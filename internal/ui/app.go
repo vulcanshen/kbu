@@ -821,7 +821,7 @@ func (m *AppModel) execShell() tea.Cmd {
 
 func shellExec(podName, namespace, container string) tea.Cmd {
 	script := fmt.Sprintf(
-		"clear; printf '\\033[?25h'; printf '\\033[1;32m<<km8-Shell>>\\033[0m Pod: \\033[1;34m%s/%s\\033[0m | Container: \\033[1;33m%s\\033[0m\\n\\n'; exec kubectl exec -it %s -n %s -c %s -- /bin/sh",
+		"clear; printf '\\033[?25h'; printf '\\033[1;32m<<km8-Shell>>\\033[0m Pod: \\033[1;34m%s/%s\\033[0m | Container: \\033[1;33m%s\\033[0m\\n\\n'; kubectl exec -it %s -n %s -c %s -- /bin/sh; clear",
 		namespace, podName, container,
 		podName, namespace, container,
 	)
