@@ -25,6 +25,11 @@ const (
 	ResourceConfigMaps
 	ResourceSecrets
 	ResourceEvents
+	ResourceServiceAccounts
+	ResourceClusterRoles
+	ResourceClusterRoleBindings
+	ResourceRoles
+	ResourceRoleBindings
 )
 
 // String returns the human-readable name of the resource type.
@@ -56,6 +61,16 @@ func (r ResourceType) String() string {
 		return "Secrets"
 	case ResourceEvents:
 		return "Events"
+	case ResourceServiceAccounts:
+		return "ServiceAccounts"
+	case ResourceClusterRoles:
+		return "ClusterRoles"
+	case ResourceClusterRoleBindings:
+		return "ClusterRoleBindings"
+	case ResourceRoles:
+		return "Roles"
+	case ResourceRoleBindings:
+		return "RoleBindings"
 	default:
 		return "Unknown"
 	}
@@ -159,6 +174,16 @@ func (r ResourceType) KubectlName() string {
 		return "secret"
 	case ResourceEvents:
 		return "event"
+	case ResourceServiceAccounts:
+		return "serviceaccount"
+	case ResourceClusterRoles:
+		return "clusterrole"
+	case ResourceClusterRoleBindings:
+		return "clusterrolebinding"
+	case ResourceRoles:
+		return "role"
+	case ResourceRoleBindings:
+		return "rolebinding"
 	default:
 		return "unknown"
 	}
@@ -180,5 +205,10 @@ func AllResourceTypes() []ResourceType {
 		ResourceConfigMaps,
 		ResourceSecrets,
 		ResourceEvents,
+		ResourceServiceAccounts,
+		ResourceClusterRoles,
+		ResourceClusterRoleBindings,
+		ResourceRoles,
+		ResourceRoleBindings,
 	}
 }

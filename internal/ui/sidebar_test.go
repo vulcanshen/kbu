@@ -20,24 +20,31 @@ func keyMsg(r rune) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 }
 
-// Visible items layout (17 total):
-//  0: Cluster      (category)
-//  1: Namespaces   (resource)
-//  2: Nodes        (resource)
-//  3: Workloads    (category)
-//  4: Pods         (resource)  ← initial cursor
-//  5: Deployments  (resource)
-//  6: DaemonSets   (resource)
-//  7: StatefulSets (resource)
-//  8: Jobs         (resource)
-//  9: CronJobs     (resource)
-// 10: Network      (category)
-// 11: Services     (resource)
-// 12: Ingresses    (resource)
-// 13: Config       (category)
-// 14: ConfigMaps   (resource)
-// 15: Secrets      (resource)
-// 16: Events       (resource, standalone)
+// Visible items layout (24 total):
+//  0: Cluster             (category)
+//  1: Namespaces           (resource)
+//  2: Nodes                (resource)
+//  3: Workloads            (category)
+//  4: Pods                 (resource)  <- initial cursor
+//  5: Deployments          (resource)
+//  6: DaemonSets           (resource)
+//  7: StatefulSets         (resource)
+//  8: Jobs                 (resource)
+//  9: CronJobs             (resource)
+// 10: Network              (category)
+// 11: Services             (resource)
+// 12: Ingresses            (resource)
+// 13: Config               (category)
+// 14: ConfigMaps           (resource)
+// 15: Secrets              (resource)
+// 16: Access               (category)
+// 17: ServiceAccounts      (resource)
+// 18: RBAC                 (category)
+// 19: ClusterRoles         (resource)
+// 20: ClusterRoleBindings  (resource)
+// 21: Roles                (resource)
+// 22: RoleBindings         (resource)
+// 23: Events               (resource, standalone)
 
 func TestSidebarModel_InitialState(t *testing.T) {
 	m := newTestSidebar()
@@ -53,10 +60,10 @@ func TestSidebarModel_InitialState(t *testing.T) {
 	}
 
 	// All items should be visible (no collapse/expand).
-	// 4 categories + 2 + 6 + 2 + 2 resources + 1 standalone = 17
+	// 6 categories + 2 + 6 + 2 + 2 + 1 + 4 resources + 1 standalone = 24
 	visible := m.visibleItems()
-	if len(visible) != 17 {
-		t.Errorf("expected 17 visible items, got %d", len(visible))
+	if len(visible) != 24 {
+		t.Errorf("expected 24 visible items, got %d", len(visible))
 	}
 }
 
@@ -224,12 +231,12 @@ func TestSidebarModel_GG(t *testing.T) {
 func TestSidebarModel_ShiftG(t *testing.T) {
 	m := newTestSidebar()
 
-	// Press G — cursor should go to last resource item (Events, index 16).
+	// Press G — cursor should go to last resource item (Events, index 23).
 	var cmd tea.Cmd
 	m, cmd = m.Update(keyMsg('G'))
 
-	if m.cursor != 16 {
-		t.Errorf("expected cursor=16 (Events) after G, got %d", m.cursor)
+	if m.cursor != 23 {
+		t.Errorf("expected cursor=23 (Events) after G, got %d", m.cursor)
 	}
 
 	// Verify it's the Events resource.
@@ -308,17 +315,17 @@ func TestSidebarModel_NavigateUpAtTop(t *testing.T) {
 func TestSidebarModel_NavigateDownAtBottom(t *testing.T) {
 	m := newTestSidebar()
 
-	// Move cursor to last resource (Events, index 16).
+	// Move cursor to last resource (Events, index 23).
 	m, _ = m.Update(keyMsg('G'))
-	if m.cursor != 16 {
-		t.Fatalf("expected cursor=16, got %d", m.cursor)
+	if m.cursor != 23 {
+		t.Fatalf("expected cursor=23, got %d", m.cursor)
 	}
 
-	// Press j at the bottom resource — should stay at 16.
+	// Press j at the bottom resource — should stay at 23.
 	var cmd tea.Cmd
 	m, cmd = m.Update(keyMsg('j'))
-	if m.cursor != 16 {
-		t.Errorf("expected cursor=16 at bottom boundary, got %d", m.cursor)
+	if m.cursor != 23 {
+		t.Errorf("expected cursor=23 at bottom boundary, got %d", m.cursor)
 	}
 
 	// No cmd should be emitted since cursor didn't move.

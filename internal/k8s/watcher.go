@@ -195,6 +195,16 @@ func (w *Watcher) startWatch(ctx context.Context, rt ResourceType, namespace str
 		return w.clientset.CoreV1().Secrets(namespace).Watch(ctx, opts)
 	case ResourceEvents:
 		return w.clientset.CoreV1().Events(namespace).Watch(ctx, opts)
+	case ResourceServiceAccounts:
+		return w.clientset.CoreV1().ServiceAccounts(namespace).Watch(ctx, opts)
+	case ResourceClusterRoles:
+		return w.clientset.RbacV1().ClusterRoles().Watch(ctx, opts)
+	case ResourceClusterRoleBindings:
+		return w.clientset.RbacV1().ClusterRoleBindings().Watch(ctx, opts)
+	case ResourceRoles:
+		return w.clientset.RbacV1().Roles(namespace).Watch(ctx, opts)
+	case ResourceRoleBindings:
+		return w.clientset.RbacV1().RoleBindings(namespace).Watch(ctx, opts)
 	default:
 		return nil, fmt.Errorf("unsupported resource type: %s", rt)
 	}
