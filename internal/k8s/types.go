@@ -97,6 +97,40 @@ type EventItem struct {
 	Age     string
 }
 
+// KubectlName returns the kubectl resource name (e.g. "pod", "deployment").
+func (r ResourceType) KubectlName() string {
+	switch r {
+	case ResourceNamespaces:
+		return "namespace"
+	case ResourceNodes:
+		return "node"
+	case ResourcePods:
+		return "pod"
+	case ResourceDeployments:
+		return "deployment"
+	case ResourceDaemonSets:
+		return "daemonset"
+	case ResourceStatefulSets:
+		return "statefulset"
+	case ResourceJobs:
+		return "job"
+	case ResourceCronJobs:
+		return "cronjob"
+	case ResourceServices:
+		return "service"
+	case ResourceIngresses:
+		return "ingress"
+	case ResourceConfigMaps:
+		return "configmap"
+	case ResourceSecrets:
+		return "secret"
+	case ResourceEvents:
+		return "event"
+	default:
+		return "unknown"
+	}
+}
+
 // AllResourceTypes returns all supported resource types in display order.
 func AllResourceTypes() []ResourceType {
 	return []ResourceType{

@@ -245,8 +245,9 @@ func TestDetailModel_ShiftG(t *testing.T) {
 	}
 }
 
-func TestDetailModel_LogsTab(t *testing.T) {
+func TestDetailModel_LogsTab_NonPodResource(t *testing.T) {
 	m := newTestDetail()
+	// Default resourceType is 0 (ResourceNamespaces), not Pods.
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	// Switch to Logs tab.
@@ -255,20 +256,115 @@ func TestDetailModel_LogsTab(t *testing.T) {
 		t.Fatalf("expected activeTab=DetailTabLogs, got %d", m.activeTab)
 	}
 
-	// Verify placeholder content.
+	// Verify placeholder content for non-Pod resource.
 	if len(m.contentLines) != 1 {
 		t.Fatalf("expected 1 content line for Logs tab, got %d", len(m.contentLines))
 	}
 
-	// The rendered line should contain the placeholder text.
-	if !strings.Contains(m.contentLines[0], "No container selected") {
-		t.Errorf("expected Logs placeholder 'No container selected', got %q", m.contentLines[0])
+	if !strings.Contains(m.contentLines[0], "Logs not available for this resource type") {
+		t.Errorf("expected Logs placeholder for non-Pod resource, got %q", m.contentLines[0])
 	}
 
 	// Also verify it renders without error.
 	view := m.View()
-	if !strings.Contains(view, "No container selected") {
-		t.Errorf("expected View to contain 'No container selected'")
+	if !strings.Contains(view, "Logs not available") {
+		t.Errorf("expected View to contain 'Logs not available'")
+	}
+}
+
+func TestDetailModel_LogsTab_PodWaiting(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), sampleEvents())
+
+	// Switch to Logs tab — no log lines yet.
+	m = m.switchToTab(DetailTabLogs)
+
+	if len(m.contentLines) != 1 {
+		t.Fatalf("expected 1 content line, got %d", len(m.contentLines))
+	}
+	if !strings.Contains(m.contentLines[0], "Waiting for logs...") {
+		t.Errorf("expected 'Waiting for logs...', got %q", m.contentLines[0])
+	}
+}
+
+func TestDetailModel_AppendLogLine(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), sampleEvents())
+
+	// Append a log line.
+	m.AppendLogLine("nginx", "hello world")
+
+	if len(m.logLines) != 1 {
+		t.Fatalf("expected 1 logLine, got %d", len(m.logLines))
+	}
+	if !strings.Contains(m.logLines[0], "nginx") {
+		t.Errorf("expected logLine to contain container name 'nginx', got %q", m.logLines[0])
+	}
+	if !strings.Contains(m.logLines[0], "hello world") {
+		t.Errorf("expected logLine to contain text 'hello world', got %q", m.logLines[0])
+	}
+	// Check separator character.
+	if !strings.Contains(m.logLines[0], "│") {
+		t.Errorf("expected logLine to contain separator, got %q", m.logLines[0])
+	}
+}
+
+func TestDetailModel_AppendLogLine_MaxLines(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.maxLogLines = 10
+
+	for i := 0; i < 15; i++ {
+		m.AppendLogLine("test", fmt.Sprintf("line %d", i))
+	}
+
+	if len(m.logLines) != 10 {
+		t.Errorf("expected 10 logLines after trimming, got %d", len(m.logLines))
+	}
+	// The oldest lines (0-4) should be trimmed.
+	if !strings.Contains(m.logLines[0], "line 5") {
+		t.Errorf("expected first logLine to be 'line 5', got %q", m.logLines[0])
+	}
+}
+
+func TestDetailModel_LogsTab_WithLogLines(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), sampleEvents())
+
+	m.AppendLogLine("nginx", "log entry 1")
+	m.AppendLogLine("sidecar", "log entry 2")
+
+	// Switch to Logs tab.
+	m = m.switchToTab(DetailTabLogs)
+
+	if len(m.contentLines) != 2 {
+		t.Fatalf("expected 2 content lines on Logs tab, got %d", len(m.contentLines))
+	}
+	if !strings.Contains(m.contentLines[0], "nginx") {
+		t.Errorf("expected first line to contain 'nginx', got %q", m.contentLines[0])
+	}
+	if !strings.Contains(m.contentLines[1], "sidecar") {
+		t.Errorf("expected second line to contain 'sidecar', got %q", m.contentLines[1])
+	}
+}
+
+func TestDetailModel_ClearDetail_ClearsLogs(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), sampleEvents())
+	m.AppendLogLine("nginx", "some log")
+
+	if len(m.logLines) == 0 {
+		t.Fatal("expected logLines to be non-empty before clear")
+	}
+
+	m.ClearDetail()
+
+	if m.logLines != nil {
+		t.Errorf("expected logLines=nil after ClearDetail, got %v", m.logLines)
 	}
 }
 

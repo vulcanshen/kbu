@@ -34,14 +34,18 @@ type DetailModel struct {
 	theme        *theme.Theme
 	hasData      bool
 	pendingG     bool
+	logLines     []string       // pre-formatted log lines for display
+	maxLogLines  int            // max lines to keep (default 1000)
+	resourceType k8s.ResourceType // current resource type
 }
 
 // NewDetailModel creates a new detail model with no data and the Detail tab active.
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{
-		activeTab: DetailTabInfo,
-		tabs:      []string{"Detail", "Events", "Logs"},
-		theme:     t,
+		activeTab:   DetailTabInfo,
+		tabs:        []string{"Detail", "Events", "Logs"},
+		theme:       t,
+		maxLogLines: 1000,
 	}
 }
 
@@ -268,6 +272,26 @@ func (m *DetailModel) ClearDetail() {
 	m.hasData = false
 	m.scrollOffset = 0
 	m.contentLines = nil
+	m.logLines = nil
+}
+
+// SetResourceType sets the current resource type (used to determine if logs are available).
+func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
+	m.resourceType = rt
+}
+
+// AppendLogLine appends a formatted log line to the log buffer.
+// If the buffer exceeds maxLogLines, the oldest lines are trimmed.
+// If the Logs tab is active, content lines are rebuilt.
+func (m *DetailModel) AppendLogLine(container, text string) {
+	formatted := "  " + container + " │ " + text
+	m.logLines = append(m.logLines, formatted)
+	if len(m.logLines) > m.maxLogLines {
+		m.logLines = m.logLines[len(m.logLines)-m.maxLogLines:]
+	}
+	if m.activeTab == DetailTabLogs {
+		m.buildContentLines()
+	}
 }
 
 // buildContentLines rebuilds the pre-rendered content lines for the current tab.
@@ -434,7 +458,13 @@ func (m DetailModel) buildEventLines() []string {
 }
 
 func (m DetailModel) buildLogLines() []string {
-	return []string{"  " + m.theme.DetailValueStyle().Render("No container selected")}
+	if m.resourceType != k8s.ResourcePods {
+		return []string{"  " + m.theme.DetailValueStyle().Render("Logs not available for this resource type")}
+	}
+	if len(m.logLines) == 0 {
+		return []string{"  " + m.theme.DetailValueStyle().Render("Waiting for logs...")}
+	}
+	return m.logLines
 }
 
 // sortedKeys returns the keys of a map sorted alphabetically.
