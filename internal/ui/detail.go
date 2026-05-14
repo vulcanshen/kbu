@@ -43,6 +43,9 @@ type DetailModel struct {
 // IsSearching returns true if the detail panel is in search mode.
 func (m DetailModel) IsSearching() bool { return m.searching }
 
+// HasActiveFilter returns true if a search filter is active.
+func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
+
 // NewDetailModel creates a new detail model with no data and the Detail tab active.
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{
@@ -123,6 +126,12 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 		m = m.scrollDown()
 	case tea.KeyUp:
 		m = m.scrollUp()
+	case tea.KeyEscape:
+		if m.searchQuery != "" {
+			m.searchQuery = ""
+			m.scrollOffset = 0
+			return m, nil
+		}
 	}
 
 	return m, nil
@@ -250,15 +259,19 @@ func (m DetailModel) View() string {
 
 	contentHeight := m.contentHeight()
 	if m.searching || m.searchQuery != "" {
-		contentHeight--
+		contentHeight -= 3
 	}
 	if contentHeight <= 0 {
 		return ""
 	}
 
+	if m.searching || m.searchQuery != "" {
+		b.WriteString(renderSearchBox(m.searchQuery, m.searching, m.width, m.theme))
+		b.WriteString("\n")
+	}
+
 	if !m.hasData {
-		placeholder := m.theme.DetailValueStyle().Render("  No resource selected")
-		b.WriteString(placeholder)
+		b.WriteString(m.theme.DetailValueStyle().Render("  No resource selected"))
 		return b.String()
 	}
 
@@ -274,14 +287,6 @@ func (m DetailModel) View() string {
 		lines = append(lines, displayLines[i])
 	}
 	b.WriteString(strings.Join(lines, "\n"))
-
-	if m.searching {
-		b.WriteString("\n")
-		b.WriteString(m.theme.TableHeaderStyle().Width(m.width).Render("/ " + m.searchQuery + "█"))
-	} else if m.searchQuery != "" {
-		b.WriteString("\n")
-		b.WriteString(m.theme.TableRowStyle().Italic(true).Width(m.width).Render(" filter: " + m.searchQuery))
-	}
 
 	return b.String()
 }
@@ -332,9 +337,12 @@ func (m *DetailModel) ClearDetail() {
 // SetResourceType sets the current resource type and adjusts available tabs.
 func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
-	if rt == k8s.ResourcePods {
+	switch rt {
+	case k8s.ResourcePods:
 		m.tabs = []string{"Detail", "Logs", "Events"}
-	} else {
+	case k8s.ResourceEvents:
+		m.tabs = []string{"Detail"}
+	default:
 		m.tabs = []string{"Detail", "Events"}
 	}
 	m.activeTab = 0

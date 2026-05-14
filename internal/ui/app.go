@@ -221,7 +221,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.enterDrillDown()
 			}
 		case "esc":
-			if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
+			filterActive := (m.activePanel == SidebarPanel && m.sidebar.HasActiveFilter()) ||
+				(m.activePanel == TablePanel && m.table.HasActiveFilter()) ||
+				(m.activePanel == DetailPanel && m.detail.HasActiveFilter())
+			if filterActive {
+				// Let panel handle Esc to clear filter
+			} else if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
 				return m, m.exitDrillDown()
 			}
 		case "n":
@@ -716,6 +721,37 @@ func (m AppModel) breadcrumb() string {
 	return m.currentResource.String()
 }
 
+func ansiTruncate(s string, maxWidth int) string {
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	var result []byte
+	w := 0
+	inEscape := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\x1b' {
+			inEscape = true
+			result = append(result, c)
+			continue
+		}
+		if inEscape {
+			result = append(result, c)
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+		if w >= maxWidth {
+			break
+		}
+		result = append(result, c)
+		w++
+	}
+	result = append(result, "\x1b[0m"...)
+	return string(result)
+}
+
 func truncateName(name string, max int) string {
 	if len(name) <= max {
 		return name
@@ -776,10 +812,9 @@ func renderPanel(content, title string, width, height int, focused bool, t *them
 	innerW := width - 2
 	innerH := height - 2
 
-	fitted := lipgloss.NewStyle().Width(innerW).Height(innerH).MaxWidth(innerW).Render(content)
-	lines := strings.Split(fitted, "\n")
+	lines := strings.Split(content, "\n")
 	for len(lines) < innerH {
-		lines = append(lines, strings.Repeat(" ", innerW))
+		lines = append(lines, "")
 	}
 	lines = lines[:innerH]
 
@@ -797,16 +832,22 @@ func renderPanel(content, title string, width, height int, focused bool, t *them
 
 	leftBorder := bStyle.Render("│")
 	rightBorder := bStyle.Render("│")
+	emptyLine := strings.Repeat(" ", innerW)
 	for _, line := range lines {
 		lw := lipgloss.Width(line)
+		if lw > innerW {
+			line = ansiTruncate(line, innerW)
+			lw = lipgloss.Width(line)
+		}
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
 		}
-		b.WriteString(leftBorder)
-		b.WriteString(line)
-		b.WriteString(pad)
-		b.WriteString(rightBorder)
+		if line == "" {
+			b.WriteString(leftBorder + emptyLine + rightBorder)
+		} else {
+			b.WriteString(leftBorder + line + pad + rightBorder)
+		}
 		b.WriteString("\n")
 	}
 
