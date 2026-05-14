@@ -61,6 +61,7 @@ func NewSidebarModel(t *theme.Theme) SidebarModel {
 			Items: []SidebarResource{
 				{Label: "Namespaces", ResourceType: k8s.ResourceNamespaces},
 				{Label: "Nodes", ResourceType: k8s.ResourceNodes},
+				{Label: "Events", ResourceType: k8s.ResourceEvents},
 			},
 		},
 		{
@@ -89,12 +90,6 @@ func NewSidebarModel(t *theme.Theme) SidebarModel {
 			},
 		},
 		{
-			Label: "Access",
-			Items: []SidebarResource{
-				{Label: "ServiceAccounts", ResourceType: k8s.ResourceServiceAccounts},
-			},
-		},
-		{
 			Label: "RBAC",
 			Items: []SidebarResource{
 				{Label: "ClusterRoles", ResourceType: k8s.ResourceClusterRoles},
@@ -105,9 +100,7 @@ func NewSidebarModel(t *theme.Theme) SidebarModel {
 		},
 	}
 
-	standalone := []SidebarResource{
-		{Label: "Events", ResourceType: k8s.ResourceEvents},
-	}
+	standalone := []SidebarResource{}
 
 	m := SidebarModel{
 		categories: categories,
