@@ -497,6 +497,18 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 	return style.Render(line)
 }
 
+// SetColumns replaces the column definitions and resets the table state.
+func (m *TableModel) SetColumns(cols []Column) {
+	m.columns = cols
+	m.rows = nil
+	m.allRows = nil
+	m.filteredIndices = nil
+	m.cursor = 0
+	m.scrollOffset = 0
+	m.searching = false
+	m.searchQuery = ""
+}
+
 // SetSize sets the table dimensions.
 func (m *TableModel) SetSize(width, height int) {
 	m.width = width

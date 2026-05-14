@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -34,16 +33,21 @@ type DetailModel struct {
 	theme        *theme.Theme
 	hasData      bool
 	pendingG     bool
-	logLines     []string       // pre-formatted log lines for display
-	maxLogLines  int            // max lines to keep (default 1000)
-	resourceType k8s.ResourceType // current resource type
+	logLines     []string
+	maxLogLines  int
+	resourceType k8s.ResourceType
+	searching    bool
+	searchQuery  string
 }
+
+// IsSearching returns true if the detail panel is in search mode.
+func (m DetailModel) IsSearching() bool { return m.searching }
 
 // NewDetailModel creates a new detail model with no data and the Detail tab active.
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{
 		activeTab:   DetailTabInfo,
-		tabs:        []string{"Detail", "Events", "Logs"},
+		tabs:        []string{"Detail", "Events"},
 		theme:       t,
 		maxLogLines: 1000,
 	}
@@ -78,7 +82,10 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 }
 
 func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
-	// Handle pending g state for gg combo.
+	if m.searching {
+		return m.handleSearchKey(msg)
+	}
+
 	if m.pendingG {
 		m.pendingG = false
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == 'g' {
@@ -106,6 +113,10 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 			m = m.nextTab()
 		case '[':
 			m = m.prevTab()
+		case '/':
+			m.searching = true
+			m.searchQuery = ""
+			return m, nil
 		}
 
 	case tea.KeyDown:
@@ -115,6 +126,52 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m DetailModel) handleSearchKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
+	switch {
+	case msg.Type == tea.KeyEscape:
+		m.searching = false
+		m.searchQuery = ""
+		m.scrollOffset = 0
+		return m, nil
+	case msg.Type == tea.KeyEnter:
+		m.searching = false
+		return m, nil
+	case msg.Type == tea.KeyBackspace:
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.scrollOffset = 0
+		}
+		return m, nil
+	case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && string(msg.Runes) == "j"):
+		m = m.scrollDown()
+		return m, nil
+	case msg.Type == tea.KeyUp || (msg.Type == tea.KeyRunes && string(msg.Runes) == "k"):
+		m = m.scrollUp()
+		return m, nil
+	case msg.Type == tea.KeyRunes:
+		for _, r := range msg.Runes {
+			m.searchQuery += string(r)
+		}
+		m.scrollOffset = 0
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m DetailModel) filteredContentLines() []string {
+	if m.searchQuery == "" {
+		return m.contentLines
+	}
+	query := strings.ToLower(m.searchQuery)
+	var filtered []string
+	for _, line := range m.contentLines {
+		if strings.Contains(strings.ToLower(line), query) {
+			filtered = append(filtered, line)
+		}
+	}
+	return filtered
 }
 
 func (m DetailModel) handleMouse(msg tea.MouseMsg) (DetailModel, tea.Cmd) {
@@ -192,6 +249,9 @@ func (m DetailModel) View() string {
 	var b strings.Builder
 
 	contentHeight := m.contentHeight()
+	if m.searching || m.searchQuery != "" {
+		contentHeight--
+	}
 	if contentHeight <= 0 {
 		return ""
 	}
@@ -202,34 +262,28 @@ func (m DetailModel) View() string {
 		return b.String()
 	}
 
+	displayLines := m.filteredContentLines()
+
 	end := m.scrollOffset + contentHeight
-	if end > len(m.contentLines) {
-		end = len(m.contentLines)
+	if end > len(displayLines) {
+		end = len(displayLines)
 	}
 
 	var lines []string
 	for i := m.scrollOffset; i < end; i++ {
-		lines = append(lines, m.contentLines[i])
+		lines = append(lines, displayLines[i])
 	}
 	b.WriteString(strings.Join(lines, "\n"))
 
-	return b.String()
-}
-
-func (m DetailModel) renderTabBar() string {
-	activeStyle := m.theme.DetailTabActiveStyle()
-	inactiveStyle := m.theme.DetailTabInactiveStyle()
-
-	var parts []string
-	for i, tab := range m.tabs {
-		if DetailTab(i) == m.activeTab {
-			parts = append(parts, activeStyle.Render(tab))
-		} else {
-			parts = append(parts, inactiveStyle.Render(tab))
-		}
+	if m.searching {
+		b.WriteString("\n")
+		b.WriteString(m.theme.TableHeaderStyle().Width(m.width).Render("/ " + m.searchQuery + "█"))
+	} else if m.searchQuery != "" {
+		b.WriteString("\n")
+		b.WriteString(m.theme.TableRowStyle().Italic(true).Width(m.width).Render(" filter: " + m.searchQuery))
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+	return b.String()
 }
 
 // SetSize sets the dimensions of the detail panel.
@@ -275,9 +329,35 @@ func (m *DetailModel) ClearDetail() {
 	m.logLines = nil
 }
 
-// SetResourceType sets the current resource type (used to determine if logs are available).
+// SetResourceType sets the current resource type and adjusts available tabs.
 func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
+	if rt == k8s.ResourcePods {
+		m.tabs = []string{"Detail", "Logs", "Events"}
+	} else {
+		m.tabs = []string{"Detail", "Events"}
+	}
+	m.activeTab = 0
+	m.scrollOffset = 0
+	m.buildContentLines()
+}
+
+// NextTab switches to the next tab.
+func (m DetailModel) NextTab() DetailModel {
+	return m.nextTab()
+}
+
+// PrevTab switches to the previous tab.
+func (m DetailModel) PrevTab() DetailModel {
+	return m.prevTab()
+}
+
+// ActiveTabName returns the name of the currently active tab.
+func (m DetailModel) ActiveTabName() string {
+	if int(m.activeTab) < len(m.tabs) {
+		return m.tabs[m.activeTab]
+	}
+	return "Detail"
 }
 
 // AppendLogLine appends a formatted log line to the log buffer.
@@ -289,20 +369,20 @@ func (m *DetailModel) AppendLogLine(container, text string) {
 	if len(m.logLines) > m.maxLogLines {
 		m.logLines = m.logLines[len(m.logLines)-m.maxLogLines:]
 	}
-	if m.activeTab == DetailTabLogs {
+	if m.ActiveTabName() == "Logs" {
 		m.buildContentLines()
 	}
 }
 
 // buildContentLines rebuilds the pre-rendered content lines for the current tab.
 func (m *DetailModel) buildContentLines() {
-	switch m.activeTab {
-	case DetailTabInfo:
+	switch m.ActiveTabName() {
+	case "Detail":
 		m.contentLines = m.buildInfoLines()
-	case DetailTabEvents:
-		m.contentLines = m.buildEventLines()
-	case DetailTabLogs:
+	case "Logs":
 		m.contentLines = m.buildLogLines()
+	case "Events":
+		m.contentLines = m.buildEventLines()
 	}
 }
 
@@ -388,6 +468,41 @@ func (m DetailModel) buildInfoLines() []string {
 		lines = append(lines, "")
 		for _, f := range m.detail.Fields {
 			addField(f.Label+":", f.Value)
+		}
+	}
+
+	// Containers section.
+	if len(m.detail.Containers) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "  "+labelStyle.Render("Containers:"))
+		for _, c := range m.detail.Containers {
+			prefix := "  "
+			if c.Init {
+				prefix = "  (init) "
+			}
+			nameStr := labelStyle.Render(prefix + c.Name)
+			lines = append(lines, "  "+nameStr)
+
+			addContainerField := func(label, value string) {
+				if value != "" {
+					l := labelStyle.Render(fmt.Sprintf("      %-10s", label))
+					v := valueStyle.Render(value)
+					lines = append(lines, "  "+l+v)
+				}
+			}
+			addContainerField("Image:", c.Image)
+			addContainerField("State:", c.State)
+			readyStr := "false"
+			if c.Ready {
+				readyStr = "true"
+			}
+			addContainerField("Ready:", readyStr)
+			if c.Restarts > 0 {
+				addContainerField("Restarts:", fmt.Sprintf("%d", c.Restarts))
+			}
+			if c.Ports != "" {
+				addContainerField("Ports:", c.Ports)
+			}
 		}
 	}
 
