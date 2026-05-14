@@ -32,6 +32,7 @@ type AppModel struct {
 	namespacePicker NamespacePickerModel
 	contextPicker   ContextPickerModel
 	help            HelpModel
+	appLog          AppLogModel
 
 	activePanel     Panel
 	width           int
@@ -79,6 +80,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client) AppModel {
 		namespacePicker: NewNamespacePickerModel(t),
 		contextPicker:   NewContextPickerModel(t),
 		help:            NewHelpModel(t),
+		appLog:          NewAppLogModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		k8sClient:       client,
@@ -89,7 +91,10 @@ func NewAppModel(t *theme.Theme, client *k8s.Client) AppModel {
 }
 
 func (m AppModel) Init() tea.Cmd {
+	m.appLog.Info("km8 started")
 	m.watcher.Start(k8s.ResourcePods, m.k8sClient.GetNamespace())
+	info := m.k8sClient.GetClusterInfo()
+	m.appLog.Info(fmt.Sprintf("connected to %s (%s)", info.ContextName, info.ServerURL))
 	return tea.Batch(
 		m.sidebar.Init(),
 		m.table.Init(),
@@ -99,6 +104,18 @@ func (m AppModel) Init() tea.Cmd {
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	if m.appLog.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg, tea.MouseMsg:
+			var cmd tea.Cmd
+			m.appLog, cmd = m.appLog.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
 
 	if m.help.IsActive() {
 		switch msg := msg.(type) {
@@ -167,6 +184,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.SetSize(m.width, m.height)
 			m.help.Toggle()
 			return m, nil
+		case "!":
+			m.appLog.SetSize(m.width, m.height)
+			m.appLog.Toggle()
+			return m, nil
 		case "1":
 			m.detailExpanded = false
 			m.setPanel(SidebarPanel)
@@ -228,6 +249,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case ResourceSelectedMsg:
+		m.appLog.Info("switched to " + msg.Type.String())
 		m.currentResource = msg.Type
 		m.drillDownStack = nil
 		m.drillDownPod = nil
@@ -274,6 +296,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ResourceErrorMsg:
+		m.appLog.Error(msg.Err.Error())
 		cmds = append(cmds, waitForWatchUpdate(m.watcher))
 		return m, tea.Batch(cmds...)
 
@@ -325,6 +348,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case NamespaceChangedMsg:
+		ns := msg.Namespace
+		if ns == "" {
+			ns = "All Namespaces"
+		}
+		m.appLog.Info("namespace switched to " + ns)
 		m.k8sClient.SetNamespace(msg.Namespace)
 		m.statusBar.SetNamespace(msg.Namespace)
 		m.logStreamer.Stop()
@@ -341,8 +369,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ContextChangedMsg:
 		newClient, err := k8s.NewClient(msg.Context)
 		if err != nil {
+			m.appLog.Error("context switch failed: " + err.Error())
 			return m, nil
 		}
+		m.appLog.Info("context switched to " + msg.Context)
 		m.watcher.Stop()
 		m.logStreamer.Stop()
 		m.logsActive = false
@@ -393,6 +423,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case EditDoneMsg:
+		m.appLog.Info("kubectl edit completed")
 		return m, nil
 	}
 
@@ -417,6 +448,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m AppModel) View() string {
 	if !m.ready {
 		return "loading..."
+	}
+
+	if m.appLog.IsActive() {
+		m.appLog.SetSize(m.width, m.height)
+		return m.appLog.View()
 	}
 
 	if m.help.IsActive() {

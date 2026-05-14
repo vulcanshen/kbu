@@ -87,52 +87,60 @@
 ## 功能需求
 
 ### Phase 1 — Foundation
-- [ ] Go module init + project structure (cmd/, internal/ui, internal/k8s, internal/config, internal/theme)
-- [ ] K8s client connection (kubeconfig loading, cluster info)
-- [ ] Bubble Tea app skeleton (root model, basic layout)
-- [ ] Sidebar model (resource tree navigation, j/k/Enter)
-- [ ] Table model (resource list, j/k scroll, column headers)
-- [ ] Vim keybinding system (j/k/h/l/gg/G/Esc) with programmatic tests
-- [ ] Status bar (cluster, namespace, context display)
+- [x] Go module init + project structure (cmd/, internal/ui, internal/k8s, internal/config, internal/theme)
+- [x] K8s client connection (kubeconfig loading, cluster info)
+- [x] Bubble Tea app skeleton (root model, basic layout)
+- [x] Sidebar model (resource tree navigation, j/k/Enter)
+- [x] Table model (resource list, j/k scroll, column headers)
+- [x] Vim keybinding system (j/k/h/l/gg/G/Esc) with programmatic tests
+- [x] Status bar (cluster, namespace, context display)
 
 ### Phase 2 — Resource Implementation
-- [ ] All 13 resource types: list fetcher + table column mapping
-- [ ] Detail panel (metadata, labels, annotations, status — structured tabs)
-- [ ] Events tab in detail panel (resource-specific events)
-- [ ] Namespace switching (all namespaces + per-namespace filter)
-- [ ] Panel focus system (Tab / Ctrl+h/j/k/l between sidebar, table, detail)
+- [x] All 13 resource types: list fetcher + table column mapping
+- [x] Detail panel (metadata, labels, annotations, status — structured tabs)
+- [x] Events tab in detail panel (resource-specific events)
+- [x] Namespace switching (all namespaces + per-namespace filter)
+- [x] Panel focus system (Tab / 1/2/3 between sidebar, table, detail)
 
 ### Phase 3 — Advanced Features
-- [ ] Pod logs tab (multi-container: `<container>|<log>` format, single-container filter)
-- [ ] Table search/filter (/ to enter search, Esc to clear)
-- [ ] YAML edit via `kubectl edit` ($EDITOR, save to apply)
-- [ ] Help overlay (? to show keybinding reference)
-- [ ] Context switching (選單 + 全畫面重繪)
+- [x] Pod logs tab (multi-container: `<container>|<log>` format, single-container filter)
+- [x] Table search/filter (/ to enter search, Esc to clear)
+- [x] YAML edit via `kubectl edit` ($EDITOR, save to apply)
+- [x] Help overlay (? to show keybinding reference)
+- [x] Context switching (選單 + 全畫面重繪)
 
 ### Phase 4 — Polish
-- [ ] Responsive layout (WindowSizeMsg handling, fixed proportional panels)
-- [ ] Cross-platform build (macOS/Linux/Windows)
-- [ ] Error handling and user feedback (status line messages)
-- [ ] Config file support (~/.config/km8/config.yaml)
-- [ ] Theme system (`~/.config/km8/theme.yaml`, 內建 default, 支援社群 theme 檔案覆蓋)
+- [x] Responsive layout (WindowSizeMsg handling, fixed proportional panels)
+- [x] Cross-platform build (macOS/Linux/Windows)
+- [x] Error handling and user feedback (app log with ! key)
+- [x] Config file support (~/.config/km8/config.yaml)
+- [x] Theme system (`~/.config/km8/theme.yaml`, 內建 default, 支援社群 theme 檔案覆蓋)
+
+### Beyond Plan — Additional Features
+- [x] Lazygit-style panel borders with numbered titles
+- [x] Drill-down navigation (Deployment/DaemonSet/StatefulSet/Job → Pods, CronJob → Jobs, Pod → Containers)
+- [x] Search (/) in all 3 panels (sidebar, table, detail)
+- [x] +/- expand detail to full screen
+- [x] Dynamic tabs (Pods: Detail/Logs/Events, others: Detail/Events)
+- [x] Container detail (image, state, ready, restarts, ports)
 
 ## 驗收標準
 
-- [ ] `go build .` 成功，支援三平台交叉編譯
-- [ ] 連接本地 K8s cluster（OrbStack）並顯示資源
-- [ ] Watch 即時更新資源狀態
-- [ ] 所有 13 種資源可在 Sidebar 切換並以表格顯示
-- [ ] Vim motion 操作正常（j/k/h/l/gg/G）— 有對應 model tests
-- [ ] 選取資源可查看 Detail Panel（結構化欄位）
-- [ ] Detail 區域 Tab 切換（Detail / Events / Logs）
-- [ ] Namespace 切換功能正常（預設 all namespaces）
-- [ ] Context 切換並重繪畫面
-- [ ] Pod logs 以 `<container>|<log>` 格式串流顯示
-- [ ] `kubectl edit` 開啟 $EDITOR 編輯資源
-- [ ] Table 搜尋/篩選功能
-- [ ] Terminal 視窗縮放時 UI 自動配適（固定比例）
-- [ ] 滑鼠滾輪滾動支援
-- [ ] 無 runtime panic，錯誤有明確提示
+- [x] `go build .` 成功，支援三平台交叉編譯
+- [x] 連接本地 K8s cluster（OrbStack）並顯示資源
+- [x] Watch 即時更新資源狀態
+- [x] 所有 13 種資源可在 Sidebar 切換並以表格顯示
+- [x] Vim motion 操作正常（j/k/h/l/gg/G）— 有對應 model tests
+- [x] 選取資源可查看 Detail Panel（結構化欄位）
+- [x] Detail 區域 Tab 切換（Detail / Events / Logs）
+- [x] Namespace 切換功能正常（預設 all namespaces）
+- [x] Context 切換並重繪畫面
+- [x] Pod logs 以 `<container>|<log>` 格式串流顯示
+- [x] `kubectl edit` 開啟 $EDITOR 編輯資源
+- [x] Table 搜尋/篩選功能
+- [x] Terminal 視窗縮放時 UI 自動配適（固定比例）
+- [x] 滑鼠滾輪滾動支援
+- [x] 無 runtime panic，錯誤有明確提示（! 查看 app log）
 
 ## 開發環境
 
