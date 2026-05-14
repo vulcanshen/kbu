@@ -25,7 +25,6 @@ const (
 	ResourceConfigMaps
 	ResourceSecrets
 	ResourceEvents
-	ResourceServiceAccounts
 	ResourceClusterRoles
 	ResourceClusterRoleBindings
 	ResourceRoles
@@ -61,8 +60,6 @@ func (r ResourceType) String() string {
 		return "Secrets"
 	case ResourceEvents:
 		return "Events"
-	case ResourceServiceAccounts:
-		return "ServiceAccounts"
 	case ResourceClusterRoles:
 		return "ClusterRoles"
 	case ResourceClusterRoleBindings:
@@ -174,8 +171,6 @@ func (r ResourceType) KubectlName() string {
 		return "secret"
 	case ResourceEvents:
 		return "event"
-	case ResourceServiceAccounts:
-		return "serviceaccount"
 	case ResourceClusterRoles:
 		return "clusterrole"
 	case ResourceClusterRoleBindings:
@@ -205,7 +200,6 @@ func AllResourceTypes() []ResourceType {
 		ResourceConfigMaps,
 		ResourceSecrets,
 		ResourceEvents,
-		ResourceServiceAccounts,
 		ResourceClusterRoles,
 		ResourceClusterRoleBindings,
 		ResourceRoles,

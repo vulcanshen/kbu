@@ -135,13 +135,6 @@ func ColumnsForResource(rt k8s.ResourceType) []Column {
 			{Title: "Message", MinWidth: 30},
 			{Title: "Age", MinWidth: 8},
 		}
-	case k8s.ResourceServiceAccounts:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Namespace", MinWidth: 15},
-			{Title: "Secrets", MinWidth: 8},
-			{Title: "Age", MinWidth: 8},
-		}
 	case k8s.ResourceClusterRoles:
 		return []Column{
 			{Title: "Name", MinWidth: 20},

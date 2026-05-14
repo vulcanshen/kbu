@@ -47,8 +47,6 @@ func FetchResources(ctx context.Context, clientset kubernetes.Interface, rt Reso
 		return fetchSecrets(ctx, clientset, namespace)
 	case ResourceEvents:
 		return fetchEvents(ctx, clientset, namespace)
-	case ResourceServiceAccounts:
-		return fetchServiceAccounts(ctx, clientset, namespace)
 	case ResourceClusterRoles:
 		return fetchClusterRoles(ctx, clientset)
 	case ResourceClusterRoleBindings:
@@ -92,8 +90,6 @@ func GetResourceDetail(rt ResourceType, item ResourceItem) ResourceDetail {
 		return detailSecret(item)
 	case ResourceEvents:
 		return detailEvent(item)
-	case ResourceServiceAccounts:
-		return detailServiceAccount(item)
 	case ResourceClusterRoles:
 		return detailClusterRole(item)
 	case ResourceClusterRoleBindings:
@@ -1144,49 +1140,6 @@ func detailEvent(item ResourceItem) ResourceDetail {
 		{Label: "Count", Value: fmt.Sprintf("%d", e.Count)},
 		{Label: "First Seen", Value: formatAge(e.FirstTimestamp.Time)},
 		{Label: "Last Seen", Value: formatAge(eventTime(*e))},
-	}
-	return d
-}
-
-// ---------------------------------------------------------------------------
-// ServiceAccount
-// ---------------------------------------------------------------------------
-
-func fetchServiceAccounts(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
-	list, err := cs.CoreV1().ServiceAccounts(ns).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("listing serviceaccounts: %w", err)
-	}
-	items := make([]ResourceItem, 0, len(list.Items))
-	for i := range list.Items {
-		sa := &list.Items[i]
-		items = append(items, ResourceItem{
-			Name:      sa.Name,
-			Namespace: sa.Namespace,
-			UID:       string(sa.UID),
-			Raw:       sa,
-			Row: []string{
-				sa.Name,
-				sa.Namespace,
-				fmt.Sprintf("%d", len(sa.Secrets)),
-				formatAge(sa.CreationTimestamp.Time),
-			},
-		})
-	}
-	return items, nil
-}
-
-func detailServiceAccount(item ResourceItem) ResourceDetail {
-	sa, _ := item.Raw.(*corev1.ServiceAccount)
-	d := baseDetail(item, "ServiceAccount", sa.ObjectMeta)
-	d.Fields = []DetailField{
-		{Label: "Secrets", Value: fmt.Sprintf("%d", len(sa.Secrets))},
-	}
-	for i, s := range sa.Secrets {
-		d.Fields = append(d.Fields, DetailField{
-			Label: fmt.Sprintf("Secret %d", i+1),
-			Value: s.Name,
-		})
 	}
 	return d
 }
