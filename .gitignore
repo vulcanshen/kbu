@@ -1,0 +1,24 @@
+# Binary
+km8
+km8.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code (local only)
+.claude/
+sessions/
+
+# Test artifacts
+coverage.out
+*.test
+
+# Config (local dev)
+config.yaml
