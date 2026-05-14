@@ -47,6 +47,7 @@ type AppModel struct {
 	ready           bool
 	logsActive      bool
 	detailExpanded  bool
+	tableExpanded   bool
 
 	// Drill-down state
 	drillDownStack      []drillDownEntry
@@ -276,9 +277,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detailExpanded = true
 				return m, nil
 			}
+			if m.activePanel == TablePanel {
+				m.tableExpanded = true
+				return m, nil
+			}
 		case "-":
-			if m.detailExpanded {
+			if m.detailExpanded || m.tableExpanded {
 				m.detailExpanded = false
+				m.tableExpanded = false
 				return m, nil
 			}
 		}
@@ -528,6 +534,17 @@ func (m AppModel) View() string {
 
 	sw, rw, upperH, detailH := m.panelSizes()
 	fullH := upperH + detailH
+
+	if m.tableExpanded {
+		fw := m.width
+		m.table.SetSize(fw-2, upperH-2)
+		m.detail.SetSize(fw-2, detailH-2)
+		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
+		tablePanel := renderPanel(m.table.View(), tabTitle, fw, upperH, m.activePanel == TablePanel, m.theme)
+		detailPanel := renderPanel(m.detail.View(), "[3] "+m.detail.ActiveTabName(), fw, detailH, m.activePanel == DetailPanel, m.theme)
+		middle := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
+		return lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
+	}
 
 	m.sidebar.SetSize(sw-2, fullH-2)
 	m.table.SetSize(rw-2, upperH-2)
