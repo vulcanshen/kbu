@@ -1,20 +1,19 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
-// SidebarCategory represents a collapsible group of resource types.
+// SidebarCategory represents a visual group of resource types.
+// Categories are non-interactive headers — they cannot be selected or collapsed.
 type SidebarCategory struct {
 	Label    string
-	Expanded bool
 	Items    []SidebarResource
+	Expanded bool
 }
 
 // SidebarResource represents a single resource type entry in the sidebar.
@@ -58,8 +57,7 @@ func NewSidebarModel(t *theme.Theme) SidebarModel {
 			},
 		},
 		{
-			Label:    "Workloads",
-			Expanded: true,
+			Label: "Workloads",
 			Items: []SidebarResource{
 				{Label: "Pods", ResourceType: k8s.ResourcePods},
 				{Label: "Deployments", ResourceType: k8s.ResourceDeployments},
@@ -70,16 +68,14 @@ func NewSidebarModel(t *theme.Theme) SidebarModel {
 			},
 		},
 		{
-			Label:    "Network",
-			Expanded: true,
+			Label: "Network",
 			Items: []SidebarResource{
 				{Label: "Services", ResourceType: k8s.ResourceServices},
 				{Label: "Ingresses", ResourceType: k8s.ResourceIngresses},
 			},
 		},
 		{
-			Label:    "Config",
-			Expanded: true,
+			Label: "Config",
 			Items: []SidebarResource{
 				{Label: "ConfigMaps", ResourceType: k8s.ResourceConfigMaps},
 				{Label: "Secrets", ResourceType: k8s.ResourceSecrets},
@@ -91,14 +87,24 @@ func NewSidebarModel(t *theme.Theme) SidebarModel {
 		{Label: "Events", ResourceType: k8s.ResourceEvents},
 	}
 
-	return SidebarModel{
+	m := SidebarModel{
 		categories: categories,
 		standalone: standalone,
-		cursor:     0,
 		focused:    false,
 		selected:   k8s.ResourcePods,
 		theme:      t,
 	}
+
+	// Set initial cursor to Pods (the default selected resource).
+	visible := m.visibleItems()
+	for i, item := range visible {
+		if !item.isCategory && item.resourceType == k8s.ResourcePods {
+			m.cursor = i
+			break
+		}
+	}
+
+	return m
 }
 
 // Init implements tea.Model.
@@ -127,9 +133,14 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	if m.pendingG {
 		m.pendingG = false
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == 'g' {
-			m.cursor = 0
+			// gg — jump to first resource item.
+			m.cursor = m.firstResourceIndex(visible)
 			m.scrollOffset = 0
-			return m, nil
+			item := visible[m.cursor]
+			m.selected = item.resourceType
+			return m, func() tea.Msg {
+				return ResourceSelectedMsg{Type: item.resourceType}
+			}
 		}
 		// Not a second g — fall through to normal handling.
 	}
@@ -141,28 +152,30 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		}
 		switch msg.Runes[0] {
 		case 'j':
-			return m.moveDown(visible), nil
+			return m.moveDown(visible)
 		case 'k':
-			return m.moveUp(visible), nil
+			return m.moveUp(visible)
 		case 'l':
-			return m.activate(visible)
-		case 'h':
-			return m.collapseOrParent(visible), nil
+			return m.activateResource(visible)
 		case 'g':
 			m.pendingG = true
 			return m, nil
 		case 'G':
-			m.cursor = len(visible) - 1
+			m.cursor = m.lastResourceIndex(visible)
 			m.ensureCursorVisible()
-			return m, nil
+			item := visible[m.cursor]
+			m.selected = item.resourceType
+			return m, func() tea.Msg {
+				return ResourceSelectedMsg{Type: item.resourceType}
+			}
 		}
 
 	case tea.KeyDown:
-		return m.moveDown(visible), nil
+		return m.moveDown(visible)
 	case tea.KeyUp:
-		return m.moveUp(visible), nil
+		return m.moveUp(visible)
 	case tea.KeyEnter:
-		return m.activate(visible)
+		return m.activateResource(visible)
 	}
 
 	return m, nil
@@ -187,20 +200,40 @@ func (m SidebarModel) handleMouse(msg tea.MouseMsg) (SidebarModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m SidebarModel) moveDown(visible []visibleItem) SidebarModel {
-	if m.cursor < len(visible)-1 {
-		m.cursor++
-		m.ensureCursorVisible()
+// moveDown moves the cursor to the next resource item, skipping categories.
+func (m SidebarModel) moveDown(visible []visibleItem) (SidebarModel, tea.Cmd) {
+	next := m.cursor + 1
+	for next < len(visible) && visible[next].isCategory {
+		next++
 	}
-	return m
+	if next < len(visible) {
+		m.cursor = next
+		m.ensureCursorVisible()
+		m.selected = visible[m.cursor].resourceType
+		return m, func() tea.Msg {
+			return ResourceSelectedMsg{Type: visible[next].resourceType}
+		}
+	}
+	// No more resource items below — stay put.
+	return m, nil
 }
 
-func (m SidebarModel) moveUp(visible []visibleItem) SidebarModel {
-	if m.cursor > 0 {
-		m.cursor--
-		m.ensureCursorVisible()
+// moveUp moves the cursor to the previous resource item, skipping categories.
+func (m SidebarModel) moveUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
+	prev := m.cursor - 1
+	for prev >= 0 && visible[prev].isCategory {
+		prev--
 	}
-	return m
+	if prev >= 0 {
+		m.cursor = prev
+		m.ensureCursorVisible()
+		m.selected = visible[m.cursor].resourceType
+		return m, func() tea.Msg {
+			return ResourceSelectedMsg{Type: visible[prev].resourceType}
+		}
+	}
+	// No more resource items above — stay put.
+	return m, nil
 }
 
 func (m *SidebarModel) ensureCursorVisible() {
@@ -215,55 +248,40 @@ func (m *SidebarModel) ensureCursorVisible() {
 	}
 }
 
-func (m SidebarModel) activate(visible []visibleItem) (SidebarModel, tea.Cmd) {
+// activateResource selects the resource under cursor and emits ResourceSelectedMsg.
+func (m SidebarModel) activateResource(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	if m.cursor < 0 || m.cursor >= len(visible) {
 		return m, nil
 	}
 	item := visible[m.cursor]
 	if item.isCategory {
-		// Toggle expand/collapse.
-		m.categories[item.categoryIndex].Expanded = !m.categories[item.categoryIndex].Expanded
-		// After collapsing, clamp cursor to visible range.
-		newVisible := m.visibleItems()
-		if m.cursor >= len(newVisible) {
-			m.cursor = len(newVisible) - 1
-		}
+		// Categories are non-interactive — do nothing.
 		return m, nil
 	}
-
-	// Resource item — select it and send message.
 	m.selected = item.resourceType
 	return m, func() tea.Msg {
 		return ResourceSelectedMsg{Type: item.resourceType}
 	}
 }
 
-func (m SidebarModel) collapseOrParent(visible []visibleItem) SidebarModel {
-	if m.cursor < 0 || m.cursor >= len(visible) {
-		return m
-	}
-	item := visible[m.cursor]
-	if item.isCategory {
-		// Collapse this category.
-		if m.categories[item.categoryIndex].Expanded {
-			m.categories[item.categoryIndex].Expanded = false
+// firstResourceIndex returns the index of the first non-category item.
+func (m SidebarModel) firstResourceIndex(visible []visibleItem) int {
+	for i, item := range visible {
+		if !item.isCategory {
+			return i
 		}
-		return m
 	}
+	return 0
+}
 
-	// Resource item — collapse parent category and move cursor to it.
-	if item.categoryIndex >= 0 {
-		m.categories[item.categoryIndex].Expanded = false
-		// Move cursor to the category header.
-		newVisible := m.visibleItems()
-		for i, v := range newVisible {
-			if v.isCategory && v.categoryIndex == item.categoryIndex {
-				m.cursor = i
-				break
-			}
+// lastResourceIndex returns the index of the last non-category item.
+func (m SidebarModel) lastResourceIndex(visible []visibleItem) int {
+	for i := len(visible) - 1; i >= 0; i-- {
+		if !visible[i].isCategory {
+			return i
 		}
 	}
-	return m
+	return len(visible) - 1
 }
 
 // View implements tea.Model.
@@ -276,12 +294,6 @@ func (m SidebarModel) View() string {
 	baseStyle := m.theme.SidebarStyle()
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	categoryStyle := m.theme.SidebarCategoryStyle()
-
-	// Compute the content width (inside border).
-	contentWidth := m.width - 1 // 1 for right border
-	if contentWidth < 1 {
-		contentWidth = 1
-	}
 
 	var lines []string
 	start := m.scrollOffset
@@ -296,56 +308,28 @@ func (m SidebarModel) View() string {
 
 		var line string
 		if item.isCategory {
-			arrow := "▼"
-			if !m.categories[item.categoryIndex].Expanded {
-				arrow = "▶"
-			}
-			label := fmt.Sprintf("%s %s", arrow, item.label)
-			if isCursor && m.focused {
-				line = selectedStyle.Width(contentWidth).Render(label)
-			} else if isCursor {
-				// Unfocused but cursor — dimmer highlight.
-				dimStyle := baseStyle.Bold(true).Width(contentWidth)
-				line = dimStyle.Render(label)
-			} else {
-				line = categoryStyle.Width(contentWidth).Render(label)
-			}
+			line = categoryStyle.Width(m.width).Render(item.label)
 		} else {
 			label := "  " + item.label
 			if isCursor && m.focused {
-				line = selectedStyle.Width(contentWidth).Render(label)
+				line = selectedStyle.Width(m.width).Render(label)
 			} else if isCursor {
-				dimStyle := baseStyle.Bold(true).Width(contentWidth)
+				dimStyle := baseStyle.Bold(true).Width(m.width)
 				line = dimStyle.Render(label)
 			} else if item.resourceType == m.selected {
-				// Currently selected resource gets subtle highlight.
-				selStyle := baseStyle.Bold(true).Width(contentWidth)
+				selStyle := baseStyle.Bold(true).Width(m.width)
 				line = selStyle.Render(label)
 			} else {
-				line = baseStyle.Width(contentWidth).Render(label)
+				line = baseStyle.Width(m.width).Render(label)
 			}
 		}
 		lines = append(lines, line)
 	}
 
-	content := strings.Join(lines, "\n")
-
-	borderColor := m.theme.Detail.BorderColor
-	if m.focused {
-		borderColor = m.theme.Sidebar.CategoryFg
-	}
-
-	borderStyle := lipgloss.NewStyle().
-		BorderRight(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(borderColor)).
-		Height(m.height).
-		Width(contentWidth)
-
-	return borderStyle.Render(content)
+	return strings.Join(lines, "\n")
 }
 
-// visibleItems computes the flat list of visible items based on expanded state.
+// visibleItems computes the flat list of all items — categories are always shown.
 func (m SidebarModel) visibleItems() []visibleItem {
 	var items []visibleItem
 	for ci, cat := range m.categories {
@@ -355,16 +339,14 @@ func (m SidebarModel) visibleItems() []visibleItem {
 			resourceIndex: -1,
 			label:         cat.Label,
 		})
-		if cat.Expanded {
-			for ri, res := range cat.Items {
-				items = append(items, visibleItem{
-					isCategory:    false,
-					categoryIndex: ci,
-					resourceIndex: ri,
-					label:         res.Label,
-					resourceType:  res.ResourceType,
-				})
-			}
+		for ri, res := range cat.Items {
+			items = append(items, visibleItem{
+				isCategory:    false,
+				categoryIndex: ci,
+				resourceIndex: ri,
+				label:         res.Label,
+				resourceType:  res.ResourceType,
+			})
 		}
 	}
 	// Standalone items.

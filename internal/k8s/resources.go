@@ -1,0 +1,994 @@
+package k8s
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+)
+
+// FetchResources lists resources of the given type and returns them as
+// ResourceItem slices. Each item's Row matches the column order from
+// ColumnsForResource(rt). Pass namespace="" to list across all namespaces.
+func FetchResources(ctx context.Context, clientset kubernetes.Interface, rt ResourceType, namespace string) ([]ResourceItem, error) {
+	switch rt {
+	case ResourceNamespaces:
+		return fetchNamespaces(ctx, clientset)
+	case ResourceNodes:
+		return fetchNodes(ctx, clientset)
+	case ResourcePods:
+		return fetchPods(ctx, clientset, namespace)
+	case ResourceDeployments:
+		return fetchDeployments(ctx, clientset, namespace)
+	case ResourceDaemonSets:
+		return fetchDaemonSets(ctx, clientset, namespace)
+	case ResourceStatefulSets:
+		return fetchStatefulSets(ctx, clientset, namespace)
+	case ResourceJobs:
+		return fetchJobs(ctx, clientset, namespace)
+	case ResourceCronJobs:
+		return fetchCronJobs(ctx, clientset, namespace)
+	case ResourceServices:
+		return fetchServices(ctx, clientset, namespace)
+	case ResourceIngresses:
+		return fetchIngresses(ctx, clientset, namespace)
+	case ResourceConfigMaps:
+		return fetchConfigMaps(ctx, clientset, namespace)
+	case ResourceSecrets:
+		return fetchSecrets(ctx, clientset, namespace)
+	case ResourceEvents:
+		return fetchEvents(ctx, clientset, namespace)
+	default:
+		return nil, fmt.Errorf("unsupported resource type: %s", rt)
+	}
+}
+
+// GetResourceDetail extracts structured detail from a ResourceItem. The detail
+// includes common metadata plus resource-specific fields.
+func GetResourceDetail(rt ResourceType, item ResourceItem) ResourceDetail {
+	switch rt {
+	case ResourceNamespaces:
+		return detailNamespace(item)
+	case ResourceNodes:
+		return detailNode(item)
+	case ResourcePods:
+		return detailPod(item)
+	case ResourceDeployments:
+		return detailDeployment(item)
+	case ResourceDaemonSets:
+		return detailDaemonSet(item)
+	case ResourceStatefulSets:
+		return detailStatefulSet(item)
+	case ResourceJobs:
+		return detailJob(item)
+	case ResourceCronJobs:
+		return detailCronJob(item)
+	case ResourceServices:
+		return detailService(item)
+	case ResourceIngresses:
+		return detailIngress(item)
+	case ResourceConfigMaps:
+		return detailConfigMap(item)
+	case ResourceSecrets:
+		return detailSecret(item)
+	case ResourceEvents:
+		return detailEvent(item)
+	default:
+		return ResourceDetail{Name: item.Name, Namespace: item.Namespace, Kind: rt.String(), UID: item.UID}
+	}
+}
+
+// FetchResourceEvents fetches events related to a specific resource by name,
+// optionally filtering by namespace. Events are returned sorted by last
+// timestamp, newest first.
+func FetchResourceEvents(ctx context.Context, clientset kubernetes.Interface, name, namespace string) ([]EventItem, error) {
+	selector := fmt.Sprintf("involvedObject.name=%s", name)
+	opts := metav1.ListOptions{FieldSelector: selector}
+
+	list, err := clientset.CoreV1().Events(namespace).List(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("listing events for %s: %w", name, err)
+	}
+
+	// Sort by last timestamp, newest first.
+	sort.Slice(list.Items, func(i, j int) bool {
+		ti := eventTime(list.Items[i])
+		tj := eventTime(list.Items[j])
+		return ti.After(tj)
+	})
+
+	items := make([]EventItem, 0, len(list.Items))
+	for i := range list.Items {
+		e := &list.Items[i]
+		items = append(items, EventItem{
+			Type:    e.Type,
+			Reason:  e.Reason,
+			Object:  fmt.Sprintf("%s/%s", e.InvolvedObject.Kind, e.InvolvedObject.Name),
+			Message: e.Message,
+			Age:     formatAge(eventTime(*e)),
+		})
+	}
+	return items, nil
+}
+
+// ---------------------------------------------------------------------------
+// formatAge
+// ---------------------------------------------------------------------------
+
+// formatAge converts a timestamp to a human-readable age string relative to
+// now (e.g. "3d", "5h", "2m", "10s"). Returns "<unknown>" for zero times.
+func formatAge(t time.Time) string {
+	if t.IsZero() {
+		return "<unknown>"
+	}
+	d := time.Since(t)
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// eventTime helper
+// ---------------------------------------------------------------------------
+
+func eventTime(e corev1.Event) time.Time {
+	if !e.LastTimestamp.IsZero() {
+		return e.LastTimestamp.Time
+	}
+	if e.EventTime.Time.IsZero() {
+		return e.CreationTimestamp.Time
+	}
+	return e.EventTime.Time
+}
+
+// ---------------------------------------------------------------------------
+// Namespace
+// ---------------------------------------------------------------------------
+
+func fetchNamespaces(ctx context.Context, cs kubernetes.Interface) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing namespaces: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		ns := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      ns.Name,
+			Namespace: "",
+			UID:       string(ns.UID),
+			Raw:       ns,
+			Row: []string{
+				ns.Name,
+				string(ns.Status.Phase),
+				formatAge(ns.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailNamespace(item ResourceItem) ResourceDetail {
+	ns, _ := item.Raw.(*corev1.Namespace)
+	d := baseDetail(item, "Namespace", ns.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Phase", Value: string(ns.Status.Phase)},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Node
+// ---------------------------------------------------------------------------
+
+func fetchNodes(ctx context.Context, cs kubernetes.Interface) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing nodes: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		n := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      n.Name,
+			Namespace: "",
+			UID:       string(n.UID),
+			Raw:       n,
+			Row: []string{
+				n.Name,
+				nodeStatus(n),
+				nodeRoles(n),
+				n.Status.NodeInfo.KubeletVersion,
+				formatAge(n.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func nodeStatus(n *corev1.Node) string {
+	for _, c := range n.Status.Conditions {
+		if c.Type == corev1.NodeReady {
+			if c.Status == corev1.ConditionTrue {
+				return "Ready"
+			}
+			return "NotReady"
+		}
+	}
+	return "Unknown"
+}
+
+func nodeRoles(n *corev1.Node) string {
+	var roles []string
+	for k := range n.Labels {
+		const prefix = "node-role.kubernetes.io/"
+		if strings.HasPrefix(k, prefix) {
+			role := strings.TrimPrefix(k, prefix)
+			if role == "" {
+				role = "worker"
+			}
+			roles = append(roles, role)
+		}
+	}
+	if len(roles) == 0 {
+		return "<none>"
+	}
+	sort.Strings(roles)
+	return strings.Join(roles, ",")
+}
+
+func detailNode(item ResourceItem) ResourceDetail {
+	n, _ := item.Raw.(*corev1.Node)
+	d := baseDetail(item, "Node", n.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Status", Value: nodeStatus(n)},
+		{Label: "Roles", Value: nodeRoles(n)},
+		{Label: "Kubelet Version", Value: n.Status.NodeInfo.KubeletVersion},
+		{Label: "OS Image", Value: n.Status.NodeInfo.OSImage},
+		{Label: "Kernel Version", Value: n.Status.NodeInfo.KernelVersion},
+		{Label: "Container Runtime", Value: n.Status.NodeInfo.ContainerRuntimeVersion},
+		{Label: "Architecture", Value: n.Status.NodeInfo.Architecture},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Pod
+// ---------------------------------------------------------------------------
+
+func fetchPods(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing pods: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		p := &list.Items[i]
+		ready, total := podReadyCounts(p)
+		restarts := podRestarts(p)
+		items = append(items, ResourceItem{
+			Name:      p.Name,
+			Namespace: p.Namespace,
+			UID:       string(p.UID),
+			Raw:       p,
+			Row: []string{
+				p.Name,
+				fmt.Sprintf("%d/%d", ready, total),
+				string(p.Status.Phase),
+				fmt.Sprintf("%d", restarts),
+				formatAge(p.CreationTimestamp.Time),
+				p.Spec.NodeName,
+			},
+		})
+	}
+	return items, nil
+}
+
+func podReadyCounts(p *corev1.Pod) (ready, total int) {
+	total = len(p.Spec.Containers)
+	for _, cs := range p.Status.ContainerStatuses {
+		if cs.Ready {
+			ready++
+		}
+	}
+	return
+}
+
+func podRestarts(p *corev1.Pod) int32 {
+	var total int32
+	for _, cs := range p.Status.ContainerStatuses {
+		total += cs.RestartCount
+	}
+	return total
+}
+
+func detailPod(item ResourceItem) ResourceDetail {
+	p, _ := item.Raw.(*corev1.Pod)
+	d := baseDetail(item, "Pod", p.ObjectMeta)
+	ready, total := podReadyCounts(p)
+
+	containers := make([]string, 0, len(p.Spec.Containers))
+	for _, c := range p.Spec.Containers {
+		containers = append(containers, c.Name)
+	}
+
+	d.Fields = []DetailField{
+		{Label: "Phase", Value: string(p.Status.Phase)},
+		{Label: "Node", Value: p.Spec.NodeName},
+		{Label: "Pod IP", Value: p.Status.PodIP},
+		{Label: "Host IP", Value: p.Status.HostIP},
+		{Label: "Ready", Value: fmt.Sprintf("%d/%d", ready, total)},
+		{Label: "Restarts", Value: fmt.Sprintf("%d", podRestarts(p))},
+		{Label: "Containers", Value: strings.Join(containers, ", ")},
+		{Label: "Service Account", Value: p.Spec.ServiceAccountName},
+	}
+	if p.Spec.Priority != nil {
+		d.Fields = append(d.Fields, DetailField{Label: "Priority", Value: fmt.Sprintf("%d", *p.Spec.Priority)})
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Deployment
+// ---------------------------------------------------------------------------
+
+func fetchDeployments(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing deployments: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		dep := &list.Items[i]
+		replicas := int32(0)
+		if dep.Spec.Replicas != nil {
+			replicas = *dep.Spec.Replicas
+		}
+		items = append(items, ResourceItem{
+			Name:      dep.Name,
+			Namespace: dep.Namespace,
+			UID:       string(dep.UID),
+			Raw:       dep,
+			Row: []string{
+				dep.Name,
+				fmt.Sprintf("%d/%d", dep.Status.ReadyReplicas, replicas),
+				fmt.Sprintf("%d", dep.Status.UpdatedReplicas),
+				fmt.Sprintf("%d", dep.Status.AvailableReplicas),
+				formatAge(dep.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailDeployment(item ResourceItem) ResourceDetail {
+	dep, _ := item.Raw.(*appsv1.Deployment)
+	d := baseDetail(item, "Deployment", dep.ObjectMeta)
+	replicas := int32(0)
+	if dep.Spec.Replicas != nil {
+		replicas = *dep.Spec.Replicas
+	}
+	strategy := string(dep.Spec.Strategy.Type)
+	d.Fields = []DetailField{
+		{Label: "Strategy", Value: strategy},
+		{Label: "Replicas", Value: fmt.Sprintf("%d desired | %d updated | %d available | %d ready",
+			replicas, dep.Status.UpdatedReplicas, dep.Status.AvailableReplicas, dep.Status.ReadyReplicas)},
+		{Label: "Min Ready Seconds", Value: fmt.Sprintf("%d", dep.Spec.MinReadySeconds)},
+	}
+	if dep.Spec.Strategy.RollingUpdate != nil {
+		ru := dep.Spec.Strategy.RollingUpdate
+		maxUnavail := "<nil>"
+		maxSurge := "<nil>"
+		if ru.MaxUnavailable != nil {
+			maxUnavail = ru.MaxUnavailable.String()
+		}
+		if ru.MaxSurge != nil {
+			maxSurge = ru.MaxSurge.String()
+		}
+		d.Fields = append(d.Fields,
+			DetailField{Label: "Max Unavailable", Value: maxUnavail},
+			DetailField{Label: "Max Surge", Value: maxSurge},
+		)
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// DaemonSet
+// ---------------------------------------------------------------------------
+
+func fetchDaemonSets(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.AppsV1().DaemonSets(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing daemonsets: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		ds := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      ds.Name,
+			Namespace: ds.Namespace,
+			UID:       string(ds.UID),
+			Raw:       ds,
+			Row: []string{
+				ds.Name,
+				fmt.Sprintf("%d", ds.Status.DesiredNumberScheduled),
+				fmt.Sprintf("%d", ds.Status.CurrentNumberScheduled),
+				fmt.Sprintf("%d", ds.Status.NumberReady),
+				formatAge(ds.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailDaemonSet(item ResourceItem) ResourceDetail {
+	ds, _ := item.Raw.(*appsv1.DaemonSet)
+	d := baseDetail(item, "DaemonSet", ds.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Desired", Value: fmt.Sprintf("%d", ds.Status.DesiredNumberScheduled)},
+		{Label: "Current", Value: fmt.Sprintf("%d", ds.Status.CurrentNumberScheduled)},
+		{Label: "Ready", Value: fmt.Sprintf("%d", ds.Status.NumberReady)},
+		{Label: "Up-to-date", Value: fmt.Sprintf("%d", ds.Status.UpdatedNumberScheduled)},
+		{Label: "Available", Value: fmt.Sprintf("%d", ds.Status.NumberAvailable)},
+		{Label: "Update Strategy", Value: string(ds.Spec.UpdateStrategy.Type)},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// StatefulSet
+// ---------------------------------------------------------------------------
+
+func fetchStatefulSets(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.AppsV1().StatefulSets(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing statefulsets: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		ss := &list.Items[i]
+		replicas := int32(0)
+		if ss.Spec.Replicas != nil {
+			replicas = *ss.Spec.Replicas
+		}
+		items = append(items, ResourceItem{
+			Name:      ss.Name,
+			Namespace: ss.Namespace,
+			UID:       string(ss.UID),
+			Raw:       ss,
+			Row: []string{
+				ss.Name,
+				fmt.Sprintf("%d/%d", ss.Status.ReadyReplicas, replicas),
+				formatAge(ss.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailStatefulSet(item ResourceItem) ResourceDetail {
+	ss, _ := item.Raw.(*appsv1.StatefulSet)
+	d := baseDetail(item, "StatefulSet", ss.ObjectMeta)
+	replicas := int32(0)
+	if ss.Spec.Replicas != nil {
+		replicas = *ss.Spec.Replicas
+	}
+	d.Fields = []DetailField{
+		{Label: "Replicas", Value: fmt.Sprintf("%d desired | %d ready | %d current",
+			replicas, ss.Status.ReadyReplicas, ss.Status.CurrentReplicas)},
+		{Label: "Update Strategy", Value: string(ss.Spec.UpdateStrategy.Type)},
+		{Label: "Pod Management Policy", Value: string(ss.Spec.PodManagementPolicy)},
+		{Label: "Service Name", Value: ss.Spec.ServiceName},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Job
+// ---------------------------------------------------------------------------
+
+func fetchJobs(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.BatchV1().Jobs(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing jobs: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		j := &list.Items[i]
+		completions := int32(1)
+		if j.Spec.Completions != nil {
+			completions = *j.Spec.Completions
+		}
+		items = append(items, ResourceItem{
+			Name:      j.Name,
+			Namespace: j.Namespace,
+			UID:       string(j.UID),
+			Raw:       j,
+			Row: []string{
+				j.Name,
+				fmt.Sprintf("%d/%d", j.Status.Succeeded, completions),
+				jobDuration(j),
+				formatAge(j.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func jobDuration(j *batchv1.Job) string {
+	if j.Status.StartTime == nil {
+		return "<pending>"
+	}
+	end := time.Now()
+	if j.Status.CompletionTime != nil {
+		end = j.Status.CompletionTime.Time
+	}
+	d := end.Sub(j.Status.StartTime.Time)
+	if d < 0 {
+		d = 0
+	}
+	return formatDuration(d)
+}
+
+func formatDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm%ds", int(d.Minutes()), int(d.Seconds())%60)
+	default:
+		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+}
+
+func detailJob(item ResourceItem) ResourceDetail {
+	j, _ := item.Raw.(*batchv1.Job)
+	d := baseDetail(item, "Job", j.ObjectMeta)
+	completions := int32(1)
+	if j.Spec.Completions != nil {
+		completions = *j.Spec.Completions
+	}
+	parallelism := int32(1)
+	if j.Spec.Parallelism != nil {
+		parallelism = *j.Spec.Parallelism
+	}
+	d.Fields = []DetailField{
+		{Label: "Completions", Value: fmt.Sprintf("%d/%d", j.Status.Succeeded, completions)},
+		{Label: "Parallelism", Value: fmt.Sprintf("%d", parallelism)},
+		{Label: "Duration", Value: jobDuration(j)},
+		{Label: "Active", Value: fmt.Sprintf("%d", j.Status.Active)},
+		{Label: "Failed", Value: fmt.Sprintf("%d", j.Status.Failed)},
+	}
+	if j.Spec.BackoffLimit != nil {
+		d.Fields = append(d.Fields, DetailField{Label: "Backoff Limit", Value: fmt.Sprintf("%d", *j.Spec.BackoffLimit)})
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// CronJob
+// ---------------------------------------------------------------------------
+
+func fetchCronJobs(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.BatchV1().CronJobs(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing cronjobs: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		cj := &list.Items[i]
+		suspend := "False"
+		if cj.Spec.Suspend != nil && *cj.Spec.Suspend {
+			suspend = "True"
+		}
+		lastSchedule := "<none>"
+		if cj.Status.LastScheduleTime != nil {
+			lastSchedule = formatAge(cj.Status.LastScheduleTime.Time)
+		}
+		items = append(items, ResourceItem{
+			Name:      cj.Name,
+			Namespace: cj.Namespace,
+			UID:       string(cj.UID),
+			Raw:       cj,
+			Row: []string{
+				cj.Name,
+				cj.Spec.Schedule,
+				suspend,
+				fmt.Sprintf("%d", len(cj.Status.Active)),
+				lastSchedule,
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailCronJob(item ResourceItem) ResourceDetail {
+	cj, _ := item.Raw.(*batchv1.CronJob)
+	d := baseDetail(item, "CronJob", cj.ObjectMeta)
+	suspend := "False"
+	if cj.Spec.Suspend != nil && *cj.Spec.Suspend {
+		suspend = "True"
+	}
+	lastSchedule := "<none>"
+	if cj.Status.LastScheduleTime != nil {
+		lastSchedule = cj.Status.LastScheduleTime.Time.Format(time.RFC3339)
+	}
+	d.Fields = []DetailField{
+		{Label: "Schedule", Value: cj.Spec.Schedule},
+		{Label: "Suspend", Value: suspend},
+		{Label: "Active", Value: fmt.Sprintf("%d", len(cj.Status.Active))},
+		{Label: "Last Schedule", Value: lastSchedule},
+		{Label: "Concurrency Policy", Value: string(cj.Spec.ConcurrencyPolicy)},
+	}
+	if cj.Spec.SuccessfulJobsHistoryLimit != nil {
+		d.Fields = append(d.Fields, DetailField{Label: "Success History Limit", Value: fmt.Sprintf("%d", *cj.Spec.SuccessfulJobsHistoryLimit)})
+	}
+	if cj.Spec.FailedJobsHistoryLimit != nil {
+		d.Fields = append(d.Fields, DetailField{Label: "Failed History Limit", Value: fmt.Sprintf("%d", *cj.Spec.FailedJobsHistoryLimit)})
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+func fetchServices(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().Services(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing services: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		svc := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      svc.Name,
+			Namespace: svc.Namespace,
+			UID:       string(svc.UID),
+			Raw:       svc,
+			Row: []string{
+				svc.Name,
+				string(svc.Spec.Type),
+				svc.Spec.ClusterIP,
+				serviceExternalIPs(svc),
+				servicePorts(svc),
+				formatAge(svc.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func serviceExternalIPs(svc *corev1.Service) string {
+	if len(svc.Status.LoadBalancer.Ingress) > 0 {
+		var ips []string
+		for _, ing := range svc.Status.LoadBalancer.Ingress {
+			if ing.IP != "" {
+				ips = append(ips, ing.IP)
+			} else if ing.Hostname != "" {
+				ips = append(ips, ing.Hostname)
+			}
+		}
+		if len(ips) > 0 {
+			return strings.Join(ips, ",")
+		}
+	}
+	if len(svc.Spec.ExternalIPs) > 0 {
+		return strings.Join(svc.Spec.ExternalIPs, ",")
+	}
+	return "<none>"
+}
+
+func servicePorts(svc *corev1.Service) string {
+	if len(svc.Spec.Ports) == 0 {
+		return "<none>"
+	}
+	var ports []string
+	for _, p := range svc.Spec.Ports {
+		s := fmt.Sprintf("%d/%s", p.Port, p.Protocol)
+		ports = append(ports, s)
+	}
+	return strings.Join(ports, ",")
+}
+
+func detailService(item ResourceItem) ResourceDetail {
+	svc, _ := item.Raw.(*corev1.Service)
+	d := baseDetail(item, "Service", svc.ObjectMeta)
+
+	var selectors []string
+	for k, v := range svc.Spec.Selector {
+		selectors = append(selectors, fmt.Sprintf("%s=%s", k, v))
+	}
+	sort.Strings(selectors)
+
+	d.Fields = []DetailField{
+		{Label: "Type", Value: string(svc.Spec.Type)},
+		{Label: "Cluster IP", Value: svc.Spec.ClusterIP},
+		{Label: "External IPs", Value: serviceExternalIPs(svc)},
+		{Label: "Ports", Value: servicePorts(svc)},
+		{Label: "Selector", Value: strings.Join(selectors, ", ")},
+		{Label: "Session Affinity", Value: string(svc.Spec.SessionAffinity)},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Ingress
+// ---------------------------------------------------------------------------
+
+func fetchIngresses(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.NetworkingV1().Ingresses(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing ingresses: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		ing := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      ing.Name,
+			Namespace: ing.Namespace,
+			UID:       string(ing.UID),
+			Raw:       ing,
+			Row: []string{
+				ing.Name,
+				ingressClass(ing),
+				ingressHosts(ing),
+				ingressPorts(ing),
+				formatAge(ing.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func ingressClass(ing *networkingv1.Ingress) string {
+	if ing.Spec.IngressClassName != nil {
+		return *ing.Spec.IngressClassName
+	}
+	// Fall back to the deprecated annotation.
+	if v, ok := ing.Annotations["kubernetes.io/ingress.class"]; ok {
+		return v
+	}
+	return "<none>"
+}
+
+func ingressHosts(ing *networkingv1.Ingress) string {
+	hostSet := make(map[string]struct{})
+	for _, rule := range ing.Spec.Rules {
+		h := rule.Host
+		if h == "" {
+			h = "*"
+		}
+		hostSet[h] = struct{}{}
+	}
+	if len(hostSet) == 0 {
+		return "*"
+	}
+	hosts := make([]string, 0, len(hostSet))
+	for h := range hostSet {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	return strings.Join(hosts, ",")
+}
+
+func ingressPorts(ing *networkingv1.Ingress) string {
+	hasTLS := len(ing.Spec.TLS) > 0
+	if hasTLS {
+		return "80,443"
+	}
+	return "80"
+}
+
+func detailIngress(item ResourceItem) ResourceDetail {
+	ing, _ := item.Raw.(*networkingv1.Ingress)
+	d := baseDetail(item, "Ingress", ing.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Class", Value: ingressClass(ing)},
+		{Label: "Hosts", Value: ingressHosts(ing)},
+		{Label: "Ports", Value: ingressPorts(ing)},
+	}
+	// Add rules detail.
+	for ri, rule := range ing.Spec.Rules {
+		host := rule.Host
+		if host == "" {
+			host = "*"
+		}
+		if rule.HTTP != nil {
+			for _, path := range rule.HTTP.Paths {
+				pathStr := "/"
+				if path.Path != "" {
+					pathStr = path.Path
+				}
+				backend := fmt.Sprintf("%s:%v", path.Backend.Service.Name, path.Backend.Service.Port.Number)
+				d.Fields = append(d.Fields, DetailField{
+					Label: fmt.Sprintf("Rule %d", ri+1),
+					Value: fmt.Sprintf("%s%s -> %s", host, pathStr, backend),
+				})
+			}
+		}
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// ConfigMap
+// ---------------------------------------------------------------------------
+
+func fetchConfigMaps(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().ConfigMaps(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing configmaps: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		cm := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      cm.Name,
+			Namespace: cm.Namespace,
+			UID:       string(cm.UID),
+			Raw:       cm,
+			Row: []string{
+				cm.Name,
+				fmt.Sprintf("%d", len(cm.Data)+len(cm.BinaryData)),
+				formatAge(cm.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailConfigMap(item ResourceItem) ResourceDetail {
+	cm, _ := item.Raw.(*corev1.ConfigMap)
+	d := baseDetail(item, "ConfigMap", cm.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Data Keys", Value: fmt.Sprintf("%d", len(cm.Data))},
+		{Label: "Binary Data Keys", Value: fmt.Sprintf("%d", len(cm.BinaryData))},
+	}
+	// List keys (not values for safety — could be large).
+	var keys []string
+	for k := range cm.Data {
+		keys = append(keys, k)
+	}
+	for k := range cm.BinaryData {
+		keys = append(keys, k+" (binary)")
+	}
+	sort.Strings(keys)
+	if len(keys) > 0 {
+		d.Fields = append(d.Fields, DetailField{Label: "Keys", Value: strings.Join(keys, ", ")})
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Secret — metadata only, never show data content
+// ---------------------------------------------------------------------------
+
+func fetchSecrets(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().Secrets(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing secrets: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		s := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      s.Name,
+			Namespace: s.Namespace,
+			UID:       string(s.UID),
+			Raw:       s,
+			Row: []string{
+				s.Name,
+				string(s.Type),
+				fmt.Sprintf("%d", len(s.Data)),
+				formatAge(s.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailSecret(item ResourceItem) ResourceDetail {
+	s, _ := item.Raw.(*corev1.Secret)
+	d := baseDetail(item, "Secret", s.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Type", Value: string(s.Type)},
+		{Label: "Data Keys", Value: fmt.Sprintf("%d", len(s.Data))},
+	}
+	// List key names only — never show secret data content.
+	var keys []string
+	for k := range s.Data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if len(keys) > 0 {
+		d.Fields = append(d.Fields, DetailField{Label: "Keys", Value: strings.Join(keys, ", ")})
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+func fetchEvents(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().Events(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing events: %w", err)
+	}
+
+	// Sort newest first.
+	sort.Slice(list.Items, func(i, j int) bool {
+		return eventTime(list.Items[i]).After(eventTime(list.Items[j]))
+	})
+
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		e := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      e.Name,
+			Namespace: e.Namespace,
+			UID:       string(e.UID),
+			Raw:       e,
+			Row: []string{
+				e.Type,
+				e.Reason,
+				fmt.Sprintf("%s/%s", e.InvolvedObject.Kind, e.InvolvedObject.Name),
+				e.Message,
+				formatAge(eventTime(*e)),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailEvent(item ResourceItem) ResourceDetail {
+	e, _ := item.Raw.(*corev1.Event)
+	d := baseDetail(item, "Event", e.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Type", Value: e.Type},
+		{Label: "Reason", Value: e.Reason},
+		{Label: "Object", Value: fmt.Sprintf("%s/%s", e.InvolvedObject.Kind, e.InvolvedObject.Name)},
+		{Label: "Message", Value: e.Message},
+		{Label: "Source", Value: fmt.Sprintf("%s, %s", e.Source.Component, e.Source.Host)},
+		{Label: "Count", Value: fmt.Sprintf("%d", e.Count)},
+		{Label: "First Seen", Value: formatAge(e.FirstTimestamp.Time)},
+		{Label: "Last Seen", Value: formatAge(eventTime(*e))},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Common helpers
+// ---------------------------------------------------------------------------
+
+func baseDetail(item ResourceItem, kind string, meta metav1.ObjectMeta) ResourceDetail {
+	return ResourceDetail{
+		Name:        item.Name,
+		Namespace:   item.Namespace,
+		Kind:        kind,
+		UID:         item.UID,
+		CreatedAt:   formatAge(meta.CreationTimestamp.Time),
+		Labels:      meta.Labels,
+		Annotations: meta.Annotations,
+	}
+}
