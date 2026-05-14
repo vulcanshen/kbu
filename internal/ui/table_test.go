@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -211,6 +212,305 @@ func TestTableModel_ScrollOffset(t *testing.T) {
 	}
 	if m.scrollOffset <= 0 {
 		t.Errorf("expected scrollOffset > 0 after scrolling down, got %d", m.scrollOffset)
+	}
+}
+
+func TestTableModel_EnterSearch(t *testing.T) {
+	m := newTestTable()
+	m.SetRows(sampleRows(5))
+
+	// Press / to enter search mode.
+	m, _ = m.Update(keyMsg('/'))
+	if !m.searching {
+		t.Fatal("expected searching=true after /")
+	}
+	if m.searchQuery != "" {
+		t.Errorf("expected empty searchQuery, got %q", m.searchQuery)
+	}
+
+	// All rows should still be visible (empty query).
+	if len(m.rows) != 5 {
+		t.Errorf("expected 5 rows with empty query, got %d", len(m.rows))
+	}
+}
+
+func TestTableModel_SearchFilter(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"nginx-pod", "1/1", "Running", "0", "5m", "node-1"},
+		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},
+		{"postgres-db", "1/1", "Running", "0", "10m", "node-1"},
+		{"nginx-svc", "1/1", "Pending", "0", "2m", "node-3"},
+	}
+	m.SetRows(rows)
+
+	// Enter search mode.
+	m, _ = m.Update(keyMsg('/'))
+	if !m.searching {
+		t.Fatal("expected searching=true after /")
+	}
+
+	// Type "nginx" — should filter to 2 rows.
+	for _, r := range "nginx" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if m.searchQuery != "nginx" {
+		t.Errorf("expected searchQuery='nginx', got %q", m.searchQuery)
+	}
+	if len(m.rows) != 2 {
+		t.Fatalf("expected 2 filtered rows for 'nginx', got %d", len(m.rows))
+	}
+	if m.rows[0][0] != "nginx-pod" {
+		t.Errorf("expected first filtered row 'nginx-pod', got %q", m.rows[0][0])
+	}
+	if m.rows[1][0] != "nginx-svc" {
+		t.Errorf("expected second filtered row 'nginx-svc', got %q", m.rows[1][0])
+	}
+}
+
+func TestTableModel_SearchFilterCaseInsensitive(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"Nginx-Pod", "1/1", "Running", "0", "5m", "node-1"},
+		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},
+	}
+	m.SetRows(rows)
+
+	// Enter search mode and type "nginx" (lowercase).
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "nginx" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	// Should match "Nginx-Pod" case-insensitively.
+	if len(m.rows) != 1 {
+		t.Fatalf("expected 1 filtered row for case-insensitive 'nginx', got %d", len(m.rows))
+	}
+	if m.rows[0][0] != "Nginx-Pod" {
+		t.Errorf("expected filtered row 'Nginx-Pod', got %q", m.rows[0][0])
+	}
+}
+
+func TestTableModel_SearchClearOnEsc(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"nginx-pod", "1/1", "Running", "0", "5m", "node-1"},
+		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},
+		{"postgres-db", "1/1", "Running", "0", "10m", "node-1"},
+	}
+	m.SetRows(rows)
+
+	// Enter search, type "nginx", then press Esc.
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "nginx" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if len(m.rows) != 1 {
+		t.Fatalf("expected 1 row for 'nginx', got %d", len(m.rows))
+	}
+
+	// Press Esc — should clear filter and exit search mode.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.searching {
+		t.Error("expected searching=false after Esc")
+	}
+	if m.searchQuery != "" {
+		t.Errorf("expected empty searchQuery after Esc, got %q", m.searchQuery)
+	}
+	if len(m.rows) != 3 {
+		t.Errorf("expected all 3 rows after Esc, got %d", len(m.rows))
+	}
+}
+
+func TestTableModel_SearchConfirmOnEnter(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"nginx-pod", "1/1", "Running", "0", "5m", "node-1"},
+		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},
+		{"postgres-db", "1/1", "Running", "0", "10m", "node-1"},
+	}
+	m.SetRows(rows)
+
+	// Enter search, type "redis", then press Enter.
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "redis" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if len(m.rows) != 1 {
+		t.Fatalf("expected 1 row for 'redis', got %d", len(m.rows))
+	}
+
+	// Press Enter — should exit search mode but keep filter.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.searching {
+		t.Error("expected searching=false after Enter")
+	}
+	if m.searchQuery != "redis" {
+		t.Errorf("expected searchQuery='redis' after Enter, got %q", m.searchQuery)
+	}
+	if len(m.rows) != 1 {
+		t.Errorf("expected filter to remain active with 1 row, got %d", len(m.rows))
+	}
+}
+
+func TestTableModel_SearchOriginalIndex(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"nginx-pod", "1/1", "Running", "0", "5m", "node-1"},   // original index 0
+		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},   // original index 1
+		{"postgres-db", "1/1", "Running", "0", "10m", "node-1"}, // original index 2
+		{"nginx-svc", "1/1", "Pending", "0", "2m", "node-3"},   // original index 3
+	}
+	m.SetRows(rows)
+
+	// Enter search, type "nginx".
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "nginx" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	// 2 rows should be visible: nginx-pod (original 0) and nginx-svc (original 3).
+	if len(m.rows) != 2 {
+		t.Fatalf("expected 2 filtered rows, got %d", len(m.rows))
+	}
+
+	// OriginalIndex for display index 0 should be 0.
+	if m.OriginalIndex(0) != 0 {
+		t.Errorf("expected OriginalIndex(0)=0, got %d", m.OriginalIndex(0))
+	}
+
+	// OriginalIndex for display index 1 should be 3.
+	if m.OriginalIndex(1) != 3 {
+		t.Errorf("expected OriginalIndex(1)=3, got %d", m.OriginalIndex(1))
+	}
+
+	// SelectedRow should return the original index.
+	m.cursor = 1
+	if m.SelectedRow() != 3 {
+		t.Errorf("expected SelectedRow()=3 when cursor=1, got %d", m.SelectedRow())
+	}
+}
+
+func TestTableModel_SearchBackspace(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"nginx-pod", "1/1", "Running", "0", "5m", "node-1"},
+		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},
+	}
+	m.SetRows(rows)
+
+	// Enter search, type "nginx", then backspace one char.
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "nginx" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if len(m.rows) != 1 {
+		t.Fatalf("expected 1 row for 'nginx', got %d", len(m.rows))
+	}
+
+	// Backspace — query becomes "ngin", still matches only "nginx-pod".
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if m.searchQuery != "ngin" {
+		t.Errorf("expected searchQuery='ngin' after backspace, got %q", m.searchQuery)
+	}
+	if len(m.rows) != 1 {
+		t.Errorf("expected 1 row for 'ngin', got %d", len(m.rows))
+	}
+
+	// Backspace 4 more times — query becomes empty, all rows visible.
+	for i := 0; i < 4; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	if m.searchQuery != "" {
+		t.Errorf("expected empty searchQuery after clearing, got %q", m.searchQuery)
+	}
+	if len(m.rows) != 2 {
+		t.Errorf("expected 2 rows with empty query, got %d", len(m.rows))
+	}
+}
+
+func TestTableModel_SearchNavigateWhileSearching(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"nginx-pod-1", "1/1", "Running", "0", "5m", "node-1"},
+		{"nginx-pod-2", "1/1", "Running", "0", "3m", "node-2"},
+		{"nginx-pod-3", "1/1", "Running", "0", "10m", "node-1"},
+	}
+	m.SetRows(rows)
+
+	// Enter search, type "nginx".
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "nginx" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if m.cursor != 0 {
+		t.Fatalf("expected cursor at 0, got %d", m.cursor)
+	}
+
+	// Navigate down with arrow key while searching.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.cursor != 1 {
+		t.Errorf("expected cursor at 1 after down arrow while searching, got %d", m.cursor)
+	}
+
+	// Still in search mode.
+	if !m.searching {
+		t.Error("expected to still be in search mode after navigating")
+	}
+}
+
+func TestTableModel_SetRowsPreservesFilter(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"nginx-pod", "1/1", "Running", "0", "5m", "node-1"},
+		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},
+	}
+	m.SetRows(rows)
+
+	// Enter search, type "nginx", confirm with Enter.
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "nginx" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Now set new rows (simulating a watch update).
+	newRows := [][]string{
+		{"nginx-pod", "1/1", "Running", "0", "6m", "node-1"},
+		{"redis-pod", "1/1", "Running", "0", "4m", "node-2"},
+		{"nginx-new", "1/1", "Running", "0", "1m", "node-3"},
+	}
+	m.SetRows(newRows)
+
+	// Filter "nginx" should still be active, showing 2 of 3 rows.
+	if m.searchQuery != "nginx" {
+		t.Errorf("expected searchQuery='nginx' after SetRows, got %q", m.searchQuery)
+	}
+	if len(m.rows) != 2 {
+		t.Errorf("expected 2 filtered rows after SetRows, got %d", len(m.rows))
+	}
+}
+
+func TestTableModel_SearchColumnMatch(t *testing.T) {
+	m := newTestTable()
+	rows := [][]string{
+		{"pod-1", "1/1", "Running", "0", "5m", "node-1"},
+		{"pod-2", "0/1", "Pending", "0", "3m", "node-2"},
+		{"pod-3", "1/1", "Error", "5", "10m", "node-1"},
+	}
+	m.SetRows(rows)
+
+	// Search for "Pending" — should match on status column.
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "Pending" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	if len(m.rows) != 1 {
+		t.Fatalf("expected 1 row matching 'Pending', got %d", len(m.rows))
+	}
+	if m.rows[0][0] != "pod-2" {
+		t.Errorf("expected matching row 'pod-2', got %q", m.rows[0][0])
 	}
 }
 

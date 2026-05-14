@@ -18,16 +18,20 @@ type Column struct {
 
 // TableModel is the Bubble Tea model for the resource table panel.
 type TableModel struct {
-	columns      []Column
-	rows         [][]string
-	cursor       int
-	scrollOffset int
-	focused      bool
-	width        int
-	height       int
-	theme        *theme.Theme
-	pendingG     bool
-	resourceType k8s.ResourceType
+	columns         []Column
+	rows            [][]string
+	allRows         [][]string
+	filteredIndices []int
+	cursor          int
+	scrollOffset    int
+	focused         bool
+	width           int
+	height          int
+	theme           *theme.Theme
+	pendingG        bool
+	resourceType    k8s.ResourceType
+	searching       bool
+	searchQuery     string
 }
 
 // ColumnsForResource returns the column definitions for a given resource type.
@@ -166,9 +170,13 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd) {
 		m.resourceType = msg.Type
 		m.columns = ColumnsForResource(msg.Type)
 		m.rows = nil
+		m.allRows = nil
+		m.filteredIndices = nil
 		m.cursor = 0
 		m.scrollOffset = 0
 		m.pendingG = false
+		m.searching = false
+		m.searchQuery = ""
 		return m, nil
 
 	case tea.KeyMsg:
@@ -188,6 +196,10 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd) {
 }
 
 func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
+	if m.searching {
+		return m.handleSearchKey(msg)
+	}
+
 	switch {
 	case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && string(msg.Runes) == "j"):
 		m.pendingG = false
@@ -223,16 +235,67 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 			m.pendingG = true
 		}
 
+	case msg.Type == tea.KeyRunes && string(msg.Runes) == "/":
+		m.pendingG = false
+		m.searching = true
+		m.searchQuery = ""
+		m.filterRows()
+		return m, nil
+
 	case msg.Type == tea.KeyEnter:
 		m.pendingG = false
 		if len(m.rows) > 0 {
 			return m, func() tea.Msg {
-				return RowSelectedMsg{Index: m.cursor}
+				return RowSelectedMsg{Index: m.OriginalIndex(m.cursor)}
 			}
 		}
 
 	default:
 		m.pendingG = false
+	}
+
+	return m, nil
+}
+
+func (m TableModel) handleSearchKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
+	switch {
+	case msg.Type == tea.KeyEscape:
+		m.searching = false
+		m.searchQuery = ""
+		m.filterRows()
+		return m, nil
+
+	case msg.Type == tea.KeyEnter:
+		m.searching = false
+		return m, nil
+
+	case msg.Type == tea.KeyBackspace:
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.filterRows()
+		}
+		return m, nil
+
+	case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && string(msg.Runes) == "j"):
+		if len(m.rows) > 0 && m.cursor < len(m.rows)-1 {
+			m.cursor++
+			m.ensureCursorVisible()
+			return m, m.emitCursorChanged()
+		}
+
+	case msg.Type == tea.KeyUp || (msg.Type == tea.KeyRunes && string(msg.Runes) == "k"):
+		if m.cursor > 0 {
+			m.cursor--
+			m.ensureCursorVisible()
+			return m, m.emitCursorChanged()
+		}
+
+	case msg.Type == tea.KeyRunes:
+		for _, r := range msg.Runes {
+			m.searchQuery += string(r)
+		}
+		m.filterRows()
+		return m, nil
 	}
 
 	return m, nil
@@ -327,6 +390,21 @@ func (m TableModel) View() string {
 		}
 	}
 
+	// Show search bar when searching or when filter is active
+	if m.searching {
+		b.WriteString("\n")
+		searchLine := fmt.Sprintf("/ %s█", m.searchQuery)
+		searchStyle := m.theme.TableHeaderStyle()
+		rendered := searchStyle.Width(m.width).Render(searchLine)
+		b.WriteString(rendered)
+	} else if m.searchQuery != "" {
+		b.WriteString("\n")
+		searchLine := fmt.Sprintf(" filter: %s", m.searchQuery)
+		searchStyle := m.theme.TableRowStyle().Italic(true)
+		rendered := searchStyle.Width(m.width).Render(searchLine)
+		b.WriteString(rendered)
+	}
+
 	return b.String()
 }
 
@@ -339,9 +417,9 @@ func (m TableModel) columnTitles() []string {
 }
 
 func (m TableModel) emitCursorChanged() tea.Cmd {
-	cursor := m.cursor
+	idx := m.OriginalIndex(m.cursor)
 	return func() tea.Msg {
-		return RowSelectedMsg{Index: cursor}
+		return RowSelectedMsg{Index: idx}
 	}
 }
 
@@ -430,9 +508,32 @@ func (m *TableModel) SetFocused(focused bool) {
 	m.focused = focused
 }
 
-// SetRows sets the table rows.
+// SetRows sets the table rows, storing in allRows and applying the current filter.
 func (m *TableModel) SetRows(rows [][]string) {
-	m.rows = rows
+	m.allRows = rows
+	m.filterRows()
+}
+
+// filterRows filters allRows by searchQuery and updates rows and filteredIndices.
+func (m *TableModel) filterRows() {
+	if m.searchQuery == "" {
+		m.rows = m.allRows
+		m.filteredIndices = nil
+	} else {
+		query := strings.ToLower(m.searchQuery)
+		m.rows = nil
+		m.filteredIndices = nil
+		for i, row := range m.allRows {
+			for _, col := range row {
+				if strings.Contains(strings.ToLower(col), query) {
+					m.rows = append(m.rows, row)
+					m.filteredIndices = append(m.filteredIndices, i)
+					break
+				}
+			}
+		}
+	}
+
 	if m.cursor >= len(m.rows) && len(m.rows) > 0 {
 		m.cursor = len(m.rows) - 1
 	}
@@ -442,14 +543,39 @@ func (m *TableModel) SetRows(rows [][]string) {
 	}
 }
 
-// SelectedRow returns the current cursor position.
-func (m TableModel) SelectedRow() int {
-	return m.cursor
+// OriginalIndex returns the original index into allRows for the given display index.
+// When no filter is active, the display index equals the original index.
+func (m TableModel) OriginalIndex(displayIdx int) int {
+	if m.filteredIndices == nil {
+		return displayIdx
+	}
+	if displayIdx >= 0 && displayIdx < len(m.filteredIndices) {
+		return m.filteredIndices[displayIdx]
+	}
+	return displayIdx
 }
 
-// visibleRows returns how many rows fit in the viewport (height minus header).
+// SelectedRow returns the original index of the currently selected row.
+func (m TableModel) SelectedRow() int {
+	return m.OriginalIndex(m.cursor)
+}
+
+// IsSearching returns whether the table is in search mode.
+func (m TableModel) IsSearching() bool {
+	return m.searching
+}
+
+// SearchQuery returns the current search query.
+func (m TableModel) SearchQuery() string {
+	return m.searchQuery
+}
+
+// visibleRows returns how many rows fit in the viewport (height minus header and search bar).
 func (m TableModel) visibleRows() int {
 	v := m.height - 1 // 1 line for header
+	if m.searching || m.searchQuery != "" {
+		v-- // 1 line for search bar
+	}
 	if v < 0 {
 		return 0
 	}

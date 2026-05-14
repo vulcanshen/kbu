@@ -49,3 +49,30 @@ type ResourceDetailMsg struct {
 type NamespaceListMsg struct {
 	Namespaces []string
 }
+
+// LogLineMsg carries a single log line from a container.
+type LogLineMsg struct {
+	Container string
+	Text      string
+}
+
+// ContextListMsg carries the list of available contexts and the current one.
+type ContextListMsg struct {
+	Contexts []string
+	Current  string
+}
+
+// ContextChangedMsg is sent when the user selects a different kubeconfig context.
+type ContextChangedMsg struct {
+	Context string
+}
+
+// EditResourceMsg requests opening kubectl edit for a resource.
+type EditResourceMsg struct {
+	ResourceType k8s.ResourceType
+	Name         string
+	Namespace    string
+}
+
+// EditDoneMsg is sent when kubectl edit finishes.
+type EditDoneMsg struct{}
