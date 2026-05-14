@@ -61,6 +61,42 @@ func (r ResourceType) String() string {
 	}
 }
 
+// ResourceItem holds a single resource's table row and metadata.
+type ResourceItem struct {
+	Row       []string
+	Name      string
+	Namespace string
+	UID       string
+	Raw       interface{}
+}
+
+// ResourceDetail holds structured detail for a resource.
+type ResourceDetail struct {
+	Name        string
+	Namespace   string
+	Kind        string
+	UID         string
+	CreatedAt   string
+	Labels      map[string]string
+	Annotations map[string]string
+	Fields      []DetailField
+}
+
+// DetailField is a key-value pair for resource-specific detail.
+type DetailField struct {
+	Label string
+	Value string
+}
+
+// EventItem holds a single event for display.
+type EventItem struct {
+	Type    string
+	Reason  string
+	Object  string
+	Message string
+	Age     string
+}
+
 // AllResourceTypes returns all supported resource types in display order.
 func AllResourceTypes() []ResourceType {
 	return []ResourceType{

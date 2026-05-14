@@ -32,11 +32,11 @@ func (m StatusLineModel) View() string {
 	var hints string
 	switch m.activePanel {
 	case SidebarPanel:
-		hints = " j/k: navigate  Enter/l: select  h: collapse  Tab: switch panel  q: quit"
+		hints = " 1 Sidebar │ j/k: navigate  n: namespace  q: quit"
 	case TablePanel:
-		hints = " j/k: navigate  gg/G: top/bottom  Tab: switch panel  q: quit"
+		hints = " 2 List │ j/k: navigate  gg/G: top/bottom  n: namespace  q: quit"
 	case DetailPanel:
-		hints = " Tab: switch panel  q: quit"
+		hints = " 3 Detail │ j/k: scroll  [/]: tab  n: namespace  q: quit"
 	}
 
 	bar := m.theme.StatusLineStyle().

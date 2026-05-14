@@ -20,12 +20,31 @@ func keyMsg(r rune) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 }
 
+// Visible items layout (17 total):
+//  0: Cluster      (category)
+//  1: Namespaces   (resource)
+//  2: Nodes        (resource)
+//  3: Workloads    (category)
+//  4: Pods         (resource)  ← initial cursor
+//  5: Deployments  (resource)
+//  6: DaemonSets   (resource)
+//  7: StatefulSets (resource)
+//  8: Jobs         (resource)
+//  9: CronJobs     (resource)
+// 10: Network      (category)
+// 11: Services     (resource)
+// 12: Ingresses    (resource)
+// 13: Config       (category)
+// 14: ConfigMaps   (resource)
+// 15: Secrets      (resource)
+// 16: Events       (resource, standalone)
+
 func TestSidebarModel_InitialState(t *testing.T) {
 	m := newTestSidebar()
 
-	// Cursor should be at 0.
-	if m.cursor != 0 {
-		t.Errorf("expected cursor=0, got %d", m.cursor)
+	// Cursor should be on Pods (index 4).
+	if m.cursor != 4 {
+		t.Errorf("expected cursor=4 (Pods), got %d", m.cursor)
 	}
 
 	// Pods should be selected by default.
@@ -33,14 +52,7 @@ func TestSidebarModel_InitialState(t *testing.T) {
 		t.Errorf("expected selected=ResourcePods, got %v", m.Selected())
 	}
 
-	// All categories should be expanded.
-	for _, cat := range m.categories {
-		if !cat.Expanded {
-			t.Errorf("expected category %q to be expanded", cat.Label)
-		}
-	}
-
-	// Verify visible items count:
+	// All items should be visible (no collapse/expand).
 	// 4 categories + 2 + 6 + 2 + 2 resources + 1 standalone = 17
 	visible := m.visibleItems()
 	if len(visible) != 17 {
@@ -51,126 +63,119 @@ func TestSidebarModel_InitialState(t *testing.T) {
 func TestSidebarModel_NavigateDown(t *testing.T) {
 	m := newTestSidebar()
 
-	// Initially at position 0 (Cluster category).
-	if m.cursor != 0 {
-		t.Fatalf("expected cursor=0, got %d", m.cursor)
+	// Initially at Pods (index 4).
+	if m.cursor != 4 {
+		t.Fatalf("expected cursor=4, got %d", m.cursor)
 	}
 
-	// Press j — should move to position 1 (Namespaces).
-	m, _ = m.Update(keyMsg('j'))
-	if m.cursor != 1 {
-		t.Errorf("expected cursor=1 after j, got %d", m.cursor)
+	// Press j — should move to Deployments (index 5), skipping no categories.
+	var cmd tea.Cmd
+	m, cmd = m.Update(keyMsg('j'))
+	if m.cursor != 5 {
+		t.Errorf("expected cursor=5 after j, got %d", m.cursor)
 	}
 
-	// Press j again — should move to position 2 (Nodes).
-	m, _ = m.Update(keyMsg('j'))
-	if m.cursor != 2 {
-		t.Errorf("expected cursor=2 after second j, got %d", m.cursor)
+	// Should emit ResourceSelectedMsg for Deployments.
+	if cmd == nil {
+		t.Fatal("expected cmd to be non-nil after j")
+	}
+	msg := cmd()
+	rsm, ok := msg.(ResourceSelectedMsg)
+	if !ok {
+		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
+	}
+	if rsm.Type != k8s.ResourceDeployments {
+		t.Errorf("expected ResourceSelectedMsg.Type=ResourceDeployments, got %v", rsm.Type)
 	}
 }
 
 func TestSidebarModel_NavigateUp(t *testing.T) {
 	m := newTestSidebar()
 
-	// Move down twice first.
-	m, _ = m.Update(keyMsg('j'))
-	m, _ = m.Update(keyMsg('j'))
-	if m.cursor != 2 {
-		t.Fatalf("expected cursor=2, got %d", m.cursor)
-	}
-
-	// Press k — should move up to position 1.
-	m, _ = m.Update(keyMsg('k'))
-	if m.cursor != 1 {
-		t.Errorf("expected cursor=1 after k, got %d", m.cursor)
-	}
-
-	// Press k again — should move up to position 0.
-	m, _ = m.Update(keyMsg('k'))
-	if m.cursor != 0 {
-		t.Errorf("expected cursor=0 after second k, got %d", m.cursor)
-	}
-
-	// Press k at top — should stay at 0.
-	m, _ = m.Update(keyMsg('k'))
-	if m.cursor != 0 {
-		t.Errorf("expected cursor=0 at top boundary, got %d", m.cursor)
-	}
-}
-
-func TestSidebarModel_CollapseCategory(t *testing.T) {
-	m := newTestSidebar()
-
-	// Cursor is at 0 (Cluster category, expanded).
-	if !m.categories[0].Expanded {
-		t.Fatal("expected Cluster to be expanded initially")
-	}
-
-	// Press Enter on Cluster category.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Cluster should now be collapsed.
-	if m.categories[0].Expanded {
-		t.Error("expected Cluster to be collapsed after Enter")
-	}
-
-	// Visible items should decrease by 2 (Namespaces + Nodes).
-	visible := m.visibleItems()
-	if len(visible) != 15 {
-		t.Errorf("expected 15 visible items after collapse, got %d", len(visible))
-	}
-}
-
-func TestSidebarModel_ExpandCategory(t *testing.T) {
-	m := newTestSidebar()
-
-	// Collapse Cluster first.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.categories[0].Expanded {
-		t.Fatal("expected Cluster to be collapsed")
-	}
-
-	// Press Enter again to expand.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if !m.categories[0].Expanded {
-		t.Error("expected Cluster to be expanded after second Enter")
-	}
-
-	visible := m.visibleItems()
-	if len(visible) != 17 {
-		t.Errorf("expected 17 visible items after expand, got %d", len(visible))
-	}
-}
-
-func TestSidebarModel_SelectResource(t *testing.T) {
-	m := newTestSidebar()
-
-	// Navigate to position 1 (Namespaces resource under Cluster).
-	m, _ = m.Update(keyMsg('j'))
-	if m.cursor != 1 {
-		t.Fatalf("expected cursor=1, got %d", m.cursor)
-	}
-
-	// Press Enter to select.
+	// Initially at Pods (index 4). Press k — should move to Nodes (index 2),
+	// skipping Workloads category (index 3).
 	var cmd tea.Cmd
-	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Selected should be Namespaces.
-	if m.Selected() != k8s.ResourceNamespaces {
-		t.Errorf("expected selected=ResourceNamespaces, got %v", m.Selected())
+	m, cmd = m.Update(keyMsg('k'))
+	if m.cursor != 2 {
+		t.Errorf("expected cursor=2 (Nodes) after k, got %d", m.cursor)
 	}
 
-	// Cmd should produce a ResourceSelectedMsg.
+	// Should emit ResourceSelectedMsg for Nodes.
 	if cmd == nil {
-		t.Fatal("expected cmd to be non-nil")
+		t.Fatal("expected cmd to be non-nil after k")
 	}
 	msg := cmd()
-	rsMsg, ok := msg.(ResourceSelectedMsg)
+	rsm, ok := msg.(ResourceSelectedMsg)
 	if !ok {
 		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
 	}
-	if rsMsg.Type != k8s.ResourceNamespaces {
-		t.Errorf("expected ResourceSelectedMsg.Type=ResourceNamespaces, got %v", rsMsg.Type)
+	if rsm.Type != k8s.ResourceNodes {
+		t.Errorf("expected ResourceSelectedMsg.Type=ResourceNodes, got %v", rsm.Type)
+	}
+}
+
+func TestSidebarModel_CursorSkipsCategories(t *testing.T) {
+	m := newTestSidebar()
+
+	visible := m.visibleItems()
+
+	// Navigate through all items with j and verify cursor never lands on a category.
+	for i := 0; i < 20; i++ {
+		m, _ = m.Update(keyMsg('j'))
+		if m.cursor >= 0 && m.cursor < len(visible) {
+			if visible[m.cursor].isCategory {
+				t.Errorf("cursor landed on category at index %d (%s)", m.cursor, visible[m.cursor].label)
+			}
+		}
+	}
+
+	// Navigate back with k and verify cursor never lands on a category.
+	for i := 0; i < 20; i++ {
+		m, _ = m.Update(keyMsg('k'))
+		if m.cursor >= 0 && m.cursor < len(visible) {
+			if visible[m.cursor].isCategory {
+				t.Errorf("cursor landed on category at index %d (%s)", m.cursor, visible[m.cursor].label)
+			}
+		}
+	}
+}
+
+func TestSidebarModel_AutoSelectOnMove(t *testing.T) {
+	m := newTestSidebar()
+
+	// Move down from Pods — should auto-select Deployments.
+	var cmd tea.Cmd
+	m, cmd = m.Update(keyMsg('j'))
+	if m.Selected() != k8s.ResourceDeployments {
+		t.Errorf("expected selected=ResourceDeployments after j, got %v", m.Selected())
+	}
+	if cmd == nil {
+		t.Fatal("expected cmd after j")
+	}
+	msg := cmd()
+	rsm, ok := msg.(ResourceSelectedMsg)
+	if !ok {
+		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
+	}
+	if rsm.Type != k8s.ResourceDeployments {
+		t.Errorf("expected msg type=ResourceDeployments, got %v", rsm.Type)
+	}
+
+	// Move up from Deployments — should auto-select Pods.
+	m, cmd = m.Update(keyMsg('k'))
+	if m.Selected() != k8s.ResourcePods {
+		t.Errorf("expected selected=ResourcePods after k, got %v", m.Selected())
+	}
+	if cmd == nil {
+		t.Fatal("expected cmd after k")
+	}
+	msg = cmd()
+	rsm, ok = msg.(ResourceSelectedMsg)
+	if !ok {
+		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
+	}
+	if rsm.Type != k8s.ResourcePods {
+		t.Errorf("expected msg type=ResourcePods, got %v", rsm.Type)
 	}
 }
 
@@ -181,8 +186,9 @@ func TestSidebarModel_GG(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		m, _ = m.Update(keyMsg('j'))
 	}
-	if m.cursor != 5 {
-		t.Fatalf("expected cursor=5, got %d", m.cursor)
+	// Should be at CronJobs (index 9).
+	if m.cursor != 9 {
+		t.Fatalf("expected cursor=9 after 5 j's, got %d", m.cursor)
 	}
 
 	// Press g (first).
@@ -191,77 +197,132 @@ func TestSidebarModel_GG(t *testing.T) {
 		t.Fatal("expected pendingG to be true after first g")
 	}
 
-	// Press g (second) — cursor should go to 0.
-	m, _ = m.Update(keyMsg('g'))
-	if m.cursor != 0 {
-		t.Errorf("expected cursor=0 after gg, got %d", m.cursor)
+	// Press g (second) — cursor should go to first resource item (Namespaces, index 1).
+	var cmd tea.Cmd
+	m, cmd = m.Update(keyMsg('g'))
+	if m.cursor != 1 {
+		t.Errorf("expected cursor=1 (Namespaces) after gg, got %d", m.cursor)
 	}
 	if m.pendingG {
 		t.Error("expected pendingG to be false after gg")
+	}
+
+	// Should emit ResourceSelectedMsg for Namespaces.
+	if cmd == nil {
+		t.Fatal("expected cmd after gg")
+	}
+	msg := cmd()
+	rsm, ok := msg.(ResourceSelectedMsg)
+	if !ok {
+		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
+	}
+	if rsm.Type != k8s.ResourceNamespaces {
+		t.Errorf("expected ResourceSelectedMsg.Type=ResourceNamespaces, got %v", rsm.Type)
 	}
 }
 
 func TestSidebarModel_ShiftG(t *testing.T) {
 	m := newTestSidebar()
 
-	// Press G (shift+g) — cursor should go to last visible item.
+	// Press G — cursor should go to last resource item (Events, index 16).
+	var cmd tea.Cmd
+	m, cmd = m.Update(keyMsg('G'))
+
+	if m.cursor != 16 {
+		t.Errorf("expected cursor=16 (Events) after G, got %d", m.cursor)
+	}
+
+	// Verify it's the Events resource.
+	visible := m.visibleItems()
+	item := visible[m.cursor]
+	if item.isCategory {
+		t.Error("expected cursor on resource, got category")
+	}
+	if item.resourceType != k8s.ResourceEvents {
+		t.Errorf("expected Events resource, got %v", item.resourceType)
+	}
+
+	// Should emit ResourceSelectedMsg for Events.
+	if cmd == nil {
+		t.Fatal("expected cmd after G")
+	}
+	msg := cmd()
+	rsm, ok := msg.(ResourceSelectedMsg)
+	if !ok {
+		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
+	}
+	if rsm.Type != k8s.ResourceEvents {
+		t.Errorf("expected ResourceSelectedMsg.Type=ResourceEvents, got %v", rsm.Type)
+	}
+}
+
+func TestSidebarModel_EnterOnResource(t *testing.T) {
+	m := newTestSidebar()
+
+	// Cursor is on Pods (index 4). Press Enter.
+	var cmd tea.Cmd
+	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Selected should be Pods.
+	if m.Selected() != k8s.ResourcePods {
+		t.Errorf("expected selected=ResourcePods, got %v", m.Selected())
+	}
+
+	// Cmd should produce a ResourceSelectedMsg.
+	if cmd == nil {
+		t.Fatal("expected cmd to be non-nil")
+	}
+	msg := cmd()
+	rsm, ok := msg.(ResourceSelectedMsg)
+	if !ok {
+		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
+	}
+	if rsm.Type != k8s.ResourcePods {
+		t.Errorf("expected ResourceSelectedMsg.Type=ResourcePods, got %v", rsm.Type)
+	}
+}
+
+func TestSidebarModel_NavigateUpAtTop(t *testing.T) {
+	m := newTestSidebar()
+
+	// Move cursor to first resource (Namespaces, index 1).
+	m, _ = m.Update(keyMsg('g'))
+	m, _ = m.Update(keyMsg('g'))
+	if m.cursor != 1 {
+		t.Fatalf("expected cursor=1, got %d", m.cursor)
+	}
+
+	// Press k at the top resource — should stay at 1 (no resource above).
+	var cmd tea.Cmd
+	m, cmd = m.Update(keyMsg('k'))
+	if m.cursor != 1 {
+		t.Errorf("expected cursor=1 at top boundary, got %d", m.cursor)
+	}
+
+	// No cmd should be emitted since cursor didn't move.
+	if cmd != nil {
+		t.Error("expected nil cmd when cursor doesn't move at top")
+	}
+}
+
+func TestSidebarModel_NavigateDownAtBottom(t *testing.T) {
+	m := newTestSidebar()
+
+	// Move cursor to last resource (Events, index 16).
 	m, _ = m.Update(keyMsg('G'))
-
-	visible := m.visibleItems()
-	expected := len(visible) - 1
-	if m.cursor != expected {
-		t.Errorf("expected cursor=%d after G, got %d", expected, m.cursor)
-	}
-}
-
-func TestSidebarModel_SkipCollapsedChildren(t *testing.T) {
-	m := newTestSidebar()
-
-	// Collapse Cluster (position 0).
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.categories[0].Expanded {
-		t.Fatal("expected Cluster collapsed")
+	if m.cursor != 16 {
+		t.Fatalf("expected cursor=16, got %d", m.cursor)
 	}
 
-	// Now position 0 is Cluster (collapsed).
-	// Press j — should skip to Workloads (next visible item, which is position 1).
-	m, _ = m.Update(keyMsg('j'))
-
-	visible := m.visibleItems()
-	// Position 1 should be Workloads category.
-	if m.cursor != 1 {
-		t.Fatalf("expected cursor=1, got %d", m.cursor)
-	}
-	item := visible[m.cursor]
-	if !item.isCategory || item.label != "Workloads" {
-		t.Errorf("expected Workloads category at cursor, got %+v", item)
-	}
-}
-
-func TestSidebarModel_HCollapsesParent(t *testing.T) {
-	m := newTestSidebar()
-
-	// Navigate to position 1 (Namespaces, under Cluster).
-	m, _ = m.Update(keyMsg('j'))
-	if m.cursor != 1 {
-		t.Fatalf("expected cursor=1, got %d", m.cursor)
+	// Press j at the bottom resource — should stay at 16.
+	var cmd tea.Cmd
+	m, cmd = m.Update(keyMsg('j'))
+	if m.cursor != 16 {
+		t.Errorf("expected cursor=16 at bottom boundary, got %d", m.cursor)
 	}
 
-	// Press h — parent (Cluster) should collapse, cursor moves to Cluster.
-	m, _ = m.Update(keyMsg('h'))
-
-	if m.categories[0].Expanded {
-		t.Error("expected Cluster to be collapsed after h")
-	}
-
-	// Cursor should now be at Cluster category (position 0).
-	if m.cursor != 0 {
-		t.Errorf("expected cursor=0 after h collapse, got %d", m.cursor)
-	}
-
-	visible := m.visibleItems()
-	item := visible[m.cursor]
-	if !item.isCategory || item.label != "Cluster" {
-		t.Errorf("expected cursor on Cluster category, got %+v", item)
+	// No cmd should be emitted since cursor didn't move.
+	if cmd != nil {
+		t.Error("expected nil cmd when cursor doesn't move at bottom")
 	}
 }

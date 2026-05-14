@@ -194,6 +194,7 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 		if len(m.rows) > 0 && m.cursor < len(m.rows)-1 {
 			m.cursor++
 			m.ensureCursorVisible()
+			return m, m.emitCursorChanged()
 		}
 
 	case msg.Type == tea.KeyUp || (msg.Type == tea.KeyRunes && string(msg.Runes) == "k"):
@@ -201,6 +202,7 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 		if m.cursor > 0 {
 			m.cursor--
 			m.ensureCursorVisible()
+			return m, m.emitCursorChanged()
 		}
 
 	case msg.Type == tea.KeyRunes && string(msg.Runes) == "G":
@@ -208,6 +210,7 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 		if len(m.rows) > 0 {
 			m.cursor = len(m.rows) - 1
 			m.ensureCursorVisible()
+			return m, m.emitCursorChanged()
 		}
 
 	case msg.Type == tea.KeyRunes && string(msg.Runes) == "g":
@@ -215,8 +218,17 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 			m.cursor = 0
 			m.scrollOffset = 0
 			m.pendingG = false
+			return m, m.emitCursorChanged()
 		} else {
 			m.pendingG = true
+		}
+
+	case msg.Type == tea.KeyEnter:
+		m.pendingG = false
+		if len(m.rows) > 0 {
+			return m, func() tea.Msg {
+				return RowSelectedMsg{Index: m.cursor}
+			}
 		}
 
 	default:
@@ -326,6 +338,13 @@ func (m TableModel) columnTitles() []string {
 	return titles
 }
 
+func (m TableModel) emitCursorChanged() tea.Cmd {
+	cursor := m.cursor
+	return func() tea.Msg {
+		return RowSelectedMsg{Index: cursor}
+	}
+}
+
 func (m TableModel) calcColumnWidths() []int {
 	if len(m.columns) == 0 {
 		return nil
@@ -337,7 +356,8 @@ func (m TableModel) calcColumnWidths() []int {
 	}
 
 	widths := make([]int, len(m.columns))
-	available := m.width
+	separators := len(m.columns) - 1
+	available := m.width - separators
 
 	if totalMin == 0 {
 		// Equal distribution
