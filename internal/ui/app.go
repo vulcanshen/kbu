@@ -259,6 +259,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel == TablePanel {
 				return m, m.execShell()
 			}
+		case "d":
+			if m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
+				idx := m.table.SelectedRow()
+				if idx >= 0 && idx < len(m.items) {
+					item := m.items[idx]
+					detail := fmt.Sprintf("kubectl delete %s %s -n %s", m.currentResource.KubectlName(), item.Name, item.Namespace)
+					m.confirm.SetSize(m.width, m.height)
+					m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
+						deleteResource(m.currentResource, item.Name, item.Namespace))
+					return m, nil
+				}
+			}
 		case "+":
 			if m.activePanel == DetailPanel {
 				m.detailExpanded = true
@@ -447,6 +459,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case EditDoneMsg:
 		m.appLog.Info("kubectl edit completed")
+		return m, nil
+
+	case DeleteDoneMsg:
+		m.appLog.Info("deleted " + msg.Name)
+		return m, nil
+
+	case DeleteErrMsg:
+		m.appLog.Error("delete failed: " + msg.Err.Error())
 		return m, nil
 	}
 
@@ -959,6 +979,20 @@ func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return EditDoneMsg{}
 	})
+}
+
+func deleteResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
+	return func() tea.Msg {
+		args := []string{"delete", rt.KubectlName(), name}
+		if namespace != "" {
+			args = append(args, "-n", namespace)
+		}
+		c := exec.Command("kubectl", args...)
+		if err := c.Run(); err != nil {
+			return DeleteErrMsg{Err: err}
+		}
+		return DeleteDoneMsg{Name: name}
+	}
 }
 
 func waitForWatchUpdate(w *k8s.Watcher) tea.Cmd {

@@ -76,3 +76,13 @@ type EditResourceMsg struct {
 
 // EditDoneMsg is sent when kubectl edit finishes.
 type EditDoneMsg struct{}
+
+// DeleteDoneMsg is sent when kubectl delete finishes.
+type DeleteDoneMsg struct {
+	Name string
+}
+
+// DeleteErrMsg is sent when kubectl delete fails.
+type DeleteErrMsg struct {
+	Err error
+}
