@@ -39,7 +39,6 @@ type SidebarModel struct {
 	focused      bool
 	width        int
 	height       int
-	scrollOffset int
 	theme        *theme.Theme
 	pendingG     bool
 	selected     k8s.ResourceType
@@ -49,6 +48,9 @@ type SidebarModel struct {
 
 // IsSearching returns true if the sidebar is in search mode.
 func (m SidebarModel) IsSearching() bool { return m.searching }
+
+// HasActiveFilter returns true if a search filter is active.
+func (m SidebarModel) HasActiveFilter() bool { return m.searchQuery != "" }
 
 // NewSidebarModel creates a new sidebar with default categories and resources.
 func NewSidebarModel(t *theme.Theme) SidebarModel {
@@ -143,8 +145,7 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == 'g' {
 			// gg — jump to first resource item.
 			m.cursor = m.firstResourceIndex(visible)
-			m.scrollOffset = 0
-			item := visible[m.cursor]
+						item := visible[m.cursor]
 			m.selected = item.resourceType
 			return m, func() tea.Msg {
 				return ResourceSelectedMsg{Type: item.resourceType}
@@ -170,7 +171,7 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 			return m, nil
 		case 'G':
 			m.cursor = m.lastResourceIndex(visible)
-			m.ensureCursorVisible()
+
 			item := visible[m.cursor]
 			m.selected = item.resourceType
 			return m, func() tea.Msg {
@@ -179,7 +180,7 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		case '/':
 			m.searching = true
 			m.searchQuery = ""
-			return m, nil
+						return m, nil
 		}
 
 	case tea.KeyDown:
@@ -188,6 +189,15 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		return m.moveUp(visible)
 	case tea.KeyEnter:
 		return m.activateResource(visible)
+	case tea.KeyEscape:
+		if m.searchQuery != "" {
+			m.searchQuery = ""
+			newVisible := m.visibleItems()
+			if m.cursor >= len(newVisible) && len(newVisible) > 0 {
+				m.cursor = m.firstResourceIndex(newVisible)
+			}
+			return m, nil
+		}
 	}
 
 	return m, nil
@@ -198,13 +208,14 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case msg.Type == tea.KeyEscape:
 		m.searching = false
 		m.searchQuery = ""
-		visible := m.visibleItems()
+				visible := m.visibleItems()
 		if m.cursor >= len(visible) && len(visible) > 0 {
 			m.cursor = m.firstResourceIndex(visible)
 		}
 		return m, nil
 	case msg.Type == tea.KeyEnter:
 		m.searching = false
+
 		return m, nil
 	case msg.Type == tea.KeyBackspace:
 		if len(m.searchQuery) > 0 {
@@ -233,7 +244,7 @@ func (m *SidebarModel) resetCursorToFirstMatch() {
 	for i, item := range visible {
 		if !item.isCategory {
 			m.cursor = i
-			m.ensureCursorVisible()
+
 			m.selected = item.resourceType
 			return
 		}
@@ -241,21 +252,6 @@ func (m *SidebarModel) resetCursorToFirstMatch() {
 }
 
 func (m SidebarModel) handleMouse(msg tea.MouseMsg) (SidebarModel, tea.Cmd) {
-	switch msg.Type {
-	case tea.MouseWheelUp:
-		if m.scrollOffset > 0 {
-			m.scrollOffset--
-		}
-	case tea.MouseWheelDown:
-		visible := m.visibleItems()
-		maxOffset := len(visible) - m.height
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-		if m.scrollOffset < maxOffset {
-			m.scrollOffset++
-		}
-	}
 	return m, nil
 }
 
@@ -267,7 +263,7 @@ func (m SidebarModel) moveDown(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	}
 	if next < len(visible) {
 		m.cursor = next
-		m.ensureCursorVisible()
+
 		m.selected = visible[m.cursor].resourceType
 		return m, func() tea.Msg {
 			return ResourceSelectedMsg{Type: visible[next].resourceType}
@@ -285,7 +281,7 @@ func (m SidebarModel) moveUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	}
 	if prev >= 0 {
 		m.cursor = prev
-		m.ensureCursorVisible()
+
 		m.selected = visible[m.cursor].resourceType
 		return m, func() tea.Msg {
 			return ResourceSelectedMsg{Type: visible[prev].resourceType}
@@ -295,17 +291,6 @@ func (m SidebarModel) moveUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m *SidebarModel) ensureCursorVisible() {
-	if m.height <= 0 {
-		return
-	}
-	if m.cursor < m.scrollOffset {
-		m.scrollOffset = m.cursor
-	}
-	if m.cursor >= m.scrollOffset+m.height {
-		m.scrollOffset = m.cursor - m.height + 1
-	}
-}
 
 // activateResource selects the resource under cursor and emits ResourceSelectedMsg.
 func (m SidebarModel) activateResource(visible []visibleItem) (SidebarModel, tea.Cmd) {
@@ -347,6 +332,9 @@ func (m SidebarModel) lastResourceIndex(visible []visibleItem) int {
 func (m SidebarModel) View() string {
 	visible := m.visibleItems()
 	if len(visible) == 0 {
+		if m.searching || m.searchQuery != "" {
+			return renderSearchBox(m.searchQuery, m.searching, m.width, m.theme)
+		}
 		return ""
 	}
 
@@ -354,19 +342,8 @@ func (m SidebarModel) View() string {
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	categoryStyle := m.theme.SidebarCategoryStyle()
 
-	viewH := m.height
-	if m.searching || m.searchQuery != "" {
-		viewH--
-	}
-
 	var lines []string
-	start := m.scrollOffset
-	end := start + viewH
-	if end > len(visible) {
-		end = len(visible)
-	}
-
-	for i := start; i < end; i++ {
+	for i := 0; i < len(visible); i++ {
 		item := visible[i]
 		isCursor := i == m.cursor
 
@@ -391,10 +368,8 @@ func (m SidebarModel) View() string {
 	}
 
 	content := strings.Join(lines, "\n")
-	if m.searching {
-		content += "\n" + m.theme.TableHeaderStyle().Width(m.width).Render("/ "+m.searchQuery+"█")
-	} else if m.searchQuery != "" {
-		content += "\n" + m.theme.TableRowStyle().Italic(true).Width(m.width).Render(" filter: "+m.searchQuery)
+	if m.searching || m.searchQuery != "" {
+		return renderSearchBox(m.searchQuery, m.searching, m.width, m.theme) + "\n" + content
 	}
 	return content
 }

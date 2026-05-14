@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"k8s.io/klog/v2"
+
 	"github.com/vulcanshen/km8/internal/config"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
@@ -12,6 +15,13 @@ import (
 )
 
 func main() {
+	// Suppress all stray output from k8s client-go / klog that would corrupt the TUI.
+	klog.SetOutput(io.Discard)
+	devNull, _ := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if devNull != nil {
+		os.Stderr = devNull
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)

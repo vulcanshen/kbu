@@ -250,6 +250,14 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 			}
 		}
 
+	case msg.Type == tea.KeyEscape:
+		if m.searchQuery != "" {
+			m.pendingG = false
+			m.searchQuery = ""
+			m.filterRows()
+			return m, nil
+		}
+
 	default:
 		m.pendingG = false
 	}
@@ -342,6 +350,11 @@ func (m TableModel) View() string {
 
 	var b strings.Builder
 
+	if m.searching || m.searchQuery != "" {
+		b.WriteString(renderSearchBox(m.searchQuery, m.searching, m.width, m.theme))
+		b.WriteString("\n")
+	}
+
 	// Render header — bright when focused, dim when not
 	headerStyle := m.theme.TableHeaderStyle()
 	if !m.focused {
@@ -388,21 +401,6 @@ func (m TableModel) View() string {
 			indicator := fmt.Sprintf(" ↓ %d more rows", remaining)
 			b.WriteString(m.theme.TableRowStyle().Render(indicator))
 		}
-	}
-
-	// Show search bar when searching or when filter is active
-	if m.searching {
-		b.WriteString("\n")
-		searchLine := fmt.Sprintf("/ %s█", m.searchQuery)
-		searchStyle := m.theme.TableHeaderStyle()
-		rendered := searchStyle.Width(m.width).Render(searchLine)
-		b.WriteString(rendered)
-	} else if m.searchQuery != "" {
-		b.WriteString("\n")
-		searchLine := fmt.Sprintf(" filter: %s", m.searchQuery)
-		searchStyle := m.theme.TableRowStyle().Italic(true)
-		rendered := searchStyle.Width(m.width).Render(searchLine)
-		b.WriteString(rendered)
 	}
 
 	return b.String()
@@ -556,6 +554,9 @@ func (m *TableModel) filterRows() {
 }
 
 // OriginalIndex returns the original index into allRows for the given display index.
+// HasActiveFilter returns true if a search filter is active.
+func (m TableModel) HasActiveFilter() bool { return m.searchQuery != "" }
+
 // When no filter is active, the display index equals the original index.
 func (m TableModel) OriginalIndex(displayIdx int) int {
 	if m.filteredIndices == nil {
@@ -586,7 +587,7 @@ func (m TableModel) SearchQuery() string {
 func (m TableModel) visibleRows() int {
 	v := m.height - 1 // 1 line for header
 	if m.searching || m.searchQuery != "" {
-		v-- // 1 line for search bar
+		v -= 3 // 3 lines for search box (border + input + border)
 	}
 	if v < 0 {
 		return 0
