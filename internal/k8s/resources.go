@@ -11,6 +11,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -46,6 +47,16 @@ func FetchResources(ctx context.Context, clientset kubernetes.Interface, rt Reso
 		return fetchSecrets(ctx, clientset, namespace)
 	case ResourceEvents:
 		return fetchEvents(ctx, clientset, namespace)
+	case ResourceServiceAccounts:
+		return fetchServiceAccounts(ctx, clientset, namespace)
+	case ResourceClusterRoles:
+		return fetchClusterRoles(ctx, clientset)
+	case ResourceClusterRoleBindings:
+		return fetchClusterRoleBindings(ctx, clientset)
+	case ResourceRoles:
+		return fetchRoles(ctx, clientset, namespace)
+	case ResourceRoleBindings:
+		return fetchRoleBindings(ctx, clientset, namespace)
 	default:
 		return nil, fmt.Errorf("unsupported resource type: %s", rt)
 	}
@@ -81,6 +92,16 @@ func GetResourceDetail(rt ResourceType, item ResourceItem) ResourceDetail {
 		return detailSecret(item)
 	case ResourceEvents:
 		return detailEvent(item)
+	case ResourceServiceAccounts:
+		return detailServiceAccount(item)
+	case ResourceClusterRoles:
+		return detailClusterRole(item)
+	case ResourceClusterRoleBindings:
+		return detailClusterRoleBinding(item)
+	case ResourceRoles:
+		return detailRole(item)
+	case ResourceRoleBindings:
+		return detailRoleBinding(item)
 	default:
 		return ResourceDetail{Name: item.Name, Namespace: item.Namespace, Kind: rt.String(), UID: item.UID}
 	}
@@ -1125,6 +1146,213 @@ func detailEvent(item ResourceItem) ResourceDetail {
 		{Label: "Last Seen", Value: formatAge(eventTime(*e))},
 	}
 	return d
+}
+
+// ---------------------------------------------------------------------------
+// ServiceAccount
+// ---------------------------------------------------------------------------
+
+func fetchServiceAccounts(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().ServiceAccounts(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing serviceaccounts: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		sa := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      sa.Name,
+			Namespace: sa.Namespace,
+			UID:       string(sa.UID),
+			Raw:       sa,
+			Row: []string{
+				sa.Name,
+				sa.Namespace,
+				fmt.Sprintf("%d", len(sa.Secrets)),
+				formatAge(sa.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailServiceAccount(item ResourceItem) ResourceDetail {
+	sa, _ := item.Raw.(*corev1.ServiceAccount)
+	d := baseDetail(item, "ServiceAccount", sa.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Secrets", Value: fmt.Sprintf("%d", len(sa.Secrets))},
+	}
+	for i, s := range sa.Secrets {
+		d.Fields = append(d.Fields, DetailField{
+			Label: fmt.Sprintf("Secret %d", i+1),
+			Value: s.Name,
+		})
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// ClusterRole
+// ---------------------------------------------------------------------------
+
+func fetchClusterRoles(ctx context.Context, cs kubernetes.Interface) ([]ResourceItem, error) {
+	list, err := cs.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing clusterroles: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		cr := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      cr.Name,
+			Namespace: "",
+			UID:       string(cr.UID),
+			Raw:       cr,
+			Row: []string{
+				cr.Name,
+				formatAge(cr.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailClusterRole(item ResourceItem) ResourceDetail {
+	cr, _ := item.Raw.(*rbacv1.ClusterRole)
+	d := baseDetail(item, "ClusterRole", cr.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Rules", Value: fmt.Sprintf("%d", len(cr.Rules))},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// ClusterRoleBinding
+// ---------------------------------------------------------------------------
+
+func fetchClusterRoleBindings(ctx context.Context, cs kubernetes.Interface) ([]ResourceItem, error) {
+	list, err := cs.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing clusterrolebindings: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		crb := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      crb.Name,
+			Namespace: "",
+			UID:       string(crb.UID),
+			Raw:       crb,
+			Row: []string{
+				crb.Name,
+				fmt.Sprintf("%s/%s", crb.RoleRef.Kind, crb.RoleRef.Name),
+				formatAge(crb.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailClusterRoleBinding(item ResourceItem) ResourceDetail {
+	crb, _ := item.Raw.(*rbacv1.ClusterRoleBinding)
+	d := baseDetail(item, "ClusterRoleBinding", crb.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "RoleRef", Value: fmt.Sprintf("%s/%s", crb.RoleRef.Kind, crb.RoleRef.Name)},
+	}
+	for i, s := range crb.Subjects {
+		d.Fields = append(d.Fields, DetailField{
+			Label: fmt.Sprintf("Subject %d", i+1),
+			Value: formatSubject(s),
+		})
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// Role
+// ---------------------------------------------------------------------------
+
+func fetchRoles(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.RbacV1().Roles(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing roles: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		r := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      r.Name,
+			Namespace: r.Namespace,
+			UID:       string(r.UID),
+			Raw:       r,
+			Row: []string{
+				r.Name,
+				r.Namespace,
+				formatAge(r.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailRole(item ResourceItem) ResourceDetail {
+	r, _ := item.Raw.(*rbacv1.Role)
+	d := baseDetail(item, "Role", r.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "Rules", Value: fmt.Sprintf("%d", len(r.Rules))},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// RoleBinding
+// ---------------------------------------------------------------------------
+
+func fetchRoleBindings(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.RbacV1().RoleBindings(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing rolebindings: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		rb := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      rb.Name,
+			Namespace: rb.Namespace,
+			UID:       string(rb.UID),
+			Raw:       rb,
+			Row: []string{
+				rb.Name,
+				rb.Namespace,
+				fmt.Sprintf("%s/%s", rb.RoleRef.Kind, rb.RoleRef.Name),
+				formatAge(rb.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailRoleBinding(item ResourceItem) ResourceDetail {
+	rb, _ := item.Raw.(*rbacv1.RoleBinding)
+	d := baseDetail(item, "RoleBinding", rb.ObjectMeta)
+	d.Fields = []DetailField{
+		{Label: "RoleRef", Value: fmt.Sprintf("%s/%s", rb.RoleRef.Kind, rb.RoleRef.Name)},
+	}
+	for i, s := range rb.Subjects {
+		d.Fields = append(d.Fields, DetailField{
+			Label: fmt.Sprintf("Subject %d", i+1),
+			Value: formatSubject(s),
+		})
+	}
+	return d
+}
+
+// formatSubject formats a RBAC subject as "kind:namespace/name".
+func formatSubject(s rbacv1.Subject) string {
+	if s.Namespace != "" {
+		return fmt.Sprintf("%s:%s/%s", s.Kind, s.Namespace, s.Name)
+	}
+	return fmt.Sprintf("%s:%s", s.Kind, s.Name)
 }
 
 // ---------------------------------------------------------------------------

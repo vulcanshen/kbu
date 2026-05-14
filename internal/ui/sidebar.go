@@ -88,6 +88,21 @@ func NewSidebarModel(t *theme.Theme) SidebarModel {
 				{Label: "Secrets", ResourceType: k8s.ResourceSecrets},
 			},
 		},
+		{
+			Label: "Access",
+			Items: []SidebarResource{
+				{Label: "ServiceAccounts", ResourceType: k8s.ResourceServiceAccounts},
+			},
+		},
+		{
+			Label: "RBAC",
+			Items: []SidebarResource{
+				{Label: "ClusterRoles", ResourceType: k8s.ResourceClusterRoles},
+				{Label: "ClusterRoleBindings", ResourceType: k8s.ResourceClusterRoleBindings},
+				{Label: "Roles", ResourceType: k8s.ResourceRoles},
+				{Label: "RoleBindings", ResourceType: k8s.ResourceRoleBindings},
+			},
+		},
 	}
 
 	standalone := []SidebarResource{

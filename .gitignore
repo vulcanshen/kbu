@@ -15,6 +15,7 @@ Thumbs.db
 # Claude Code (local only)
 .claude/
 sessions/
+GOAL.md
 
 # Test artifacts
 coverage.out
