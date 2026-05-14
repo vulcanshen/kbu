@@ -80,12 +80,24 @@ type ResourceDetail struct {
 	Labels      map[string]string
 	Annotations map[string]string
 	Fields      []DetailField
+	Containers  []ContainerInfo
 }
 
 // DetailField is a key-value pair for resource-specific detail.
 type DetailField struct {
 	Label string
 	Value string
+}
+
+// ContainerInfo holds detail about a single container in a Pod.
+type ContainerInfo struct {
+	Name     string
+	Image    string
+	State    string
+	Ready    bool
+	Restarts int
+	Ports    string
+	Init     bool
 }
 
 // EventItem holds a single event for display.
@@ -95,6 +107,27 @@ type EventItem struct {
 	Object  string
 	Message string
 	Age     string
+}
+
+// SupportsDrillDown returns true if this resource type can drill down to children.
+func (r ResourceType) SupportsDrillDown() bool {
+	switch r {
+	case ResourceDeployments, ResourceDaemonSets, ResourceStatefulSets,
+		ResourceJobs, ResourceCronJobs, ResourcePods:
+		return true
+	}
+	return false
+}
+
+// ChildResourceType returns what resource type the drill-down shows.
+func (r ResourceType) ChildResourceType() ResourceType {
+	switch r {
+	case ResourceDeployments, ResourceDaemonSets, ResourceStatefulSets, ResourceJobs:
+		return ResourcePods
+	case ResourceCronJobs:
+		return ResourceJobs
+	}
+	return -1
 }
 
 // KubectlName returns the kubectl resource name (e.g. "pod", "deployment").

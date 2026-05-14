@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -10,6 +11,13 @@ import (
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
+
+type drillDownMsg struct {
+	parentType k8s.ResourceType
+	parentName string
+	childType  k8s.ResourceType
+	children   []k8s.ResourceItem
+}
 
 const sidebarWidthPercent = 20
 const minSidebarWidth = 24
@@ -35,7 +43,19 @@ type AppModel struct {
 	currentResource k8s.ResourceType
 	items           []k8s.ResourceItem
 	ready           bool
-	logsActive      bool // true when log streaming is running
+	logsActive      bool
+	detailExpanded  bool
+
+	// Drill-down state
+	drillDownStack      []drillDownEntry
+	drillDownPod        *k8s.ResourceItem   // innermost: Pod → Container
+	drillDownContainers []k8s.ContainerInfo
+}
+
+type drillDownEntry struct {
+	parentType  k8s.ResourceType
+	parentName  string
+	parentItems []k8s.ResourceItem
 }
 
 func NewAppModel(t *theme.Theme, client *k8s.Client) AppModel {
@@ -80,24 +100,11 @@ func (m AppModel) Init() tea.Cmd {
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	// Help overlay intercepts all input when active.
 	if m.help.IsActive() {
 		switch msg := msg.(type) {
 		case tea.KeyMsg, tea.MouseMsg:
 			var cmd tea.Cmd
 			m.help, cmd = m.help.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.namespacePicker.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg, tea.MouseMsg:
-			var cmd tea.Cmd
-			m.namespacePicker, cmd = m.namespacePicker.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -117,6 +124,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.namespacePicker.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg, tea.MouseMsg:
+			var cmd tea.Cmd
+			m.namespacePicker, cmd = m.namespacePicker.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -126,16 +145,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// Don't intercept global keys when table is in search mode
-		// (except q/ctrl+c which should always work).
-		if m.table.IsSearching() && m.activePanel == TablePanel {
+		// When any panel is in search mode, only ctrl+c passes through.
+		searching := (m.activePanel == TablePanel && m.table.IsSearching()) ||
+			(m.activePanel == SidebarPanel && m.sidebar.IsSearching()) ||
+			(m.activePanel == DetailPanel && m.detail.IsSearching())
+		if searching {
 			switch msg.String() {
 			case "ctrl+c":
 				m.watcher.Stop()
 				m.logStreamer.Stop()
 				return m, tea.Quit
 			}
-			// Let the table handle all other keys in search mode
 			break
 		}
 		switch msg.String() {
@@ -148,12 +168,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.Toggle()
 			return m, nil
 		case "1":
+			m.detailExpanded = false
 			m.setPanel(SidebarPanel)
 			return m, nil
 		case "2":
+			m.detailExpanded = false
 			m.setPanel(TablePanel)
 			return m, nil
 		case "3":
+			m.detailExpanded = false
 			m.setPanel(DetailPanel)
 			return m, nil
 		case "tab":
@@ -162,22 +185,53 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.cyclePanelReverse()
 			return m, nil
+		case "h":
+			if m.activePanel == TablePanel || m.activePanel == DetailPanel {
+				m.detail = m.detail.PrevTab()
+				return m, nil
+			}
+		case "l":
+			if m.activePanel == TablePanel || m.activePanel == DetailPanel {
+				m.detail = m.detail.NextTab()
+				return m, nil
+			}
+		case "enter":
+			if m.activePanel == TablePanel && m.drillDownPod == nil {
+				return m, m.enterDrillDown()
+			}
+		case "esc":
+			if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
+				return m, m.exitDrillDown()
+			}
 		case "n":
 			return m, fetchNamespaces(m.k8sClient)
 		case "c":
 			return m, fetchContexts(m.k8sClient)
 		case "e":
-			if m.activePanel == TablePanel && len(m.items) > 0 {
+			if m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
 				idx := m.table.SelectedRow()
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
 					return m, editResource(m.currentResource, item.Name, item.Namespace)
 				}
 			}
+		case "+":
+			if m.activePanel == DetailPanel {
+				m.detailExpanded = true
+				return m, nil
+			}
+		case "-":
+			if m.detailExpanded {
+				m.detailExpanded = false
+				return m, nil
+			}
 		}
 
 	case ResourceSelectedMsg:
 		m.currentResource = msg.Type
+		m.drillDownStack = nil
+		m.drillDownPod = nil
+		m.drillDownContainers = nil
 		m.logStreamer.Stop()
 		m.logsActive = false
 		m.detail.ClearDetail()
@@ -191,12 +245,32 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ResourceDataMsg:
 		m.items = msg.Items
+		cmds = append(cmds, waitForWatchUpdate(m.watcher))
+		if m.drillDownPod != nil {
+			// In drill-down mode: update items but don't touch the table
+			return m, tea.Batch(cmds...)
+		}
 		rows := make([][]string, len(msg.Items))
 		for i, item := range msg.Items {
 			rows[i] = item.Row
 		}
 		m.table.SetRows(rows)
-		cmds = append(cmds, waitForWatchUpdate(m.watcher))
+		if len(msg.Items) > 0 {
+			idx := m.table.SelectedRow()
+			if idx >= 0 && idx < len(msg.Items) {
+				item := msg.Items[idx]
+				cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
+				if m.currentResource == k8s.ResourcePods && !m.logsActive {
+					containers := k8s.ContainerNames(item.Raw)
+					if len(containers) > 0 {
+						m.detail.logLines = nil
+						m.logStreamer.Start(item.Name, item.Namespace, containers)
+						m.logsActive = true
+						cmds = append(cmds, waitForLogLine(m.logStreamer))
+					}
+				}
+			}
+		}
 		return m, tea.Batch(cmds...)
 
 	case ResourceErrorMsg:
@@ -204,15 +278,26 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case RowSelectedMsg:
+		if m.drillDownPod != nil {
+			// In drill-down: selected a container
+			if msg.Index >= 0 && msg.Index < len(m.drillDownContainers) {
+				c := m.drillDownContainers[msg.Index]
+				detail := containerToDetail(c, m.drillDownPod.Name, m.drillDownPod.Namespace)
+				m.detail.SetDetail(detail, nil)
+				m.detail.logLines = nil
+				m.logStreamer.Start(m.drillDownPod.Name, m.drillDownPod.Namespace, []string{c.Name})
+				m.logsActive = true
+				cmds = append(cmds, waitForLogLine(m.logStreamer))
+			}
+			return m, tea.Batch(cmds...)
+		}
 		if msg.Index >= 0 && msg.Index < len(m.items) {
 			item := m.items[msg.Index]
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
-
-			// Start log streaming for Pods.
 			if m.currentResource == k8s.ResourcePods {
 				containers := k8s.ContainerNames(item.Raw)
 				if len(containers) > 0 {
-					m.detail.logLines = nil // clear previous logs
+					m.detail.logLines = nil
 					m.logStreamer.Start(item.Name, item.Namespace, containers)
 					m.logsActive = true
 					cmds = append(cmds, waitForLogLine(m.logStreamer))
@@ -256,7 +341,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ContextChangedMsg:
 		newClient, err := k8s.NewClient(msg.Context)
 		if err != nil {
-			// Stay on current context if the new one fails.
 			return m, nil
 		}
 		m.watcher.Stop()
@@ -275,8 +359,40 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, waitForWatchUpdate(m.watcher))
 		return m, tea.Batch(cmds...)
 
+	case drillDownMsg:
+		if msg.children == nil {
+			return m, nil
+		}
+		m.drillDownStack = append(m.drillDownStack, drillDownEntry{
+			parentType:  msg.parentType,
+			parentName:  msg.parentName,
+			parentItems: m.items,
+		})
+		m.currentResource = msg.childType
+		m.items = msg.children
+		m.detail.SetResourceType(msg.childType)
+		m.table.SetColumns(ColumnsForResource(msg.childType))
+		rows := make([][]string, len(msg.children))
+		for i, item := range msg.children {
+			rows[i] = item.Row
+		}
+		m.table.SetRows(rows)
+		m.statusLine.SetDrillDown(true)
+		if len(msg.children) > 0 {
+			cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.childType, msg.children[0]))
+			if msg.childType == k8s.ResourcePods {
+				containers := k8s.ContainerNames(msg.children[0].Raw)
+				if len(containers) > 0 {
+					m.detail.logLines = nil
+					m.logStreamer.Start(msg.children[0].Name, msg.children[0].Namespace, containers)
+					m.logsActive = true
+					cmds = append(cmds, waitForLogLine(m.logStreamer))
+				}
+			}
+		}
+		return m, tea.Batch(cmds...)
+
 	case EditDoneMsg:
-		// TUI resumes automatically. The watcher will pick up changes.
 		return m, nil
 	}
 
@@ -316,22 +432,29 @@ func (m AppModel) View() string {
 		return m.namespacePicker.View()
 	}
 
-	sw, rw, tableH, detailH, middleH := m.panelSizes()
-	// Inner sizes (subtract border: 2 for width, 2 for height)
-	siW, siH := sw-2, middleH-2
-	tiW, tiH := rw-2, tableH-2
-	diW, diH := rw-2, detailH-2
-
-	m.sidebar.SetSize(siW, siH)
-	m.table.SetSize(tiW, tiH)
-	m.detail.SetSize(diW, diH)
-
 	statusBar := m.statusBar.View()
 	statusLine := m.statusLine.View()
 
-	sidebarPanel := renderPanel(m.sidebar.View(), "[1] Sidebar", sw, middleH, m.activePanel == SidebarPanel, m.theme)
-	tablePanel := renderPanel(m.table.View(), "[2] "+m.currentResource.String(), rw, tableH, m.activePanel == TablePanel, m.theme)
-	detailPanel := renderPanel(m.detail.View(), "[3] "+m.detail.TabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme)
+	if m.detailExpanded {
+		panelH := m.height - 2
+		m.detail.SetSize(m.width-2, panelH-2)
+		fullPanel := renderPanel(m.detail.View(), "[3] "+m.detail.ActiveTabName(), m.width, panelH, true, m.theme)
+		return lipgloss.JoinVertical(lipgloss.Left, statusBar, fullPanel, statusLine)
+	}
+
+	sw, rw, upperH, detailH := m.panelSizes()
+	fullH := upperH + detailH
+
+	m.sidebar.SetSize(sw-2, fullH-2)
+	m.table.SetSize(rw-2, upperH-2)
+	m.detail.SetSize(rw-2, detailH-2)
+
+	sidebarPanel := renderPanel(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme)
+
+	tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
+	tablePanel := renderPanel(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme)
+
+	detailPanel := renderPanel(m.detail.View(), "[3] "+m.detail.ActiveTabName(), rw, detailH, m.activePanel == DetailPanel, m.theme)
 
 	rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
 	middle := lipgloss.JoinHorizontal(lipgloss.Top, sidebarPanel, rightSide)
@@ -347,7 +470,7 @@ func (m *AppModel) layout() {
 	m.help.SetSize(m.width, m.height)
 }
 
-func (m AppModel) panelSizes() (sw, rw, tableH, detailH, middleH int) {
+func (m AppModel) panelSizes() (sw, rw, upperH, detailH int) {
 	sw = m.width * sidebarWidthPercent / 100
 	if sw < minSidebarWidth {
 		sw = minSidebarWidth
@@ -357,21 +480,211 @@ func (m AppModel) panelSizes() (sw, rw, tableH, detailH, middleH int) {
 	}
 	rw = m.width - sw
 
-	middleH = m.height - 2 // 1 status bar + 1 status line
-	if middleH < 6 {
-		middleH = 6
+	totalH := m.height - 2 // status bar + status line
+	if totalH < 6 {
+		totalH = 6
 	}
 
-	detailH = middleH * detailHeightPercent / 100
+	detailH = totalH * detailHeightPercent / 100
 	if detailH < 5 {
 		detailH = 5
 	}
-	tableH = middleH - detailH
-	if tableH < 4 {
-		tableH = 4
-		detailH = middleH - tableH
+	upperH = totalH - detailH
+	if upperH < 4 {
+		upperH = 4
+		detailH = totalH - upperH
 	}
 	return
+}
+
+func (m *AppModel) enterDrillDown() tea.Cmd {
+	idx := m.table.SelectedRow()
+	if idx < 0 || idx >= len(m.items) {
+		return nil
+	}
+	item := m.items[idx]
+
+	// Pod → Container drill-down (special case)
+	if m.currentResource == k8s.ResourcePods {
+		m.drillDownPod = &item
+		detail := k8s.GetResourceDetail(k8s.ResourcePods, item)
+		m.drillDownContainers = detail.Containers
+		m.table.SetColumns(containerColumns())
+		m.table.SetRows(containerRows(m.drillDownContainers))
+		m.statusLine.SetDrillDown(true)
+		if len(m.drillDownContainers) > 0 {
+			c := m.drillDownContainers[0]
+			d := containerToDetail(c, item.Name, item.Namespace)
+			m.detail.SetDetail(d, nil)
+			m.detail.logLines = nil
+			m.logStreamer.Start(item.Name, item.Namespace, []string{c.Name})
+			m.logsActive = true
+			return waitForLogLine(m.logStreamer)
+		}
+		return nil
+	}
+
+	// Resource → child resource drill-down
+	if !m.currentResource.SupportsDrillDown() {
+		return nil
+	}
+
+	return func() tea.Msg {
+		childType, children, err := k8s.FetchChildResources(
+			context.Background(), m.k8sClient.Clientset(), m.currentResource, item,
+		)
+		if err != nil || len(children) == 0 {
+			return nil
+		}
+		return drillDownMsg{
+			parentType: m.currentResource,
+			parentName: item.Name,
+			childType:  childType,
+			children:   children,
+		}
+	}
+}
+
+func (m *AppModel) exitDrillDown() tea.Cmd {
+	m.logStreamer.Stop()
+	m.logsActive = false
+	m.detail.logLines = nil
+
+	// If at container level, go back to pod list
+	if m.drillDownPod != nil {
+		m.drillDownPod = nil
+		m.drillDownContainers = nil
+		// Restore current resource's table
+		m.table.SetColumns(ColumnsForResource(m.currentResource))
+		rows := make([][]string, len(m.items))
+		for i, item := range m.items {
+			rows[i] = item.Row
+		}
+		m.table.SetRows(rows)
+		m.statusLine.SetDrillDown(len(m.drillDownStack) > 0)
+		return m.refreshDetailForCurrent()
+	}
+
+	// Pop from resource drill-down stack
+	if len(m.drillDownStack) > 0 {
+		entry := m.drillDownStack[len(m.drillDownStack)-1]
+		m.drillDownStack = m.drillDownStack[:len(m.drillDownStack)-1]
+		m.currentResource = entry.parentType
+		m.items = entry.parentItems
+		m.detail.SetResourceType(m.currentResource)
+		m.table.SetColumns(ColumnsForResource(m.currentResource))
+		rows := make([][]string, len(m.items))
+		for i, item := range m.items {
+			rows[i] = item.Row
+		}
+		m.table.SetRows(rows)
+		m.statusLine.SetDrillDown(len(m.drillDownStack) > 0)
+		return m.refreshDetailForCurrent()
+	}
+
+	return nil
+}
+
+func (m *AppModel) refreshDetailForCurrent() tea.Cmd {
+	if len(m.items) == 0 {
+		return nil
+	}
+	idx := m.table.SelectedRow()
+	if idx < 0 || idx >= len(m.items) {
+		return nil
+	}
+	item := m.items[idx]
+	var cmds []tea.Cmd
+	cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
+	if m.currentResource == k8s.ResourcePods {
+		containers := k8s.ContainerNames(item.Raw)
+		if len(containers) > 0 {
+			m.detail.logLines = nil
+			m.logStreamer.Start(item.Name, item.Namespace, containers)
+			m.logsActive = true
+			cmds = append(cmds, waitForLogLine(m.logStreamer))
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+func containerColumns() []Column {
+	return []Column{
+		{Title: "Name", MinWidth: 15},
+		{Title: "Image", MinWidth: 30},
+		{Title: "State", MinWidth: 12},
+		{Title: "Ready", MinWidth: 7},
+		{Title: "Restarts", MinWidth: 10},
+	}
+}
+
+func containerRows(containers []k8s.ContainerInfo) [][]string {
+	rows := make([][]string, len(containers))
+	for i, c := range containers {
+		ready := "false"
+		if c.Ready {
+			ready = "true"
+		}
+		prefix := ""
+		if c.Init {
+			prefix = "(init) "
+		}
+		rows[i] = []string{
+			prefix + c.Name,
+			c.Image,
+			c.State,
+			ready,
+			fmt.Sprintf("%d", c.Restarts),
+		}
+	}
+	return rows
+}
+
+func containerToDetail(c k8s.ContainerInfo, podName, namespace string) k8s.ResourceDetail {
+	fields := []k8s.DetailField{
+		{Label: "Pod", Value: podName},
+		{Label: "Image", Value: c.Image},
+		{Label: "State", Value: c.State},
+	}
+	ready := "false"
+	if c.Ready {
+		ready = "true"
+	}
+	fields = append(fields, k8s.DetailField{Label: "Ready", Value: ready})
+	if c.Restarts > 0 {
+		fields = append(fields, k8s.DetailField{Label: "Restarts", Value: fmt.Sprintf("%d", c.Restarts)})
+	}
+	if c.Ports != "" {
+		fields = append(fields, k8s.DetailField{Label: "Ports", Value: c.Ports})
+	}
+	name := c.Name
+	if c.Init {
+		name = "(init) " + name
+	}
+	return k8s.ResourceDetail{
+		Name:      name,
+		Namespace: namespace,
+		Kind:      "Container",
+		Fields:    fields,
+	}
+}
+
+func (m AppModel) breadcrumb() string {
+	if m.drillDownPod != nil {
+		return truncateName(m.drillDownPod.Name, 20) + " > Containers"
+	}
+	if len(m.drillDownStack) > 0 {
+		last := m.drillDownStack[len(m.drillDownStack)-1]
+		return truncateName(last.parentName, 20) + " > " + m.currentResource.String()
+	}
+	return m.currentResource.String()
+}
+
+func truncateName(name string, max int) string {
+	if len(name) <= max {
+		return name
+	}
+	return name[:max-1] + "…"
 }
 
 func (m *AppModel) setPanel(p Panel) {
@@ -408,9 +721,9 @@ func (m *AppModel) updateFocus() {
 	m.table.SetFocused(m.activePanel == TablePanel)
 	m.detail.SetFocused(m.activePanel == DetailPanel)
 	m.statusLine.SetActivePanel(m.activePanel)
+	m.statusLine.SetDrillDown(m.drillDownPod != nil)
 }
 
-// renderPanel wraps content in a bordered panel with a title, like lazygit.
 func renderPanel(content, title string, width, height int, focused bool, t *theme.Theme) string {
 	if width < 4 || height < 3 {
 		return content
@@ -427,7 +740,6 @@ func renderPanel(content, title string, width, height int, focused bool, t *them
 	innerW := width - 2
 	innerH := height - 2
 
-	// Fit content into inner dimensions.
 	fitted := lipgloss.NewStyle().Width(innerW).Height(innerH).MaxWidth(innerW).Render(content)
 	lines := strings.Split(fitted, "\n")
 	for len(lines) < innerH {
@@ -437,7 +749,6 @@ func renderPanel(content, title string, width, height int, focused bool, t *them
 
 	var b strings.Builder
 
-	// Top border: ╭─[1] Sidebar────────╮
 	titleVis := lipgloss.Width(title)
 	dashesAfter := innerW - 1 - titleVis
 	if dashesAfter < 0 {
@@ -448,7 +759,6 @@ func renderPanel(content, title string, width, height int, focused bool, t *them
 	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter) + "╮"))
 	b.WriteString("\n")
 
-	// Content lines with side borders.
 	leftBorder := bStyle.Render("│")
 	rightBorder := bStyle.Render("│")
 	for _, line := range lines {
@@ -464,7 +774,6 @@ func renderPanel(content, title string, width, height int, focused bool, t *them
 		b.WriteString("\n")
 	}
 
-	// Bottom border: ╰────────────────────╯
 	b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
 
 	return b.String()

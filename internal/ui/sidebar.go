@@ -43,7 +43,12 @@ type SidebarModel struct {
 	theme        *theme.Theme
 	pendingG     bool
 	selected     k8s.ResourceType
+	searching    bool
+	searchQuery  string
 }
+
+// IsSearching returns true if the sidebar is in search mode.
+func (m SidebarModel) IsSearching() bool { return m.searching }
 
 // NewSidebarModel creates a new sidebar with default categories and resources.
 func NewSidebarModel(t *theme.Theme) SidebarModel {
@@ -124,12 +129,15 @@ func (m SidebarModel) Update(msg tea.Msg) (SidebarModel, tea.Cmd) {
 }
 
 func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
+	if m.searching {
+		return m.handleSearchKey(msg)
+	}
+
 	visible := m.visibleItems()
 	if len(visible) == 0 {
 		return m, nil
 	}
 
-	// Handle pending g state for gg combo.
 	if m.pendingG {
 		m.pendingG = false
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == 'g' {
@@ -168,6 +176,10 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 			return m, func() tea.Msg {
 				return ResourceSelectedMsg{Type: item.resourceType}
 			}
+		case '/':
+			m.searching = true
+			m.searchQuery = ""
+			return m, nil
 		}
 
 	case tea.KeyDown:
@@ -179,6 +191,53 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
+	switch {
+	case msg.Type == tea.KeyEscape:
+		m.searching = false
+		m.searchQuery = ""
+		visible := m.visibleItems()
+		if m.cursor >= len(visible) && len(visible) > 0 {
+			m.cursor = m.firstResourceIndex(visible)
+		}
+		return m, nil
+	case msg.Type == tea.KeyEnter:
+		m.searching = false
+		return m, nil
+	case msg.Type == tea.KeyBackspace:
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.resetCursorToFirstMatch()
+		}
+		return m, nil
+	case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && string(msg.Runes) == "j"):
+		visible := m.visibleItems()
+		return m.moveDown(visible)
+	case msg.Type == tea.KeyUp || (msg.Type == tea.KeyRunes && string(msg.Runes) == "k"):
+		visible := m.visibleItems()
+		return m.moveUp(visible)
+	case msg.Type == tea.KeyRunes:
+		for _, r := range msg.Runes {
+			m.searchQuery += string(r)
+		}
+		m.resetCursorToFirstMatch()
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *SidebarModel) resetCursorToFirstMatch() {
+	visible := m.visibleItems()
+	for i, item := range visible {
+		if !item.isCategory {
+			m.cursor = i
+			m.ensureCursorVisible()
+			m.selected = item.resourceType
+			return
+		}
+	}
 }
 
 func (m SidebarModel) handleMouse(msg tea.MouseMsg) (SidebarModel, tea.Cmd) {
@@ -295,9 +354,14 @@ func (m SidebarModel) View() string {
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	categoryStyle := m.theme.SidebarCategoryStyle()
 
+	viewH := m.height
+	if m.searching || m.searchQuery != "" {
+		viewH--
+	}
+
 	var lines []string
 	start := m.scrollOffset
-	end := start + m.height
+	end := start + viewH
 	if end > len(visible) {
 		end = len(visible)
 	}
@@ -326,21 +390,26 @@ func (m SidebarModel) View() string {
 		lines = append(lines, line)
 	}
 
-	return strings.Join(lines, "\n")
+	content := strings.Join(lines, "\n")
+	if m.searching {
+		content += "\n" + m.theme.TableHeaderStyle().Width(m.width).Render("/ "+m.searchQuery+"█")
+	} else if m.searchQuery != "" {
+		content += "\n" + m.theme.TableRowStyle().Italic(true).Width(m.width).Render(" filter: "+m.searchQuery)
+	}
+	return content
 }
 
-// visibleItems computes the flat list of all items — categories are always shown.
+// visibleItems computes the flat list of visible items, filtered by search query.
 func (m SidebarModel) visibleItems() []visibleItem {
+	query := strings.ToLower(m.searchQuery)
 	var items []visibleItem
 	for ci, cat := range m.categories {
-		items = append(items, visibleItem{
-			isCategory:    true,
-			categoryIndex: ci,
-			resourceIndex: -1,
-			label:         cat.Label,
-		})
+		var children []visibleItem
 		for ri, res := range cat.Items {
-			items = append(items, visibleItem{
+			if query != "" && !strings.Contains(strings.ToLower(res.Label), query) {
+				continue
+			}
+			children = append(children, visibleItem{
 				isCategory:    false,
 				categoryIndex: ci,
 				resourceIndex: ri,
@@ -348,9 +417,20 @@ func (m SidebarModel) visibleItems() []visibleItem {
 				resourceType:  res.ResourceType,
 			})
 		}
+		if len(children) > 0 || query == "" {
+			items = append(items, visibleItem{
+				isCategory:    true,
+				categoryIndex: ci,
+				resourceIndex: -1,
+				label:         cat.Label,
+			})
+			items = append(items, children...)
+		}
 	}
-	// Standalone items.
 	for _, res := range m.standalone {
+		if query != "" && !strings.Contains(strings.ToLower(res.Label), query) {
+			continue
+		}
 		items = append(items, visibleItem{
 			isCategory:    false,
 			categoryIndex: -1,

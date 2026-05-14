@@ -119,6 +119,114 @@ func FetchResourceEvents(ctx context.Context, clientset kubernetes.Interface, na
 	return items, nil
 }
 
+// FetchChildResources fetches child resources for a parent (e.g. Deployment → Pods).
+func FetchChildResources(ctx context.Context, clientset kubernetes.Interface, parentType ResourceType, item ResourceItem) (ResourceType, []ResourceItem, error) {
+	var childType ResourceType
+	var selector string
+
+	switch parentType {
+	case ResourceDeployments:
+		dep, _ := item.Raw.(*appsv1.Deployment)
+		sel, _ := metav1.LabelSelectorAsSelector(dep.Spec.Selector)
+		childType = ResourcePods
+		selector = sel.String()
+	case ResourceDaemonSets:
+		ds, _ := item.Raw.(*appsv1.DaemonSet)
+		sel, _ := metav1.LabelSelectorAsSelector(ds.Spec.Selector)
+		childType = ResourcePods
+		selector = sel.String()
+	case ResourceStatefulSets:
+		ss, _ := item.Raw.(*appsv1.StatefulSet)
+		sel, _ := metav1.LabelSelectorAsSelector(ss.Spec.Selector)
+		childType = ResourcePods
+		selector = sel.String()
+	case ResourceJobs:
+		items, err := fetchPodsForJob(ctx, clientset, item)
+		return ResourcePods, items, err
+	case ResourceCronJobs:
+		items, err := fetchJobsForCronJob(ctx, clientset, item)
+		return ResourceJobs, items, err
+	default:
+		return 0, nil, fmt.Errorf("drill-down not supported for %s", parentType)
+	}
+
+	items, err := fetchPodsWithSelector(ctx, clientset, item.Namespace, selector)
+	return childType, items, err
+}
+
+func fetchPodsWithSelector(ctx context.Context, cs kubernetes.Interface, namespace, selector string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, fmt.Errorf("listing pods: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		p := &list.Items[i]
+		ready, total := podReadyCounts(p)
+		items = append(items, ResourceItem{
+			Name:      p.Name,
+			Namespace: p.Namespace,
+			UID:       string(p.UID),
+			Raw:       p,
+			Row: []string{
+				p.Name,
+				fmt.Sprintf("%d/%d", ready, total),
+				string(p.Status.Phase),
+				fmt.Sprintf("%d", podRestarts(p)),
+				formatAge(p.CreationTimestamp.Time),
+				p.Spec.NodeName,
+			},
+		})
+	}
+	return items, nil
+}
+
+func fetchPodsForJob(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	selector := fmt.Sprintf("job-name=%s", item.Name)
+	return fetchPodsWithSelector(ctx, cs, item.Namespace, selector)
+}
+
+func fetchJobsForCronJob(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	list, err := cs.BatchV1().Jobs(item.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing jobs: %w", err)
+	}
+	var items []ResourceItem
+	for i := range list.Items {
+		j := &list.Items[i]
+		for _, ref := range j.OwnerReferences {
+			if ref.Kind == "CronJob" && ref.Name == item.Name {
+				completions := int32(0)
+				if j.Spec.Completions != nil {
+					completions = *j.Spec.Completions
+				}
+				duration := "<pending>"
+				if j.Status.StartTime != nil {
+					end := time.Now()
+					if j.Status.CompletionTime != nil {
+						end = j.Status.CompletionTime.Time
+					}
+					duration = end.Sub(j.Status.StartTime.Time).Truncate(time.Second).String()
+				}
+				items = append(items, ResourceItem{
+					Name:      j.Name,
+					Namespace: j.Namespace,
+					UID:       string(j.UID),
+					Raw:       j,
+					Row: []string{
+						j.Name,
+						fmt.Sprintf("%d/%d", j.Status.Succeeded, completions),
+						duration,
+						formatAge(j.CreationTimestamp.Time),
+					},
+				})
+				break
+			}
+		}
+	}
+	return items, nil
+}
+
 // ---------------------------------------------------------------------------
 // formatAge
 // ---------------------------------------------------------------------------
@@ -325,11 +433,6 @@ func detailPod(item ResourceItem) ResourceDetail {
 	d := baseDetail(item, "Pod", p.ObjectMeta)
 	ready, total := podReadyCounts(p)
 
-	containers := make([]string, 0, len(p.Spec.Containers))
-	for _, c := range p.Spec.Containers {
-		containers = append(containers, c.Name)
-	}
-
 	d.Fields = []DetailField{
 		{Label: "Phase", Value: string(p.Status.Phase)},
 		{Label: "Node", Value: p.Spec.NodeName},
@@ -337,13 +440,60 @@ func detailPod(item ResourceItem) ResourceDetail {
 		{Label: "Host IP", Value: p.Status.HostIP},
 		{Label: "Ready", Value: fmt.Sprintf("%d/%d", ready, total)},
 		{Label: "Restarts", Value: fmt.Sprintf("%d", podRestarts(p))},
-		{Label: "Containers", Value: strings.Join(containers, ", ")},
 		{Label: "Service Account", Value: p.Spec.ServiceAccountName},
 	}
 	if p.Spec.Priority != nil {
 		d.Fields = append(d.Fields, DetailField{Label: "Priority", Value: fmt.Sprintf("%d", *p.Spec.Priority)})
 	}
+
+	statusMap := make(map[string]corev1.ContainerStatus)
+	for i := range p.Status.ContainerStatuses {
+		statusMap[p.Status.ContainerStatuses[i].Name] = p.Status.ContainerStatuses[i]
+	}
+	for i := range p.Status.InitContainerStatuses {
+		statusMap[p.Status.InitContainerStatuses[i].Name] = p.Status.InitContainerStatuses[i]
+	}
+
+	for _, c := range p.Spec.InitContainers {
+		d.Containers = append(d.Containers, containerDetail(c, statusMap, true))
+	}
+	for _, c := range p.Spec.Containers {
+		d.Containers = append(d.Containers, containerDetail(c, statusMap, false))
+	}
+
 	return d
+}
+
+func containerDetail(c corev1.Container, statusMap map[string]corev1.ContainerStatus, isInit bool) ContainerInfo {
+	info := ContainerInfo{
+		Name:  c.Name,
+		Image: c.Image,
+		Init:  isInit,
+	}
+
+	var ports []string
+	for _, p := range c.Ports {
+		if p.Name != "" {
+			ports = append(ports, fmt.Sprintf("%s:%d/%s", p.Name, p.ContainerPort, p.Protocol))
+		} else {
+			ports = append(ports, fmt.Sprintf("%d/%s", p.ContainerPort, p.Protocol))
+		}
+	}
+	info.Ports = strings.Join(ports, ", ")
+
+	if cs, ok := statusMap[c.Name]; ok {
+		info.Ready = cs.Ready
+		info.Restarts = int(cs.RestartCount)
+		if cs.State.Running != nil {
+			info.State = "Running"
+		} else if cs.State.Waiting != nil {
+			info.State = "Waiting: " + cs.State.Waiting.Reason
+		} else if cs.State.Terminated != nil {
+			info.State = "Terminated: " + cs.State.Terminated.Reason
+		}
+	}
+
+	return info
 }
 
 // ---------------------------------------------------------------------------

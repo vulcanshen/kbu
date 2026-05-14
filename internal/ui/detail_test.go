@@ -56,11 +56,11 @@ func TestDetailModel_InitialState(t *testing.T) {
 	if m.activeTab != DetailTabInfo {
 		t.Errorf("expected activeTab=DetailTabInfo, got %d", m.activeTab)
 	}
-	if len(m.tabs) != 3 {
-		t.Errorf("expected 3 tabs, got %d", len(m.tabs))
+	if len(m.tabs) != 2 {
+		t.Errorf("expected 2 tabs (no Logs for non-Pod), got %d", len(m.tabs))
 	}
-	if m.tabs[0] != "Detail" || m.tabs[1] != "Events" || m.tabs[2] != "Logs" {
-		t.Errorf("expected tabs=[Detail, Events, Logs], got %v", m.tabs)
+	if m.tabs[0] != "Detail" || m.tabs[1] != "Events" {
+		t.Errorf("expected tabs=[Detail, Events], got %v", m.tabs)
 	}
 	if m.scrollOffset != 0 {
 		t.Errorf("expected scrollOffset=0, got %d", m.scrollOffset)
@@ -88,44 +88,44 @@ func TestDetailModel_SetDetail(t *testing.T) {
 
 func TestDetailModel_SwitchTab(t *testing.T) {
 	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods) // 3 tabs: Detail, Logs, Events
 	m.SetDetail(sampleDetail(), sampleEvents())
 
-	// Initially on Detail tab.
-	if m.activeTab != DetailTabInfo {
-		t.Fatalf("expected activeTab=DetailTabInfo, got %d", m.activeTab)
+	if m.activeTab != 0 {
+		t.Fatalf("expected activeTab=0 (Detail), got %d", m.activeTab)
 	}
 
-	// Press ']' to cycle Info → Events.
+	// ']' cycles Detail → Logs
 	m, _ = m.Update(keyMsg(']'))
-	if m.activeTab != DetailTabEvents {
-		t.Errorf("expected activeTab=DetailTabEvents after first ']', got %d", m.activeTab)
+	if m.ActiveTabName() != "Logs" {
+		t.Errorf("expected Logs after first ']', got %s", m.ActiveTabName())
 	}
 
-	// Press ']' to cycle Events → Logs.
+	// ']' cycles Logs → Events
 	m, _ = m.Update(keyMsg(']'))
-	if m.activeTab != DetailTabLogs {
-		t.Errorf("expected activeTab=DetailTabLogs after second ']', got %d", m.activeTab)
+	if m.ActiveTabName() != "Events" {
+		t.Errorf("expected Events after second ']', got %s", m.ActiveTabName())
 	}
 
-	// Press ']' to cycle Logs → Info (wrap around).
+	// ']' wraps Events → Detail
 	m, _ = m.Update(keyMsg(']'))
-	if m.activeTab != DetailTabInfo {
-		t.Errorf("expected activeTab=DetailTabInfo after third ']' (wrap), got %d", m.activeTab)
+	if m.ActiveTabName() != "Detail" {
+		t.Errorf("expected Detail after wrap ']', got %s", m.ActiveTabName())
 	}
 
-	// Press '[' to cycle Info → Logs (wrap backward).
+	// '[' wraps Detail → Events (backward)
 	m, _ = m.Update(keyMsg('['))
-	if m.activeTab != DetailTabLogs {
-		t.Errorf("expected activeTab=DetailTabLogs after '[' from Info, got %d", m.activeTab)
+	if m.ActiveTabName() != "Events" {
+		t.Errorf("expected Events after '[' from Detail, got %s", m.ActiveTabName())
 	}
 
-	// Press '[' to cycle Logs → Events.
+	// '[' cycles Events → Logs
 	m, _ = m.Update(keyMsg('['))
-	if m.activeTab != DetailTabEvents {
-		t.Errorf("expected activeTab=DetailTabEvents after '[' from Logs, got %d", m.activeTab)
+	if m.ActiveTabName() != "Logs" {
+		t.Errorf("expected Logs after '[' from Events, got %s", m.ActiveTabName())
 	}
 
-	// Press '[' to cycle Events → Info.
+	// '[' cycles Logs → Detail
 	m, _ = m.Update(keyMsg('['))
 	if m.activeTab != DetailTabInfo {
 		t.Errorf("expected activeTab=DetailTabInfo after '[' from Events, got %d", m.activeTab)
@@ -248,27 +248,12 @@ func TestDetailModel_ShiftG(t *testing.T) {
 func TestDetailModel_LogsTab_NonPodResource(t *testing.T) {
 	m := newTestDetail()
 	// Default resourceType is 0 (ResourceNamespaces), not Pods.
-	m.SetDetail(sampleDetail(), sampleEvents())
-
-	// Switch to Logs tab.
-	m = m.switchToTab(DetailTabLogs)
-	if m.activeTab != DetailTabLogs {
-		t.Fatalf("expected activeTab=DetailTabLogs, got %d", m.activeTab)
+	// For non-Pod resources, tabs are ["Detail", "Events"] — no Logs tab.
+	if len(m.tabs) != 2 {
+		t.Fatalf("expected 2 tabs for non-Pod resource, got %d", len(m.tabs))
 	}
-
-	// Verify placeholder content for non-Pod resource.
-	if len(m.contentLines) != 1 {
-		t.Fatalf("expected 1 content line for Logs tab, got %d", len(m.contentLines))
-	}
-
-	if !strings.Contains(m.contentLines[0], "Logs not available for this resource type") {
-		t.Errorf("expected Logs placeholder for non-Pod resource, got %q", m.contentLines[0])
-	}
-
-	// Also verify it renders without error.
-	view := m.View()
-	if !strings.Contains(view, "Logs not available") {
-		t.Errorf("expected View to contain 'Logs not available'")
+	if m.tabs[1] != "Events" {
+		t.Errorf("expected second tab to be 'Events', got %q", m.tabs[1])
 	}
 }
 
@@ -278,7 +263,7 @@ func TestDetailModel_LogsTab_PodWaiting(t *testing.T) {
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	// Switch to Logs tab — no log lines yet.
-	m = m.switchToTab(DetailTabLogs)
+	m = m.switchToTab(1) // Logs tab for Pods is index 1
 
 	if len(m.contentLines) != 1 {
 		t.Fatalf("expected 1 content line, got %d", len(m.contentLines))
@@ -338,7 +323,7 @@ func TestDetailModel_LogsTab_WithLogLines(t *testing.T) {
 	m.AppendLogLine("sidecar", "log entry 2")
 
 	// Switch to Logs tab.
-	m = m.switchToTab(DetailTabLogs)
+	m = m.switchToTab(1) // Logs tab for Pods is index 1
 
 	if len(m.contentLines) != 2 {
 		t.Fatalf("expected 2 content lines on Logs tab, got %d", len(m.contentLines))
