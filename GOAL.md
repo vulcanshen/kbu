@@ -57,6 +57,33 @@
 | Config | Secrets | Name, Type, Data count, Age (metadata only) |
 | Events | Events | Type, Reason, Object, Message, Age |
 
+## 設計決策
+
+### 資料層
+- **更新策略：** Watch（即時推送），非 Polling
+- **Namespace：** 預設顯示所有 Namespace
+- **Context 切換：** 支援切換 kubeconfig context，切換時整個畫面重繪
+- **CRD：** v1 不支援，未來再開發
+
+### UI 行為
+- **Detail 區域：** 同一區域多個 Tab 切換
+  - **Detail Tab** — 結構化欄位（metadata、status、spec 重點）
+  - **Events Tab** — 該資源相關的 Events
+  - **Logs Tab** — 僅 Pod 類資源顯示，多 container 以 `<container-name>|<log>` 格式混合顯示，選取特定 container 時只顯示該 container
+- **Sidebar Events：** 獨立項目，顯示全域 Events
+- **Detail 內容：** 結構化欄位，非 raw YAML
+- **Panel 大小：** 固定比例，不支援拖曳調整
+- **滑鼠：** 僅支援滾輪滾動，不支援拖曳操作
+
+### 操作流程
+- **YAML 編輯：** 使用 `kubectl edit`（開啟 $EDITOR，存檔即生效），不自行實作 diff + apply
+
+### Theme 系統
+- **機制：** 內建 default theme，使用者將 `theme.yaml` 放到 `~/.config/km8/theme.yaml` 即覆蓋
+- **格式：** 獨立 `theme.yaml` 檔案，每個 UI 元素的顏色獨立定義
+- **使用方式：** 類似 lazygit — 社群分享 theme 檔案（如 catppuccin-mocha、dracula），下載貼到 config 目錄即生效
+- **`config.yaml` 不含 theme 設定**，theme 完全由 `theme.yaml` 控制
+
 ## 功能需求
 
 ### Phase 1 — Foundation
@@ -70,35 +97,41 @@
 
 ### Phase 2 — Resource Implementation
 - [ ] All 13 resource types: list fetcher + table column mapping
-- [ ] Detail panel (metadata, labels, annotations, status)
-- [ ] Namespace switching (all namespaces + per-namespace)
+- [ ] Detail panel (metadata, labels, annotations, status — structured tabs)
+- [ ] Events tab in detail panel (resource-specific events)
+- [ ] Namespace switching (all namespaces + per-namespace filter)
 - [ ] Panel focus system (Tab / Ctrl+h/j/k/l between sidebar, table, detail)
 
 ### Phase 3 — Advanced Features
-- [ ] Pod logs streaming (dock panel, follow mode)
+- [ ] Pod logs tab (multi-container: `<container>|<log>` format, single-container filter)
 - [ ] Table search/filter (/ to enter search, Esc to clear)
-- [ ] YAML edit flow ($EDITOR → diff → kubectl apply)
+- [ ] YAML edit via `kubectl edit` ($EDITOR, save to apply)
 - [ ] Help overlay (? to show keybinding reference)
+- [ ] Context switching (選單 + 全畫面重繪)
 
 ### Phase 4 — Polish
-- [ ] Responsive layout (WindowSizeMsg handling, proportional panels)
+- [ ] Responsive layout (WindowSizeMsg handling, fixed proportional panels)
 - [ ] Cross-platform build (macOS/Linux/Windows)
 - [ ] Error handling and user feedback (status line messages)
 - [ ] Config file support (~/.config/km8/config.yaml)
-- [ ] Color theme system (lipgloss-based, configurable)
+- [ ] Theme system (`~/.config/km8/theme.yaml`, 內建 default, 支援社群 theme 檔案覆蓋)
 
 ## 驗收標準
 
 - [ ] `go build .` 成功，支援三平台交叉編譯
 - [ ] 連接本地 K8s cluster（OrbStack）並顯示資源
+- [ ] Watch 即時更新資源狀態
 - [ ] 所有 13 種資源可在 Sidebar 切換並以表格顯示
 - [ ] Vim motion 操作正常（j/k/h/l/gg/G）— 有對應 model tests
-- [ ] 選取資源可查看 Detail Panel
-- [ ] Namespace 切換功能正常
-- [ ] Pod logs 可串流顯示
-- [ ] 任意資源可開啟 YAML 編輯並 apply
+- [ ] 選取資源可查看 Detail Panel（結構化欄位）
+- [ ] Detail 區域 Tab 切換（Detail / Events / Logs）
+- [ ] Namespace 切換功能正常（預設 all namespaces）
+- [ ] Context 切換並重繪畫面
+- [ ] Pod logs 以 `<container>|<log>` 格式串流顯示
+- [ ] `kubectl edit` 開啟 $EDITOR 編輯資源
 - [ ] Table 搜尋/篩選功能
-- [ ] Terminal 視窗縮放時 UI 自動配適
+- [ ] Terminal 視窗縮放時 UI 自動配適（固定比例）
+- [ ] 滑鼠滾輪滾動支援
 - [ ] 無 runtime panic，錯誤有明確提示
 
 ## 開發環境
