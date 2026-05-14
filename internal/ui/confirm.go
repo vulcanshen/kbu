@@ -12,6 +12,7 @@ type ConfirmAction int
 
 const (
 	ConfirmShellExec ConfirmAction = iota
+	ConfirmDelete
 )
 
 type ConfirmModel struct {
