@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,12 +16,10 @@ import (
 )
 
 func main() {
-	// Suppress all stray output from k8s client-go / klog that would corrupt the TUI.
+	// Suppress k8s client-go / klog output that would corrupt the TUI.
 	klog.SetOutput(io.Discard)
-	devNull, _ := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-	if devNull != nil {
-		os.Stderr = devNull
-	}
+	klog.SetLogger(klog.NewKlogr().V(100)) // effectively disable all logging
+	log.SetOutput(io.Discard)
 
 	cfg, err := config.Load()
 	if err != nil {

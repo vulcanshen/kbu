@@ -33,6 +33,7 @@ type AppModel struct {
 	contextPicker   ContextPickerModel
 	help            HelpModel
 	appLog          AppLogModel
+	confirm         ConfirmModel
 
 	activePanel     Panel
 	width           int
@@ -81,6 +82,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client) AppModel {
 		contextPicker:   NewContextPickerModel(t),
 		help:            NewHelpModel(t),
 		appLog:          NewAppLogModel(t),
+		confirm:         NewConfirmModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		k8sClient:       client,
@@ -104,6 +106,18 @@ func (m AppModel) Init() tea.Cmd {
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	if m.confirm.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.confirm, cmd = m.confirm.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
 
 	if m.appLog.IsActive() {
 		switch msg := msg.(type) {
@@ -240,6 +254,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					item := m.items[idx]
 					return m, editResource(m.currentResource, item.Name, item.Namespace)
 				}
+			}
+		case "s":
+			if m.activePanel == TablePanel {
+				return m, m.execShell()
 			}
 		case "+":
 			if m.activePanel == DetailPanel {
@@ -463,6 +481,11 @@ func (m AppModel) View() string {
 	if m.help.IsActive() {
 		m.help.SetSize(m.width, m.height)
 		return m.help.View()
+	}
+
+	if m.confirm.IsActive() {
+		m.confirm.SetSize(m.width, m.height)
+		return m.confirm.View()
 	}
 
 	if m.contextPicker.IsActive() {
@@ -757,6 +780,55 @@ func truncateName(name string, max int) string {
 		return name
 	}
 	return name[:max-1] + "…"
+}
+
+func (m *AppModel) execShell() tea.Cmd {
+	var podName, namespace, container string
+
+	if m.drillDownPod != nil {
+		idx := m.table.SelectedRow()
+		if idx < 0 || idx >= len(m.drillDownContainers) {
+			return nil
+		}
+		podName = m.drillDownPod.Name
+		namespace = m.drillDownPod.Namespace
+		container = m.drillDownContainers[idx].Name
+	} else {
+		if m.currentResource != k8s.ResourcePods || len(m.items) == 0 {
+			return nil
+		}
+		idx := m.table.SelectedRow()
+		if idx < 0 || idx >= len(m.items) {
+			return nil
+		}
+		item := m.items[idx]
+		containers := k8s.ContainerNames(item.Raw)
+		if len(containers) == 0 {
+			return nil
+		}
+		podName = item.Name
+		namespace = item.Namespace
+		container = containers[0]
+	}
+
+	detail := fmt.Sprintf("kubectl exec -it %s -n %s -c %s", podName, namespace, container)
+	m.confirm.SetSize(m.width, m.height)
+	m.confirm.Show(ConfirmShellExec, "Exec into container?", detail,
+		shellExec(podName, namespace, container))
+	m.appLog.Info("exec shell: " + detail)
+	return nil
+}
+
+func shellExec(podName, namespace, container string) tea.Cmd {
+	script := fmt.Sprintf(
+		"clear; printf '\\033[?25h'; printf '\\033[1;32m<<km8-Shell>>\\033[0m Pod: \\033[1;34m%s/%s\\033[0m | Container: \\033[1;33m%s\\033[0m\\n\\n'; exec kubectl exec -it %s -n %s -c %s -- /bin/sh",
+		namespace, podName, container,
+		podName, namespace, container,
+	)
+	c := exec.Command("sh", "-c", script)
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return EditDoneMsg{}
+	})
 }
 
 func (m *AppModel) setPanel(p Panel) {
