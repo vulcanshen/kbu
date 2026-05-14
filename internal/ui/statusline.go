@@ -37,9 +37,9 @@ func (m StatusLineModel) View() string {
 		hints = " [1] Sidebar | n: ns | c: ctx | e: edit"
 	case TablePanel:
 		if m.drillDown {
-			hints = " [2] Containers | /: search | h/l: tab | esc: back"
+			hints = " [2] Containers | /: search | h/l: tab | s: shell | esc: back"
 		} else {
-			hints = " [2] List | /: search | h/l: tab | e: edit"
+			hints = " [2] List | /: search | h/l: tab | s: shell | e: edit"
 		}
 	case DetailPanel:
 		hints = " [3] Detail | h/l: tab | +/-: expand"
