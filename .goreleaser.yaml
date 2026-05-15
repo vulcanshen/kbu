@@ -1,0 +1,50 @@
+version: 2
+
+project_name: km8
+
+builds:
+  - main: ./cmd
+    binary: km8
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  disable: true
+
+release:
+  extra_files: []
+
+brews:
+  - repository:
+      owner: vulcanshen
+      name: homebrew-tap
+      token: "{{ .Env.ACTION_TOKEN }}"
+    homepage: "https://github.com/vulcanshen/km8"
+    description: "Kubernetes TUI management tool inspired by Lens IDE"
+
+scoops:
+  - repository:
+      owner: vulcanshen
+      name: scoop-bucket
+      token: "{{ .Env.ACTION_TOKEN }}"
+    homepage: "https://github.com/vulcanshen/km8"
+    description: "Kubernetes TUI management tool inspired by Lens IDE"
