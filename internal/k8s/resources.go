@@ -16,91 +16,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// FetchResources lists resources of the given type and returns them as
-// ResourceItem slices. Each item's Row matches the column order from
-// ColumnsForResource(rt). Pass namespace="" to list across all namespaces.
+// FetchResources lists resources of the given type via the DefaultRegistry.
 func FetchResources(ctx context.Context, clientset kubernetes.Interface, rt ResourceType, namespace string) ([]ResourceItem, error) {
-	switch rt {
-	case ResourceNamespaces:
-		return fetchNamespaces(ctx, clientset)
-	case ResourceNodes:
-		return fetchNodes(ctx, clientset)
-	case ResourcePods:
-		return fetchPods(ctx, clientset, namespace)
-	case ResourceDeployments:
-		return fetchDeployments(ctx, clientset, namespace)
-	case ResourceDaemonSets:
-		return fetchDaemonSets(ctx, clientset, namespace)
-	case ResourceStatefulSets:
-		return fetchStatefulSets(ctx, clientset, namespace)
-	case ResourceJobs:
-		return fetchJobs(ctx, clientset, namespace)
-	case ResourceCronJobs:
-		return fetchCronJobs(ctx, clientset, namespace)
-	case ResourceServices:
-		return fetchServices(ctx, clientset, namespace)
-	case ResourceIngresses:
-		return fetchIngresses(ctx, clientset, namespace)
-	case ResourceConfigMaps:
-		return fetchConfigMaps(ctx, clientset, namespace)
-	case ResourceSecrets:
-		return fetchSecrets(ctx, clientset, namespace)
-	case ResourceEvents:
-		return fetchEvents(ctx, clientset, namespace)
-	case ResourceClusterRoles:
-		return fetchClusterRoles(ctx, clientset)
-	case ResourceClusterRoleBindings:
-		return fetchClusterRoleBindings(ctx, clientset)
-	case ResourceRoles:
-		return fetchRoles(ctx, clientset, namespace)
-	case ResourceRoleBindings:
-		return fetchRoleBindings(ctx, clientset, namespace)
-	default:
-		return nil, fmt.Errorf("unsupported resource type: %s", rt)
-	}
+	return DefaultRegistry.FetchResources(ctx, clientset, rt, namespace)
 }
 
-// GetResourceDetail extracts structured detail from a ResourceItem. The detail
-// includes common metadata plus resource-specific fields.
+// GetResourceDetail extracts structured detail via the DefaultRegistry.
 func GetResourceDetail(rt ResourceType, item ResourceItem) ResourceDetail {
-	switch rt {
-	case ResourceNamespaces:
-		return detailNamespace(item)
-	case ResourceNodes:
-		return detailNode(item)
-	case ResourcePods:
-		return detailPod(item)
-	case ResourceDeployments:
-		return detailDeployment(item)
-	case ResourceDaemonSets:
-		return detailDaemonSet(item)
-	case ResourceStatefulSets:
-		return detailStatefulSet(item)
-	case ResourceJobs:
-		return detailJob(item)
-	case ResourceCronJobs:
-		return detailCronJob(item)
-	case ResourceServices:
-		return detailService(item)
-	case ResourceIngresses:
-		return detailIngress(item)
-	case ResourceConfigMaps:
-		return detailConfigMap(item)
-	case ResourceSecrets:
-		return detailSecret(item)
-	case ResourceEvents:
-		return detailEvent(item)
-	case ResourceClusterRoles:
-		return detailClusterRole(item)
-	case ResourceClusterRoleBindings:
-		return detailClusterRoleBinding(item)
-	case ResourceRoles:
-		return detailRole(item)
-	case ResourceRoleBindings:
-		return detailRoleBinding(item)
-	default:
-		return ResourceDetail{Name: item.Name, Namespace: item.Namespace, Kind: rt.String(), UID: item.UID}
-	}
+	return DefaultRegistry.GetResourceDetail(rt, item)
 }
 
 // FetchResourceEvents fetches events related to a specific resource by name,
@@ -136,39 +59,14 @@ func FetchResourceEvents(ctx context.Context, clientset kubernetes.Interface, na
 	return items, nil
 }
 
-// FetchChildResources fetches child resources for a parent (e.g. Deployment → Pods).
+// FetchChildResources fetches child resources for a parent via the registry's DrillDown config.
 func FetchChildResources(ctx context.Context, clientset kubernetes.Interface, parentType ResourceType, item ResourceItem) (ResourceType, []ResourceItem, error) {
-	var childType ResourceType
-	var selector string
-
-	switch parentType {
-	case ResourceDeployments:
-		dep, _ := item.Raw.(*appsv1.Deployment)
-		sel, _ := metav1.LabelSelectorAsSelector(dep.Spec.Selector)
-		childType = ResourcePods
-		selector = sel.String()
-	case ResourceDaemonSets:
-		ds, _ := item.Raw.(*appsv1.DaemonSet)
-		sel, _ := metav1.LabelSelectorAsSelector(ds.Spec.Selector)
-		childType = ResourcePods
-		selector = sel.String()
-	case ResourceStatefulSets:
-		ss, _ := item.Raw.(*appsv1.StatefulSet)
-		sel, _ := metav1.LabelSelectorAsSelector(ss.Spec.Selector)
-		childType = ResourcePods
-		selector = sel.String()
-	case ResourceJobs:
-		items, err := fetchPodsForJob(ctx, clientset, item)
-		return ResourcePods, items, err
-	case ResourceCronJobs:
-		items, err := fetchJobsForCronJob(ctx, clientset, item)
-		return ResourceJobs, items, err
-	default:
-		return 0, nil, fmt.Errorf("drill-down not supported for %s", parentType)
+	def := DefaultRegistry.Get(parentType)
+	if def == nil || def.DrillDown == nil || def.DrillDown.FetchChildren == nil {
+		return "", nil, fmt.Errorf("drill-down not supported for %s", parentType)
 	}
-
-	items, err := fetchPodsWithSelector(ctx, clientset, item.Namespace, selector)
-	return childType, items, err
+	children, err := def.DrillDown.FetchChildren(ctx, clientset, item)
+	return def.DrillDown.ChildType, children, err
 }
 
 func fetchPodsWithSelector(ctx context.Context, cs kubernetes.Interface, namespace, selector string) ([]ResourceItem, error) {

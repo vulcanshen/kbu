@@ -10,11 +10,8 @@ import (
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
-// Column defines a table column with a title and minimum width.
-type Column struct {
-	Title    string
-	MinWidth int
-}
+// Column is an alias for k8s.Column for backward compatibility within the UI package.
+type Column = k8s.Column
 
 // TableModel is the Bubble Tea model for the resource table panel.
 type TableModel struct {
@@ -36,134 +33,7 @@ type TableModel struct {
 
 // ColumnsForResource returns the column definitions for a given resource type.
 func ColumnsForResource(rt k8s.ResourceType) []Column {
-	switch rt {
-	case k8s.ResourceNamespaces:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Status", MinWidth: 10},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceNodes:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Status", MinWidth: 10},
-			{Title: "Roles", MinWidth: 12},
-			{Title: "Version", MinWidth: 10},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourcePods:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Ready", MinWidth: 7},
-			{Title: "Status", MinWidth: 10},
-			{Title: "Restarts", MinWidth: 10},
-			{Title: "Age", MinWidth: 8},
-			{Title: "Node", MinWidth: 15},
-		}
-	case k8s.ResourceDeployments:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Ready", MinWidth: 7},
-			{Title: "Up-to-date", MinWidth: 12},
-			{Title: "Available", MinWidth: 10},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceDaemonSets:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Desired", MinWidth: 8},
-			{Title: "Current", MinWidth: 8},
-			{Title: "Ready", MinWidth: 7},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceStatefulSets:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Ready", MinWidth: 7},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceJobs:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Completions", MinWidth: 12},
-			{Title: "Duration", MinWidth: 10},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceCronJobs:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Schedule", MinWidth: 15},
-			{Title: "Suspend", MinWidth: 8},
-			{Title: "Active", MinWidth: 7},
-			{Title: "Last Schedule", MinWidth: 15},
-		}
-	case k8s.ResourceServices:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Type", MinWidth: 12},
-			{Title: "Cluster-IP", MinWidth: 15},
-			{Title: "External-IP", MinWidth: 15},
-			{Title: "Ports", MinWidth: 15},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceIngresses:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Class", MinWidth: 10},
-			{Title: "Hosts", MinWidth: 20},
-			{Title: "Ports", MinWidth: 10},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceConfigMaps:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Data", MinWidth: 6},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceSecrets:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Type", MinWidth: 20},
-			{Title: "Data", MinWidth: 6},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceEvents:
-		return []Column{
-			{Title: "Type", MinWidth: 8},
-			{Title: "Reason", MinWidth: 15},
-			{Title: "Object", MinWidth: 20},
-			{Title: "Message", MinWidth: 30},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceClusterRoles:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceClusterRoleBindings:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Role", MinWidth: 20},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceRoles:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Namespace", MinWidth: 15},
-			{Title: "Age", MinWidth: 8},
-		}
-	case k8s.ResourceRoleBindings:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-			{Title: "Namespace", MinWidth: 15},
-			{Title: "Role", MinWidth: 20},
-			{Title: "Age", MinWidth: 8},
-		}
-	default:
-		return []Column{
-			{Title: "Name", MinWidth: 20},
-		}
-	}
+	return k8s.DefaultRegistry.ColumnsFor(rt)
 }
 
 // NewTableModel creates a new table model initialized with Pods columns.

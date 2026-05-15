@@ -52,65 +52,35 @@ func (m SidebarModel) IsSearching() bool { return m.searching }
 // HasActiveFilter returns true if a search filter is active.
 func (m SidebarModel) HasActiveFilter() bool { return m.searchQuery != "" }
 
-// NewSidebarModel creates a new sidebar with default categories and resources.
+// NewSidebarModel creates a new sidebar with categories built from the registry.
 func NewSidebarModel(t *theme.Theme) SidebarModel {
-	categories := []SidebarCategory{
-		{
-			Label:    "Cluster",
-			Expanded: true,
-			Items: []SidebarResource{
-				{Label: "Namespaces", ResourceType: k8s.ResourceNamespaces},
-				{Label: "Nodes", ResourceType: k8s.ResourceNodes},
-				{Label: "Events", ResourceType: k8s.ResourceEvents},
-			},
-		},
-		{
-			Label: "Workloads",
-			Items: []SidebarResource{
-				{Label: "Pods", ResourceType: k8s.ResourcePods},
-				{Label: "Deployments", ResourceType: k8s.ResourceDeployments},
-				{Label: "DaemonSets", ResourceType: k8s.ResourceDaemonSets},
-				{Label: "StatefulSets", ResourceType: k8s.ResourceStatefulSets},
-				{Label: "Jobs", ResourceType: k8s.ResourceJobs},
-				{Label: "CronJobs", ResourceType: k8s.ResourceCronJobs},
-			},
-		},
-		{
-			Label: "Network",
-			Items: []SidebarResource{
-				{Label: "Services", ResourceType: k8s.ResourceServices},
-				{Label: "Ingresses", ResourceType: k8s.ResourceIngresses},
-			},
-		},
-		{
-			Label: "Config",
-			Items: []SidebarResource{
-				{Label: "ConfigMaps", ResourceType: k8s.ResourceConfigMaps},
-				{Label: "Secrets", ResourceType: k8s.ResourceSecrets},
-			},
-		},
-		{
-			Label: "RBAC",
-			Items: []SidebarResource{
-				{Label: "ClusterRoles", ResourceType: k8s.ResourceClusterRoles},
-				{Label: "ClusterRoleBindings", ResourceType: k8s.ResourceClusterRoleBindings},
-				{Label: "Roles", ResourceType: k8s.ResourceRoles},
-				{Label: "RoleBindings", ResourceType: k8s.ResourceRoleBindings},
-			},
-		},
-	}
+	return newSidebarFromRegistry(t, k8s.DefaultRegistry)
+}
 
-	standalone := []SidebarResource{}
+func newSidebarFromRegistry(t *theme.Theme, reg *k8s.Registry) SidebarModel {
+	catGroups := reg.SidebarCategories()
+	categories := make([]SidebarCategory, len(catGroups))
+	for i, cg := range catGroups {
+		items := make([]SidebarResource, len(cg.Resources))
+		for j, def := range cg.Resources {
+			items[j] = SidebarResource{
+				Label:        def.DisplayName,
+				ResourceType: def.Type,
+			}
+		}
+		categories[i] = SidebarCategory{
+			Label: cg.Label,
+			Items: items,
+		}
+	}
 
 	m := SidebarModel{
 		categories: categories,
-		standalone: standalone,
 		focused:    false,
 		selected:   k8s.ResourcePods,
 		theme:      t,
 	}
 
-	// Set initial cursor to Pods (the default selected resource).
 	visible := m.visibleItems()
 	for i, item := range visible {
 		if !item.isCategory && item.resourceType == k8s.ResourcePods {
@@ -120,6 +90,27 @@ func NewSidebarModel(t *theme.Theme) SidebarModel {
 	}
 
 	return m
+}
+
+// RefreshCategories rebuilds sidebar categories from the registry.
+func (m *SidebarModel) RefreshCategories(reg *k8s.Registry) {
+	catGroups := reg.SidebarCategories()
+	categories := make([]SidebarCategory, len(catGroups))
+	for i, cg := range catGroups {
+		items := make([]SidebarResource, len(cg.Resources))
+		for j, def := range cg.Resources {
+			items[j] = SidebarResource{
+				Label:        def.DisplayName,
+				ResourceType: def.Type,
+			}
+		}
+		categories[i] = SidebarCategory{
+			Label: cg.Label,
+			Items: items,
+		}
+	}
+	m.categories = categories
+	m.standalone = nil
 }
 
 // Init implements tea.Model.
