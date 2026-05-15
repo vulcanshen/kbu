@@ -129,6 +129,36 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 			m.pendingG = true
 		}
 
+	case msg.Type == tea.KeyRunes && string(msg.Runes) == "d":
+		m.pendingG = false
+		if len(m.rows) > 0 {
+			half := m.visibleRows() / 2
+			if half < 1 {
+				half = 1
+			}
+			m.cursor += half
+			if m.cursor >= len(m.rows) {
+				m.cursor = len(m.rows) - 1
+			}
+			m.ensureCursorVisible()
+			return m, m.emitCursorChanged()
+		}
+
+	case msg.Type == tea.KeyRunes && string(msg.Runes) == "u":
+		m.pendingG = false
+		if len(m.rows) > 0 {
+			half := m.visibleRows() / 2
+			if half < 1 {
+				half = 1
+			}
+			m.cursor -= half
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+			m.ensureCursorVisible()
+			return m, m.emitCursorChanged()
+		}
+
 	case msg.Type == tea.KeyRunes && string(msg.Runes) == "/":
 		m.pendingG = false
 		m.searching = true
