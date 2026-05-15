@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -24,18 +23,16 @@ type LogEntry struct {
 	Message string
 }
 
-func (e LogEntry) String() string {
+func (e LogEntry) FormatPrefix() (string, string) {
 	ts := e.Time.Format("15:04:05")
-	var prefix string
 	switch e.Level {
-	case LogInfo:
-		prefix = "INFO"
 	case LogWarn:
-		prefix = "WARN"
+		return ts, "WARN"
 	case LogError:
-		prefix = "ERR "
+		return ts, "ERR"
+	default:
+		return ts, "INFO"
 	}
-	return fmt.Sprintf("%s [%s] %s", ts, prefix, e.Message)
 }
 
 type AppLogModel struct {
@@ -151,8 +148,27 @@ func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
 	return m, nil
 }
 
+func (m AppLogModel) popupHeight() int {
+	h := m.height - 4
+	if h < 5 {
+		h = 5
+	}
+	return h
+}
+
+func (m AppLogModel) popupWidth() int {
+	w := m.width * 80 / 100
+	if w < 40 {
+		w = 40
+	}
+	if w > m.width-4 {
+		w = m.width - 4
+	}
+	return w
+}
+
 func (m AppLogModel) maxScrollOffset() int {
-	contentH := m.height - 4
+	contentH := m.popupHeight() - 2
 	max := len(m.entries) - contentH
 	if max < 0 {
 		return 0
@@ -161,28 +177,26 @@ func (m AppLogModel) maxScrollOffset() int {
 }
 
 func (m AppLogModel) View() string {
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Sidebar.CategoryFg)).
-		Bold(true)
-	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Status.Error))
-	warnStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Status.Pending))
-	infoStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Detail.ValueFg))
+	return lipgloss.Place(m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		m.RenderPopup())
+}
 
-	boxW := m.width - 4
-	contentH := m.height - 4
-	if contentH < 1 {
-		contentH = 1
-	}
+func (m AppLogModel) RenderPopup() string {
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Error))
+	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
+	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Detail.ValueFg))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.StatusLine.Foreground))
+
+	boxW := m.popupWidth()
+	contentH := m.popupHeight() - 2
+	innerW := boxW - 2
 
 	var lines []string
-	lines = append(lines, titleStyle.Render(" App Log (! close, j/k scroll, u/d page, D clear)"))
-	lines = append(lines, "")
 
 	if len(m.entries) == 0 {
-		lines = append(lines, infoStyle.Render(" No log entries"))
+		lines = append(lines, dimStyle.Render(" No log entries"))
 	} else {
 		last := len(m.entries) - 1 - m.scrollOffset
 		first := last - contentH + 1
@@ -191,33 +205,74 @@ func (m AppLogModel) View() string {
 		}
 		for i := last; i >= first; i-- {
 			e := m.entries[i]
-			var s lipgloss.Style
+			ts, level := e.FormatPrefix()
+
+			var levelStyle lipgloss.Style
 			switch e.Level {
 			case LogError:
-				s = errorStyle
+				levelStyle = errorStyle
 			case LogWarn:
-				s = warnStyle
+				levelStyle = warnStyle
 			default:
-				s = infoStyle
+				levelStyle = infoStyle
 			}
-			line := e.String()
-			if len(line) > boxW-2 {
-				line = line[:boxW-3] + "…"
+
+			prefix := dimStyle.Render(ts) + " " + levelStyle.Width(5).Render(level) + " "
+			prefixW := lipgloss.Width(prefix)
+			msgW := innerW - prefixW
+			msg := e.Message
+			if lipgloss.Width(msg) > msgW && msgW > 3 {
+				msg = msg[:msgW-1] + "…"
 			}
-			lines = append(lines, s.Render(" "+line))
+			lines = append(lines, prefix+levelStyle.Render(msg))
 		}
 	}
 
-	content := strings.Join(lines, "\n")
+	lines = append(lines, hintStyle.Render(" !:close  j/k:scroll  u/d:page  D:clear"))
 
-	overlay := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.theme.Sidebar.CategoryFg)).
-		Width(boxW).
-		Height(m.height - 2).
-		Render(content)
+	body := strings.Join(lines, "\n")
 
-	return lipgloss.Place(m.width, m.height,
-		lipgloss.Center, lipgloss.Center,
-		overlay)
+	bc := lipgloss.Color(m.theme.StatusBar.ClusterFg)
+	bStyle := lipgloss.NewStyle().Foreground(bc)
+	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+
+	title := "App Log"
+	dashes := innerW - 1 - len(title)
+	if dashes < 0 {
+		dashes = 0
+	}
+
+	var b strings.Builder
+	b.WriteString(bStyle.Render("╭─"))
+	b.WriteString(tStyle.Render(title))
+	b.WriteString(bStyle.Render(strings.Repeat("─", dashes) + "╮"))
+	b.WriteString("\n")
+
+	leftBorder := bStyle.Render("│")
+	rightBorder := bStyle.Render("│")
+	bodyLines := strings.Split(body, "\n")
+	panelH := m.popupHeight()
+	for len(bodyLines) < panelH-2 {
+		bodyLines = append(bodyLines, "")
+	}
+	for _, line := range bodyLines[:panelH-2] {
+		lw := lipgloss.Width(line)
+		if lw > innerW {
+			line = ansiTruncate(line, innerW)
+			lw = lipgloss.Width(line)
+		}
+		pad := ""
+		if lw < innerW {
+			pad = strings.Repeat(" ", innerW-lw)
+		}
+		if line == "" {
+			b.WriteString(leftBorder + strings.Repeat(" ", innerW) + rightBorder)
+		} else {
+			b.WriteString(leftBorder + line + pad + rightBorder)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
+
+	return b.String()
 }
