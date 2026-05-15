@@ -345,7 +345,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ResourceErrorMsg:
-		m.appLog.Error(msg.Err.Error())
+		if msg.Err != nil {
+			m.appLog.Error(msg.Err.Error())
+		}
 		cmds = append(cmds, waitForWatchUpdate(m.watcher))
 		return m, tea.Batch(cmds...)
 
