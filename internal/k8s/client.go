@@ -63,6 +63,9 @@ func NewClient(contextName string) (*Client, error) {
 		return nil, fmt.Errorf("building rest config for context %q: %w", contextName, err)
 	}
 
+	restConfig.QPS = 50
+	restConfig.Burst = 100
+
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("creating kubernetes clientset: %w", err)
