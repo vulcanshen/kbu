@@ -105,7 +105,7 @@ func DefaultTheme() *Theme {
 		},
 		StatusLine: StatusLineColors{
 			Background: "",
-			Foreground: "#89dceb",
+			Foreground: "#89b4fa",
 		},
 		Status: StatusColors{
 			Running: "#a6e3a1",

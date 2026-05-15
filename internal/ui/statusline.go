@@ -44,7 +44,7 @@ func (m StatusLineModel) ViewWithError(unreadErrors int, lastError string) strin
 		if m.drillDown {
 			hints = " [2] /: search | h/l: tab | s: shell | esc: back"
 		} else {
-			hints = " [2] /: search | h/l: tab | s: shell | e: edit | D: delete"
+			hints = " [2] /: search | h/l: tab | s: shell | e: edit | D: delete | +/-: expand"
 		}
 	case DetailPanel:
 		hints = " [3] h/l: tab | +/-: expand"
