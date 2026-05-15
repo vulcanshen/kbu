@@ -31,6 +31,18 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/). Buil
 
 ## Installation
 
+### Quick Install (macOS/Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vulcanshen/km8/main/install.sh | sh
+```
+
+### Quick Install (Windows PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/vulcanshen/km8/main/install.ps1 | iex
+```
+
 ### Homebrew (macOS/Linux)
 
 ```bash
@@ -48,6 +60,16 @@ scoop install km8
 
 ```bash
 go install github.com/vulcanshen/km8/cmd@latest
+```
+
+### Uninstall
+
+```bash
+# macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/vulcanshen/km8/main/uninstall.sh | sh
+
+# Windows PowerShell
+irm https://raw.githubusercontent.com/vulcanshen/km8/main/uninstall.ps1 | iex
 ```
 
 ### Build locally
