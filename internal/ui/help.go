@@ -95,23 +95,12 @@ func (m HelpModel) View() string {
 		popup)
 }
 
-// RenderPopup returns just the bordered popup box (for overlay on background).
+// RenderPopup returns the bordered help box.
 func (m HelpModel) RenderPopup() string {
-	sectionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Sidebar.CategoryFg)).
-		Bold(true).
-		Background(lipgloss.Color("#1e1e2e"))
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Detail.LabelFg)).
-		Background(lipgloss.Color("#1e1e2e"))
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Detail.ValueFg)).
-		Background(lipgloss.Color("#1e1e2e"))
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.StatusLine.Foreground)).
-		Background(lipgloss.Color("#1e1e2e"))
-	bgStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#1e1e2e"))
+	sectionStyle := m.theme.SidebarCategoryStyle()
+	keyStyle := m.theme.DetailLabelStyle()
+	descStyle := m.theme.DetailValueStyle()
+	hintStyle := m.theme.StatusLineStyle()
 
 	content := m.helpContent()
 
@@ -125,24 +114,23 @@ func (m HelpModel) RenderPopup() string {
 
 	for _, entry := range content {
 		if entry.isSection {
-			lines = append(lines, sectionStyle.Width(boxWidth).Render(" "+entry.text))
+			lines = append(lines, sectionStyle.Render(" "+entry.text))
 		} else if entry.key == "" {
 			continue
 		} else {
 			key := keyStyle.Width(14).Render(entry.key)
 			desc := descStyle.Render(entry.desc)
-			lines = append(lines, bgStyle.Render(" ")+key+desc)
+			lines = append(lines, "  "+key+desc)
 		}
 	}
 
-	lines = append(lines, hintStyle.Width(boxWidth).Render(" Esc/?:close  j/k:scroll"))
+	lines = append(lines, hintStyle.Render(" Esc/?:close  j/k:scroll"))
 
 	body := strings.Join(lines, "\n")
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(m.theme.Detail.BorderColor)).
-		Background(lipgloss.Color("#1e1e2e")).
 		Padding(0, 1).
 		Render(body)
 }
