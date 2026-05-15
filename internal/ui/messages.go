@@ -23,6 +23,7 @@ type NamespaceChangedMsg struct {
 
 // ResourceDataMsg carries updated resource data from the watcher.
 type ResourceDataMsg struct {
+	Type  k8s.ResourceType
 	Items []k8s.ResourceItem
 }
 

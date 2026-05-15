@@ -101,7 +101,7 @@ func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.sidebar.Init(),
 		m.table.Init(),
-		waitForWatchUpdate(m.watcher),
+		waitForWatchUpdate(m.watcher, m.currentResource),
 		discoverCRDs(m.k8sClient),
 	)
 }
@@ -311,14 +311,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table, cmd = m.table.Update(msg)
 		cmds = append(cmds, cmd)
 		m.watcher.Start(msg.Type, m.k8sClient.GetNamespace())
-		cmds = append(cmds, waitForWatchUpdate(m.watcher))
+		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		return m, tea.Batch(cmds...)
 
 	case ResourceDataMsg:
+		if msg.Type != m.currentResource {
+			return m, nil
+		}
 		m.items = msg.Items
-		cmds = append(cmds, waitForWatchUpdate(m.watcher))
+		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		if m.drillDownPod != nil {
-			// In drill-down mode: update items but don't touch the table
 			return m, tea.Batch(cmds...)
 		}
 		rows := make([][]string, len(msg.Items))
@@ -330,8 +332,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			idx := m.table.SelectedRow()
 			if idx >= 0 && idx < len(msg.Items) {
 				item := msg.Items[idx]
-				cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
-				if m.currentResource == k8s.ResourcePods && !m.logsActive {
+				cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.Type, item))
+				if msg.Type == k8s.ResourcePods && !m.logsActive {
 					containers := k8s.ContainerNames(item.Raw)
 					if len(containers) > 0 {
 						m.detail.logLines = nil
@@ -348,7 +350,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.appLog.Error(msg.Err.Error())
 		}
-		cmds = append(cmds, waitForWatchUpdate(m.watcher))
+		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		return m, tea.Batch(cmds...)
 
 	case RowSelectedMsg:
@@ -410,7 +412,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logsActive = false
 		m.detail.ClearDetail()
 		m.watcher.Start(m.currentResource, msg.Namespace)
-		cmds = append(cmds, waitForWatchUpdate(m.watcher))
+		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		return m, tea.Batch(cmds...)
 
 	case ContextListMsg:
@@ -442,7 +444,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.sidebar.RefreshCategories(newClient.Registry())
 		m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
-		cmds = append(cmds, waitForWatchUpdate(m.watcher))
+		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		cmds = append(cmds, discoverCRDs(newClient))
 		return m, tea.Batch(cmds...)
 
@@ -594,6 +596,12 @@ func (m *AppModel) layout() {
 	m.namespacePicker.SetSize(m.width, m.height)
 	m.contextPicker.SetSize(m.width, m.height)
 	m.help.SetSize(m.width, m.height)
+
+	sw, rw, upperH, detailH := m.panelSizes()
+	fullH := upperH + detailH
+	m.sidebar.SetSize(sw-2, fullH-2)
+	m.table.SetSize(rw-2, upperH-2)
+	m.detail.SetSize(rw-2, detailH-2)
 }
 
 func (m AppModel) panelSizes() (sw, rw, upperH, detailH int) {
@@ -1056,11 +1064,11 @@ func deleteResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 	}
 }
 
-func waitForWatchUpdate(w *k8s.Watcher) tea.Cmd {
+func waitForWatchUpdate(w *k8s.Watcher, rt k8s.ResourceType) tea.Cmd {
 	return func() tea.Msg {
 		select {
 		case msg := <-w.Updates():
-			return ResourceDataMsg{Items: msg.Items}
+			return ResourceDataMsg{Type: rt, Items: msg.Items}
 		case errMsg := <-w.Errors():
 			return ResourceErrorMsg{Err: errMsg.Err}
 		}
