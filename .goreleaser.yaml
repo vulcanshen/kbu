@@ -2,6 +2,9 @@ version: 2
 
 project_name: km8
 
+git:
+  allow_dirty: true
+
 builds:
   - main: ./cmd
     binary: km8
