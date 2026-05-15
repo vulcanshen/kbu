@@ -97,7 +97,9 @@ func (m HelpModel) View() string {
 
 // RenderPopup returns the help box styled like other panels.
 func (m HelpModel) RenderPopup() string {
-	sectionStyle := m.theme.SidebarCategoryStyle()
+	sectionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.StatusBar.NamespaceFg)).
+		Bold(true)
 	keyStyle := m.theme.DetailLabelStyle()
 	descStyle := m.theme.DetailValueStyle()
 	hintStyle := m.theme.StatusLineStyle()
