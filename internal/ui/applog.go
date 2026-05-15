@@ -228,8 +228,6 @@ func (m AppLogModel) RenderPopup() string {
 		}
 	}
 
-	lines = append(lines, hintStyle.Render(" !:close  j/k:scroll  u/d:page  D:clear"))
-
 	body := strings.Join(lines, "\n")
 
 	bc := lipgloss.Color(m.theme.StatusBar.ClusterFg)
@@ -272,7 +270,12 @@ func (m AppLogModel) RenderPopup() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
+	hint := " !:close j/k:scroll u/d:page D:clear "
+	bottomDashes := innerW - len(hint)
+	if bottomDashes < 0 {
+		bottomDashes = 0
+	}
+	b.WriteString(bStyle.Render("╰─") + hintStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes) + "╯"))
 
 	return b.String()
 }
