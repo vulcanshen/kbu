@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	overlay "github.com/rmhubbert/bubbletea-overlay"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -601,7 +602,8 @@ func (m AppModel) View() string {
 
 	if m.help.IsActive() {
 		m.help.SetSize(m.width, m.height)
-		return m.help.View()
+		popup := m.help.RenderPopup()
+		mainView = overlay.Composite(popup, mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	return mainView
