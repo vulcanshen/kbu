@@ -120,8 +120,6 @@ func (m HelpModel) RenderPopup() string {
 			lines = append(lines, "  "+key+desc)
 		}
 	}
-	lines = append(lines, hintStyle.Render(" Esc/?:close  j/k:scroll"))
-
 	body := strings.Join(lines, "\n")
 	panelH := len(lines) + 2
 	bc := lipgloss.Color(m.theme.StatusBar.ClusterFg)
@@ -160,7 +158,12 @@ func (m HelpModel) RenderPopup() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
+	hint := " Esc/?:close j/k:scroll "
+	bottomDashes := innerW - len(hint)
+	if bottomDashes < 0 {
+		bottomDashes = 0
+	}
+	b.WriteString(bStyle.Render("╰─") + hintStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes) + "╯"))
 
 	return b.String()
 }
