@@ -9,11 +9,11 @@ import (
 )
 
 type StatusBarModel struct {
-	clusterInfo    k8s.ClusterInfo
-	namespace      string
-	width          int
-	theme          *theme.Theme
-	unreadErrors   int
+	clusterInfo  k8s.ClusterInfo
+	namespace    string
+	width        int
+	theme        *theme.Theme
+	unreadErrors int
 }
 
 func NewStatusBarModel(t *theme.Theme, info k8s.ClusterInfo) StatusBarModel {
@@ -51,22 +51,21 @@ func (m StatusBarModel) View() string {
 
 	left := fmt.Sprintf(" %s  %s  %s", ctx, cluster, ns)
 
+	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
+
 	if m.unreadErrors > 0 {
-		errStyle := lipgloss.NewStyle().
+		badgeText := fmt.Sprintf(" ! %d errors ", m.unreadErrors)
+		badgeWidth := len(badgeText)
+		leftPart := barStyle.Width(m.width - badgeWidth).Render(left)
+		badgePart := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#1e1e2e")).
 			Background(lipgloss.Color(m.theme.Status.Error)).
 			Bold(true).
-			Padding(0, 1)
-		badge := errStyle.Render(fmt.Sprintf("! %d errors", m.unreadErrors))
-		left += "  " + badge
+			Render(badgeText)
+		return leftPart + badgePart
 	}
 
-	bar := m.theme.StatusBarStyle().
-		Width(m.width).
-		Padding(0, 0).
-		Render(left)
-
-	return bar
+	return barStyle.Width(m.width).Render(left)
 }
 
 func (m StatusBarModel) Height() int {

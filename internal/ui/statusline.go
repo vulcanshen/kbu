@@ -51,20 +51,25 @@ func (m StatusLineModel) View() string {
 		hints = " [3] Detail | h/l: tab | +/-: expand"
 	}
 
+	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
+
 	if m.lastError != "" {
-		errStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#f38ba8"))
 		errText := m.lastError
-		maxLen := m.width - lipgloss.Width(hints) - 4
-		if maxLen > 0 && len(errText) > maxLen {
-			errText = errText[:maxLen-1] + "…"
-		}
-		if maxLen > 0 {
-			hints += " " + errStyle.Render(errText)
+		hintsWidth := lipgloss.Width(hints)
+		maxErrLen := m.width - hintsWidth - 4
+		if maxErrLen > 10 {
+			if len(errText) > maxErrLen {
+				errText = errText[:maxErrLen-1] + "…"
+			}
+			leftPart := barStyle.Width(hintsWidth + 2).Render(hints)
+			errPart := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(m.theme.Status.Error)).
+				Background(lipgloss.Color(m.theme.StatusBar.Background)).
+				Width(m.width - hintsWidth - 2).
+				Render(" " + errText)
+			return leftPart + errPart
 		}
 	}
 
-	return m.theme.StatusBarStyle().
-		Width(m.width).
-		Render(hints)
+	return barStyle.Width(m.width).Render(hints)
 }

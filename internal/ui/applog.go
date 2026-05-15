@@ -81,8 +81,9 @@ func (m *AppLogModel) Toggle() {
 	m.active = !m.active
 	if m.active {
 		m.scrollOffset = m.maxScrollOffset()
-		m.seenErrorCount = m.errorCount
 	}
+	m.seenErrorCount = m.errorCount
+	m.lastError = ""
 }
 
 func (m AppLogModel) IsActive() bool { return m.active }
