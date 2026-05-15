@@ -548,11 +548,6 @@ func (m AppModel) View() string {
 		return "loading..."
 	}
 
-	if m.appLog.IsActive() {
-		m.appLog.SetSize(m.width, m.height)
-		return m.appLog.View()
-	}
-
 	if m.confirm.IsActive() {
 		m.confirm.SetSize(m.width, m.height)
 		return m.confirm.View()
@@ -603,10 +598,14 @@ func (m AppModel) View() string {
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	}
 
+	if m.appLog.IsActive() {
+		m.appLog.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.appLog.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
 	if m.help.IsActive() {
 		m.help.SetSize(m.width, m.height)
-		popup := m.help.RenderPopup()
-		mainView = overlay.Composite(popup, mainView, overlay.Center, overlay.Center, 0, 0)
+		mainView = overlay.Composite(m.help.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	return mainView
