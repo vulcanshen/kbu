@@ -549,11 +549,6 @@ func (m AppModel) View() string {
 		return m.appLog.View()
 	}
 
-	if m.help.IsActive() {
-		m.help.SetSize(m.width, m.height)
-		return m.help.View()
-	}
-
 	if m.confirm.IsActive() {
 		m.confirm.SetSize(m.width, m.height)
 		return m.confirm.View()
@@ -570,17 +565,15 @@ func (m AppModel) View() string {
 	statusBar := m.statusBar.ViewWithErrors(m.appLog.UnreadErrorCount())
 	statusLine := m.statusLine.ViewWithError(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage())
 
+	var mainView string
+
 	if m.detailExpanded {
 		panelH := m.height - 2
 		m.detail.SetSize(m.width-2, panelH-2)
 		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), m.width, panelH, true, m.theme, m.detail.ScrollInfo())
-		return lipgloss.JoinVertical(lipgloss.Left, statusBar, fullPanel, statusLine)
-	}
-
-	sw, rw, upperH, detailH := m.panelSizes()
-	fullH := upperH + detailH
-
-	if m.tableExpanded {
+		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, fullPanel, statusLine)
+	} else if m.tableExpanded {
+		_, _, upperH, detailH := m.panelSizes()
 		fw := m.width
 		m.table.SetSize(fw-2, upperH-2)
 		m.detail.SetSize(fw-2, detailH-2)
@@ -588,24 +581,30 @@ func (m AppModel) View() string {
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, fw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
 		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), fw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 		middle := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
-		return lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
+		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
+	} else {
+		sw, rw, upperH, detailH := m.panelSizes()
+		fullH := upperH + detailH
+		m.sidebar.SetSize(sw-2, fullH-2)
+		m.table.SetSize(rw-2, upperH-2)
+		m.detail.SetSize(rw-2, detailH-2)
+
+		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo())
+		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
+		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
+
+		rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
+		middle := lipgloss.JoinHorizontal(lipgloss.Top, sidebarPanel, rightSide)
+		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	}
 
-	m.sidebar.SetSize(sw-2, fullH-2)
-	m.table.SetSize(rw-2, upperH-2)
-	m.detail.SetSize(rw-2, detailH-2)
+	if m.help.IsActive() {
+		m.help.SetSize(m.width, m.height)
+		mainView = overlayPopup(mainView, m.help.RenderPopup(), m.width, m.height)
+	}
 
-	sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo())
-
-	tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
-	tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
-
-	detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
-
-	rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
-	middle := lipgloss.JoinHorizontal(lipgloss.Top, sidebarPanel, rightSide)
-
-	return lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
+	return mainView
 }
 
 func (m *AppModel) layout() {
@@ -830,6 +829,48 @@ func (m AppModel) breadcrumb() string {
 		return truncateName(last.parentName, 20) + " > " + m.currentResource.String()
 	}
 	return m.currentResource.String()
+}
+
+func overlayPopup(bg, popup string, screenW, screenH int) string {
+	bgLines := strings.Split(bg, "\n")
+	popupLines := strings.Split(popup, "\n")
+
+	popupMaxW := 0
+	for _, l := range popupLines {
+		if w := lipgloss.Width(l); w > popupMaxW {
+			popupMaxW = w
+		}
+	}
+	popupH := len(popupLines)
+
+	startY := (screenH - popupH) / 2
+	startX := (screenW - popupMaxW) / 2
+	if startY < 0 {
+		startY = 0
+	}
+	if startX < 0 {
+		startX = 0
+	}
+
+	for len(bgLines) < screenH {
+		bgLines = append(bgLines, "")
+	}
+
+	for i, pLine := range popupLines {
+		y := startY + i
+		if y < 0 || y >= len(bgLines) {
+			continue
+		}
+		bgLine := bgLines[y]
+		prefix := ansiTruncate(bgLine, startX)
+		prefixW := lipgloss.Width(prefix)
+		if prefixW < startX {
+			prefix += strings.Repeat(" ", startX-prefixW)
+		}
+		bgLines[y] = prefix + pLine
+	}
+
+	return strings.Join(bgLines, "\n")
 }
 
 func ansiTruncate(s string, maxWidth int) string {

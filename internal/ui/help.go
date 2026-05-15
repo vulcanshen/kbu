@@ -84,12 +84,19 @@ func (m HelpModel) contentHeight() int {
 	return h
 }
 
-// View renders the help overlay as a centered box.
+// View renders the help overlay as a full-screen placement (legacy).
 func (m HelpModel) View() string {
 	if !m.active {
 		return ""
 	}
+	popup := m.RenderPopup()
+	return lipgloss.Place(m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		popup)
+}
 
+// RenderPopup returns just the bordered popup box (for overlay on background).
+func (m HelpModel) RenderPopup() string {
 	titleStyle := m.theme.DetailTabActiveStyle()
 	sectionStyle := m.theme.SidebarCategoryStyle()
 	keyStyle := m.theme.DetailLabelStyle()
@@ -107,7 +114,6 @@ func (m HelpModel) View() string {
 	lines = append(lines, titleStyle.Width(boxWidth).Align(lipgloss.Center).Render("Keybindings"))
 	lines = append(lines, "")
 
-	// Apply scroll
 	visibleHeight := m.contentHeight()
 	start := m.scrollOffset
 	end := start + visibleHeight
@@ -133,15 +139,11 @@ func (m HelpModel) View() string {
 
 	body := strings.Join(lines, "\n")
 
-	overlay := lipgloss.NewStyle().
+	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(m.theme.Detail.BorderColor)).
 		Padding(1, 2).
 		Render(body)
-
-	return lipgloss.Place(m.width, m.height,
-		lipgloss.Center, lipgloss.Center,
-		overlay)
 }
 
 type helpEntry struct {
