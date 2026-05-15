@@ -323,7 +323,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		m.switchSeq++
 		seq := m.switchSeq
-		cmds = append(cmds, tea.Tick(800*time.Millisecond, func(t time.Time) tea.Msg {
+		cmds = append(cmds, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
 			return resourceSwitchTickMsg{seq: seq}
 		}))
 		return m, tea.Batch(cmds...)

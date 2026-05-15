@@ -46,16 +46,12 @@ func NewWatcher(clientset kubernetes.Interface) *Watcher {
 func (w *Watcher) Start(rt ResourceType, namespace string) {
 	w.Stop()
 
-	// Drain stale messages from previous watcher cycle.
-	for {
-		select {
-		case <-w.updates:
-		case <-w.errors:
-		default:
-			goto drained
-		}
-	}
-drained:
+	// Close old channels to unblock any stale waitForWatchUpdate goroutines,
+	// then create fresh channels for the new watcher cycle.
+	close(w.updates)
+	close(w.errors)
+	w.updates = make(chan WatchMsg, 1)
+	w.errors = make(chan WatchErrMsg, 1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	w.mu.Lock()
