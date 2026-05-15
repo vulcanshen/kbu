@@ -103,7 +103,7 @@ func (m HelpModel) RenderPopup() string {
 	bc := lipgloss.Color(m.theme.StatusBar.NamespaceFg)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
-	sectionStyle := tStyle
+	sectionStyle := m.theme.SidebarCategoryStyle()
 	keyStyle := m.theme.DetailLabelStyle()
 	descStyle := m.theme.DetailValueStyle()
 
