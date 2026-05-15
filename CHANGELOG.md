@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.1] - 2026-05-15
+
+### Changed
+- Status bar and status line backgrounds removed (terminal transparent)
+- Status line text color changed to blue (#89b4fa, matching panel focus color)
+- Status line simplified: removed panel titles, kept panel number + hotkeys only
+- Panel 2 status line now includes +/- expand hint
+
+### Fixed
+- Status line was using StatusBarStyle (white) instead of StatusLineStyle
+
+### Docs
+- Added screenshot, badges, and removed ASCII layout from README
+
 ## [v1.0.0] - 2026-05-15
 
 ### Added
