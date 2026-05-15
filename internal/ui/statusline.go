@@ -39,15 +39,15 @@ func (m StatusLineModel) ViewWithError(unreadErrors int, lastError string) strin
 	var hints string
 	switch m.activePanel {
 	case SidebarPanel:
-		hints = " [1] Sidebar | n: ns | c: ctx | e: edit"
+		hints = " [1] n: ns | c: ctx | e: edit"
 	case TablePanel:
 		if m.drillDown {
-			hints = " [2] Containers | /: search | h/l: tab | s: shell | esc: back"
+			hints = " [2] /: search | h/l: tab | s: shell | esc: back"
 		} else {
-			hints = " [2] List | /: search | h/l: tab | s: shell | e: edit | D: delete"
+			hints = " [2] /: search | h/l: tab | s: shell | e: edit | D: delete"
 		}
 	case DetailPanel:
-		hints = " [3] Detail | h/l: tab | +/-: expand"
+		hints = " [3] h/l: tab | +/-: expand"
 	}
 
 	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
