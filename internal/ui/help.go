@@ -95,7 +95,7 @@ func (m HelpModel) View() string {
 		popup)
 }
 
-// RenderPopup returns the bordered help box.
+// RenderPopup returns the help box styled like other panels.
 func (m HelpModel) RenderPopup() string {
 	sectionStyle := m.theme.SidebarCategoryStyle()
 	keyStyle := m.theme.DetailLabelStyle()
@@ -104,14 +104,9 @@ func (m HelpModel) RenderPopup() string {
 
 	content := m.helpContent()
 
-	boxWidth := 44
-	if boxWidth > m.width-6 {
-		boxWidth = m.width - 6
-	}
+	boxWidth := 46
 
 	var lines []string
-	lines = append(lines, sectionStyle.Width(boxWidth).Align(lipgloss.Center).Render("Keybindings"))
-
 	for _, entry := range content {
 		if entry.isSection {
 			lines = append(lines, sectionStyle.Render(" "+entry.text))
@@ -123,16 +118,11 @@ func (m HelpModel) RenderPopup() string {
 			lines = append(lines, "  "+key+desc)
 		}
 	}
-
 	lines = append(lines, hintStyle.Render(" Esc/?:close  j/k:scroll"))
 
 	body := strings.Join(lines, "\n")
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.theme.Detail.BorderColor)).
-		Padding(0, 1).
-		Render(body)
+	panelH := len(lines) + 2
+	return renderPanel(body, "Keybindings", boxWidth, panelH, true, m.theme)
 }
 
 type helpEntry struct {
