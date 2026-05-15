@@ -274,7 +274,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel == TablePanel {
 				return m, m.execShell()
 			}
-		case "d":
+		case "D":
 			if m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
 				idx := m.table.SelectedRow()
 				if idx >= 0 && idx < len(m.items) {
@@ -319,7 +319,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		m.switchSeq++
 		seq := m.switchSeq
-		cmds = append(cmds, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+		cmds = append(cmds, tea.Tick(800*time.Millisecond, func(t time.Time) tea.Msg {
 			return resourceSwitchTickMsg{seq: seq}
 		}))
 		return m, tea.Batch(cmds...)

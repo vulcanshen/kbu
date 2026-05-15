@@ -178,10 +178,14 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 			return m, func() tea.Msg {
 				return ResourceSelectedMsg{Type: item.resourceType}
 			}
+		case 'd':
+			return m.pageDown(visible)
+		case 'u':
+			return m.pageUp(visible)
 		case '/':
 			m.searching = true
 			m.searchQuery = ""
-						return m, nil
+			return m, nil
 		}
 
 	case tea.KeyDown:
@@ -290,6 +294,52 @@ func (m SidebarModel) moveUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	return m, nil
 }
 
+
+func (m SidebarModel) pageDown(visible []visibleItem) (SidebarModel, tea.Cmd) {
+	half := m.viewportHeight() / 2
+	if half < 1 {
+		half = 1
+	}
+	target := m.cursor + half
+	for target < len(visible) && visible[target].isCategory {
+		target++
+	}
+	if target >= len(visible) {
+		target = m.lastResourceIndex(visible)
+	}
+	if target != m.cursor {
+		m.cursor = target
+		m.ensureCursorVisible()
+		m.selected = visible[m.cursor].resourceType
+		return m, func() tea.Msg {
+			return ResourceSelectedMsg{Type: visible[m.cursor].resourceType}
+		}
+	}
+	return m, nil
+}
+
+func (m SidebarModel) pageUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
+	half := m.viewportHeight() / 2
+	if half < 1 {
+		half = 1
+	}
+	target := m.cursor - half
+	for target >= 0 && visible[target].isCategory {
+		target--
+	}
+	if target < 0 {
+		target = m.firstResourceIndex(visible)
+	}
+	if target != m.cursor {
+		m.cursor = target
+		m.ensureCursorVisible()
+		m.selected = visible[m.cursor].resourceType
+		return m, func() tea.Msg {
+			return ResourceSelectedMsg{Type: visible[m.cursor].resourceType}
+		}
+	}
+	return m, nil
+}
 
 // activateResource selects the resource under cursor and emits ResourceSelectedMsg.
 func (m SidebarModel) activateResource(visible []visibleItem) (SidebarModel, tea.Cmd) {

@@ -116,6 +116,24 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 			m = m.nextTab()
 		case '[':
 			m = m.prevTab()
+		case 'd':
+			half := m.contentHeight() / 2
+			if half < 1 {
+				half = 1
+			}
+			m.scrollOffset += half
+			if m.scrollOffset > m.maxScrollOffset() {
+				m.scrollOffset = m.maxScrollOffset()
+			}
+		case 'u':
+			half := m.contentHeight() / 2
+			if half < 1 {
+				half = 1
+			}
+			m.scrollOffset -= half
+			if m.scrollOffset < 0 {
+				m.scrollOffset = 0
+			}
 		case '/':
 			m.searching = true
 			m.searchQuery = ""
