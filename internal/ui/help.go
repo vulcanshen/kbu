@@ -122,7 +122,45 @@ func (m HelpModel) RenderPopup() string {
 
 	body := strings.Join(lines, "\n")
 	panelH := len(lines) + 2
-	return renderPanel(body, "Keybindings", boxWidth, panelH, true, m.theme)
+	bc := lipgloss.Color(m.theme.StatusBar.ClusterFg)
+	bStyle := lipgloss.NewStyle().Foreground(bc)
+	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+
+	title := "Keybindings"
+	innerW := boxWidth - 2
+	dashesAfter := innerW - 1 - len(title)
+	if dashesAfter < 0 {
+		dashesAfter = 0
+	}
+
+	var b strings.Builder
+	b.WriteString(bStyle.Render("╭─"))
+	b.WriteString(tStyle.Render(title))
+	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter) + "╮"))
+	b.WriteString("\n")
+
+	leftBorder := bStyle.Render("│")
+	rightBorder := bStyle.Render("│")
+	bodyLines := strings.Split(body, "\n")
+	for len(bodyLines) < panelH-2 {
+		bodyLines = append(bodyLines, "")
+	}
+	for _, line := range bodyLines[:panelH-2] {
+		lw := lipgloss.Width(line)
+		pad := ""
+		if lw < innerW {
+			pad = strings.Repeat(" ", innerW-lw)
+		}
+		if line == "" {
+			b.WriteString(leftBorder + strings.Repeat(" ", innerW) + rightBorder)
+		} else {
+			b.WriteString(leftBorder + line + pad + rightBorder)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
+
+	return b.String()
 }
 
 type helpEntry struct {
