@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -149,15 +150,15 @@ func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
 }
 
 func (m AppLogModel) popupHeight() int {
-	h := m.height - 4
-	if h < 5 {
-		h = 5
+	h := m.height * 60 / 100
+	if h < 10 {
+		h = 10
 	}
 	return h
 }
 
 func (m AppLogModel) popupWidth() int {
-	w := m.width * 80 / 100
+	w := m.width * 70 / 100
 	if w < 40 {
 		w = 40
 	}
@@ -270,12 +271,17 @@ func (m AppLogModel) RenderPopup() string {
 		}
 		b.WriteString("\n")
 	}
-	hint := " !:close j/k:scroll u/d:page D:clear "
-	bottomDashes := innerW - len(hint)
+	hint := " !:close j/k u/d D:clear "
+	indicator := ""
+	if len(m.entries) > 0 {
+		pos := m.scrollOffset + 1
+		indicator = fmt.Sprintf(" %d of %d ", pos, len(m.entries))
+	}
+	bottomDashes := innerW - len(hint) - len(indicator) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + hintStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes) + "╯"))
+	b.WriteString(bStyle.Render("╰─") + hintStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+indicator+"╯"))
 
 	return b.String()
 }
