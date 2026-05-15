@@ -188,7 +188,6 @@ func (m AppLogModel) RenderPopup() string {
 	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
 	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Detail.ValueFg))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.StatusLine.Foreground))
 
 	boxW := m.popupWidth()
 	contentH := m.popupHeight() - 2
@@ -231,7 +230,7 @@ func (m AppLogModel) RenderPopup() string {
 
 	body := strings.Join(lines, "\n")
 
-	bc := lipgloss.Color(m.theme.StatusBar.ClusterFg)
+	bc := lipgloss.Color(m.theme.StatusBar.NamespaceFg)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 
@@ -281,7 +280,7 @@ func (m AppLogModel) RenderPopup() string {
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + hintStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+indicator+"╯"))
+	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+indicator+"╯"))
 
 	return b.String()
 }

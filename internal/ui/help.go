@@ -97,16 +97,15 @@ func (m HelpModel) View() string {
 
 // RenderPopup returns the help box styled like other panels.
 func (m HelpModel) RenderPopup() string {
-	sectionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.StatusBar.NamespaceFg)).
-		Bold(true)
-	keyStyle := m.theme.DetailLabelStyle()
-	descStyle := m.theme.DetailValueStyle()
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.StatusLine.Foreground))
-
 	content := m.helpContent()
 
 	boxWidth := 46
+	bc := lipgloss.Color(m.theme.StatusBar.NamespaceFg)
+	bStyle := lipgloss.NewStyle().Foreground(bc)
+	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	sectionStyle := tStyle
+	keyStyle := m.theme.DetailLabelStyle()
+	descStyle := m.theme.DetailValueStyle()
 
 	var lines []string
 	for _, entry := range content {
@@ -122,9 +121,6 @@ func (m HelpModel) RenderPopup() string {
 	}
 	body := strings.Join(lines, "\n")
 	panelH := len(lines) + 2
-	bc := lipgloss.Color(m.theme.StatusBar.ClusterFg)
-	bStyle := lipgloss.NewStyle().Foreground(bc)
-	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 
 	title := "Keybindings"
 	innerW := boxWidth - 2
@@ -163,7 +159,7 @@ func (m HelpModel) RenderPopup() string {
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + hintStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes) + "╯"))
+	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes) + "╯"))
 
 	return b.String()
 }
