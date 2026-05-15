@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
+
+type resourceSwitchTickMsg struct {
+	seq int
+}
 
 type drillDownMsg struct {
 	parentType k8s.ResourceType
@@ -48,6 +53,7 @@ type AppModel struct {
 	logsActive      bool
 	detailExpanded  bool
 	tableExpanded   bool
+	switchSeq       int
 
 	// Drill-down state
 	drillDownStack      []drillDownEntry
@@ -305,12 +311,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.drillDownContainers = nil
 		m.logStreamer.Stop()
 		m.logsActive = false
+		m.watcher.Stop()
 		m.detail.ClearDetail()
 		m.detail.SetResourceType(msg.Type)
 		var cmd tea.Cmd
 		m.table, cmd = m.table.Update(msg)
 		cmds = append(cmds, cmd)
-		m.watcher.Start(msg.Type, m.k8sClient.GetNamespace())
+		m.switchSeq++
+		seq := m.switchSeq
+		cmds = append(cmds, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+			return resourceSwitchTickMsg{seq: seq}
+		}))
+		return m, tea.Batch(cmds...)
+
+	case resourceSwitchTickMsg:
+		if msg.seq != m.switchSeq {
+			return m, nil
+		}
+		m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		return m, tea.Batch(cmds...)
 
