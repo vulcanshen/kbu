@@ -118,9 +118,33 @@ func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
 			if m.scrollOffset > 0 {
 				m.scrollOffset--
 			}
+		case "d":
+			half := (m.height - 4) / 2
+			if half < 1 {
+				half = 1
+			}
+			m.scrollOffset += half
+			if m.scrollOffset > m.maxScrollOffset() {
+				m.scrollOffset = m.maxScrollOffset()
+			}
+		case "u":
+			half := (m.height - 4) / 2
+			if half < 1 {
+				half = 1
+			}
+			m.scrollOffset -= half
+			if m.scrollOffset < 0 {
+				m.scrollOffset = 0
+			}
 		case "G":
 			m.scrollOffset = m.maxScrollOffset()
 		case "g":
+			m.scrollOffset = 0
+		case "D":
+			m.entries = nil
+			m.errorCount = 0
+			m.seenErrorCount = 0
+			m.lastError = ""
 			m.scrollOffset = 0
 		}
 	}
@@ -154,7 +178,7 @@ func (m AppLogModel) View() string {
 	}
 
 	var lines []string
-	lines = append(lines, titleStyle.Render(" App Log (! to close, j/k to scroll)"))
+	lines = append(lines, titleStyle.Render(" App Log (! close, j/k scroll, u/d page, D clear)"))
 	lines = append(lines, "")
 
 	if len(m.entries) == 0 {
