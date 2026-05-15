@@ -302,6 +302,19 @@ func (m *DetailModel) SetFocused(focused bool) {
 	m.focused = focused
 }
 
+// ScrollInfo returns scroll position for the detail panel.
+func (m DetailModel) ScrollInfo() *ScrollInfo {
+	lines := m.filteredContentLines()
+	if len(lines) == 0 {
+		return nil
+	}
+	pos := m.scrollOffset + 1
+	if pos > len(lines) {
+		pos = len(lines)
+	}
+	return &ScrollInfo{Position: pos, Total: len(lines)}
+}
+
 // SetDetail updates the detail data and rebuilds content lines.
 func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventItem) {
 	m.detail = detail

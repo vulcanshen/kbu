@@ -431,3 +431,22 @@ func (m *SidebarModel) SetFocused(focused bool) {
 func (m SidebarModel) Selected() k8s.ResourceType {
 	return m.selected
 }
+
+// ScrollInfo returns the current cursor position among resources (non-category items).
+func (m SidebarModel) ScrollInfo() *ScrollInfo {
+	visible := m.visibleItems()
+	var resourceIdx, totalResources int
+	for i, item := range visible {
+		if item.isCategory {
+			continue
+		}
+		totalResources++
+		if i == m.cursor {
+			resourceIdx = totalResources
+		}
+	}
+	if totalResources == 0 {
+		return nil
+	}
+	return &ScrollInfo{Position: resourceIdx, Total: totalResources}
+}

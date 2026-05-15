@@ -551,7 +551,7 @@ func (m AppModel) View() string {
 	if m.detailExpanded {
 		panelH := m.height - 2
 		m.detail.SetSize(m.width-2, panelH-2)
-		fullPanel := renderPanel(m.detail.View(), "[3] "+m.detail.ActiveTabName(), m.width, panelH, true, m.theme)
+		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), m.width, panelH, true, m.theme, m.detail.ScrollInfo())
 		return lipgloss.JoinVertical(lipgloss.Left, statusBar, fullPanel, statusLine)
 	}
 
@@ -563,8 +563,8 @@ func (m AppModel) View() string {
 		m.table.SetSize(fw-2, upperH-2)
 		m.detail.SetSize(fw-2, detailH-2)
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
-		tablePanel := renderPanel(m.table.View(), tabTitle, fw, upperH, m.activePanel == TablePanel, m.theme)
-		detailPanel := renderPanel(m.detail.View(), "[3] "+m.detail.ActiveTabName(), fw, detailH, m.activePanel == DetailPanel, m.theme)
+		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, fw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), fw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 		middle := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
 		return lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	}
@@ -573,12 +573,12 @@ func (m AppModel) View() string {
 	m.table.SetSize(rw-2, upperH-2)
 	m.detail.SetSize(rw-2, detailH-2)
 
-	sidebarPanel := renderPanel(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme)
+	sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo())
 
 	tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
-	tablePanel := renderPanel(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme)
+	tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
 
-	detailPanel := renderPanel(m.detail.View(), "[3] "+m.detail.ActiveTabName(), rw, detailH, m.activePanel == DetailPanel, m.theme)
+	detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 
 	rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
 	middle := lipgloss.JoinHorizontal(lipgloss.Top, sidebarPanel, rightSide)
@@ -928,7 +928,17 @@ func (m *AppModel) updateFocus() {
 	m.statusLine.SetDrillDown(m.drillDownPod != nil)
 }
 
+// ScrollInfo holds position info for the "X of Y" indicator in a panel border.
+type ScrollInfo struct {
+	Position int // 1-based current position
+	Total    int
+}
+
 func renderPanel(content, title string, width, height int, focused bool, t *theme.Theme) string {
+	return renderPanelWithScroll(content, title, width, height, focused, t, nil)
+}
+
+func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo) string {
 	if width < 4 || height < 3 {
 		return content
 	}
@@ -983,7 +993,16 @@ func renderPanel(content, title string, width, height int, focused bool, t *them
 		b.WriteString("\n")
 	}
 
-	b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
+	if scroll != nil && scroll.Total > 0 {
+		indicator := fmt.Sprintf(" %d of %d ", scroll.Position, scroll.Total)
+		dashes := innerW - len(indicator)
+		if dashes < 0 {
+			dashes = 0
+		}
+		b.WriteString(bStyle.Render("╰" + strings.Repeat("─", dashes) + indicator + "╯"))
+	} else {
+		b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
+	}
 
 	return b.String()
 }

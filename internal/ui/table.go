@@ -477,6 +477,14 @@ func (m TableModel) SearchQuery() string {
 	return m.searchQuery
 }
 
+// ScrollInfo returns the current cursor position and total row count.
+func (m TableModel) ScrollInfo() *ScrollInfo {
+	if len(m.rows) == 0 {
+		return nil
+	}
+	return &ScrollInfo{Position: m.cursor + 1, Total: len(m.rows)}
+}
+
 // visibleRows returns how many rows fit in the viewport (height minus header and search bar).
 func (m TableModel) visibleRows() int {
 	v := m.height - 1 // 1 line for header
