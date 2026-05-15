@@ -10,7 +10,6 @@ type StatusLineModel struct {
 	drillDown   bool
 	width       int
 	theme       *theme.Theme
-	lastError   string
 }
 
 func NewStatusLineModel(t *theme.Theme) StatusLineModel {
@@ -32,11 +31,11 @@ func (m *StatusLineModel) SetWidth(width int) {
 	m.width = width
 }
 
-func (m *StatusLineModel) SetLastError(msg string) {
-	m.lastError = msg
+func (m StatusLineModel) View() string {
+	return m.ViewWithError(0, "")
 }
 
-func (m StatusLineModel) View() string {
+func (m StatusLineModel) ViewWithError(unreadErrors int, lastError string) string {
 	var hints string
 	switch m.activePanel {
 	case SidebarPanel:
@@ -53,8 +52,8 @@ func (m StatusLineModel) View() string {
 
 	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
 
-	if m.lastError != "" {
-		errText := m.lastError
+	if unreadErrors > 0 && lastError != "" {
+		errText := lastError
 		hintsWidth := lipgloss.Width(hints)
 		maxErrLen := m.width - hintsWidth - 4
 		if maxErrLen > 10 {

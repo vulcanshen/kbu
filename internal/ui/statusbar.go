@@ -9,11 +9,10 @@ import (
 )
 
 type StatusBarModel struct {
-	clusterInfo  k8s.ClusterInfo
-	namespace    string
-	width        int
-	theme        *theme.Theme
-	unreadErrors int
+	clusterInfo k8s.ClusterInfo
+	namespace   string
+	width       int
+	theme       *theme.Theme
 }
 
 func NewStatusBarModel(t *theme.Theme, info k8s.ClusterInfo) StatusBarModel {
@@ -40,11 +39,11 @@ func (m *StatusBarModel) SetWidth(width int) {
 	m.width = width
 }
 
-func (m *StatusBarModel) SetUnreadErrors(count int) {
-	m.unreadErrors = count
+func (m StatusBarModel) View() string {
+	return m.ViewWithErrors(0)
 }
 
-func (m StatusBarModel) View() string {
+func (m StatusBarModel) ViewWithErrors(unreadErrors int) string {
 	ctx := m.theme.StatusBarContextStyle().Render(fmt.Sprintf("ctx: %s", m.clusterInfo.ContextName))
 	cluster := m.theme.StatusBarClusterStyle().Render(fmt.Sprintf("cluster: %s", m.clusterInfo.ClusterName))
 	ns := m.theme.StatusBarNamespaceStyle().Render(fmt.Sprintf("ns: %s", m.namespace))
@@ -53,8 +52,8 @@ func (m StatusBarModel) View() string {
 
 	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
 
-	if m.unreadErrors > 0 {
-		badgeText := fmt.Sprintf(" ! %d errors ", m.unreadErrors)
+	if unreadErrors > 0 {
+		badgeText := fmt.Sprintf(" ! %d errors ", unreadErrors)
 		badgeWidth := len(badgeText)
 		leftPart := barStyle.Width(m.width - badgeWidth).Render(left)
 		badgePart := lipgloss.NewStyle().
