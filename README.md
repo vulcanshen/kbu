@@ -99,26 +99,6 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 | `?` | Toggle help |
 | `q` / `Esc` | Quit / back |
 
-## Layout
-
-```
- ctx: orbstack   cluster: orbstack   ns: All Namespaces
-╭─[1] km8──────╮╭─[2] Pods─[Detail]─Logs─Events──────────────╮
-│ Cluster      ││ Name                Ready Status   Age Node │
-│   Namespaces ││ coredns-6cc96..     1/1   Running  3d  orb  │
-│   Nodes      ││ nginx-7b4f6..      1/1   Running  1d  orb  │
-│   Events     ││ redis-5c8d2..      1/1   Running  5h  orb  │
-│ Workloads    │╰──────────────────────────────────── 1 of 7 ─╯
-│   Pods       │╭─[3] Detail──────────────────────────────────╮
-│   Deployments││ Name:       coredns-6cc96b5c97-vvh2b        │
-│   DaemonSets ││ Namespace:  kube-system                     │
-│ Network      ││ Kind:       Pod                             │
-│   Services   ││ Phase:      Running                         │
-│ ...         │╰──────────────────────────────────── 1 of 23 ─╯
-╰───── 4 of 31 ╯
- [1] Sidebar | n: ns | c: ctx | e: edit
-```
-
 ## Configuration
 
 Config files are in the OS-appropriate config directory:
