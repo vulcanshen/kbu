@@ -601,12 +601,7 @@ func (m AppModel) View() string {
 
 	if m.help.IsActive() {
 		m.help.SetSize(m.width, m.height)
-		popup := m.help.RenderPopup()
-		mainView = lipgloss.Place(m.width, m.height,
-			lipgloss.Center, lipgloss.Center,
-			popup,
-			lipgloss.WithWhitespaceBackground(lipgloss.Color("#1e1e2e")),
-		)
+		return m.help.View()
 	}
 
 	return mainView
@@ -836,53 +831,6 @@ func (m AppModel) breadcrumb() string {
 	return m.currentResource.String()
 }
 
-func overlayPopup(bg, popup string, screenW, screenH int) string {
-	bgLines := strings.Split(bg, "\n")
-	popupLines := strings.Split(popup, "\n")
-
-	popupMaxW := 0
-	for _, l := range popupLines {
-		if w := lipgloss.Width(l); w > popupMaxW {
-			popupMaxW = w
-		}
-	}
-	popupH := len(popupLines)
-
-	startY := (screenH - popupH) / 2
-	startX := (screenW - popupMaxW) / 2
-	if startY < 0 {
-		startY = 0
-	}
-	if startX < 0 {
-		startX = 0
-	}
-
-	for len(bgLines) < screenH {
-		bgLines = append(bgLines, "")
-	}
-
-	for i, pLine := range popupLines {
-		y := startY + i
-		if y < 0 || y >= len(bgLines) {
-			continue
-		}
-		bgLine := bgLines[y]
-		prefix := ansiTruncate(bgLine, startX)
-		prefixW := lipgloss.Width(prefix)
-		if prefixW < startX {
-			prefix += strings.Repeat(" ", startX-prefixW)
-		}
-		pLineW := lipgloss.Width(pLine)
-		if pLineW < popupMaxW {
-			pLine += strings.Repeat(" ", popupMaxW-pLineW)
-		}
-		suffix := ansiSkipPrefix(bgLine, startX+popupMaxW)
-		bgLines[y] = prefix + pLine + suffix
-	}
-
-	return strings.Join(bgLines, "\n")
-}
-
 func ansiTruncate(s string, maxWidth int) string {
 	if lipgloss.Width(s) <= maxWidth {
 		return s
@@ -912,29 +860,6 @@ func ansiTruncate(s string, maxWidth int) string {
 	}
 	result = append(result, "\x1b[0m"...)
 	return string(result)
-}
-
-func ansiSkipPrefix(s string, skipWidth int) string {
-	w := 0
-	inEscape := false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-		if w >= skipWidth {
-			return s[i:]
-		}
-		w++
-	}
-	return ""
 }
 
 func truncateName(name string, max int) string {
