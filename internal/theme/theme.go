@@ -97,15 +97,15 @@ func DefaultTheme() *Theme {
 			TabInactiveFg: "#6c7086",
 		},
 		StatusBar: StatusBarColors{
-			Background:  "#181825",
+			Background:  "",
 			Foreground:  "#cdd6f4",
 			ClusterFg:   "#a6e3a1",
 			NamespaceFg: "#f9e2af",
 			ContextFg:   "#89b4fa",
 		},
 		StatusLine: StatusLineColors{
-			Background: "#313244",
-			Foreground: "#a6adc8",
+			Background: "",
+			Foreground: "#cba6f7",
 		},
 		Status: StatusColors{
 			Running: "#a6e3a1",
