@@ -36,6 +36,7 @@ type SidebarModel struct {
 	categories   []SidebarCategory
 	standalone   []SidebarResource
 	cursor       int
+	scrollOffset int
 	focused      bool
 	width        int
 	height       int
@@ -144,7 +145,8 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == 'g' {
 			// gg — jump to first resource item.
 			m.cursor = m.firstResourceIndex(visible)
-						item := visible[m.cursor]
+			m.ensureCursorVisible()
+			item := visible[m.cursor]
 			m.selected = item.resourceType
 			return m, func() tea.Msg {
 				return ResourceSelectedMsg{Type: item.resourceType}
@@ -170,7 +172,7 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 			return m, nil
 		case 'G':
 			m.cursor = m.lastResourceIndex(visible)
-
+			m.ensureCursorVisible()
 			item := visible[m.cursor]
 			m.selected = item.resourceType
 			return m, func() tea.Msg {
@@ -262,13 +264,12 @@ func (m SidebarModel) moveDown(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	}
 	if next < len(visible) {
 		m.cursor = next
-
+		m.ensureCursorVisible()
 		m.selected = visible[m.cursor].resourceType
 		return m, func() tea.Msg {
 			return ResourceSelectedMsg{Type: visible[next].resourceType}
 		}
 	}
-	// No more resource items below — stay put.
 	return m, nil
 }
 
@@ -280,13 +281,12 @@ func (m SidebarModel) moveUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	}
 	if prev >= 0 {
 		m.cursor = prev
-
+		m.ensureCursorVisible()
 		m.selected = visible[m.cursor].resourceType
 		return m, func() tea.Msg {
 			return ResourceSelectedMsg{Type: visible[prev].resourceType}
 		}
 	}
-	// No more resource items above — stay put.
 	return m, nil
 }
 
@@ -341,8 +341,14 @@ func (m SidebarModel) View() string {
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	categoryStyle := m.theme.SidebarCategoryStyle()
 
+	viewH := m.viewportHeight()
+	end := m.scrollOffset + viewH
+	if end > len(visible) {
+		end = len(visible)
+	}
+
 	var lines []string
-	for i := 0; i < len(visible); i++ {
+	for i := m.scrollOffset; i < end; i++ {
 		item := visible[i]
 		isCursor := i == m.cursor
 
@@ -414,6 +420,30 @@ func (m SidebarModel) visibleItems() []visibleItem {
 		})
 	}
 	return items
+}
+
+func (m *SidebarModel) ensureCursorVisible() {
+	viewH := m.viewportHeight()
+	if viewH <= 0 {
+		return
+	}
+	if m.cursor < m.scrollOffset {
+		m.scrollOffset = m.cursor
+	}
+	if m.cursor >= m.scrollOffset+viewH {
+		m.scrollOffset = m.cursor - viewH + 1
+	}
+}
+
+func (m SidebarModel) viewportHeight() int {
+	h := m.height
+	if m.searching || m.searchQuery != "" {
+		h -= 3
+	}
+	if h < 1 {
+		h = 1
+	}
+	return h
 }
 
 // SetSize sets the dimensions of the sidebar panel.
