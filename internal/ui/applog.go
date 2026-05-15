@@ -39,13 +39,16 @@ func (e LogEntry) String() string {
 }
 
 type AppLogModel struct {
-	entries      []LogEntry
-	maxEntries   int
-	active       bool
-	scrollOffset int
-	width        int
-	height       int
-	theme        *theme.Theme
+	entries        []LogEntry
+	maxEntries     int
+	active         bool
+	scrollOffset   int
+	width          int
+	height         int
+	theme          *theme.Theme
+	errorCount     int
+	seenErrorCount int
+	lastError      string
 }
 
 func NewAppLogModel(t *theme.Theme) AppLogModel {
@@ -64,6 +67,10 @@ func (m *AppLogModel) Add(level LogLevel, msg string) {
 	if len(m.entries) > m.maxEntries {
 		m.entries = m.entries[len(m.entries)-m.maxEntries:]
 	}
+	if level == LogError || level == LogWarn {
+		m.errorCount++
+		m.lastError = msg
+	}
 }
 
 func (m *AppLogModel) Info(msg string)  { m.Add(LogInfo, msg) }
@@ -74,6 +81,7 @@ func (m *AppLogModel) Toggle() {
 	m.active = !m.active
 	if m.active {
 		m.scrollOffset = m.maxScrollOffset()
+		m.seenErrorCount = m.errorCount
 	}
 }
 
@@ -84,13 +92,12 @@ func (m *AppLogModel) SetSize(w, h int) {
 	m.height = h
 }
 
-func (m AppLogModel) LastError() string {
-	for i := len(m.entries) - 1; i >= 0; i-- {
-		if m.entries[i].Level == LogError {
-			return m.entries[i].Message
-		}
-	}
-	return ""
+func (m AppLogModel) UnreadErrorCount() int {
+	return m.errorCount - m.seenErrorCount
+}
+
+func (m AppLogModel) LastErrorMessage() string {
+	return m.lastError
 }
 
 func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {

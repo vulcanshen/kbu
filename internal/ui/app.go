@@ -545,6 +545,12 @@ func (m AppModel) View() string {
 		return m.namespacePicker.View()
 	}
 
+	m.statusBar.SetUnreadErrors(m.appLog.UnreadErrorCount())
+	if m.appLog.UnreadErrorCount() > 0 {
+		m.statusLine.SetLastError(m.appLog.LastErrorMessage())
+	} else {
+		m.statusLine.SetLastError("")
+	}
 	statusBar := m.statusBar.View()
 	statusLine := m.statusLine.View()
 
