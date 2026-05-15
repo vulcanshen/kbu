@@ -18,9 +18,9 @@ func renderSearchBox(query string, active bool, width int, t *theme.Theme) strin
 
 	var text string
 	if active {
-		text = " / " + query + "█"
+		text = " 🔍 " + query + "█"
 	} else {
-		text = " filter: " + query
+		text = " 🔍 " + query
 	}
 
 	textW := lipgloss.Width(text)

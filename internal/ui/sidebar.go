@@ -429,6 +429,12 @@ func (m *SidebarModel) ensureCursorVisible() {
 	}
 	if m.cursor < m.scrollOffset {
 		m.scrollOffset = m.cursor
+		if m.scrollOffset > 0 {
+			visible := m.visibleItems()
+			if m.scrollOffset-1 >= 0 && visible[m.scrollOffset-1].isCategory {
+				m.scrollOffset--
+			}
+		}
 	}
 	if m.cursor >= m.scrollOffset+viewH {
 		m.scrollOffset = m.cursor - viewH + 1
