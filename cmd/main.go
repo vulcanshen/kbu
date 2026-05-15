@@ -15,7 +15,13 @@ import (
 	"github.com/vulcanshen/km8/internal/ui"
 )
 
+var Version = "dev"
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Println("km8 " + Version)
+		return
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			path := config.WriteCrashLog(r)

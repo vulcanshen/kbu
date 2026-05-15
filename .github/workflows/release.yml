@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, ver)) found=1; next
+            }
+            found { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --clean --release-notes RELEASE_NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION_TOKEN: ${{ secrets.ACTION_TOKEN }}
