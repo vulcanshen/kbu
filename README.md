@@ -1,4 +1,4 @@
-# km8
+# km8 — KubeMate
 
 <p align="center">
   <img src="docs/icon.svg" width="128" alt="km8 icon" />
