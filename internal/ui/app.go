@@ -102,7 +102,15 @@ func (m AppModel) Init() tea.Cmd {
 		m.sidebar.Init(),
 		m.table.Init(),
 		waitForWatchUpdate(m.watcher),
+		discoverCRDs(m.k8sClient),
 	)
+}
+
+func discoverCRDs(client *k8s.Client) tea.Cmd {
+	return func() tea.Msg {
+		count, err := k8s.DiscoverCRDs(context.Background(), client)
+		return CRDsDiscoveredMsg{Count: count, Err: err}
+	}
 }
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -417,6 +425,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.watcher.Stop()
 		m.logStreamer.Stop()
 		m.logsActive = false
+		newClient.Registry().ClearDynamic()
 		m.k8sClient = newClient
 		m.watcher = k8s.NewWatcher(newClient.Clientset())
 		m.logStreamer = k8s.NewLogStreamer(newClient.Clientset())
@@ -426,8 +435,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail.ClearDetail()
 		m.items = nil
 		m.table.SetRows(nil)
+		if m.currentResource.SupportsDrillDown() || k8s.DefaultRegistry.Get(m.currentResource) == nil {
+			m.currentResource = k8s.ResourcePods
+		}
+		m.sidebar.RefreshCategories(newClient.Registry())
 		m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
 		cmds = append(cmds, waitForWatchUpdate(m.watcher))
+		cmds = append(cmds, discoverCRDs(newClient))
 		return m, tea.Batch(cmds...)
 
 	case drillDownMsg:
@@ -473,6 +487,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case DeleteErrMsg:
 		m.appLog.Error("delete failed: " + msg.Err.Error())
+		return m, nil
+
+	case CRDsDiscoveredMsg:
+		if msg.Err != nil {
+			m.appLog.Warn("CRD discovery failed: " + msg.Err.Error())
+		} else if msg.Count > 0 {
+			m.appLog.Info(fmt.Sprintf("discovered %d CRDs", msg.Count))
+			m.sidebar.RefreshCategories(m.k8sClient.Registry())
+		}
 		return m, nil
 	}
 
