@@ -16,6 +16,17 @@ import (
 )
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			path := config.WriteCrashLog(r)
+			fmt.Fprintf(os.Stderr, "km8 crashed: %v\n", r)
+			if path != "" {
+				fmt.Fprintf(os.Stderr, "crash log: %s\n", path)
+			}
+			os.Exit(1)
+		}
+	}()
+
 	// Suppress k8s client-go / klog output that would corrupt the TUI.
 	klog.SetOutput(io.Discard)
 	klog.SetLogger(klog.NewKlogr().V(100)) // effectively disable all logging
@@ -51,7 +62,11 @@ func main() {
 	)
 
 	if _, err := p.Run(); err != nil {
+		path := config.WriteCrashLog(err)
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		if path != "" {
+			fmt.Fprintf(os.Stderr, "crash log: %s\n", path)
+		}
 		os.Exit(1)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	overlay "github.com/rmhubbert/bubbletea-overlay"
+	"github.com/vulcanshen/km8/internal/config"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -116,7 +117,9 @@ func (m AppModel) Init() tea.Cmd {
 func discoverCRDs(client *k8s.Client) tea.Cmd {
 	return func() tea.Msg {
 		defer func() {
-			recover()
+			if r := recover(); r != nil {
+				config.WriteCrashLog(r)
+			}
 		}()
 		count, err := k8s.DiscoverCRDs(context.Background(), client)
 		return CRDsDiscoveredMsg{Count: count, Err: err}
@@ -1099,7 +1102,9 @@ func waitForWatchUpdate(w *k8s.Watcher, rt k8s.ResourceType) tea.Cmd {
 func fetchResourceDetail(client *k8s.Client, rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
 	return func() tea.Msg {
 		defer func() {
-			recover()
+			if r := recover(); r != nil {
+				config.WriteCrashLog(r)
+			}
 		}()
 		detail := k8s.GetResourceDetail(rt, item)
 		events, _ := k8s.FetchResourceEvents(context.Background(), client.Clientset(), item.Name, item.Namespace)
