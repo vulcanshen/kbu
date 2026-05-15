@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 )
@@ -166,44 +165,5 @@ func (w *Watcher) handleEvent(ctx context.Context, event watch.Event, rt Resourc
 }
 
 func (w *Watcher) startWatch(ctx context.Context, rt ResourceType, namespace string) (watch.Interface, error) {
-	opts := metav1.ListOptions{}
-
-	switch rt {
-	case ResourceNamespaces:
-		return w.clientset.CoreV1().Namespaces().Watch(ctx, opts)
-	case ResourceNodes:
-		return w.clientset.CoreV1().Nodes().Watch(ctx, opts)
-	case ResourcePods:
-		return w.clientset.CoreV1().Pods(namespace).Watch(ctx, opts)
-	case ResourceDeployments:
-		return w.clientset.AppsV1().Deployments(namespace).Watch(ctx, opts)
-	case ResourceDaemonSets:
-		return w.clientset.AppsV1().DaemonSets(namespace).Watch(ctx, opts)
-	case ResourceStatefulSets:
-		return w.clientset.AppsV1().StatefulSets(namespace).Watch(ctx, opts)
-	case ResourceJobs:
-		return w.clientset.BatchV1().Jobs(namespace).Watch(ctx, opts)
-	case ResourceCronJobs:
-		return w.clientset.BatchV1().CronJobs(namespace).Watch(ctx, opts)
-	case ResourceServices:
-		return w.clientset.CoreV1().Services(namespace).Watch(ctx, opts)
-	case ResourceIngresses:
-		return w.clientset.NetworkingV1().Ingresses(namespace).Watch(ctx, opts)
-	case ResourceConfigMaps:
-		return w.clientset.CoreV1().ConfigMaps(namespace).Watch(ctx, opts)
-	case ResourceSecrets:
-		return w.clientset.CoreV1().Secrets(namespace).Watch(ctx, opts)
-	case ResourceEvents:
-		return w.clientset.CoreV1().Events(namespace).Watch(ctx, opts)
-	case ResourceClusterRoles:
-		return w.clientset.RbacV1().ClusterRoles().Watch(ctx, opts)
-	case ResourceClusterRoleBindings:
-		return w.clientset.RbacV1().ClusterRoleBindings().Watch(ctx, opts)
-	case ResourceRoles:
-		return w.clientset.RbacV1().Roles(namespace).Watch(ctx, opts)
-	case ResourceRoleBindings:
-		return w.clientset.RbacV1().RoleBindings(namespace).Watch(ctx, opts)
-	default:
-		return nil, fmt.Errorf("unsupported resource type: %s", rt)
-	}
+	return DefaultRegistry.StartWatch(ctx, w.clientset, rt, namespace)
 }

@@ -337,12 +337,12 @@ func (m *DetailModel) ClearDetail() {
 // SetResourceType sets the current resource type and adjusts available tabs.
 func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
-	switch rt {
-	case k8s.ResourcePods:
+	def := k8s.DefaultRegistry.Get(rt)
+	if def != nil && def.HasLogs {
 		m.tabs = []string{"Detail", "Logs", "Events"}
-	case k8s.ResourceEvents:
+	} else if rt == k8s.ResourceEvents {
 		m.tabs = []string{"Detail"}
-	default:
+	} else {
 		m.tabs = []string{"Detail", "Events"}
 	}
 	m.activeTab = 0

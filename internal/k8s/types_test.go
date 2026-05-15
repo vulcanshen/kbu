@@ -33,8 +33,8 @@ func TestResourceType_KubectlName(t *testing.T) {
 }
 
 func TestResourceType_KubectlName_Unknown(t *testing.T) {
-	rt := ResourceType(999)
-	if got := rt.KubectlName(); got != "unknown" {
-		t.Errorf("KubectlName() for unknown type = %q, want 'unknown'", got)
+	rt := ResourceType("nonexistent")
+	if got := rt.KubectlName(); got != "nonexistent" {
+		t.Errorf("KubectlName() for unknown type = %q, want 'nonexistent'", got)
 	}
 }
