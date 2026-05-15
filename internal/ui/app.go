@@ -867,7 +867,12 @@ func overlayPopup(bg, popup string, screenW, screenH int) string {
 		if prefixW < startX {
 			prefix += strings.Repeat(" ", startX-prefixW)
 		}
-		bgLines[y] = prefix + pLine
+		pLineW := lipgloss.Width(pLine)
+		if pLineW < popupMaxW {
+			pLine += strings.Repeat(" ", popupMaxW-pLineW)
+		}
+		suffix := ansiSkipPrefix(bgLine, startX+popupMaxW)
+		bgLines[y] = prefix + pLine + suffix
 	}
 
 	return strings.Join(bgLines, "\n")
@@ -902,6 +907,29 @@ func ansiTruncate(s string, maxWidth int) string {
 	}
 	result = append(result, "\x1b[0m"...)
 	return string(result)
+}
+
+func ansiSkipPrefix(s string, skipWidth int) string {
+	w := 0
+	inEscape := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+		if w >= skipWidth {
+			return s[i:]
+		}
+		w++
+	}
+	return ""
 }
 
 func truncateName(name string, max int) string {
