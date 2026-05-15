@@ -115,6 +115,9 @@ func (m AppModel) Init() tea.Cmd {
 
 func discoverCRDs(client *k8s.Client) tea.Cmd {
 	return func() tea.Msg {
+		defer func() {
+			recover()
+		}()
 		count, err := k8s.DiscoverCRDs(context.Background(), client)
 		return CRDsDiscoveredMsg{Count: count, Err: err}
 	}
@@ -386,7 +389,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(cmds...)
 		}
-		if msg.Index >= 0 && msg.Index < len(m.items) {
+		if msg.Index >= 0 && msg.Index < len(m.items) && len(m.table.rows) > 0 {
 			item := m.items[msg.Index]
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
 			if m.currentResource == k8s.ResourcePods {
@@ -1096,6 +1099,9 @@ func waitForWatchUpdate(w *k8s.Watcher, rt k8s.ResourceType) tea.Cmd {
 
 func fetchResourceDetail(client *k8s.Client, rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
 	return func() tea.Msg {
+		defer func() {
+			recover()
+		}()
 		detail := k8s.GetResourceDetail(rt, item)
 		events, _ := k8s.FetchResourceEvents(context.Background(), client.Clientset(), item.Name, item.Namespace)
 		return ResourceDetailMsg{Detail: detail, Events: events}
