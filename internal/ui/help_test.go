@@ -84,7 +84,6 @@ func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 	// Check that key sections are present.
 	expectedSections := []string{
 		"Navigation",
-		"Sidebar",
 		"Table",
 		"Detail",
 		"Global",
@@ -95,13 +94,13 @@ func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 		}
 	}
 
-	// Check some specific keybindings.
 	expectedKeys := []string{
 		"j / k",
 		"gg / G",
 		"/",
-		"[ / ]",
+		"h / l",
 		"?",
+		"c",
 	}
 	for _, key := range expectedKeys {
 		if !strings.Contains(view, key) {
