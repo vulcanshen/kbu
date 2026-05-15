@@ -97,52 +97,53 @@ func (m HelpModel) View() string {
 
 // RenderPopup returns just the bordered popup box (for overlay on background).
 func (m HelpModel) RenderPopup() string {
-	titleStyle := m.theme.DetailTabActiveStyle()
-	sectionStyle := m.theme.SidebarCategoryStyle()
-	keyStyle := m.theme.DetailLabelStyle()
-	descStyle := m.theme.DetailValueStyle()
-	hintStyle := m.theme.StatusLineStyle()
+	sectionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.Sidebar.CategoryFg)).
+		Bold(true).
+		Background(lipgloss.Color("#1e1e2e"))
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.Detail.LabelFg)).
+		Background(lipgloss.Color("#1e1e2e"))
+	descStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.Detail.ValueFg)).
+		Background(lipgloss.Color("#1e1e2e"))
+	hintStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.StatusLine.Foreground)).
+		Background(lipgloss.Color("#1e1e2e"))
+	bgStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e1e2e"))
 
 	content := m.helpContent()
 
-	boxWidth := 50
+	boxWidth := 44
 	if boxWidth > m.width-6 {
 		boxWidth = m.width - 6
 	}
 
 	var lines []string
-	lines = append(lines, titleStyle.Width(boxWidth).Align(lipgloss.Center).Render("Keybindings"))
-	lines = append(lines, "")
+	lines = append(lines, sectionStyle.Width(boxWidth).Align(lipgloss.Center).Render("Keybindings"))
 
-	visibleHeight := m.contentHeight()
-	start := m.scrollOffset
-	end := start + visibleHeight
-	if end > len(content) {
-		end = len(content)
-	}
-	if start > len(content) {
-		start = len(content)
-	}
-
-	for _, entry := range content[start:end] {
+	for _, entry := range content {
 		if entry.isSection {
-			lines = append(lines, sectionStyle.Render(entry.text))
+			lines = append(lines, sectionStyle.Width(boxWidth).Render(" "+entry.text))
+		} else if entry.key == "" {
+			continue
 		} else {
-			key := keyStyle.Width(16).Render(entry.key)
+			key := keyStyle.Width(14).Render(entry.key)
 			desc := descStyle.Render(entry.desc)
-			lines = append(lines, "  "+key+desc)
+			lines = append(lines, bgStyle.Render(" ")+key+desc)
 		}
 	}
 
-	lines = append(lines, "")
-	lines = append(lines, hintStyle.Render(" Esc/q/?: close  j/k: scroll"))
+	lines = append(lines, hintStyle.Width(boxWidth).Render(" Esc/?:close  j/k:scroll"))
 
 	body := strings.Join(lines, "\n")
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(m.theme.Detail.BorderColor)).
-		Padding(1, 2).
+		Background(lipgloss.Color("#1e1e2e")).
+		Padding(0, 1).
 		Render(body)
 }
 
@@ -156,29 +157,25 @@ type helpEntry struct {
 func (m HelpModel) helpContent() []helpEntry {
 	return []helpEntry{
 		{isSection: true, text: "Navigation"},
-		{key: "j / k", desc: "Move cursor up/down"},
-		{key: "gg / G", desc: "Jump to top/bottom"},
-		{key: "1 / 2 / 3", desc: "Switch to panel"},
+		{key: "j / k", desc: "Up / down"},
+		{key: "u / d", desc: "Page up / down"},
+		{key: "gg / G", desc: "Top / bottom"},
+		{key: "1 / 2 / 3", desc: "Switch panel"},
 		{key: "Tab", desc: "Cycle panels"},
-		{},
 		{isSection: true, text: "Table"},
-		{key: "/", desc: "Search/filter"},
-		{key: "Esc", desc: "Clear filter"},
-		{key: "Enter", desc: "Drill down / confirm filter"},
-		{key: "e", desc: "Edit resource (kubectl edit)"},
+		{key: "/", desc: "Search / filter"},
+		{key: "Enter", desc: "Drill down"},
+		{key: "e", desc: "Edit (kubectl edit)"},
 		{key: "D", desc: "Delete resource"},
-		{key: "u / d", desc: "Page up/down"},
 		{key: "s", desc: "Shell into container"},
-		{},
 		{isSection: true, text: "Detail"},
 		{key: "h / l", desc: "Switch tab"},
-		{key: "+ / -", desc: "Expand / restore panel"},
-		{},
+		{key: "+ / -", desc: "Expand / restore"},
 		{isSection: true, text: "Global"},
 		{key: "n", desc: "Switch namespace"},
 		{key: "c", desc: "Switch context"},
 		{key: "!", desc: "App log"},
 		{key: "?", desc: "Toggle help"},
-		{key: "q", desc: "Quit"},
+		{key: "q / Esc", desc: "Quit / back"},
 	}
 }
