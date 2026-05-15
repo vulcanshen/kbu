@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sync"
 
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
@@ -13,9 +15,12 @@ import (
 // namespace filter. It is the primary entry point for all cluster operations
 // in km8.
 type Client struct {
-	clientset   kubernetes.Interface
-	kubeConfig  api.Config
-	contextName string
+	clientset     kubernetes.Interface
+	dynamicClient dynamic.Interface
+	restConfig    *rest.Config
+	kubeConfig    api.Config
+	contextName   string
+	registry      *Registry
 
 	mu        sync.RWMutex
 	namespace string // "" means all namespaces
@@ -63,21 +68,19 @@ func NewClient(contextName string) (*Client, error) {
 		return nil, fmt.Errorf("creating kubernetes clientset: %w", err)
 	}
 
-	// Determine the default namespace from the context.
-	ns := rawConfig.Contexts[contextName].Namespace
-	if ns == "" {
-		ns = "default"
+	dynClient, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("creating dynamic client: %w", err)
 	}
 
-	// Note: ns from context is available via GetClusterInfo().Namespace,
-	// but the namespace filter starts as "" (all namespaces) by design.
-	_ = ns
-
 	return &Client{
-		clientset:   clientset,
-		kubeConfig:  rawConfig,
-		contextName: contextName,
-		namespace:   "", // default: all namespaces
+		clientset:     clientset,
+		dynamicClient: dynClient,
+		restConfig:    restConfig,
+		kubeConfig:    rawConfig,
+		contextName:   contextName,
+		registry:      DefaultRegistry,
+		namespace:     "",
 	}, nil
 }
 
@@ -130,10 +133,24 @@ func (c *Client) GetNamespace() string {
 	return c.namespace
 }
 
-// Clientset returns the underlying Kubernetes clientset. This is useful for
-// resource fetchers that need direct access to the API.
+// Clientset returns the underlying Kubernetes clientset.
 func (c *Client) Clientset() kubernetes.Interface {
 	return c.clientset
+}
+
+// DynamicClient returns the dynamic Kubernetes client for CRD access.
+func (c *Client) DynamicClient() dynamic.Interface {
+	return c.dynamicClient
+}
+
+// RestConfig returns the REST config used to connect to the cluster.
+func (c *Client) RestConfig() *rest.Config {
+	return c.restConfig
+}
+
+// Registry returns the resource registry associated with this client.
+func (c *Client) Registry() *Registry {
+	return c.registry
 }
 
 // ContextName returns the name of the active kubeconfig context.
