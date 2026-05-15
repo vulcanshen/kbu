@@ -102,7 +102,7 @@ func (m HelpModel) RenderPopup() string {
 		Bold(true)
 	keyStyle := m.theme.DetailLabelStyle()
 	descStyle := m.theme.DetailValueStyle()
-	hintStyle := m.theme.StatusLineStyle()
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.StatusLine.Foreground))
 
 	content := m.helpContent()
 
@@ -159,7 +159,7 @@ func (m HelpModel) RenderPopup() string {
 		b.WriteString("\n")
 	}
 	hint := " Esc/?:close j/k:scroll "
-	bottomDashes := innerW - len(hint)
+	bottomDashes := innerW - len(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
