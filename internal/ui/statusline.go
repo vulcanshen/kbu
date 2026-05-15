@@ -63,7 +63,6 @@ func (m StatusLineModel) ViewWithError(unreadErrors int, lastError string) strin
 			leftPart := barStyle.Width(hintsWidth + 2).Render(hints)
 			errPart := lipgloss.NewStyle().
 				Foreground(lipgloss.Color(m.theme.Status.Error)).
-				Background(lipgloss.Color(m.theme.StatusBar.Background)).
 				Width(m.width - hintsWidth - 2).
 				Render(" " + errText)
 			return leftPart + errPart

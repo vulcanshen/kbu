@@ -35,15 +35,13 @@ func TestDefaultTheme(t *testing.T) {
 	assertNonEmpty(t, "Detail.TabActiveFg", th.Detail.TabActiveFg)
 	assertNonEmpty(t, "Detail.TabInactiveFg", th.Detail.TabInactiveFg)
 
-	// StatusBar colors
-	assertNonEmpty(t, "StatusBar.Background", th.StatusBar.Background)
+	// StatusBar colors (Background intentionally empty for transparency)
 	assertNonEmpty(t, "StatusBar.Foreground", th.StatusBar.Foreground)
 	assertNonEmpty(t, "StatusBar.ClusterFg", th.StatusBar.ClusterFg)
 	assertNonEmpty(t, "StatusBar.NamespaceFg", th.StatusBar.NamespaceFg)
 	assertNonEmpty(t, "StatusBar.ContextFg", th.StatusBar.ContextFg)
 
-	// StatusLine colors
-	assertNonEmpty(t, "StatusLine.Background", th.StatusLine.Background)
+	// StatusLine colors (Background intentionally empty for transparency)
 	assertNonEmpty(t, "StatusLine.Foreground", th.StatusLine.Foreground)
 
 	// Status colors
