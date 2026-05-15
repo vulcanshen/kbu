@@ -86,3 +86,9 @@ type DeleteDoneMsg struct {
 type DeleteErrMsg struct {
 	Err error
 }
+
+// CRDsDiscoveredMsg is sent when CRD discovery completes.
+type CRDsDiscoveredMsg struct {
+	Count int
+	Err   error
+}
