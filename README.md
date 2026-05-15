@@ -1,5 +1,9 @@
 # km8
 
+<p align="center">
+  <img src="docs/icon.svg" width="128" alt="km8 icon" />
+</p>
+
 [![GitHub Release](https://img.shields.io/github/v/release/vulcanshen/km8)](https://github.com/vulcanshen/km8/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/vulcanshen/km8)](https://go.dev/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/vulcanshen/km8)](https://goreportcard.com/report/github.com/vulcanshen/km8)
