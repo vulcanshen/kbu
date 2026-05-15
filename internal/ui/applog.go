@@ -80,7 +80,7 @@ func (m *AppLogModel) Error(msg string) { m.Add(LogError, msg) }
 func (m *AppLogModel) Toggle() {
 	m.active = !m.active
 	if m.active {
-		m.scrollOffset = m.maxScrollOffset()
+		m.scrollOffset = 0
 	}
 	m.seenErrorCount = m.errorCount
 	m.lastError = ""
@@ -184,15 +184,12 @@ func (m AppLogModel) View() string {
 	if len(m.entries) == 0 {
 		lines = append(lines, infoStyle.Render(" No log entries"))
 	} else {
-		end := m.scrollOffset + contentH
-		if end > len(m.entries) {
-			end = len(m.entries)
+		last := len(m.entries) - 1 - m.scrollOffset
+		first := last - contentH + 1
+		if first < 0 {
+			first = 0
 		}
-		start := m.scrollOffset
-		if start < 0 {
-			start = 0
-		}
-		for i := start; i < end; i++ {
+		for i := last; i >= first; i-- {
 			e := m.entries[i]
 			var s lipgloss.Style
 			switch e.Level {
