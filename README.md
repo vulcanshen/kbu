@@ -2,6 +2,8 @@
 
 A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/). Built with Go and [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
+![km8 screenshot](docs/screenshot.png)
+
 ## Features
 
 - **17 built-in resource types + CRD support** -- dynamic discovery of Custom Resources at startup
