@@ -50,7 +50,7 @@ func (m StatusLineModel) ViewWithError(unreadErrors int, lastError string) strin
 		hints = " [3] h/l: tab | +/-: expand"
 	}
 
-	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
+	barStyle := m.theme.StatusLineStyle().Padding(0, 0)
 
 	if unreadErrors > 0 && lastError != "" {
 		errText := lastError
