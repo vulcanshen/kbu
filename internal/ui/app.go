@@ -601,7 +601,12 @@ func (m AppModel) View() string {
 
 	if m.help.IsActive() {
 		m.help.SetSize(m.width, m.height)
-		mainView = overlayPopup(mainView, m.help.RenderPopup(), m.width, m.height)
+		popup := m.help.RenderPopup()
+		mainView = lipgloss.Place(m.width, m.height,
+			lipgloss.Center, lipgloss.Center,
+			popup,
+			lipgloss.WithWhitespaceBackground(lipgloss.Color("#1e1e2e")),
+		)
 	}
 
 	return mainView
