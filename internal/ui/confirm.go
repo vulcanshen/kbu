@@ -20,8 +20,6 @@ type ConfirmModel struct {
 	action    ConfirmAction
 	message   string
 	detail    string
-	width     int
-	height    int
 	theme     *theme.Theme
 	onConfirm tea.Cmd
 }
@@ -45,11 +43,6 @@ func (m *ConfirmModel) Close() {
 
 func (m ConfirmModel) IsActive() bool { return m.active }
 
-func (m *ConfirmModel) SetSize(w, h int) {
-	m.width = w
-	m.height = h
-}
-
 func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 	if !m.active {
 		return m, nil
@@ -72,35 +65,55 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 }
 
 func (m ConfirmModel) View() string {
-	bc := lipgloss.Color(m.theme.Sidebar.CategoryFg)
-	titleStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
-	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.StatusLine.Foreground))
+	return ""
+}
 
-	boxW := 50
-	if boxW > m.width-4 {
-		boxW = m.width - 4
-	}
+func (m ConfirmModel) RenderPopup() string {
+	bc := lipgloss.Color("#74c7ec")
+	bStyle := lipgloss.NewStyle().Foreground(bc)
+	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	msgStyle := lipgloss.NewStyle().Bold(true)
+	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
+
+	boxWidth := 54
+	innerW := boxWidth - 2
 
 	var lines []string
-	lines = append(lines, titleStyle.Render(" "+m.message))
-	lines = append(lines, "")
+	lines = append(lines, msgStyle.Render(" "+m.message))
 	if m.detail != "" {
-		lines = append(lines, detailStyle.Render(" "+m.detail))
 		lines = append(lines, "")
+		lines = append(lines, detailStyle.Render(" "+m.detail))
 	}
-	lines = append(lines, hintStyle.Render(" Enter/y: confirm | Esc/n: cancel"))
+	body := strings.Join(lines, "\n")
 
-	content := strings.Join(lines, "\n")
+	title := "Confirm"
+	dashesAfter := innerW - 1 - len(title)
+	if dashesAfter < 0 {
+		dashesAfter = 0
+	}
 
-	overlay := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(bc).
-		Padding(1, 2).
-		Width(boxW).
-		Render(content)
+	var b strings.Builder
+	b.WriteString(bStyle.Render("╭─") + tStyle.Render(title) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
 
-	return lipgloss.Place(m.width, m.height,
-		lipgloss.Center, lipgloss.Center,
-		overlay)
+	leftBorder := bStyle.Render("│")
+	rightBorder := bStyle.Render("│")
+	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
+	bodyLines = append(bodyLines, "")
+	for _, line := range bodyLines {
+		lw := lipgloss.Width(line)
+		pad := ""
+		if lw < innerW {
+			pad = strings.Repeat(" ", innerW-lw)
+		}
+		b.WriteString(leftBorder + line + pad + rightBorder + "\n")
+	}
+
+	hint := " Enter/y: confirm  Esc/n: cancel "
+	bottomDashes := innerW - len(hint) - 1
+	if bottomDashes < 0 {
+		bottomDashes = 0
+	}
+	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+
+	return b.String()
 }

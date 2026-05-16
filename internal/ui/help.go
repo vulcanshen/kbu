@@ -100,7 +100,7 @@ func (m HelpModel) RenderPopup() string {
 	content := m.helpContent()
 
 	boxWidth := 46
-	bc := lipgloss.Color(m.theme.StatusBar.NamespaceFg)
+	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	sectionStyle := lipgloss.NewStyle().Bold(true)
@@ -120,7 +120,7 @@ func (m HelpModel) RenderPopup() string {
 		}
 	}
 	body := strings.Join(lines, "\n")
-	panelH := len(lines) + 2
+	panelH := len(lines) + 4
 
 	title := "Keybindings"
 	innerW := boxWidth - 2
@@ -137,7 +137,8 @@ func (m HelpModel) RenderPopup() string {
 
 	leftBorder := bStyle.Render("│")
 	rightBorder := bStyle.Render("│")
-	bodyLines := strings.Split(body, "\n")
+	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
+	bodyLines = append(bodyLines, "")
 	for len(bodyLines) < panelH-2 {
 		bodyLines = append(bodyLines, "")
 	}

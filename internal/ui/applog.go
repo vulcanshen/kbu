@@ -230,7 +230,7 @@ func (m AppLogModel) RenderPopup() string {
 
 	body := strings.Join(lines, "\n")
 
-	bc := lipgloss.Color(m.theme.StatusBar.NamespaceFg)
+	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 
@@ -248,7 +248,8 @@ func (m AppLogModel) RenderPopup() string {
 
 	leftBorder := bStyle.Render("│")
 	rightBorder := bStyle.Render("│")
-	bodyLines := strings.Split(body, "\n")
+	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
+	bodyLines = append(bodyLines, "")
 	panelH := m.popupHeight()
 	for len(bodyLines) < panelH-2 {
 		bodyLines = append(bodyLines, "")
