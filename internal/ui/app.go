@@ -287,7 +287,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
 					detail := fmt.Sprintf("kubectl delete %s %s -n %s", m.currentResource.KubectlName(), item.Name, item.Namespace)
-					m.confirm.SetSize(m.width, m.height)
 					m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
 						deleteResource(m.currentResource, item.Name, item.Namespace))
 					return m, nil
@@ -551,19 +550,6 @@ func (m AppModel) View() string {
 		return "loading..."
 	}
 
-	if m.confirm.IsActive() {
-		m.confirm.SetSize(m.width, m.height)
-		return m.confirm.View()
-	}
-
-	if m.contextPicker.IsActive() {
-		return m.contextPicker.View()
-	}
-
-	if m.namespacePicker.IsActive() {
-		return m.namespacePicker.View()
-	}
-
 	statusBar := m.statusBar.ViewWithErrors(m.appLog.UnreadErrorCount())
 	statusLine := m.statusLine.ViewWithError(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage())
 
@@ -611,14 +597,24 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.help.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
+	if m.confirm.IsActive() {
+		mainView = overlay.Composite(m.confirm.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.contextPicker.IsActive() {
+		mainView = overlay.Composite(m.contextPicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.namespacePicker.IsActive() {
+		mainView = overlay.Composite(m.namespacePicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
 	return mainView
 }
 
 func (m *AppModel) layout() {
 	m.statusBar.SetWidth(m.width)
 	m.statusLine.SetWidth(m.width)
-	m.namespacePicker.SetSize(m.width, m.height)
-	m.contextPicker.SetSize(m.width, m.height)
 	m.help.SetSize(m.width, m.height)
 
 	sw, rw, upperH, detailH := m.panelSizes()
@@ -906,7 +902,6 @@ func (m *AppModel) execShell() tea.Cmd {
 	}
 
 	detail := fmt.Sprintf("kubectl exec -it %s -n %s -c %s", podName, namespace, container)
-	m.confirm.SetSize(m.width, m.height)
 	m.confirm.Show(ConfirmShellExec, "Exec into container?", detail,
 		shellExec(podName, namespace, container))
 	m.appLog.Info("exec shell: " + detail)

@@ -12,8 +12,6 @@ type NamespacePickerModel struct {
 	namespaces []string
 	cursor     int
 	active     bool
-	width      int
-	height     int
 	theme      *theme.Theme
 }
 
@@ -36,11 +34,6 @@ func (m *NamespacePickerModel) Close() {
 
 func (m *NamespacePickerModel) IsActive() bool {
 	return m.active
-}
-
-func (m *NamespacePickerModel) SetSize(width, height int) {
-	m.width = width
-	m.height = height
 }
 
 func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd) {
@@ -78,28 +71,20 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 }
 
 func (m NamespacePickerModel) View() string {
-	if !m.active {
-		return ""
-	}
+	return ""
+}
 
-	titleStyle := m.theme.DetailTabActiveStyle()
+func (m NamespacePickerModel) RenderPopup() string {
+	bc := lipgloss.Color("#74c7ec")
+	bStyle := lipgloss.NewStyle().Foreground(bc)
+	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	normalStyle := m.theme.SidebarStyle()
 
-	boxWidth := 40
-	if boxWidth > m.width-4 {
-		boxWidth = m.width - 4
-	}
+	boxWidth := 44
+	innerW := boxWidth - 2
 
-	var lines []string
-	lines = append(lines, titleStyle.Width(boxWidth).Align(lipgloss.Center).Render("Select Namespace"))
-	lines = append(lines, "")
-
-	maxVisible := m.height - 6
-	if maxVisible < 5 {
-		maxVisible = 5
-	}
-
+	maxVisible := 10
 	start := 0
 	if m.cursor >= maxVisible {
 		start = m.cursor - maxVisible + 1
@@ -109,28 +94,45 @@ func (m NamespacePickerModel) View() string {
 		end = len(m.namespaces)
 	}
 
+	var lines []string
 	for i := start; i < end; i++ {
-		label := m.namespaces[i]
+		label := " " + m.namespaces[i]
 		if i == m.cursor {
-			lines = append(lines, selectedStyle.Width(boxWidth).Render(" "+label))
+			lines = append(lines, selectedStyle.Width(innerW).Render(label))
 		} else {
-			lines = append(lines, normalStyle.Width(boxWidth).Render(" "+label))
+			lines = append(lines, normalStyle.Width(innerW).Render(label))
 		}
 	}
+	body := strings.Join(lines, "\n")
 
-	lines = append(lines, "")
-	hintStyle := m.theme.StatusLineStyle()
-	lines = append(lines, hintStyle.Render(" j/k: navigate  Enter: select  Esc: cancel"))
+	title := "Select Namespace"
+	dashesAfter := innerW - 1 - len(title)
+	if dashesAfter < 0 {
+		dashesAfter = 0
+	}
 
-	content := strings.Join(lines, "\n")
+	var b strings.Builder
+	b.WriteString(bStyle.Render("╭─") + tStyle.Render(title) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
 
-	overlay := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.theme.Detail.BorderColor)).
-		Padding(1, 2).
-		Render(content)
+	leftBorder := bStyle.Render("│")
+	rightBorder := bStyle.Render("│")
+	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
+	bodyLines = append(bodyLines, "")
+	for _, line := range bodyLines {
+		lw := lipgloss.Width(line)
+		pad := ""
+		if lw < innerW {
+			pad = strings.Repeat(" ", innerW-lw)
+		}
+		b.WriteString(leftBorder + line + pad + rightBorder + "\n")
+	}
 
-	return lipgloss.Place(m.width, m.height,
-		lipgloss.Center, lipgloss.Center,
-		overlay)
+	hint := " Enter: select  Esc: cancel "
+	bottomDashes := innerW - len(hint) - 1
+	if bottomDashes < 0 {
+		bottomDashes = 0
+	}
+	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+
+	return b.String()
 }

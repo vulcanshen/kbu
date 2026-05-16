@@ -14,8 +14,6 @@ type ContextPickerModel struct {
 	current  string
 	cursor   int
 	active   bool
-	width    int
-	height   int
 	theme    *theme.Theme
 }
 
@@ -51,12 +49,6 @@ func (m *ContextPickerModel) IsActive() bool {
 	return m.active
 }
 
-// SetSize sets the overlay dimensions (full terminal size).
-func (m *ContextPickerModel) SetSize(width, height int) {
-	m.width = width
-	m.height = height
-}
-
 // Update handles keyboard input for the context picker.
 func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 	if !m.active {
@@ -89,30 +81,23 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the context picker as a centered overlay.
+// View renders the context picker (no-op; rendering via RenderPopup + overlay).
 func (m ContextPickerModel) View() string {
-	if !m.active {
-		return ""
-	}
+	return ""
+}
 
-	titleStyle := m.theme.DetailTabActiveStyle()
+// RenderPopup returns the context picker box for use with overlay.Composite.
+func (m ContextPickerModel) RenderPopup() string {
+	bc := lipgloss.Color("#74c7ec")
+	bStyle := lipgloss.NewStyle().Foreground(bc)
+	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	normalStyle := m.theme.SidebarStyle()
 
-	boxWidth := 50
-	if boxWidth > m.width-4 {
-		boxWidth = m.width - 4
-	}
+	boxWidth := 54
+	innerW := boxWidth - 2
 
-	var lines []string
-	lines = append(lines, titleStyle.Width(boxWidth).Align(lipgloss.Center).Render("Select Context"))
-	lines = append(lines, "")
-
-	maxVisible := m.height - 6
-	if maxVisible < 5 {
-		maxVisible = 5
-	}
-
+	maxVisible := 10
 	start := 0
 	if m.cursor >= maxVisible {
 		start = m.cursor - maxVisible + 1
@@ -122,33 +107,49 @@ func (m ContextPickerModel) View() string {
 		end = len(m.contexts)
 	}
 
+	var lines []string
 	for i := start; i < end; i++ {
-		label := m.contexts[i]
 		marker := "  "
 		if m.contexts[i] == m.current {
 			marker = "* "
 		}
-		display := marker + label
+		label := marker + m.contexts[i]
 		if i == m.cursor {
-			lines = append(lines, selectedStyle.Width(boxWidth).Render(display))
+			lines = append(lines, selectedStyle.Width(innerW).Render(label))
 		} else {
-			lines = append(lines, normalStyle.Width(boxWidth).Render(display))
+			lines = append(lines, normalStyle.Width(innerW).Render(label))
 		}
 	}
+	body := strings.Join(lines, "\n")
 
-	lines = append(lines, "")
-	hintStyle := m.theme.StatusLineStyle()
-	lines = append(lines, hintStyle.Render(" j/k: navigate  Enter: select  Esc: cancel"))
+	title := "Select Context"
+	dashesAfter := innerW - 1 - len(title)
+	if dashesAfter < 0 {
+		dashesAfter = 0
+	}
 
-	content := strings.Join(lines, "\n")
+	var b strings.Builder
+	b.WriteString(bStyle.Render("╭─") + tStyle.Render(title) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
 
-	overlay := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.theme.Detail.BorderColor)).
-		Padding(1, 2).
-		Render(content)
+	leftBorder := bStyle.Render("│")
+	rightBorder := bStyle.Render("│")
+	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
+	bodyLines = append(bodyLines, "")
+	for _, line := range bodyLines {
+		lw := lipgloss.Width(line)
+		pad := ""
+		if lw < innerW {
+			pad = strings.Repeat(" ", innerW-lw)
+		}
+		b.WriteString(leftBorder + line + pad + rightBorder + "\n")
+	}
 
-	return lipgloss.Place(m.width, m.height,
-		lipgloss.Center, lipgloss.Center,
-		overlay)
+	hint := " Enter: select  Esc: cancel "
+	bottomDashes := innerW - len(hint) - 1
+	if bottomDashes < 0 {
+		bottomDashes = 0
+	}
+	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+
+	return b.String()
 }

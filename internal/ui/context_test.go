@@ -9,9 +9,7 @@ import (
 
 func newTestContextPicker() ContextPickerModel {
 	t := theme.DefaultTheme()
-	m := NewContextPickerModel(t)
-	m.SetSize(80, 40)
-	return m
+	return NewContextPickerModel(t)
 }
 
 func TestContextPickerModel_InitialState(t *testing.T) {
