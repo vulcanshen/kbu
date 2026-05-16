@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.2] - 2026-05-16
+
+### Changed
+- Confirm, namespace picker, and context picker modals now render as overlay popups (background remains visible, consistent with help and app log)
+- All popup border color changed to sapphire (#74c7ec, Catppuccin Mocha)
+- All popups now have vertical padding for less cramped appearance
+
 ## [v1.0.1] - 2026-05-15
 
 ### Changed
