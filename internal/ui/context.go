@@ -13,20 +13,21 @@ type ContextPickerModel struct {
 	contexts []string
 	current  string
 	cursor   int
-	active   bool
+	animator PopupAnimator
 	theme    *theme.Theme
 }
 
 // NewContextPickerModel creates a new context picker.
 func NewContextPickerModel(t *theme.Theme) ContextPickerModel {
 	return ContextPickerModel{
-		theme: t,
+		theme:    t,
+		animator: NewPopupAnimator("context", lipgloss.Color("#74c7ec")),
 	}
 }
 
 // Open populates the picker with available contexts and sets the cursor to
 // the currently active context.
-func (m *ContextPickerModel) Open(contexts []string, current string) {
+func (m *ContextPickerModel) Open(contexts []string, current string) tea.Cmd {
 	m.contexts = contexts
 	m.current = current
 	m.cursor = 0
@@ -36,22 +37,28 @@ func (m *ContextPickerModel) Open(contexts []string, current string) {
 			break
 		}
 	}
-	m.active = true
+	return m.animator.Open()
 }
 
 // Close hides the picker.
-func (m *ContextPickerModel) Close() {
-	m.active = false
+func (m *ContextPickerModel) Close() tea.Cmd {
+	return m.animator.Close()
 }
 
-// IsActive returns whether the picker overlay is shown.
-func (m *ContextPickerModel) IsActive() bool {
-	return m.active
+// IsActive returns whether the picker overlay is shown (including animations).
+func (m *ContextPickerModel) IsActive() bool      { return m.animator.IsActive() }
+func (m *ContextPickerModel) IsInteractive() bool { return m.animator.IsInteractive() }
+
+func (m *ContextPickerModel) HandleTick(msg AnimTickMsg) tea.Cmd {
+	if msg.Target != m.animator.Target {
+		return nil
+	}
+	return m.animator.Tick()
 }
 
 // Update handles keyboard input for the context picker.
 func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
-	if !m.active {
+	if !m.animator.IsInteractive() {
 		return m, nil
 	}
 
@@ -68,13 +75,12 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 			}
 		case "enter":
 			selected := m.contexts[m.cursor]
-			m.active = false
-			return m, func() tea.Msg {
+			closeCmd := m.animator.Close()
+			return m, tea.Batch(closeCmd, func() tea.Msg {
 				return ContextChangedMsg{Context: selected}
-			}
+			})
 		case "esc", "c":
-			m.active = false
-			return m, nil
+			return m, m.animator.Close()
 		}
 	}
 
@@ -88,6 +94,10 @@ func (m ContextPickerModel) View() string {
 
 // RenderPopup returns the context picker box for use with overlay.Composite.
 func (m ContextPickerModel) RenderPopup() string {
+	return m.animator.RenderFrame(m.renderFullPopup())
+}
+
+func (m ContextPickerModel) renderFullPopup() string {
 	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)

@@ -39,7 +39,7 @@ func (e LogEntry) FormatPrefix() (string, string) {
 type AppLogModel struct {
 	entries        []LogEntry
 	maxEntries     int
-	active         bool
+	animator       PopupAnimator
 	scrollOffset   int
 	width          int
 	height         int
@@ -53,6 +53,7 @@ func NewAppLogModel(t *theme.Theme) AppLogModel {
 	return AppLogModel{
 		maxEntries: 500,
 		theme:      t,
+		animator:   NewPopupAnimator("applog", lipgloss.Color("#74c7ec")),
 	}
 }
 
@@ -75,16 +76,25 @@ func (m *AppLogModel) Info(msg string)  { m.Add(LogInfo, msg) }
 func (m *AppLogModel) Warn(msg string)  { m.Add(LogWarn, msg) }
 func (m *AppLogModel) Error(msg string) { m.Add(LogError, msg) }
 
-func (m *AppLogModel) Toggle() {
-	m.active = !m.active
-	if m.active {
-		m.scrollOffset = 0
+func (m *AppLogModel) Toggle() tea.Cmd {
+	if m.animator.IsActive() {
+		return m.animator.Close()
 	}
+	m.scrollOffset = 0
 	m.seenErrorCount = m.errorCount
 	m.lastError = ""
+	return m.animator.Open()
 }
 
-func (m AppLogModel) IsActive() bool { return m.active }
+func (m AppLogModel) IsActive() bool      { return m.animator.IsActive() }
+func (m AppLogModel) IsInteractive() bool { return m.animator.IsInteractive() }
+
+func (m *AppLogModel) HandleTick(msg AnimTickMsg) tea.Cmd {
+	if msg.Target != m.animator.Target {
+		return nil
+	}
+	return m.animator.Tick()
+}
 
 func (m *AppLogModel) SetSize(w, h int) {
 	m.width = w
@@ -100,14 +110,14 @@ func (m AppLogModel) LastErrorMessage() string {
 }
 
 func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
-	if !m.active {
+	if !m.animator.IsInteractive() {
 		return m, nil
 	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc", "!", "q":
-			m.active = false
+			return m, m.animator.Close()
 		case "j", "down":
 			if m.scrollOffset < m.maxScrollOffset() {
 				m.scrollOffset++
@@ -184,6 +194,10 @@ func (m AppLogModel) View() string {
 }
 
 func (m AppLogModel) RenderPopup() string {
+	return m.animator.RenderFrame(m.renderFullPopup())
+}
+
+func (m AppLogModel) renderFullPopup() string {
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Error))
 	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
 	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Detail.ValueFg))

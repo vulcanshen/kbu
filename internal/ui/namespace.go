@@ -11,33 +11,40 @@ import (
 type NamespacePickerModel struct {
 	namespaces []string
 	cursor     int
-	active     bool
+	animator   PopupAnimator
 	theme      *theme.Theme
 }
 
 func NewNamespacePickerModel(t *theme.Theme) NamespacePickerModel {
 	return NamespacePickerModel{
-		theme: t,
+		theme:    t,
+		animator: NewPopupAnimator("namespace", lipgloss.Color("#74c7ec")),
 	}
 }
 
-func (m *NamespacePickerModel) Open(namespaces []string) {
+func (m *NamespacePickerModel) Open(namespaces []string) tea.Cmd {
 	all := []string{"All Namespaces"}
 	m.namespaces = append(all, namespaces...)
 	m.cursor = 0
-	m.active = true
+	return m.animator.Open()
 }
 
-func (m *NamespacePickerModel) Close() {
-	m.active = false
+func (m *NamespacePickerModel) Close() tea.Cmd {
+	return m.animator.Close()
 }
 
-func (m *NamespacePickerModel) IsActive() bool {
-	return m.active
+func (m *NamespacePickerModel) IsActive() bool      { return m.animator.IsActive() }
+func (m *NamespacePickerModel) IsInteractive() bool { return m.animator.IsInteractive() }
+
+func (m *NamespacePickerModel) HandleTick(msg AnimTickMsg) tea.Cmd {
+	if msg.Target != m.animator.Target {
+		return nil
+	}
+	return m.animator.Tick()
 }
 
 func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd) {
-	if !m.active {
+	if !m.animator.IsInteractive() {
 		return m, nil
 	}
 
@@ -57,13 +64,12 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 			if m.cursor > 0 {
 				ns = m.namespaces[m.cursor]
 			}
-			m.active = false
-			return m, func() tea.Msg {
+			closeCmd := m.animator.Close()
+			return m, tea.Batch(closeCmd, func() tea.Msg {
 				return NamespaceChangedMsg{Namespace: ns}
-			}
+			})
 		case "esc", "n":
-			m.active = false
-			return m, nil
+			return m, m.animator.Close()
 		}
 	}
 
@@ -75,6 +81,10 @@ func (m NamespacePickerModel) View() string {
 }
 
 func (m NamespacePickerModel) RenderPopup() string {
+	return m.animator.RenderFrame(m.renderFullPopup())
+}
+
+func (m NamespacePickerModel) renderFullPopup() string {
 	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)

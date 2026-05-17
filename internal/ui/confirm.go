@@ -16,7 +16,7 @@ const (
 )
 
 type ConfirmModel struct {
-	active    bool
+	animator  PopupAnimator
 	action    ConfirmAction
 	message   string
 	detail    string
@@ -25,26 +25,37 @@ type ConfirmModel struct {
 }
 
 func NewConfirmModel(t *theme.Theme) ConfirmModel {
-	return ConfirmModel{theme: t}
+	return ConfirmModel{
+		theme:    t,
+		animator: NewPopupAnimator("confirm", lipgloss.Color("#74c7ec")),
+	}
 }
 
-func (m *ConfirmModel) Show(action ConfirmAction, message, detail string, onConfirm tea.Cmd) {
-	m.active = true
+func (m *ConfirmModel) Show(action ConfirmAction, message, detail string, onConfirm tea.Cmd) tea.Cmd {
 	m.action = action
 	m.message = message
 	m.detail = detail
 	m.onConfirm = onConfirm
+	return m.animator.Open()
 }
 
-func (m *ConfirmModel) Close() {
-	m.active = false
+func (m *ConfirmModel) Close() tea.Cmd {
 	m.onConfirm = nil
+	return m.animator.Close()
 }
 
-func (m ConfirmModel) IsActive() bool { return m.active }
+func (m ConfirmModel) IsActive() bool      { return m.animator.IsActive() }
+func (m ConfirmModel) IsInteractive() bool { return m.animator.IsInteractive() }
+
+func (m *ConfirmModel) HandleTick(msg AnimTickMsg) tea.Cmd {
+	if msg.Target != m.animator.Target {
+		return nil
+	}
+	return m.animator.Tick()
+}
 
 func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
-	if !m.active {
+	if !m.animator.IsInteractive() {
 		return m, nil
 	}
 	switch msg := msg.(type) {
@@ -52,13 +63,12 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 		switch msg.String() {
 		case "enter", "y":
 			cmd := m.onConfirm
-			m.active = false
 			m.onConfirm = nil
-			return m, cmd
+			closeCmd := m.animator.Close()
+			return m, tea.Batch(cmd, closeCmd)
 		case "esc", "n", "q":
-			m.active = false
 			m.onConfirm = nil
-			return m, nil
+			return m, m.animator.Close()
 		}
 	}
 	return m, nil
@@ -69,6 +79,10 @@ func (m ConfirmModel) View() string {
 }
 
 func (m ConfirmModel) RenderPopup() string {
+	return m.animator.RenderFrame(m.renderFullPopup())
+}
+
+func (m ConfirmModel) renderFullPopup() string {
 	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)

@@ -10,7 +10,7 @@ import (
 
 // HelpModel is the Bubble Tea model for the help overlay.
 type HelpModel struct {
-	active       bool
+	animator     PopupAnimator
 	width        int
 	height       int
 	theme        *theme.Theme
@@ -20,21 +20,36 @@ type HelpModel struct {
 // NewHelpModel creates a new help model.
 func NewHelpModel(t *theme.Theme) HelpModel {
 	return HelpModel{
-		theme: t,
+		theme:    t,
+		animator: NewPopupAnimator("help", lipgloss.Color("#74c7ec")),
 	}
 }
 
-// IsActive returns whether the help overlay is visible.
+// IsActive returns whether the help overlay is visible (including animations).
 func (m HelpModel) IsActive() bool {
-	return m.active
+	return m.animator.IsActive()
 }
 
-// Toggle switches the help overlay on or off.
-func (m *HelpModel) Toggle() {
-	m.active = !m.active
-	if m.active {
-		m.scrollOffset = 0
+// IsInteractive returns whether the help overlay should accept input.
+func (m HelpModel) IsInteractive() bool {
+	return m.animator.IsInteractive()
+}
+
+// Toggle switches the help overlay on or off, returning the animation tick cmd.
+func (m *HelpModel) Toggle() tea.Cmd {
+	if m.animator.IsActive() {
+		return m.animator.Close()
 	}
+	m.scrollOffset = 0
+	return m.animator.Open()
+}
+
+// HandleTick processes an animation tick. Returns a new tick cmd if animation continues.
+func (m *HelpModel) HandleTick(msg AnimTickMsg) tea.Cmd {
+	if msg.Target != m.animator.Target {
+		return nil
+	}
+	return m.animator.Tick()
 }
 
 // SetSize sets the overlay dimensions.
@@ -45,7 +60,7 @@ func (m *HelpModel) SetSize(width, height int) {
 
 // Update handles key events for the help overlay.
 func (m HelpModel) Update(msg tea.Msg) (HelpModel, tea.Cmd) {
-	if !m.active {
+	if !m.animator.IsInteractive() {
 		return m, nil
 	}
 
@@ -53,8 +68,7 @@ func (m HelpModel) Update(msg tea.Msg) (HelpModel, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc", "q", "?":
-			m.active = false
-			return m, nil
+			return m, m.animator.Close()
 		case "j", "down":
 			content := m.helpContent()
 			maxOffset := len(content) - m.contentHeight()
@@ -86,7 +100,7 @@ func (m HelpModel) contentHeight() int {
 
 // View renders the help overlay as a full-screen placement (legacy).
 func (m HelpModel) View() string {
-	if !m.active {
+	if !m.animator.IsActive() {
 		return ""
 	}
 	popup := m.RenderPopup()
@@ -95,8 +109,13 @@ func (m HelpModel) View() string {
 		popup)
 }
 
-// RenderPopup returns the help box styled like other panels.
+// RenderPopup returns the help box (animated based on current animator state).
 func (m HelpModel) RenderPopup() string {
+	return m.animator.RenderFrame(m.renderFullPopup())
+}
+
+// renderFullPopup builds the complete popup without animation.
+func (m HelpModel) renderFullPopup() string {
 	content := m.helpContent()
 
 	boxWidth := 46

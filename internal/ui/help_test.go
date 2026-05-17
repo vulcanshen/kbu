@@ -34,12 +34,14 @@ func TestHelpModel_Toggle(t *testing.T) {
 
 	// Toggle on.
 	m.Toggle()
+	m.animator.Finalize()
 	if !m.IsActive() {
 		t.Error("expected help to be active after toggle")
 	}
 
 	// Toggle off.
 	m.Toggle()
+	m.animator.Finalize()
 	if m.IsActive() {
 		t.Error("expected help to be inactive after second toggle")
 	}
@@ -47,9 +49,11 @@ func TestHelpModel_Toggle(t *testing.T) {
 
 func TestHelpModel_CloseWithEsc(t *testing.T) {
 	m := newTestHelp()
-	m.Toggle() // activate
+	m.Toggle()
+	m.animator.Finalize()
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m.animator.Finalize()
 	if m.IsActive() {
 		t.Error("expected help to be inactive after Esc")
 	}
@@ -57,9 +61,11 @@ func TestHelpModel_CloseWithEsc(t *testing.T) {
 
 func TestHelpModel_CloseWithQ(t *testing.T) {
 	m := newTestHelp()
-	m.Toggle() // activate
+	m.Toggle()
+	m.animator.Finalize()
 
 	m, _ = m.Update(keyMsg('q'))
+	m.animator.Finalize()
 	if m.IsActive() {
 		t.Error("expected help to be inactive after q")
 	}
@@ -67,9 +73,11 @@ func TestHelpModel_CloseWithQ(t *testing.T) {
 
 func TestHelpModel_CloseWithQuestionMark(t *testing.T) {
 	m := newTestHelp()
-	m.Toggle() // activate
+	m.Toggle()
+	m.animator.Finalize()
 
 	m, _ = m.Update(keyMsg('?'))
+	m.animator.Finalize()
 	if m.IsActive() {
 		t.Error("expected help to be inactive after ?")
 	}
@@ -78,6 +86,7 @@ func TestHelpModel_CloseWithQuestionMark(t *testing.T) {
 func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 	m := newTestHelp()
 	m.Toggle()
+	m.animator.Finalize()
 
 	view := m.View()
 
@@ -113,6 +122,7 @@ func TestHelpModel_Scroll(t *testing.T) {
 	m := newTestHelp()
 	m.SetSize(80, 10) // Small height to force scrolling
 	m.Toggle()
+	m.animator.Finalize()
 
 	// Initial scroll offset should be 0.
 	if m.scrollOffset != 0 {
@@ -142,6 +152,7 @@ func TestHelpModel_ScrollResetOnToggle(t *testing.T) {
 	m := newTestHelp()
 	m.SetSize(80, 10)
 	m.Toggle()
+	m.animator.Finalize()
 
 	// Scroll down.
 	m, _ = m.Update(keyMsg('j'))
@@ -152,7 +163,9 @@ func TestHelpModel_ScrollResetOnToggle(t *testing.T) {
 
 	// Close and reopen — scroll should reset.
 	m.Toggle() // close
+	m.animator.Finalize()
 	m.Toggle() // reopen
+	m.animator.Finalize()
 	if m.scrollOffset != 0 {
 		t.Errorf("expected scrollOffset=0 after reopen, got %d", m.scrollOffset)
 	}
