@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -1095,6 +1096,11 @@ func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 		args = append(args, "-n", namespace)
 	}
 	c := exec.Command("kubectl", args...)
+	// Suppress kubectl's own stdout/stderr (e.g. "Edit cancelled, no changes
+	// made.") — vim writes directly to the TTY and is unaffected. Errors are
+	// surfaced via the err callback parameter instead.
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return EditDoneMsg{}
 	})
