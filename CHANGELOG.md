@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.3] - 2026-05-17
+
+### Added
+- Open/close animation for all overlay popups (horizontal line expanding then vertical reveal; reversed on close)
+- Hidden km8 logo easter egg — press `K` to show a centered pixel-art logo, `Esc`/`q` to dismiss
+- Navigation hotkey hints (`j/k scroll`, `u/d page`, `gg/G top/bot`) added to status line for all panels
+- `/ search` hint added to Panel 3 (Detail)
+
+### Changed
+- Status line redesigned: removed panel numbers (`[1]/[2]/[3]`), separators (`|`), and colons; keys now styled in bold sapphire with dim descriptions
+- Status line auto-wraps to a second row when hints exceed terminal width (drops trailing hints if still too narrow); panel heights adjust accordingly
+- Confirm popup width now adapts to content (capped at 70% of screen); long detail strings (e.g. `kubectl exec` commands) word-wrap inside the popup
+
+### Fixed
+- Confirm popup right-edge padding when content nearly fills the box
+
 ## [v1.0.2] - 2026-05-16
 
 ### Changed
