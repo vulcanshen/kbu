@@ -197,10 +197,7 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case tea.KeyEscape:
 		if m.searchQuery != "" {
 			m.searchQuery = ""
-			newVisible := m.visibleItems()
-			if m.cursor >= len(newVisible) && len(newVisible) > 0 {
-				m.cursor = m.firstResourceIndex(newVisible)
-			}
+			m.restoreCursorToSelected()
 			return m, nil
 		}
 	}
@@ -213,10 +210,7 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case msg.Type == tea.KeyEscape:
 		m.searching = false
 		m.searchQuery = ""
-				visible := m.visibleItems()
-		if m.cursor >= len(visible) && len(visible) > 0 {
-			m.cursor = m.firstResourceIndex(visible)
-		}
+		m.restoreCursorToSelected()
 		return m, nil
 	case msg.Type == tea.KeyEnter:
 		m.searching = false
@@ -242,6 +236,23 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// restoreCursorToSelected finds m.selected in the current visible list and
+// moves the cursor to it. Falls back to the first resource if not found.
+func (m *SidebarModel) restoreCursorToSelected() {
+	visible := m.visibleItems()
+	for i, item := range visible {
+		if !item.isCategory && item.resourceType == m.selected {
+			m.cursor = i
+			m.ensureCursorVisible()
+			return
+		}
+	}
+	if len(visible) > 0 {
+		m.cursor = m.firstResourceIndex(visible)
+		m.ensureCursorVisible()
+	}
 }
 
 func (m *SidebarModel) resetCursorToFirstMatch() {

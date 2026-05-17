@@ -102,6 +102,12 @@ func (w *Watcher) Errors() <-chan WatchErrMsg {
 	return w.errors
 }
 
+// Channels returns both channels atomically, preventing a TOCTOU race where
+// Start() replaces one channel between two separate Updates()/Errors() calls.
+func (w *Watcher) Channels() (<-chan WatchMsg, <-chan WatchErrMsg) {
+	return w.updates, w.errors
+}
+
 func (w *Watcher) run(ctx context.Context, rt ResourceType, namespace string) {
 	items, err := FetchResources(ctx, w.clientset, rt, namespace)
 	if err != nil {

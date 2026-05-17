@@ -1115,11 +1115,12 @@ func deleteResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 }
 
 func waitForWatchUpdate(w *k8s.Watcher, rt k8s.ResourceType) tea.Cmd {
+	updates, errors := w.Channels()
 	return func() tea.Msg {
 		select {
-		case msg := <-w.Updates():
+		case msg := <-updates:
 			return ResourceDataMsg{Type: rt, Items: msg.Items}
-		case errMsg := <-w.Errors():
+		case errMsg := <-errors:
 			return ResourceErrorMsg{Err: errMsg.Err}
 		}
 	}

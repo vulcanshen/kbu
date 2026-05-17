@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/go-logr/logr"
 	"k8s.io/klog/v2"
 
 	"github.com/vulcanshen/km8/internal/config"
@@ -22,20 +24,11 @@ func main() {
 		fmt.Println("km8 " + Version)
 		return
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			path := config.WriteCrashLog(r)
-			fmt.Fprintf(os.Stderr, "km8 crashed: %v\n", r)
-			if path != "" {
-				fmt.Fprintf(os.Stderr, "crash log: %s\n", path)
-			}
-			os.Exit(1)
-		}
-	}()
-
 	// Suppress k8s client-go / klog output that would corrupt the TUI.
+	// logr.Discard() is a true no-op; klog.NewKlogr() would route back through
+	// klog itself and risk infinite recursion on certain error paths.
 	klog.SetOutput(io.Discard)
-	klog.SetLogger(klog.NewKlogr().V(100)) // effectively disable all logging
+	klog.SetLogger(logr.Discard())
 	log.SetOutput(io.Discard)
 
 	cfg, err := config.Load()
@@ -68,6 +61,17 @@ func main() {
 	)
 
 	if _, err := p.Run(); err != nil {
+		// bubbletea catches panics, restores the terminal, then returns
+		// tea.ErrProgramPanic. Handle it separately for a clear crash message.
+		if errors.Is(err, tea.ErrProgramPanic) {
+			path := config.WriteCrashLog(err)
+			fmt.Fprintf(os.Stderr, "\n\x1b[31;1mkm8 crashed!\x1b[0m\n")
+			fmt.Fprintf(os.Stderr, "panic: %v\n", err)
+			if path != "" {
+				fmt.Fprintf(os.Stderr, "crash log: %s\n", path)
+			}
+			os.Exit(1)
+		}
 		path := config.WriteCrashLog(err)
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		if path != "" {
