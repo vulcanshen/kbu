@@ -90,6 +90,8 @@ func newSidebarFromRegistry(t *theme.Theme, reg *k8s.Registry) SidebarModel {
 		}
 	}
 
+	m.clampCursor()
+
 	return m
 }
 
@@ -112,6 +114,7 @@ func (m *SidebarModel) RefreshCategories(reg *k8s.Registry) {
 	}
 	m.categories = categories
 	m.standalone = nil
+	m.clampCursor()
 }
 
 // Init implements tea.Model.
@@ -197,10 +200,7 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case tea.KeyEscape:
 		if m.searchQuery != "" {
 			m.searchQuery = ""
-			newVisible := m.visibleItems()
-			if m.cursor >= len(newVisible) && len(newVisible) > 0 {
-				m.cursor = m.firstResourceIndex(newVisible)
-			}
+			m.clampCursor()
 			return m, nil
 		}
 	}
@@ -213,19 +213,17 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case msg.Type == tea.KeyEscape:
 		m.searching = false
 		m.searchQuery = ""
-				visible := m.visibleItems()
-		if m.cursor >= len(visible) && len(visible) > 0 {
-			m.cursor = m.firstResourceIndex(visible)
-		}
+		m.clampCursor()
 		return m, nil
 	case msg.Type == tea.KeyEnter:
 		m.searching = false
-
 		return m, nil
 	case msg.Type == tea.KeyBackspace:
 		if len(m.searchQuery) > 0 {
 			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 			m.resetCursorToFirstMatch()
+		} else {
+			m.clampCursor()
 		}
 		return m, nil
 	case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && string(msg.Runes) == "j"):
@@ -249,11 +247,51 @@ func (m *SidebarModel) resetCursorToFirstMatch() {
 	for i, item := range visible {
 		if !item.isCategory {
 			m.cursor = i
-
 			m.selected = item.resourceType
+			m.ensureCursorVisible()
 			return
 		}
 	}
+	m.clampCursor()
+}
+
+func (m *SidebarModel) clampCursor() {
+	visible := m.visibleItems()
+	if len(visible) == 0 {
+		m.cursor = 0
+		m.scrollOffset = 0
+		return
+	}
+	if m.cursor >= len(visible) {
+		m.cursor = len(visible) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	// If cursor landed on a category, move it to the nearest resource
+	if visible[m.cursor].isCategory {
+		// Try moving down (start at cursor+1; cursor is already known to be a category)
+		for i := m.cursor + 1; i < len(visible); i++ {
+			if !visible[i].isCategory {
+				m.cursor = i
+				m.selected = visible[i].resourceType
+				m.ensureCursorVisible()
+				return
+			}
+		}
+		// Try moving up
+		for i := m.cursor; i >= 0; i-- {
+			if !visible[i].isCategory {
+				m.cursor = i
+				m.selected = visible[i].resourceType
+				m.ensureCursorVisible()
+				return
+			}
+		}
+	} else {
+		m.selected = visible[m.cursor].resourceType
+	}
+	m.ensureCursorVisible()
 }
 
 func (m SidebarModel) handleMouse(msg tea.MouseMsg) (SidebarModel, tea.Cmd) {
@@ -262,6 +300,14 @@ func (m SidebarModel) handleMouse(msg tea.MouseMsg) (SidebarModel, tea.Cmd) {
 
 // moveDown moves the cursor to the next resource item, skipping categories.
 func (m SidebarModel) moveDown(visible []visibleItem) (SidebarModel, tea.Cmd) {
+	if len(visible) == 0 {
+		return m, nil
+	}
+	if m.cursor >= len(visible) {
+		m.clampCursor()
+		visible = m.visibleItems()
+	}
+
 	next := m.cursor + 1
 	for next < len(visible) && visible[next].isCategory {
 		next++
@@ -279,6 +325,14 @@ func (m SidebarModel) moveDown(visible []visibleItem) (SidebarModel, tea.Cmd) {
 
 // moveUp moves the cursor to the previous resource item, skipping categories.
 func (m SidebarModel) moveUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
+	if len(visible) == 0 {
+		return m, nil
+	}
+	if m.cursor >= len(visible) {
+		m.clampCursor()
+		visible = m.visibleItems()
+	}
+
 	prev := m.cursor - 1
 	for prev >= 0 && visible[prev].isCategory {
 		prev--
@@ -293,7 +347,6 @@ func (m SidebarModel) moveUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	}
 	return m, nil
 }
-
 
 func (m SidebarModel) pageDown(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	half := m.viewportHeight() / 2
@@ -481,7 +534,7 @@ func (m *SidebarModel) ensureCursorVisible() {
 		m.scrollOffset = m.cursor
 		if m.scrollOffset > 0 {
 			visible := m.visibleItems()
-			if m.scrollOffset-1 >= 0 && visible[m.scrollOffset-1].isCategory {
+			if m.scrollOffset-1 >= 0 && m.scrollOffset-1 < len(visible) && visible[m.scrollOffset-1].isCategory {
 				m.scrollOffset--
 			}
 		}

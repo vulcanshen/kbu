@@ -7,6 +7,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/vulcanshen/km8/internal/config"
 )
 
 // LogLine represents a single log line from a container.
@@ -87,6 +89,12 @@ func (ls *LogStreamer) Lines() <-chan LogLine {
 }
 
 func (ls *LogStreamer) streamContainer(ctx context.Context, podName, namespace, container string) {
+	defer func() {
+		if r := recover(); r != nil {
+			config.WriteCrashLog(r)
+		}
+	}()
+
 	tailLines := int64(100)
 	opts := &corev1.PodLogOptions{
 		Container: container,

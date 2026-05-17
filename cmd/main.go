@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/go-logr/logr"
 	"k8s.io/klog/v2"
 
 	"github.com/vulcanshen/km8/internal/config"
@@ -22,20 +24,14 @@ func main() {
 		fmt.Println("km8 " + Version)
 		return
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			path := config.WriteCrashLog(r)
-			fmt.Fprintf(os.Stderr, "km8 crashed: %v\n", r)
-			if path != "" {
-				fmt.Fprintf(os.Stderr, "crash log: %s\n", path)
-			}
-			os.Exit(1)
-		}
-	}()
 
 	// Suppress k8s client-go / klog output that would corrupt the TUI.
+	// We use klog.SetOutput(io.Discard) to ignore regular klog output.
+	// We use logr.Discard() to ignore structured logging from client-go.
+	// We MUST NOT use klog.SetLogger(klog.NewKlogr()) as it creates an infinite
+	// recursion if klog tries to log an error through its own logger.
 	klog.SetOutput(io.Discard)
-	klog.SetLogger(klog.NewKlogr().V(100)) // effectively disable all logging
+	klog.SetLogger(logr.Discard())
 	log.SetOutput(io.Discard)
 
 	cfg, err := config.Load()
@@ -68,6 +64,18 @@ func main() {
 	)
 
 	if _, err := p.Run(); err != nil {
+		// bubbletea catches panics internally, restores the terminal, and prints
+		// the stack trace itself. We handle ErrProgramPanic separately to write a
+		// crash log and show a clear user-facing message.
+		if errors.Is(err, tea.ErrProgramPanic) {
+			path := config.WriteCrashLog(err)
+			fmt.Fprintf(os.Stderr, "\n\x1b[31;1mkm8 crashed!\x1b[0m\n")
+			fmt.Fprintf(os.Stderr, "panic: %v\n", err)
+			if path != "" {
+				fmt.Fprintf(os.Stderr, "A copy of this crash log has been written to:\n  %s\n\n", path)
+			}
+			os.Exit(1)
+		}
 		path := config.WriteCrashLog(err)
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		if path != "" {

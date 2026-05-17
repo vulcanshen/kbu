@@ -7,6 +7,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/vulcanshen/km8/internal/config"
 )
 
 // WatchMsg is sent when the resource list has been updated.
@@ -46,20 +48,21 @@ func NewWatcher(clientset kubernetes.Interface) *Watcher {
 func (w *Watcher) Start(rt ResourceType, namespace string) {
 	w.Stop()
 
-	// Close old channels to unblock any stale waitForWatchUpdate goroutines,
-	// then create fresh channels for the new watcher cycle.
-	close(w.updates)
-	close(w.errors)
+	w.mu.Lock()
+	// Create fresh channels for this new watcher cycle.
+	// We do NOT close the old ones because stale goroutines might still be
+	// trying to send to them, which would cause a panic.
 	w.updates = make(chan WatchMsg, 1)
 	w.errors = make(chan WatchErrMsg, 1)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	w.mu.Lock()
 	w.cancel = cancel
 	w.items = nil
+	updates := w.updates
+	errors := w.errors
 	w.mu.Unlock()
 
-	go w.run(ctx, rt, namespace)
+	go w.run(ctx, rt, namespace, updates, errors)
 }
 
 // Stop cancels the current watch.
@@ -94,60 +97,86 @@ func (w *Watcher) GetItem(index int) *ResourceItem {
 
 // Updates returns the channel for receiving watch updates.
 func (w *Watcher) Updates() <-chan WatchMsg {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.updates
 }
 
 // Errors returns the channel for receiving watch errors.
 func (w *Watcher) Errors() <-chan WatchErrMsg {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.errors
 }
 
-func (w *Watcher) run(ctx context.Context, rt ResourceType, namespace string) {
-	items, err := FetchResources(ctx, w.clientset, rt, namespace)
-	if err != nil {
-		select {
-		case w.errors <- WatchErrMsg{Err: fmt.Errorf("listing %s: %w", rt, err)}:
-		case <-ctx.Done():
+// Channels returns both the updates and errors channels atomically under a
+// single lock. Use this instead of calling Updates() and Errors() separately
+// when both are needed in a single select, to avoid a TOCTOU race where
+// Start() could replace the channels between the two separate calls.
+func (w *Watcher) Channels() (<-chan WatchMsg, <-chan WatchErrMsg) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.updates, w.errors
+}
+
+func (w *Watcher) run(ctx context.Context, rt ResourceType, namespace string, updates chan WatchMsg, errors chan WatchErrMsg) {
+	defer func() {
+		if r := recover(); r != nil {
+			config.WriteCrashLog(r)
 		}
-		return
-	}
-
-	w.mu.Lock()
-	w.items = items
-	w.mu.Unlock()
-
-	select {
-	case w.updates <- WatchMsg{Items: items}:
-	case <-ctx.Done():
-		return
-	}
-
-	watcher, err := w.startWatch(ctx, rt, namespace)
-	if err != nil {
-		select {
-		case w.errors <- WatchErrMsg{Err: fmt.Errorf("watching %s: %w", rt, err)}:
-		case <-ctx.Done():
-		}
-		return
-	}
-	defer watcher.Stop()
+	}()
 
 	for {
+		items, err := FetchResources(ctx, w.clientset, rt, namespace)
+		if err != nil {
+			select {
+			case errors <- WatchErrMsg{Err: fmt.Errorf("listing %s: %w", rt, err)}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		w.mu.Lock()
+		w.items = items
+		w.mu.Unlock()
+
 		select {
+		case updates <- WatchMsg{Items: items}:
 		case <-ctx.Done():
 			return
-		case event, ok := <-watcher.ResultChan():
-			if !ok {
-				// Watch closed, re-list and restart
-				w.run(ctx, rt, namespace)
-				return
+		}
+
+		watcher, err := w.startWatch(ctx, rt, namespace)
+		if err != nil {
+			select {
+			case errors <- WatchErrMsg{Err: fmt.Errorf("watching %s: %w", rt, err)}:
+			case <-ctx.Done():
 			}
-			w.handleEvent(ctx, event, rt, namespace)
+			return
+		}
+
+		// Process events until the watch channel closes or context is done.
+		// When the channel closes (normal K8s behaviour every 5-10 min), we
+		// loop back to re-list and re-watch instead of recursing.
+		watchClosed := false
+		for !watchClosed {
+			select {
+			case <-ctx.Done():
+				watcher.Stop()
+				return
+			case event, ok := <-watcher.ResultChan():
+				if !ok {
+					watcher.Stop()
+					watchClosed = true
+				} else {
+					w.handleEvent(ctx, event, rt, namespace, updates)
+				}
+			}
 		}
 	}
 }
 
-func (w *Watcher) handleEvent(ctx context.Context, event watch.Event, rt ResourceType, namespace string) {
+func (w *Watcher) handleEvent(ctx context.Context, event watch.Event, rt ResourceType, namespace string, updates chan WatchMsg) {
 	switch event.Type {
 	case watch.Added, watch.Modified, watch.Deleted:
 		// Re-fetch the full list for simplicity.
@@ -162,7 +191,7 @@ func (w *Watcher) handleEvent(ctx context.Context, event watch.Event, rt Resourc
 		w.mu.Unlock()
 
 		select {
-		case w.updates <- WatchMsg{Items: items}:
+		case updates <- WatchMsg{Items: items}:
 		case <-ctx.Done():
 		}
 
