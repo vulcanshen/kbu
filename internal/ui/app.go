@@ -129,6 +129,26 @@ func discoverCRDs(client *k8s.Client) tea.Cmd {
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	if tickMsg, ok := msg.(AnimTickMsg); ok {
+		var animCmds []tea.Cmd
+		if c := m.help.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.appLog.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.confirm.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.contextPicker.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.namespacePicker.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		return m, tea.Batch(animCmds...)
+	}
+
 	if m.confirm.IsActive() {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -218,12 +238,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "?":
 			m.help.SetSize(m.width, m.height)
-			m.help.Toggle()
-			return m, nil
+			return m, m.help.Toggle()
 		case "!":
 			m.appLog.SetSize(m.width, m.height)
-			m.appLog.Toggle()
-			return m, nil
+			return m, m.appLog.Toggle()
 		case "1":
 			m.detailExpanded = false
 			m.setPanel(SidebarPanel)
@@ -287,9 +305,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
 					detail := fmt.Sprintf("kubectl delete %s %s -n %s", m.currentResource.KubectlName(), item.Name, item.Namespace)
-					m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
+					return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
 						deleteResource(m.currentResource, item.Name, item.Namespace))
-					return m, nil
 				}
 			}
 		case "+":
@@ -421,8 +438,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case NamespaceListMsg:
-		m.namespacePicker.Open(msg.Namespaces)
-		return m, nil
+		return m, m.namespacePicker.Open(msg.Namespaces)
 
 	case NamespaceChangedMsg:
 		ns := msg.Namespace
@@ -440,8 +456,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ContextListMsg:
-		m.contextPicker.Open(msg.Contexts, msg.Current)
-		return m, nil
+		return m, m.contextPicker.Open(msg.Contexts, msg.Current)
 
 	case ContextChangedMsg:
 		newClient, err := k8s.NewClient(msg.Context)
@@ -902,10 +917,10 @@ func (m *AppModel) execShell() tea.Cmd {
 	}
 
 	detail := fmt.Sprintf("kubectl exec -it %s -n %s -c %s", podName, namespace, container)
-	m.confirm.Show(ConfirmShellExec, "Exec into container?", detail,
+	showCmd := m.confirm.Show(ConfirmShellExec, "Exec into container?", detail,
 		shellExec(podName, namespace, container))
 	m.appLog.Info("exec shell: " + detail)
-	return nil
+	return showCmd
 }
 
 func shellExec(podName, namespace, container string) tea.Cmd {
