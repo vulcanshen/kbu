@@ -177,8 +177,11 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 	case msg.Type == tea.KeyEscape:
 		if m.searchQuery != "" {
 			m.pendingG = false
+			orig := m.OriginalIndex(m.cursor)
 			m.searchQuery = ""
 			m.filterRows()
+			m.cursor = orig
+			m.ensureCursorVisible()
 			return m, nil
 		}
 
@@ -193,8 +196,11 @@ func (m TableModel) handleSearchKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 	switch {
 	case msg.Type == tea.KeyEscape:
 		m.searching = false
+		orig := m.OriginalIndex(m.cursor)
 		m.searchQuery = ""
 		m.filterRows()
+		m.cursor = orig
+		m.ensureCursorVisible()
 		return m, nil
 
 	case msg.Type == tea.KeyEnter:
