@@ -53,7 +53,7 @@ func main() {
 		client.SetNamespace(cfg.DefaultNamespace)
 	}
 
-	app := ui.NewAppModel(t, client)
+	app := ui.NewAppModel(t, client, cfg.Editor)
 
 	p := tea.NewProgram(app,
 		tea.WithAltScreen(),

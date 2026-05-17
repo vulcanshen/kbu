@@ -151,7 +151,7 @@ Logs (crash and audit) are written to the `logs/` subdirectory of the config dir
 ```yaml
 default_context: ""      # kubeconfig context (default: current-context)
 default_namespace: ""    # namespace filter (default: all namespaces)
-editor: ""               # editor override (default: $EDITOR)
+editor: ""               # editor override (default: $VISUAL → $EDITOR → vi)
 ```
 
 ### theme.yaml

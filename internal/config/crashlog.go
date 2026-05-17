@@ -21,16 +21,21 @@ func WriteCrashLog(panicVal interface{}) string {
 		return ""
 	}
 
-	ts := time.Now().Format("2006-01-02_15-04-05")
-	path := filepath.Join(dir, fmt.Sprintf("crash-%s.log", ts))
+	date := time.Now().Format("2006-01-02")
+	path := filepath.Join(dir, fmt.Sprintf("crash-%s.log", date))
 
 	buf := make([]byte, 8192)
 	n := runtime.Stack(buf, false)
 
-	content := fmt.Sprintf("km8 crash at %s\n\npanic: %v\n\n%s\n",
+	content := fmt.Sprintf("---\nkm8 crash at %s\n\npanic: %v\n\n%s\n",
 		time.Now().Format(time.RFC3339), panicVal, buf[:n])
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if _, err := fmt.Fprint(f, content); err != nil {
 		return ""
 	}
 	return path

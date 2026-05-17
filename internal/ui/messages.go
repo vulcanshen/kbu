@@ -75,11 +75,43 @@ type EditResourceMsg struct {
 	Namespace    string
 }
 
-// EditDoneMsg is sent when kubectl edit finishes.
+// EditDoneMsg is sent when the edit flow finishes (editor closed + apply done).
 type EditDoneMsg struct {
 	Resource  string // e.g. "pods/my-pod"
 	Namespace string
+	Output    string // kubectl apply output
 }
+
+// editTempReadyMsg is sent after the YAML has been fetched and written to a temp file.
+type editTempReadyMsg struct {
+	path      string
+	original  []byte // original YAML bytes for change detection
+	resource  string
+	namespace string
+}
+
+// editEditorDoneMsg is sent after the editor exits cleanly.
+type editEditorDoneMsg struct {
+	path      string
+	original  []byte
+	resource  string
+	namespace string
+}
+
+// editEditorCrashedMsg is sent when the editor exits with a non-zero code.
+type editEditorCrashedMsg struct {
+	path string
+}
+
+// editApplyFailedMsg is sent when kubectl apply returns a non-zero exit code.
+type editApplyFailedMsg struct {
+	resource  string
+	namespace string
+	output    string
+}
+
+// successNoticeClearMsg clears the success badge in the status bar.
+type successNoticeClearMsg struct{}
 
 // DeleteDoneMsg is sent when kubectl delete finishes.
 type DeleteDoneMsg struct {
