@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -48,6 +50,8 @@ type AppModel struct {
 	width           int
 	height          int
 	theme           *theme.Theme
+	cfgEditor       string
+	successNotice   string
 	k8sClient       *k8s.Client
 	watcher         *k8s.Watcher
 	logStreamer      *k8s.LogStreamer
@@ -71,7 +75,7 @@ type drillDownEntry struct {
 	parentItems []k8s.ResourceItem
 }
 
-func NewAppModel(t *theme.Theme, client *k8s.Client) AppModel {
+func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel {
 	info := client.GetClusterInfo()
 
 	sidebar := NewSidebarModel(t)
@@ -97,6 +101,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client) AppModel {
 		splash:          NewSplashModel(),
 		activePanel:     SidebarPanel,
 		theme:           t,
+		cfgEditor:       cfgEditor,
 		k8sClient:       client,
 		watcher:         watcher,
 		logStreamer:      logStreamer,
@@ -532,9 +537,63 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case editTempReadyMsg:
+		editorCmd := resolveEditor(m.cfgEditor)
+		parts := strings.Fields(editorCmd)
+		c := exec.Command(parts[0], append(parts[1:], msg.path)...)
+		return m, tea.ExecProcess(c, func(err error) tea.Msg {
+			if err != nil {
+				return editEditorCrashedMsg{path: msg.path}
+			}
+			return editEditorDoneMsg{path: msg.path, original: msg.original, resource: msg.resource, namespace: msg.namespace}
+		})
+
+	case editEditorCrashedMsg:
+		os.Remove(msg.path)
+		m.appLog.Warn("editor exited with error — edit cancelled")
+		return m, nil
+
+	case editEditorDoneMsg:
+		return m, func() tea.Msg {
+			defer os.Remove(msg.path)
+			edited, err := os.ReadFile(msg.path)
+			if err != nil || bytes.Equal(edited, msg.original) {
+				return EditDoneMsg{Resource: msg.resource, Namespace: msg.namespace, Output: "no changes"}
+			}
+			var buf bytes.Buffer
+			c := exec.Command("kubectl", "apply", "-f", msg.path)
+			c.Stdout = &buf
+			c.Stderr = &buf
+			applyErr := c.Run()
+			output := strings.TrimSpace(buf.String())
+			if applyErr != nil {
+				return editApplyFailedMsg{resource: msg.resource, namespace: msg.namespace, output: output}
+			}
+			return EditDoneMsg{Resource: msg.resource, Namespace: msg.namespace, Output: output}
+		}
+
+	case editApplyFailedMsg:
+		m.appLog.Warn("kubectl apply failed: " + msg.output)
+		config.WriteAuditEntry("edit", msg.resource, msg.namespace, "FAILED: "+msg.output) //nolint
+		return m, func() tea.Msg {
+			return ResourceErrorMsg{Err: fmt.Errorf("apply failed: %s", msg.output)}
+		}
+
 	case EditDoneMsg:
-		m.appLog.Info("kubectl edit: " + msg.Resource)
-		config.WriteAuditEntry("edit", msg.Resource, msg.Namespace, "") //nolint
+		if msg.Output == "no changes" {
+			m.appLog.Info("edit: " + msg.Resource + " — no changes")
+		} else {
+			m.appLog.Success("edit: " + msg.Resource + " — " + msg.Output)
+			m.successNotice = "applied"
+			cmds = append(cmds, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+				return successNoticeClearMsg{}
+			}))
+		}
+		config.WriteAuditEntry("edit", msg.Resource, msg.Namespace, msg.Output) //nolint
+		return m, tea.Batch(cmds...)
+
+	case successNoticeClearMsg:
+		m.successNotice = ""
 		return m, nil
 
 	case DeleteDoneMsg:
@@ -587,8 +646,8 @@ func (m AppModel) View() string {
 		return m.splash.Render(m.width, m.height)
 	}
 
-	statusBar := m.statusBar.ViewWithErrors(m.appLog.UnreadErrorCount())
-	statusLine := m.statusLine.ViewWithError(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage())
+	statusBar := m.statusBar.ViewWithBadge(m.appLog.UnreadErrorCount(), m.successNotice)
+	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage(), "")
 
 	var mainView string
 
@@ -1096,18 +1155,48 @@ func fetchContexts(client *k8s.Client) tea.Cmd {
 	}
 }
 
-func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
-	args := []string{"edit", rt.KubectlName(), name}
-	if namespace != "" {
-		args = append(args, "-n", namespace)
-	}
-	c := exec.Command("kubectl", args...)
-	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return EditDoneMsg{
-			Resource:  string(rt.KubectlName()) + "/" + name,
-			Namespace: namespace,
+// editResource fetches the resource YAML and writes it to a temp file.
+// The editor is opened in the next step (editTempReadyMsg handler).
+// resolveEditor returns the editor to use, in priority order:
+// config.Editor → $VISUAL → $EDITOR → platform default (vi / notepad).
+func resolveEditor(cfgEditor string) string {
+	for _, v := range []string{cfgEditor, os.Getenv("VISUAL"), os.Getenv("EDITOR")} {
+		if v != "" {
+			return v
 		}
-	})
+	}
+	if runtime.GOOS == "windows" {
+		return "notepad"
+	}
+	return "vi"
+}
+
+func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
+	return func() tea.Msg {
+		args := []string{"get", rt.KubectlName(), name, "-o", "yaml"}
+		if namespace != "" {
+			args = append(args, "-n", namespace)
+		}
+		out, err := exec.Command("kubectl", args...).Output()
+		if err != nil {
+			return ResourceErrorMsg{Err: fmt.Errorf("kubectl get: %w", err)}
+		}
+		f, err := os.CreateTemp("", "km8-edit-*.yaml")
+		if err != nil {
+			return ResourceErrorMsg{Err: fmt.Errorf("create temp file: %w", err)}
+		}
+		defer f.Close()
+		if _, err := f.Write(out); err != nil {
+			os.Remove(f.Name())
+			return ResourceErrorMsg{Err: fmt.Errorf("write temp file: %w", err)}
+		}
+		return editTempReadyMsg{
+			path:      f.Name(),
+			original:  out,
+			resource:  rt.KubectlName() + "/" + name,
+			namespace: namespace,
+		}
+	}
 }
 
 func deleteResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
