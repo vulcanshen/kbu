@@ -44,23 +44,30 @@ func (m StatusBarModel) View() string {
 }
 
 func (m StatusBarModel) ViewWithErrors(unreadErrors int) string {
+	return m.ViewWithBadge(unreadErrors, "")
+}
+
+func (m StatusBarModel) ViewWithBadge(unreadErrors int, successNotice string) string {
 	ctx := m.theme.StatusBarContextStyle().Render(fmt.Sprintf("ctx: %s", m.clusterInfo.ContextName))
 	cluster := m.theme.StatusBarClusterStyle().Render(fmt.Sprintf("cluster: %s", m.clusterInfo.ClusterName))
 	ns := m.theme.StatusBarNamespaceStyle().Render(fmt.Sprintf("ns: %s", m.namespace))
 
 	left := fmt.Sprintf(" %s  %s  %s", ctx, cluster, ns)
-
 	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
+
+	badgeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Bold(true)
 
 	if unreadErrors > 0 {
 		badgeText := fmt.Sprintf(" ! %d errors ", unreadErrors)
-		badgeWidth := len(badgeText)
-		leftPart := barStyle.Width(m.width - badgeWidth).Render(left)
-		badgePart := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#1e1e2e")).
-			Background(lipgloss.Color(m.theme.Status.Error)).
-			Bold(true).
-			Render(badgeText)
+		badgePart := badgeStyle.Background(lipgloss.Color(m.theme.Status.Error)).Render(badgeText)
+		leftPart := barStyle.Width(m.width - lipgloss.Width(badgePart)).Render(left)
+		return leftPart + badgePart
+	}
+
+	if successNotice != "" {
+		badgeText := fmt.Sprintf(" ✓ %s ", successNotice)
+		badgePart := badgeStyle.Background(lipgloss.Color(m.theme.Status.Running)).Render(badgeText)
+		leftPart := barStyle.Width(m.width - lipgloss.Width(badgePart)).Render(left)
 		return leftPart + badgePart
 	}
 

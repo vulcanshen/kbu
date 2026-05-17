@@ -166,30 +166,44 @@ func (m StatusLineModel) View() string {
 }
 
 func (m StatusLineModel) ViewWithError(unreadErrors int, lastError string) string {
+	return m.ViewWithNotice(unreadErrors, lastError, "")
+}
+
+func (m StatusLineModel) ViewWithNotice(unreadErrors int, lastError, lastSuccess string) string {
 	lines := m.layoutLines()
 	barStyle := m.theme.StatusLineStyle().Padding(0, 0)
 
-	// Inline error only when status line is a single row (to keep multi-row clean).
-	if len(lines) == 1 && unreadErrors > 0 && lastError != "" {
-		hints := lines[0]
-		errText := lastError
-		hintsWidth := lipgloss.Width(hints)
-		maxErrLen := m.width - hintsWidth - 4
-		if maxErrLen > 10 {
-			if len(errText) > maxErrLen {
-				errText = errText[:maxErrLen-1] + "…"
-			}
-			leftPart := barStyle.Width(hintsWidth + 2).Render(hints)
-			errPart := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(m.theme.Status.Error)).
-				Width(m.width - hintsWidth - 2).
-				Render(" " + errText)
-			return leftPart + errPart
-		}
+	// Error takes priority over success.
+	noticeText := ""
+	noticeColor := ""
+	if unreadErrors > 0 && lastError != "" {
+		noticeText = lastError
+		noticeColor = m.theme.Status.Error
+	} else if lastSuccess != "" {
+		noticeText = lastSuccess
+		noticeColor = m.theme.Status.Running
 	}
 
 	styled := make([]string, 0, len(lines))
-	for _, line := range lines {
+	for i, line := range lines {
+		isLast := i == len(lines)-1
+		if isLast && noticeText != "" {
+			lineW := lipgloss.Width(line)
+			maxLen := m.width - lineW - 4
+			if maxLen > 10 {
+				text := noticeText
+				if lipgloss.Width(text) > maxLen {
+					text = text[:maxLen-1] + "…"
+				}
+				leftPart := barStyle.Width(lineW + 2).Render(line)
+				noticePart := lipgloss.NewStyle().
+					Foreground(lipgloss.Color(noticeColor)).
+					Width(m.width - lineW - 2).
+					Render(" " + text)
+				styled = append(styled, leftPart+noticePart)
+				continue
+			}
+		}
 		styled = append(styled, barStyle.Width(m.width).Render(line))
 	}
 	return strings.Join(styled, "\n")
