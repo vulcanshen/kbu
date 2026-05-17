@@ -214,8 +214,8 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		return m, nil
 	case msg.Type == tea.KeyEnter:
 		m.searching = false
-
-		return m, nil
+		visible := m.visibleItems()
+		return m.activateResource(visible)
 	case msg.Type == tea.KeyBackspace:
 		if len(m.searchQuery) > 0 {
 			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
