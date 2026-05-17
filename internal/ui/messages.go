@@ -76,11 +76,18 @@ type EditResourceMsg struct {
 }
 
 // EditDoneMsg is sent when kubectl edit finishes.
-type EditDoneMsg struct{}
+type EditDoneMsg struct {
+	Resource  string // e.g. "pods/my-pod"
+	Namespace string
+	Output    string // combined stdout+stderr from kubectl
+}
 
 // DeleteDoneMsg is sent when kubectl delete finishes.
 type DeleteDoneMsg struct {
-	Name string
+	Name      string
+	Namespace string
+	Resource  string // e.g. "pods/my-pod"
+	Output    string
 }
 
 // DeleteErrMsg is sent when kubectl delete fails.
