@@ -214,5 +214,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{key: "!", desc: "App log"},
 		{key: "?", desc: "Toggle help"},
 		{key: "q / Esc", desc: "Quit / back"},
+		{isSection: true, text: "Easter Egg"},
+		{key: "K", desc: "Show logo"},
 	}
 }
