@@ -32,7 +32,8 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Theme system** -- drop a `theme.yaml` into config directory to override colors
 - **Help & App Log overlays** -- `?` / `!` popup on top of main UI
 - **Error notifications** -- status bar badge + status line message
-- **Crash logging** -- panics written to `~/.config/km8/logs/`
+- **Crash logging** -- panics written to the km8 log directory
+- **Audit logging** -- every `kubectl edit` and `kubectl delete` recorded to `audit-*.log`
 
 ## Installation
 
@@ -135,13 +136,15 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 
 ## Configuration
 
-Config files are in the OS-appropriate config directory:
+Config files are in the OS-appropriate config directory. Set `XDG_CONFIG_HOME` to override on any platform:
 
-| OS | Path |
+| OS | Default Path |
 |---|---|
 | Linux | `$XDG_CONFIG_HOME/km8/` or `~/.config/km8/` |
 | macOS | `~/Library/Application Support/km8/` |
 | Windows | `%APPDATA%/km8/` |
+
+Logs (crash and audit) are written to the `logs/` subdirectory of the config directory.
 
 ### config.yaml
 
