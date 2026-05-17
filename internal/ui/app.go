@@ -1102,9 +1102,6 @@ func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 		args = append(args, "-n", namespace)
 	}
 	c := exec.Command("kubectl", args...)
-	// Do NOT redirect stdout/stderr — vim needs a real TTY to render.
-	// kubectl's own messages (e.g. "Edit cancelled") will appear briefly
-	// before bubbletea restores the alt screen; this is an acceptable tradeoff.
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return EditDoneMsg{
 			Resource:  string(rt.KubectlName()) + "/" + name,
