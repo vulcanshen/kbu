@@ -1,9 +1,9 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -533,11 +533,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case EditDoneMsg:
-		m.appLog.Info("kubectl edit completed")
+		out := strings.TrimSpace(msg.Output)
+		if out == "" {
+			out = "completed"
+		}
+		m.appLog.Info("kubectl edit: " + out)
+		config.WriteAuditEntry("edit", msg.Resource, msg.Namespace, msg.Output) //nolint
 		return m, nil
 
 	case DeleteDoneMsg:
-		m.appLog.Info("deleted " + msg.Name)
+		out := strings.TrimSpace(msg.Output)
+		if out == "" {
+			out = "deleted " + msg.Name
+		}
+		m.appLog.Info(out)
+		config.WriteAuditEntry("delete", msg.Resource, msg.Namespace, msg.Output) //nolint
 		return m, nil
 
 	case DeleteErrMsg:
@@ -1096,13 +1106,17 @@ func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 		args = append(args, "-n", namespace)
 	}
 	c := exec.Command("kubectl", args...)
-	// Suppress kubectl's own stdout/stderr (e.g. "Edit cancelled, no changes
-	// made.") — vim writes directly to the TTY and is unaffected. Errors are
-	// surfaced via the err callback parameter instead.
-	c.Stdout = io.Discard
-	c.Stderr = io.Discard
+	// Capture kubectl's stdout/stderr (e.g. "Edit cancelled, no changes made.")
+	// vim writes directly to the TTY and is unaffected by this redirection.
+	var buf bytes.Buffer
+	c.Stdout = &buf
+	c.Stderr = &buf
 	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return EditDoneMsg{}
+		return EditDoneMsg{
+			Resource:  string(rt.KubectlName()) + "/" + args[2],
+			Namespace: namespace,
+			Output:    buf.String(),
+		}
 	})
 }
 
@@ -1113,10 +1127,18 @@ func deleteResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 			args = append(args, "-n", namespace)
 		}
 		c := exec.Command("kubectl", args...)
+		var buf bytes.Buffer
+		c.Stdout = &buf
+		c.Stderr = &buf
 		if err := c.Run(); err != nil {
 			return DeleteErrMsg{Err: err}
 		}
-		return DeleteDoneMsg{Name: name}
+		return DeleteDoneMsg{
+			Name:      name,
+			Namespace: namespace,
+			Resource:  string(rt.KubectlName()) + "/" + name,
+			Output:    buf.String(),
+		}
 	}
 }
 
