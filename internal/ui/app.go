@@ -41,6 +41,7 @@ type AppModel struct {
 	help            HelpModel
 	appLog          AppLogModel
 	confirm         ConfirmModel
+	splash          SplashModel
 
 	activePanel     Panel
 	width           int
@@ -92,6 +93,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client) AppModel {
 		help:            NewHelpModel(t),
 		appLog:          NewAppLogModel(t),
 		confirm:         NewConfirmModel(t),
+		splash:          NewSplashModel(),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		k8sClient:       client,
@@ -128,6 +130,12 @@ func discoverCRDs(client *k8s.Client) tea.Cmd {
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	if m.splash.IsActive() {
+		var cmd tea.Cmd
+		m.splash, cmd = m.splash.Update(msg)
+		return m, cmd
+	}
 
 	if tickMsg, ok := msg.(AnimTickMsg); ok {
 		var animCmds []tea.Cmd
@@ -236,6 +244,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.watcher.Stop()
 			m.logStreamer.Stop()
 			return m, tea.Quit
+		case "K":
+			m.splash.Show()
+			return m, nil
 		case "?":
 			m.help.SetSize(m.width, m.height)
 			return m, m.help.Toggle()
@@ -565,13 +576,17 @@ func (m AppModel) View() string {
 		return "loading..."
 	}
 
+	if m.splash.IsActive() {
+		return m.splash.Render(m.width, m.height)
+	}
+
 	statusBar := m.statusBar.ViewWithErrors(m.appLog.UnreadErrorCount())
 	statusLine := m.statusLine.ViewWithError(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage())
 
 	var mainView string
 
 	if m.detailExpanded {
-		panelH := m.height - 2
+		panelH := m.height - 1 - m.statusLine.LineCount()
 		m.detail.SetSize(m.width-2, panelH-2)
 		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), m.width, panelH, true, m.theme, m.detail.ScrollInfo())
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, fullPanel, statusLine)
@@ -613,6 +628,7 @@ func (m AppModel) View() string {
 	}
 
 	if m.confirm.IsActive() {
+		m.confirm.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.confirm.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
@@ -649,7 +665,7 @@ func (m AppModel) panelSizes() (sw, rw, upperH, detailH int) {
 	}
 	rw = m.width - sw
 
-	totalH := m.height - 2 // status bar + status line
+	totalH := m.height - 1 - m.statusLine.LineCount() // status bar + status line(s)
 	if totalH < 6 {
 		totalH = 6
 	}
@@ -1130,4 +1146,40 @@ func waitForLogLine(ls *k8s.LogStreamer) tea.Cmd {
 		}
 		return LogLineMsg{Container: line.Container, Text: line.Text}
 	}
+}
+
+// wrapWords wraps s at word boundaries to fit within width. Words longer than
+// width are broken mid-word.
+func wrapWords(s string, width int) []string {
+	if width <= 0 || s == "" {
+		return []string{s}
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	var lines []string
+	var current string
+	for _, w := range words {
+		for len(w) > width {
+			if current != "" {
+				lines = append(lines, current)
+				current = ""
+			}
+			lines = append(lines, w[:width])
+			w = w[width:]
+		}
+		if current == "" {
+			current = w
+		} else if len(current)+1+len(w) <= width {
+			current += " " + w
+		} else {
+			lines = append(lines, current)
+			current = w
+		}
+	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	return lines
 }
