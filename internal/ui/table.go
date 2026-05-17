@@ -205,6 +205,11 @@ func (m TableModel) handleSearchKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 
 	case msg.Type == tea.KeyEnter:
 		m.searching = false
+		if len(m.rows) > 0 {
+			return m, func() tea.Msg {
+				return RowSelectedMsg{Index: m.OriginalIndex(m.cursor)}
+			}
+		}
 		return m, nil
 
 	case msg.Type == tea.KeyBackspace:
