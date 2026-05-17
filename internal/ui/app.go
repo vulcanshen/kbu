@@ -46,13 +46,15 @@ type AppModel struct {
 	confirm         ConfirmModel
 	splash          SplashModel
 
-	activePanel     Panel
-	width           int
-	height          int
-	theme           *theme.Theme
-	cfgEditor       string
-	successNotice   string
-	k8sClient       *k8s.Client
+	activePanel      Panel
+	width            int
+	height           int
+	theme            *theme.Theme
+	cfgEditor        string
+	editing          bool
+	successNotice    string
+	successNoticeID  int
+	k8sClient        *k8s.Client
 	watcher         *k8s.Watcher
 	logStreamer      *k8s.LogStreamer
 	currentResource k8s.ResourceType
@@ -305,10 +307,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			return m, fetchContexts(m.k8sClient)
 		case "e":
-			if m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
+			if !m.editing && m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
 				idx := m.table.SelectedRow()
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
+					m.editing = true
 					return m, editResource(m.currentResource, item.Name, item.Namespace)
 				}
 			}
@@ -548,7 +551,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return editEditorDoneMsg{path: msg.path, original: msg.original, resource: msg.resource, namespace: msg.namespace}
 		})
 
+	case editFetchFailedMsg:
+		m.editing = false
+		return m, func() tea.Msg { return ResourceErrorMsg{Err: msg.err} }
+
 	case editEditorCrashedMsg:
+		m.editing = false
 		os.Remove(msg.path)
 		m.appLog.Warn("editor exited with error — edit cancelled")
 		return m, nil
@@ -573,6 +581,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case editApplyFailedMsg:
+		m.editing = false
 		m.appLog.Warn("kubectl apply failed: " + msg.output)
 		config.WriteAuditEntry("edit", msg.resource, msg.namespace, "FAILED: "+msg.output) //nolint
 		return m, func() tea.Msg {
@@ -580,20 +589,25 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case EditDoneMsg:
+		m.editing = false
 		if msg.Output == "no changes" {
 			m.appLog.Info("edit: " + msg.Resource + " — no changes")
 		} else {
 			m.appLog.Success("edit: " + msg.Resource + " — " + msg.Output)
 			m.successNotice = "applied"
+			m.successNoticeID++
+			id := m.successNoticeID
 			cmds = append(cmds, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-				return successNoticeClearMsg{}
+				return successNoticeClearMsg{id: id}
 			}))
 		}
 		config.WriteAuditEntry("edit", msg.Resource, msg.Namespace, msg.Output) //nolint
 		return m, tea.Batch(cmds...)
 
 	case successNoticeClearMsg:
-		m.successNotice = ""
+		if msg.id == m.successNoticeID {
+			m.successNotice = ""
+		}
 		return m, nil
 
 	case DeleteDoneMsg:
@@ -1179,16 +1193,16 @@ func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 		}
 		out, err := exec.Command("kubectl", args...).Output()
 		if err != nil {
-			return ResourceErrorMsg{Err: fmt.Errorf("kubectl get: %w", err)}
+			return editFetchFailedMsg{err: fmt.Errorf("kubectl get: %w", err)}
 		}
 		f, err := os.CreateTemp("", "km8-edit-*.yaml")
 		if err != nil {
-			return ResourceErrorMsg{Err: fmt.Errorf("create temp file: %w", err)}
+			return editFetchFailedMsg{err: fmt.Errorf("create temp file: %w", err)}
 		}
 		defer f.Close()
 		if _, err := f.Write(out); err != nil {
 			os.Remove(f.Name())
-			return ResourceErrorMsg{Err: fmt.Errorf("write temp file: %w", err)}
+			return editFetchFailedMsg{err: fmt.Errorf("write temp file: %w", err)}
 		}
 		return editTempReadyMsg{
 			path:      f.Name(),

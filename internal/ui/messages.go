@@ -82,6 +82,9 @@ type EditDoneMsg struct {
 	Output    string // kubectl apply output
 }
 
+// editFetchFailedMsg is sent when kubectl get or temp file creation fails.
+type editFetchFailedMsg struct{ err error }
+
 // editTempReadyMsg is sent after the YAML has been fetched and written to a temp file.
 type editTempReadyMsg struct {
 	path      string
@@ -111,7 +114,8 @@ type editApplyFailedMsg struct {
 }
 
 // successNoticeClearMsg clears the success badge in the status bar.
-type successNoticeClearMsg struct{}
+// id must match AppModel.successNoticeID to avoid stale timers clearing a newer badge.
+type successNoticeClearMsg struct{ id int }
 
 // DeleteDoneMsg is sent when kubectl delete finishes.
 type DeleteDoneMsg struct {

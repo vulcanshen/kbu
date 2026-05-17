@@ -258,7 +258,21 @@ func (m AppLogModel) renderAllLines() []string {
 
 func (m AppLogModel) maxScrollOffset() int {
 	contentH := m.popupHeight() - 2
-	total := len(m.renderAllLines())
+	innerW := m.popupWidth() - 2
+	prefixW := len("00:00:00 LEVEL ") // fixed-width prefix approximation
+	msgW := innerW - prefixW
+	if msgW < 4 {
+		msgW = 4
+	}
+	total := 0
+	for _, e := range m.entries {
+		r := []rune(e.Message)
+		if len(r) == 0 {
+			total++
+		} else {
+			total += (len(r) + msgW - 1) / msgW
+		}
+	}
 	max := total - contentH
 	if max < 0 {
 		return 0

@@ -23,7 +23,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Drill-down navigation** -- Deployment → Pods → Containers
 - **Pod log streaming** -- multi-container support with `<container>|<log>` format
 - **Container shell exec** -- `kubectl exec` into any container
-- **kubectl edit integration** -- fetches YAML, opens `$EDITOR` locally, applies changes with `kubectl apply`; skips apply if nothing changed
+- **kubectl edit integration** -- fetches YAML, opens `$EDITOR` locally, applies changes with `kubectl apply`; skips apply if nothing changed. Note: uses `kubectl apply` (declarative) rather than strategic merge patch, and does not perform optimistic concurrency checks — avoid using on resources managed by Helm or operators
 - **Resource deletion** -- `D` with confirmation dialog
 - **Search/filter** -- `/` to search in all three panels
 - **Namespace and context switching** -- `n` / `c`
