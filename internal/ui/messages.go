@@ -79,7 +79,6 @@ type EditResourceMsg struct {
 type EditDoneMsg struct {
 	Resource  string // e.g. "pods/my-pod"
 	Namespace string
-	Output    string // combined stdout+stderr from kubectl
 }
 
 // DeleteDoneMsg is sent when kubectl delete finishes.
