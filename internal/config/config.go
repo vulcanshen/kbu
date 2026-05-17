@@ -37,14 +37,16 @@ func DefaultConfig() *Config {
 // appName is the directory name used under the OS config directory.
 const appName = "km8"
 
-// ConfigDir returns the platform-appropriate config directory for km8.
-// On Linux: $XDG_CONFIG_HOME/km8 or ~/.config/km8
-// On macOS: ~/Library/Application Support/km8
-// On Windows: %APPDATA%/km8
+// ConfigDir returns the config directory for km8.
+// Priority: $XDG_CONFIG_HOME/km8 → platform default → ~/.config/km8
+// Platform defaults: macOS=~/Library/Application Support/km8,
+// Linux=~/.config/km8, Windows=%APPDATA%/km8
 func ConfigDir() string {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, appName)
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
-		// Fallback to ~/.config on error
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, ".config", appName)
 	}
