@@ -533,12 +533,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case EditDoneMsg:
-		out := strings.TrimSpace(msg.Output)
-		if out == "" {
-			out = "completed"
-		}
-		m.appLog.Info("kubectl edit: " + out)
-		config.WriteAuditEntry("edit", msg.Resource, msg.Namespace, msg.Output) //nolint
+		m.appLog.Info("kubectl edit: " + msg.Resource)
+		config.WriteAuditEntry("edit", msg.Resource, msg.Namespace, "") //nolint
 		return m, nil
 
 	case DeleteDoneMsg:
@@ -1106,16 +1102,13 @@ func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 		args = append(args, "-n", namespace)
 	}
 	c := exec.Command("kubectl", args...)
-	// Capture kubectl's stdout/stderr (e.g. "Edit cancelled, no changes made.")
-	// vim writes directly to the TTY and is unaffected by this redirection.
-	var buf bytes.Buffer
-	c.Stdout = &buf
-	c.Stderr = &buf
+	// Do NOT redirect stdout/stderr — vim needs a real TTY to render.
+	// kubectl's own messages (e.g. "Edit cancelled") will appear briefly
+	// before bubbletea restores the alt screen; this is an acceptable tradeoff.
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return EditDoneMsg{
-			Resource:  string(rt.KubectlName()) + "/" + args[2],
+			Resource:  string(rt.KubectlName()) + "/" + name,
 			Namespace: namespace,
-			Output:    buf.String(),
 		}
 	})
 }
