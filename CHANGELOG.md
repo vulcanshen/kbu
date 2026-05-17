@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.5] - 2026-05-18
+
+### Changed
+- **kubectl edit rewritten as get → edit → apply flow**: the editor now opens a local temp file instead of running `kubectl edit`, so vim/nvim works correctly with no "Edit cancelled" message leaking into the terminal. Changes are applied with `kubectl apply -f` after the editor exits; if the file is unchanged the apply is skipped entirely.
+- Editor resolution order: `config.yaml editor:` → `$VISUAL` → `$EDITOR` → `vi` (macOS/Linux) / `notepad` (Windows). Editor strings with arguments (e.g. `code --wait`) are handled correctly.
+- Audit and crash logs now rotate daily (`audit-YYYY-MM-DD.log`, `crash-YYYY-MM-DD.log`) instead of per-session; multiple events in a day append to the same file.
+- App log entries are now word-wrapped at the popup width instead of truncated; scrolling is line-based so wrapped entries scroll smoothly. Maximum entry length capped at 300 characters; log buffer increased to 1000 entries.
+
+### Added
+- Status bar shows a green `✓ applied` badge for 2 seconds after a successful `kubectl apply`
+- App log `OK` level (green) for successful operations; `WARN` (yellow) for editor crash or apply failure
+- Apply failure triggers both an app log warning and a status bar error notification
+
+### Fixed
+- Editor crash (non-zero exit code) is now caught: the temp file is cleaned up and no apply is attempted
+
 ## [v1.0.4] - 2026-05-17
 
 ### Added
