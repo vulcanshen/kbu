@@ -87,18 +87,20 @@ type editFetchFailedMsg struct{ err error }
 
 // editTempReadyMsg is sent after the YAML has been fetched and written to a temp file.
 type editTempReadyMsg struct {
-	path      string
-	original  []byte // original YAML bytes for change detection
-	resource  string
-	namespace string
+	path        string
+	original    []byte // original YAML bytes for change detection
+	resource    string
+	namespace   string
+	contextName string // kubeconfig context to pass to kubectl subprocess
 }
 
 // editEditorDoneMsg is sent after the editor exits cleanly.
 type editEditorDoneMsg struct {
-	path      string
-	original  []byte
-	resource  string
-	namespace string
+	path        string
+	original    []byte
+	resource    string
+	namespace   string
+	contextName string
 }
 
 // editEditorCrashedMsg is sent when the editor exits with a non-zero code.

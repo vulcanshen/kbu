@@ -111,16 +111,17 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 	}
 }
 
+type appInitMsg struct{ info k8s.ClusterInfo }
+
 func (m AppModel) Init() tea.Cmd {
-	m.appLog.Info("km8 started")
 	m.watcher.Start(k8s.ResourcePods, m.k8sClient.GetNamespace())
 	info := m.k8sClient.GetClusterInfo()
-	m.appLog.Info(fmt.Sprintf("connected to %s (%s)", info.ContextName, info.ServerURL))
 	return tea.Batch(
 		m.sidebar.Init(),
 		m.table.Init(),
 		waitForWatchUpdate(m.watcher, m.currentResource),
 		discoverCRDs(m.k8sClient),
+		func() tea.Msg { return appInitMsg{info: info} },
 	)
 }
 
@@ -311,7 +312,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
 					m.editing = true
-					return m, editResource(m.currentResource, item.Name, item.Namespace)
+					return m, editResource(m.currentResource, item.Name, item.Namespace, m.k8sClient.ContextName())
 				}
 			}
 		case "s":
@@ -325,7 +326,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					item := m.items[idx]
 					detail := fmt.Sprintf("kubectl delete %s %s -n %s", m.currentResource.KubectlName(), item.Name, item.Namespace)
 					return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
-						deleteResource(m.currentResource, item.Name, item.Namespace))
+						deleteResource(m.currentResource, item.Name, item.Namespace, m.k8sClient.ContextName()))
 				}
 			}
 		case "+":
@@ -547,7 +548,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return editEditorCrashedMsg{path: msg.path}
 			}
-			return editEditorDoneMsg{path: msg.path, original: msg.original, resource: msg.resource, namespace: msg.namespace}
+			return editEditorDoneMsg{path: msg.path, original: msg.original, resource: msg.resource, namespace: msg.namespace, contextName: msg.contextName}
 		})
 
 	case editFetchFailedMsg:
@@ -568,7 +569,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return EditDoneMsg{Resource: msg.resource, Namespace: msg.namespace, Output: "no changes"}
 			}
 			var buf bytes.Buffer
-			c := exec.Command("kubectl", "apply", "-f", msg.path)
+			args := []string{"apply", "-f", msg.path}
+			if msg.contextName != "" {
+				args = append(args, "--context", msg.contextName)
+			}
+			c := exec.Command("kubectl", args...)
 			c.Stdout = &buf
 			c.Stderr = &buf
 			applyErr := c.Run()
@@ -620,6 +625,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case DeleteErrMsg:
 		m.appLog.Error("delete failed: " + msg.Err.Error())
+		return m, nil
+
+	case appInitMsg:
+		m.appLog.Info("km8 started")
+		m.appLog.Info(fmt.Sprintf("connected to %s (%s)", msg.info.ContextName, msg.info.ServerURL))
 		return m, nil
 
 	case CRDsDiscoveredMsg:
@@ -1013,20 +1023,24 @@ func (m *AppModel) execShell() tea.Cmd {
 
 	detail := fmt.Sprintf("kubectl exec -it %s -n %s -c %s", podName, namespace, container)
 	showCmd := m.confirm.Show(ConfirmShellExec, "Exec into container?", detail,
-		shellExec(podName, namespace, container))
+		shellExec(podName, namespace, container, m.k8sClient.ContextName()))
 	m.appLog.Info("exec shell: " + detail)
 	return showCmd
 }
 
-func shellExec(podName, namespace, container string) tea.Cmd {
+func shellExec(podName, namespace, container, contextName string) tea.Cmd {
+	ctxFlag := ""
+	if contextName != "" {
+		ctxFlag = " --context " + contextName
+	}
 	script := fmt.Sprintf(
-		"clear; printf '\\033[?25h'; printf '\\033[1;32m<<km8-Shell>>\\033[0m Pod: \\033[1;34m%s/%s\\033[0m | Container: \\033[1;33m%s\\033[0m\\n\\n'; kubectl exec -it %s -n %s -c %s -- /bin/sh; clear",
+		"clear; printf '\\033[?25h'; printf '\\033[1;32m<<km8-Shell>>\\033[0m Pod: \\033[1;34m%s/%s\\033[0m | Container: \\033[1;33m%s\\033[0m\\n\\n'; kubectl exec -it %s -n %s -c %s%s -- /bin/sh; clear",
 		namespace, podName, container,
-		podName, namespace, container,
+		podName, namespace, container, ctxFlag,
 	)
 	c := exec.Command("sh", "-c", script)
 	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return EditDoneMsg{}
+		return EditDoneMsg{Output: "no changes"} // suppress success badge
 	})
 }
 
@@ -1184,11 +1198,14 @@ func resolveEditor(cfgEditor string) string {
 	return "vi"
 }
 
-func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
+func editResource(rt k8s.ResourceType, name, namespace, contextName string) tea.Cmd {
 	return func() tea.Msg {
 		args := []string{"get", rt.KubectlName(), name, "-o", "yaml"}
 		if namespace != "" {
 			args = append(args, "-n", namespace)
+		}
+		if contextName != "" {
+			args = append(args, "--context", contextName)
 		}
 		out, err := exec.Command("kubectl", args...).Output()
 		if err != nil {
@@ -1204,19 +1221,23 @@ func editResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
 			return editFetchFailedMsg{err: fmt.Errorf("write temp file: %w", err)}
 		}
 		return editTempReadyMsg{
-			path:      f.Name(),
-			original:  out,
-			resource:  rt.KubectlName() + "/" + name,
-			namespace: namespace,
+			path:        f.Name(),
+			original:    out,
+			resource:    rt.KubectlName() + "/" + name,
+			namespace:   namespace,
+			contextName: contextName,
 		}
 	}
 }
 
-func deleteResource(rt k8s.ResourceType, name, namespace string) tea.Cmd {
+func deleteResource(rt k8s.ResourceType, name, namespace, contextName string) tea.Cmd {
 	return func() tea.Msg {
 		args := []string{"delete", rt.KubectlName(), name}
 		if namespace != "" {
 			args = append(args, "-n", namespace)
+		}
+		if contextName != "" {
+			args = append(args, "--context", contextName)
 		}
 		c := exec.Command("kubectl", args...)
 		var buf bytes.Buffer
@@ -1238,9 +1259,15 @@ func waitForWatchUpdate(w *k8s.Watcher, rt k8s.ResourceType) tea.Cmd {
 	updates, errors := w.Channels()
 	return func() tea.Msg {
 		select {
-		case msg := <-updates:
+		case msg, ok := <-updates:
+			if !ok {
+				return nil // channel closed by watcher.Start(); caller must not re-register
+			}
 			return ResourceDataMsg{Type: rt, Items: msg.Items}
-		case errMsg := <-errors:
+		case errMsg, ok := <-errors:
+			if !ok {
+				return nil
+			}
 			return ResourceErrorMsg{Err: errMsg.Err}
 		}
 	}
