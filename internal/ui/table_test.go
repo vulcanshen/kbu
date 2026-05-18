@@ -356,10 +356,10 @@ func TestTableModel_SearchConfirmOnEnter(t *testing.T) {
 func TestTableModel_SearchOriginalIndex(t *testing.T) {
 	m := newTestTable()
 	rows := [][]string{
-		{"nginx-pod", "1/1", "Running", "0", "5m", "node-1"},   // original index 0
-		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},   // original index 1
+		{"nginx-pod", "1/1", "Running", "0", "5m", "node-1"},    // original index 0
+		{"redis-pod", "1/1", "Running", "0", "3m", "node-2"},    // original index 1
 		{"postgres-db", "1/1", "Running", "0", "10m", "node-1"}, // original index 2
-		{"nginx-svc", "1/1", "Pending", "0", "2m", "node-3"},   // original index 3
+		{"nginx-svc", "1/1", "Pending", "0", "2m", "node-3"},    // original index 3
 	}
 	m.SetRows(rows)
 

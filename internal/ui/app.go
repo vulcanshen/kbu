@@ -46,17 +46,17 @@ type AppModel struct {
 	confirm         ConfirmModel
 	splash          SplashModel
 
-	activePanel      Panel
-	width            int
-	height           int
-	theme            *theme.Theme
-	cfgEditor        string
-	editing          bool
-	successNotice    string
-	successNoticeID  int
-	k8sClient        *k8s.Client
+	activePanel     Panel
+	width           int
+	height          int
+	theme           *theme.Theme
+	cfgEditor       string
+	editing         bool
+	successNotice   string
+	successNoticeID int
+	k8sClient       *k8s.Client
 	watcher         *k8s.Watcher
-	logStreamer      *k8s.LogStreamer
+	logStreamer     *k8s.LogStreamer
 	currentResource k8s.ResourceType
 	items           []k8s.ResourceItem
 	ready           bool
@@ -67,7 +67,7 @@ type AppModel struct {
 
 	// Drill-down state
 	drillDownStack      []drillDownEntry
-	drillDownPod        *k8s.ResourceItem   // innermost: Pod → Container
+	drillDownPod        *k8s.ResourceItem // innermost: Pod → Container
 	drillDownContainers []k8s.ContainerInfo
 }
 
@@ -106,7 +106,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		cfgEditor:       cfgEditor,
 		k8sClient:       client,
 		watcher:         watcher,
-		logStreamer:      logStreamer,
+		logStreamer:     logStreamer,
 		currentResource: k8s.ResourcePods,
 	}
 }

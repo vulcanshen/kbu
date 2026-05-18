@@ -305,7 +305,6 @@ func (m SidebarModel) moveUp(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	return m, nil
 }
 
-
 func (m SidebarModel) pageDown(visible []visibleItem) (SidebarModel, tea.Cmd) {
 	half := m.viewportHeight() / 2
 	if half < 1 {

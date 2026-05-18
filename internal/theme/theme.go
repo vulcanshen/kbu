@@ -29,12 +29,12 @@ type SidebarColors struct {
 
 // TableColors defines colors for the resource table.
 type TableColors struct {
-	HeaderBg       string `yaml:"header_bg"`
-	HeaderFg       string `yaml:"header_fg"`
-	RowFg          string `yaml:"row_fg"`
-	SelectedRowBg  string `yaml:"selected_row_bg"`
-	SelectedRowFg  string `yaml:"selected_row_fg"`
-	AlternatingBg  string `yaml:"alternating_bg"`
+	HeaderBg      string `yaml:"header_bg"`
+	HeaderFg      string `yaml:"header_fg"`
+	RowFg         string `yaml:"row_fg"`
+	SelectedRowBg string `yaml:"selected_row_bg"`
+	SelectedRowFg string `yaml:"selected_row_fg"`
+	AlternatingBg string `yaml:"alternating_bg"`
 }
 
 // DetailColors defines colors for the detail panel.
@@ -81,12 +81,12 @@ func DefaultTheme() *Theme {
 			CategoryFg: "#89b4fa",
 		},
 		Table: TableColors{
-			HeaderBg:       "#313244",
-			HeaderFg:       "#89b4fa",
-			RowFg:          "#cdd6f4",
-			SelectedRowBg:  "#45475a",
-			SelectedRowFg:  "#cdd6f4",
-			AlternatingBg:  "",
+			HeaderBg:      "#313244",
+			HeaderFg:      "#89b4fa",
+			RowFg:         "#cdd6f4",
+			SelectedRowBg: "#45475a",
+			SelectedRowFg: "#cdd6f4",
+			AlternatingBg: "",
 		},
 		Detail: DetailColors{
 			BorderColor:   "#585b70",

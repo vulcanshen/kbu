@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.6] - 2026-05-18
+
+### Added
+- Easter egg (`K`): logo now reveals with a random pixel-by-pixel animation (~500 ms); each trigger produces a different order. "K M 8" caption and dim close hint appear after animation completes. `K` is intentionally absent from the help overlay.
+
+### Fixed
+- **kubectl context safety**: edit (`e`), delete (`D`), and shell exec (`s`) now pass `--context <name>` to every `kubectl` subprocess. Previously they used the ambient kubeconfig `current-context`, which could differ from what km8 was showing after a context switch.
+- **Watch reconnection goroutine leak**: each namespace or context switch previously leaked one goroutine that persisted until the next switch; after N switches there were N+1 goroutines waiting on the same channel. Fixed by checking `ok` on channel receive — closed-channel wakeups return `nil` and break the chain.
+- **Watch recursive stack growth**: the watch reconnection loop was implemented as a recursive `run()` call; K8s closes watch streams every ~5–10 minutes, so the goroutine stack grew by one frame per reconnect indefinitely. Replaced with an explicit outer loop.
+- **Context-canceled log noise**: rapidly switching resources cancelled the previous watch context mid-flight, which non-deterministically logged a spurious `ERR watching <resource>: context canceled`. Now silently discarded when the context was intentionally cancelled.
+- **Init log messages discarded**: "km8 started" and "connected to …" were written inside `Init()` which has a value receiver — the mutations were silently thrown away. Moved to an `appInitMsg` dispatched through `Update()`.
+- **Shell exec success badge**: exiting a shell (`s`) showed a green "✓ applied" badge and wrote an empty audit entry. Fixed by returning `EditDoneMsg{Output: "no changes"}` to suppress both side-effects.
+- **Splash animation never started**: `SplashModel.Show()` was changed to return a `tea.Cmd` for the first tick, but the call site in `app.go` discarded the return value, so the pixel-reveal animation never ran.
+- **Duplicate edit / stale badge / double renderAllLines** (carried from main, not previously released): `editing` flag prevents concurrent edits; success badge timer carries a generation ID to prevent stale timers from clearing a newer badge; `maxScrollOffset()` no longer calls `renderAllLines()` to avoid double computation.
+
+### Documentation
+- Added **Editing Resources** section to README: three-step flow (get → editor → apply), editor resolution order, comparison table vs `kubectl edit` (declarative apply vs strategic merge patch, no `resourceVersion` check, `last-applied-configuration` annotation caveat, Helm/operator warning).
+- Added **Context Isolation** section to README: km8 context is session-local, does not modify `~/.kube/config`, all kubectl subprocesses use `--context`.
+
 ## [v1.0.5] - 2026-05-18
 
 ### Changed
