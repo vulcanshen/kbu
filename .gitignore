@@ -26,3 +26,5 @@ config.yaml
 
 # Local workspace (design assets, test scripts, references — not for repo)
 .local/
+/AGENTS.md
+/CLAUDE.md
