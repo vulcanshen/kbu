@@ -294,4 +294,3 @@ func isSimpleValue(v interface{}) bool {
 	}
 	return false
 }
-
