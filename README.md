@@ -23,7 +23,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Drill-down navigation** -- Deployment → Pods → Containers
 - **Pod log streaming** -- multi-container support with `<container>|<log>` format
 - **Container shell exec** -- `kubectl exec` into any container
-- **kubectl edit integration** -- fetches YAML, opens `$EDITOR` locally, applies changes with `kubectl apply`; skips apply if nothing changed. Note: uses `kubectl apply` (declarative) rather than strategic merge patch, and does not perform optimistic concurrency checks — avoid using on resources managed by Helm or operators
+- **In-place resource editing** -- fetches YAML with `kubectl get -o yaml`, opens `$EDITOR`, applies with `kubectl apply -f` if the file changed; skips apply on no-op saves. Uses declarative apply semantics — see [Editing Resources](#editing-resources) for implications
 - **Resource deletion** -- `D` with confirmation dialog
 - **Search/filter** -- `/` to search in all three panels
 - **Namespace and context switching** -- `n` / `c`
@@ -113,7 +113,7 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 |---|---|
 | `/` | Search / filter |
 | `Enter` | Drill down |
-| `e` | Edit resource (kubectl edit) |
+| `e` | Edit resource (get → editor → apply) |
 | `D` | Delete resource |
 | `s` | Shell into container |
 
@@ -133,6 +133,32 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 | `!` | App log |
 | `?` | Toggle help |
 | `q` / `Esc` | Quit / back |
+
+## Editing Resources
+
+Pressing `e` on a resource runs a three-step flow:
+
+1. **Fetch** — `kubectl get <resource> -o yaml --context <ctx>` writes the YAML to a temp file
+2. **Edit** — your `$EDITOR` opens the temp file (editor resolution: `config.yaml editor` → `$VISUAL` → `$EDITOR` → `vi` / `notepad`)
+3. **Apply** — if the file changed, `kubectl apply -f <tmpfile> --context <ctx>` is run; if nothing changed, the apply is skipped entirely
+
+**Differences from `kubectl edit`:**
+
+| | km8 `e` | `kubectl edit` |
+|---|---|---|
+| Apply method | `kubectl apply` (declarative) | Strategic merge patch |
+| Concurrency check | None — no `resourceVersion` enforcement | Uses `resourceVersion` to detect conflicts |
+| Annotation side-effect | Sets `last-applied-configuration` | Does not set it |
+
+Because km8 uses `kubectl apply`, it is not suitable for resources actively managed by Helm or operators — the annotation may interfere with their reconciliation loop. For those resources, use `kubectl edit` directly.
+
+## Context Isolation
+
+km8 maintains its own **session-local** context. Switching context with `c` inside km8 **does not** modify `~/.kube/config` or the `KUBECONFIG` environment variable in any other terminal.
+
+All `kubectl` subprocesses spawned by km8 (edit, delete, shell exec) receive an explicit `--context <name>` flag, so they always target the cluster km8 is showing — regardless of what `kubectl`'s default context is set to.
+
+This means you can safely run km8 in one terminal while using `kubectl` in another without either session interfering with the other's context.
 
 ## Configuration
 
