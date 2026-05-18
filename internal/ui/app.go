@@ -253,8 +253,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logStreamer.Stop()
 			return m, tea.Quit
 		case "K":
-			m.splash.Show()
-			return m, nil
+			return m, m.splash.Show()
 		case "?":
 			m.help.SetSize(m.width, m.height)
 			return m, m.help.Toggle()
