@@ -1,0 +1,189 @@
+package ui
+
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+// ── Setup ──────────────────────────────────────────────────────────────────
+
+func newTestSplash() SplashModel {
+	return NewSplashModel()
+}
+
+// ── Initial state ──────────────────────────────────────────────────────────
+
+func TestSplashModel_InitialState(t *testing.T) {
+	m := newTestSplash()
+
+	if m.IsActive() {
+		t.Error("new splash model should be inactive")
+	}
+	if out := m.Render(80, 40); out != "" {
+		t.Errorf("expected empty render when inactive, got non-empty string")
+	}
+}
+
+// ── Show ───────────────────────────────────────────────────────────────────
+
+func TestSplashModel_ShowReturnsCmd(t *testing.T) {
+	m := newTestSplash()
+	cmd := m.Show()
+	if cmd == nil {
+		// This is the bug fixed in c6ffcbe: Show() was changed to return
+		// a tea.Cmd for the first tick, but the call site in app.go discarded
+		// the return value, so the animation never started.
+		t.Fatal("Show() must return a non-nil cmd to start the animation tick")
+	}
+}
+
+func TestSplashModel_ShowActivates(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+
+	if !m.IsActive() {
+		t.Error("Show() must set active = true")
+	}
+}
+
+func TestSplashModel_ShowPopulatesPixelOrder(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+
+	if len(m.pixelOrder) == 0 {
+		t.Error("Show() must populate pixelOrder with colored pixel indices")
+	}
+}
+
+func TestSplashModel_ShowResetsRevealCount(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+	m, _ = m.Update(splashTickMsg{}) // advance a tick
+
+	m.Show() // call again (re-trigger)
+
+	if m.revealedCount != 0 {
+		t.Errorf("Show() must reset revealedCount to 0, got %d", m.revealedCount)
+	}
+}
+
+func TestSplashModel_ShowRendersNonEmpty(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+
+	if out := m.Render(80, 40); out == "" {
+		t.Error("active splash must render a non-empty string")
+	}
+}
+
+// ── Animation ticks ────────────────────────────────────────────────────────
+
+func TestSplashModel_TickRevealsPixels(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+	before := m.revealedCount
+
+	m, _ = m.Update(splashTickMsg{})
+
+	if m.revealedCount <= before {
+		t.Errorf("splashTickMsg must increase revealedCount; before=%d after=%d", before, m.revealedCount)
+	}
+}
+
+func TestSplashModel_TickReturnsNextCmd(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+
+	// Logo has many more than 15 colored pixels, so animation continues.
+	_, cmd := m.Update(splashTickMsg{})
+	if cmd == nil {
+		t.Error("tick must return next cmd while animation is in progress")
+	}
+}
+
+func TestSplashModel_TickDoesNotExceedTotal(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+
+	// Run ticks until animation completes.
+	for i := 0; i < 1000; i++ {
+		if m.revealedCount >= len(m.pixelOrder) {
+			break
+		}
+		m, _ = m.Update(splashTickMsg{})
+	}
+
+	if m.revealedCount != len(m.pixelOrder) {
+		t.Errorf("revealedCount must not exceed pixelOrder length; got %d, want %d",
+			m.revealedCount, len(m.pixelOrder))
+	}
+}
+
+func TestSplashModel_TickStopsWhenComplete(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+	m.revealedCount = len(m.pixelOrder) // fast-forward to end
+
+	_, cmd := m.Update(splashTickMsg{})
+	if cmd != nil {
+		t.Error("no tick cmd should be returned when animation is already complete")
+	}
+}
+
+func TestSplashModel_InactiveIgnoresTick(t *testing.T) {
+	m := newTestSplash()
+	// Do NOT call Show().
+
+	m, cmd := m.Update(splashTickMsg{})
+	if m.IsActive() || cmd != nil {
+		t.Error("inactive splash must ignore tick messages")
+	}
+}
+
+// ── Close ──────────────────────────────────────────────────────────────────
+
+func TestSplashModel_CloseOnEsc(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.IsActive() {
+		t.Error("Esc must close the splash overlay")
+	}
+}
+
+func TestSplashModel_CloseOnQ(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+
+	m, _ = m.Update(keyMsg('q'))
+	if m.IsActive() {
+		t.Error("q must close the splash overlay")
+	}
+}
+
+func TestSplashModel_CloseResetsState(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+	m, _ = m.Update(splashTickMsg{}) // reveal some pixels
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+
+	if m.revealedCount != 0 {
+		t.Errorf("closing splash must reset revealedCount to 0, got %d", m.revealedCount)
+	}
+	if m.pixelOrder != nil {
+		t.Error("closing splash must set pixelOrder to nil")
+	}
+}
+
+func TestSplashModel_InactiveIgnoresKeys(t *testing.T) {
+	m := newTestSplash()
+	// Do NOT call Show().
+
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.IsActive() || cmd != nil {
+		t.Error("inactive splash must ignore key messages")
+	}
+}
