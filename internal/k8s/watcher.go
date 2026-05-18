@@ -111,6 +111,9 @@ func (w *Watcher) Channels() (<-chan WatchMsg, <-chan WatchErrMsg) {
 func (w *Watcher) run(ctx context.Context, rt ResourceType, namespace string) {
 	items, err := FetchResources(ctx, w.clientset, rt, namespace)
 	if err != nil {
+		if ctx.Err() != nil {
+			return // context was cancelled intentionally (e.g. user switched resource)
+		}
 		select {
 		case w.errors <- WatchErrMsg{Err: fmt.Errorf("listing %s: %w", rt, err)}:
 		case <-ctx.Done():
@@ -130,6 +133,9 @@ func (w *Watcher) run(ctx context.Context, rt ResourceType, namespace string) {
 
 	watcher, err := w.startWatch(ctx, rt, namespace)
 	if err != nil {
+		if ctx.Err() != nil {
+			return // context was cancelled intentionally
+		}
 		select {
 		case w.errors <- WatchErrMsg{Err: fmt.Errorf("watching %s: %w", rt, err)}:
 		case <-ctx.Done():
