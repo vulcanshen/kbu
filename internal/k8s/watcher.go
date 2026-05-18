@@ -109,52 +109,57 @@ func (w *Watcher) Channels() (<-chan WatchMsg, <-chan WatchErrMsg) {
 }
 
 func (w *Watcher) run(ctx context.Context, rt ResourceType, namespace string) {
-	items, err := FetchResources(ctx, w.clientset, rt, namespace)
-	if err != nil {
-		if ctx.Err() != nil {
-			return // context was cancelled intentionally (e.g. user switched resource)
-		}
-		select {
-		case w.errors <- WatchErrMsg{Err: fmt.Errorf("listing %s: %w", rt, err)}:
-		case <-ctx.Done():
-		}
-		return
-	}
-
-	w.mu.Lock()
-	w.items = items
-	w.mu.Unlock()
-
-	select {
-	case w.updates <- WatchMsg{Items: items}:
-	case <-ctx.Done():
-		return
-	}
-
-	watcher, err := w.startWatch(ctx, rt, namespace)
-	if err != nil {
-		if ctx.Err() != nil {
-			return // context was cancelled intentionally
-		}
-		select {
-		case w.errors <- WatchErrMsg{Err: fmt.Errorf("watching %s: %w", rt, err)}:
-		case <-ctx.Done():
-		}
-		return
-	}
-	defer watcher.Stop()
-
 	for {
+		items, err := FetchResources(ctx, w.clientset, rt, namespace)
+		if err != nil {
+			if ctx.Err() != nil {
+				return // context was cancelled intentionally (e.g. user switched resource)
+			}
+			select {
+			case w.errors <- WatchErrMsg{Err: fmt.Errorf("listing %s: %w", rt, err)}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		w.mu.Lock()
+		w.items = items
+		w.mu.Unlock()
+
 		select {
+		case w.updates <- WatchMsg{Items: items}:
 		case <-ctx.Done():
 			return
-		case event, ok := <-watcher.ResultChan():
-			if !ok {
-				// Watch closed, re-list and restart
-				w.run(ctx, rt, namespace)
-				return
+		}
+
+		watcher, err := w.startWatch(ctx, rt, namespace)
+		if err != nil {
+			if ctx.Err() != nil {
+				return // context was cancelled intentionally
 			}
-			w.handleEvent(ctx, event, rt, namespace)
+			select {
+			case w.errors <- WatchErrMsg{Err: fmt.Errorf("watching %s: %w", rt, err)}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		// Inner event loop: runs until the watch stream closes or ctx is cancelled.
+		// On stream close (!ok), break to the outer loop to re-list and reconnect.
+		reconnect := false
+		for !reconnect {
+			select {
+			case <-ctx.Done():
+				watcher.Stop()
+				return
+			case event, ok := <-watcher.ResultChan():
+				if !ok {
+					watcher.Stop()
+					reconnect = true
+				} else {
+					w.handleEvent(ctx, event, rt, namespace)
+				}
+			}
 		}
 	}
 }
