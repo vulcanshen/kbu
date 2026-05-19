@@ -14,8 +14,6 @@ Thumbs.db
 
 # Claude Code (local only)
 .claude/
-sessions/
-GOAL.md
 
 # Test artifacts
 coverage.out
@@ -28,3 +26,9 @@ config.yaml
 .local/
 /AGENTS.md
 /CLAUDE.md
+
+# forge — local dev state (never commit)
+.forge/
+
+# Session checkpoints (written by /save-checkpoint)
+.checkpoints/
