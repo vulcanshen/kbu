@@ -59,8 +59,8 @@ func TestDetailModel_InitialState(t *testing.T) {
 	if len(m.tabs) != 2 {
 		t.Errorf("expected 2 tabs (no Logs for non-Pod), got %d", len(m.tabs))
 	}
-	if m.tabs[0] != "Detail" || m.tabs[1] != "Events" {
-		t.Errorf("expected tabs=[Detail, Events], got %v", m.tabs)
+	if m.tabs[0] != "YAML" || m.tabs[1] != "Events" {
+		t.Errorf("expected tabs=[YAML, Events], got %v", m.tabs)
 	}
 	if m.scrollOffset != 0 {
 		t.Errorf("expected scrollOffset=0, got %d", m.scrollOffset)
@@ -109,8 +109,8 @@ func TestDetailModel_SwitchTab(t *testing.T) {
 
 	// ']' wraps Events → Detail
 	m, _ = m.Update(keyMsg(']'))
-	if m.ActiveTabName() != "Detail" {
-		t.Errorf("expected Detail after wrap ']', got %s", m.ActiveTabName())
+	if m.ActiveTabName() != "YAML" {
+		t.Errorf("expected YAML after wrap ']', got %s", m.ActiveTabName())
 	}
 
 	// '[' wraps Detail → Events (backward)
@@ -284,15 +284,57 @@ func TestDetailModel_AppendLogLine(t *testing.T) {
 	if len(m.logLines) != 1 {
 		t.Fatalf("expected 1 logLine, got %d", len(m.logLines))
 	}
-	if !strings.Contains(m.logLines[0], "nginx") {
-		t.Errorf("expected logLine to contain container name 'nginx', got %q", m.logLines[0])
+	if m.logLines[0].container != "nginx" {
+		t.Errorf("expected container='nginx', got %q", m.logLines[0].container)
 	}
-	if !strings.Contains(m.logLines[0], "hello world") {
-		t.Errorf("expected logLine to contain text 'hello world', got %q", m.logLines[0])
+	if m.logLines[0].text != "hello world" {
+		t.Errorf("expected text='hello world', got %q", m.logLines[0].text)
 	}
-	// Check separator character.
-	if !strings.Contains(m.logLines[0], "│") {
-		t.Errorf("expected logLine to contain separator, got %q", m.logLines[0])
+}
+
+func TestDetailModel_AppendLogLine_WrapsLongText(t *testing.T) {
+	m := newTestDetail() // width=80
+	m.SetResourceType(k8s.ResourcePods)
+	longText := strings.Repeat("foo bar baz ", 20) // ~240 chars, far over 80
+
+	m.AppendLogLine("nginx", longText)
+	// Storage stores raw — exactly one entry, unwrapped.
+	if len(m.logLines) != 1 {
+		t.Fatalf("expected 1 raw log entry, got %d", len(m.logLines))
+	}
+
+	// Render-time wrap: switch to Logs tab and inspect contentLines.
+	m = m.switchToTab(1)
+	if len(m.contentLines) < 2 {
+		t.Fatalf("expected long log to wrap to multiple content lines, got %d", len(m.contentLines))
+	}
+	if !strings.HasPrefix(m.contentLines[0], "  nginx │ ") {
+		t.Errorf("first content line must carry container prefix, got %q", m.contentLines[0])
+	}
+	contIndent := "  " + strings.Repeat(" ", len("nginx")) + " │ "
+	if !strings.HasPrefix(m.contentLines[1], contIndent) {
+		t.Errorf("continuation line must align under content column, got %q", m.contentLines[1])
+	}
+}
+
+func TestDetailModel_Logs_ReflowOnResize(t *testing.T) {
+	m := newTestDetail() // width=80
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(1) // Logs
+	longText := strings.Repeat("foo bar baz ", 20)
+	m.AppendLogLine("nginx", longText)
+
+	narrowLines := len(m.contentLines)
+	if narrowLines < 2 {
+		t.Fatalf("expected wrap at width=80, got %d content lines", narrowLines)
+	}
+
+	// Expand: width 200 should reduce wrap (fewer or equal continuation lines).
+	m.SetSize(200, 20)
+	wideLines := len(m.contentLines)
+	if wideLines >= narrowLines {
+		t.Errorf("expected fewer wrap lines after expand: was %d, now %d", narrowLines, wideLines)
 	}
 }
 
@@ -309,8 +351,8 @@ func TestDetailModel_AppendLogLine_MaxLines(t *testing.T) {
 		t.Errorf("expected 10 logLines after trimming, got %d", len(m.logLines))
 	}
 	// The oldest lines (0-4) should be trimmed.
-	if !strings.Contains(m.logLines[0], "line 5") {
-		t.Errorf("expected first logLine to be 'line 5', got %q", m.logLines[0])
+	if m.logLines[0].text != "line 5" {
+		t.Errorf("expected first logLine text='line 5', got %q", m.logLines[0].text)
 	}
 }
 
@@ -350,6 +392,147 @@ func TestDetailModel_ClearDetail_ClearsLogs(t *testing.T) {
 
 	if m.logLines != nil {
 		t.Errorf("expected logLines=nil after ClearDetail, got %v", m.logLines)
+	}
+}
+
+func TestWrapPlain(t *testing.T) {
+	tests := []struct {
+		name  string
+		text  string
+		width int
+		want  []string
+	}{
+		{"empty stays single", "", 10, []string{""}},
+		{"shorter than width", "hi", 10, []string{"hi"}},
+		{"equal to width", "0123456789", 10, []string{"0123456789"}},
+		{"word boundary", "hello world foo", 11, []string{"hello world", "foo"}},
+		{"no spaces hard cut", "abcdefghij", 4, []string{"abcd", "efgh", "ij"}},
+		{"width zero passthrough", "anything", 0, []string{"anything"}},
+		{"width negative passthrough", "anything", -1, []string{"anything"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := wrapPlain(tc.text, tc.width)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d lines, want %d: %q", len(got), len(tc.want), got)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("line %d: got %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestDetailModel_EventsMessage_Wraps_NotTruncates(t *testing.T) {
+	m := newTestDetail() // width=80
+	longMsg := "this is a deliberately very long event message that should wrap to multiple lines rather than being silently truncated with an ellipsis at the end"
+	events := []k8s.EventItem{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/x", Message: longMsg, Age: "1m"},
+	}
+	detail := sampleDetail()
+	m.SetDetail(detail, events)
+	m = m.switchToTab(DetailTabEvents)
+
+	joined := strings.Join(m.contentLines, "\n")
+	if strings.Contains(joined, "…") {
+		t.Errorf("expected no ellipsis (wrap not truncate), got:\n%s", joined)
+	}
+	// The full message text (every word) must appear somewhere in the rendered output.
+	for _, word := range []string{"deliberately", "ellipsis"} {
+		if !strings.Contains(joined, word) {
+			t.Errorf("expected wrapped output to contain %q, got:\n%s", word, joined)
+		}
+	}
+}
+
+func TestDetailModel_SearchJKAreTypedNotNavigation(t *testing.T) {
+	m := newTestDetail()
+	detail := sampleDetail()
+	// Add enough labels to make content scrollable.
+	detail.Labels = make(map[string]string)
+	for i := 0; i < 30; i++ {
+		detail.Labels[fmt.Sprintf("label-%02d", i)] = fmt.Sprintf("value-%02d", i)
+	}
+	m.SetDetail(detail, sampleEvents())
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(keyMsg('j'))
+	m, _ = m.Update(keyMsg('k'))
+
+	if m.scrollOffset != 0 {
+		t.Errorf("j/k in search must not scroll, got scrollOffset=%d", m.scrollOffset)
+	}
+	if m.searchQuery != "jk" {
+		t.Errorf("j/k in search must be typed, got query %q", m.searchQuery)
+	}
+}
+
+func TestDetailModel_BuildInfo_YAMLPath(t *testing.T) {
+	m := newTestDetail()
+	d := sampleDetail()
+	d.YAML = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx"
+	m.SetDetail(d, nil)
+
+	joined := strings.Join(m.contentLines, "\n")
+	if !strings.Contains(joined, "apiVersion: v1") {
+		t.Errorf("expected YAML to be rendered, got:\n%s", joined)
+	}
+	if !strings.Contains(joined, "kind: Pod") {
+		t.Errorf("expected YAML kind line, got:\n%s", joined)
+	}
+}
+
+func TestDetailModel_CopyableContent_YAMLReturnsRawWhenNoSearch(t *testing.T) {
+	m := newTestDetail()
+	d := sampleDetail()
+	d.YAML = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx\n"
+	m.SetDetail(d, nil)
+
+	got := m.CopyableContent()
+	want := "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx"
+	if got != want {
+		t.Errorf("expected raw YAML for copy, got:\n%s", got)
+	}
+}
+
+func TestDetailModel_CopyableContent_YAMLFallsBackToFilteredWhenSearching(t *testing.T) {
+	m := newTestDetail()
+	d := sampleDetail()
+	d.YAML = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx"
+	m.SetDetail(d, nil)
+	m.searchQuery = "kind"
+
+	got := m.CopyableContent()
+	if !strings.Contains(got, "kind: Pod") {
+		t.Errorf("expected filtered output to include kind line, got:\n%s", got)
+	}
+	if strings.Contains(got, "apiVersion") {
+		t.Errorf("expected non-matching lines to be filtered out, got:\n%s", got)
+	}
+}
+
+func TestDetailModel_CopyableContent_StripsANSI(t *testing.T) {
+	m := newTestDetail()
+	m.SetDetail(sampleDetail(), sampleEvents())
+
+	plain := m.CopyableContent()
+	if plain == "" {
+		t.Fatal("expected non-empty copyable content")
+	}
+	if strings.Contains(plain, "\x1b[") {
+		t.Errorf("expected no ANSI escapes in copyable content, got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "nginx-7b4f6c8d4-abc12") {
+		t.Errorf("expected pod name in copyable content, got:\n%s", plain)
+	}
+}
+
+func TestDetailModel_CopyableContent_EmptyWhenNoData(t *testing.T) {
+	m := newTestDetail()
+	if got := m.CopyableContent(); got != "" {
+		t.Errorf("expected empty content when no data, got %q", got)
 	}
 }
 

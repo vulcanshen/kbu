@@ -23,6 +23,16 @@ func TestStatusLineModel_Hints_Sidebar(t *testing.T) {
 
 	mustContain(t, keys, "n", "sidebar must have namespace hint")
 	mustContain(t, keys, "c", "sidebar must have context hint")
+	mustContain(t, keys, "y", "sidebar must have copy hint (global)")
+}
+
+func TestStatusLineModel_Hints_CopyHintOnAllPanels(t *testing.T) {
+	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
+		m := newTestStatusLine()
+		m.SetActivePanel(p)
+		keys := hintKeys(m.hints())
+		mustContain(t, keys, "y", "panel must show global copy hint")
+	}
 }
 
 func TestStatusLineModel_Hints_TablePanel(t *testing.T) {
@@ -65,7 +75,7 @@ func TestStatusLineModel_Hints_DetailPanel(t *testing.T) {
 	keys := hintKeys(hints)
 
 	mustContain(t, keys, "h/l", "detail panel must have tab hint")
-	mustContain(t, keys, "+/-", "detail panel must have expand hint")
+	mustContain(t, keys, "=/-", "detail panel must have expand/restore hint")
 }
 
 // ── LineCount ─────────────────────────────────────────────────────────────

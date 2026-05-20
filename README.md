@@ -21,14 +21,17 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Vim-style navigation** -- `j`/`k`, `u`/`d` page scroll, `gg`/`G`, `/` search
 - **3-panel lazygit-style layout** -- numbered sidebar, list, and detail panels with scroll indicator
 - **Drill-down navigation** -- Deployment → Pods → Containers
+- **YAML detail view with syntax highlighting** -- `[YAML]` tab shows the resource serialized exactly like `kubectl get -o yaml`; container drill-down shows the extracted `spec`/`status` for that container
 - **Pod log streaming** -- multi-container support with `<container>|<log>` format
 - **Container shell exec** -- `kubectl exec` into any container
 - **In-place resource editing** -- fetches YAML with `kubectl get -o yaml`, opens `$EDITOR`, applies with `kubectl apply -f` if the file changed; skips apply on no-op saves. Uses declarative apply semantics — see [Editing Resources](#editing-resources) for implications
 - **Resource deletion** -- `D` with confirmation dialog
-- **Search/filter** -- `/` to search in all three panels
+- **Search/filter** -- `/` to search in all three panels and in the namespace/context picker popups
+- **Clipboard copy (`y`)** -- copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required)
 - **Namespace and context switching** -- `n` / `c`
-- **Detail tabs** -- Detail / Events / Logs (Logs tab only for Pods)
-- **Panel expand** -- `+`/`-` to toggle full screen
+- **Detail tabs** -- YAML / Events / Logs (Logs tab only for Pods)
+- **Long values wrap, never truncate** -- applies to YAML, Events, and Logs; wrap points reflow on panel resize
+- **Panel expand** -- `=`/`-` to toggle full-screen Table or Detail panel
 - **Theme system** -- drop a `theme.yaml` into config directory to override colors
 - **Help & App Log overlays** -- `?` / `!` popup on top of main UI
 - **Error notifications** -- status bar badge + status line message
@@ -121,15 +124,16 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 
 | Key | Action |
 |---|---|
-| `h` / `l` | Switch tab |
-| `+` / `-` | Expand / restore panel |
+| `h` / `l` | Switch tab (YAML / Events / Logs) |
+| `=` / `-` | Expand / restore panel |
 
 ### Global
 
 | Key | Action |
 |---|---|
-| `n` | Switch namespace |
-| `c` | Switch context |
+| `n` | Switch namespace (`/` to filter inside the popup) |
+| `c` | Switch context (`/` to filter inside the popup) |
+| `y` | Copy focused panel content to clipboard (OSC 52) |
 | `!` | App log |
 | `?` | Toggle help |
 | `q` / `Esc` | Quit / back |

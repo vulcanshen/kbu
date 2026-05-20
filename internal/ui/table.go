@@ -31,6 +31,50 @@ type TableModel struct {
 	searchQuery     string
 }
 
+// CopyableContent returns the current (filtered) table rows as plain text
+// with the header. Columns are space-padded for readability when pasted.
+// Used by the global `y` key.
+func (m TableModel) CopyableContent() string {
+	if len(m.rows) == 0 {
+		return ""
+	}
+	widths := make([]int, len(m.columns))
+	for i, c := range m.columns {
+		widths[i] = len(c.Title)
+	}
+	for _, row := range m.rows {
+		for i := 0; i < len(widths) && i < len(row); i++ {
+			if len(row[i]) > widths[i] {
+				widths[i] = len(row[i])
+			}
+		}
+	}
+	formatRow := func(cells []string) string {
+		parts := make([]string, len(widths))
+		for i := range widths {
+			cell := ""
+			if i < len(cells) {
+				cell = cells[i]
+			}
+			if i == len(widths)-1 {
+				parts[i] = cell
+			} else {
+				parts[i] = fmt.Sprintf("%-*s", widths[i], cell)
+			}
+		}
+		return strings.Join(parts, "  ")
+	}
+	header := make([]string, len(m.columns))
+	for i, c := range m.columns {
+		header[i] = c.Title
+	}
+	lines := []string{formatRow(header)}
+	for _, row := range m.rows {
+		lines = append(lines, formatRow(row))
+	}
+	return strings.Join(lines, "\n")
+}
+
 // ColumnsForResource returns the column definitions for a given resource type.
 func ColumnsForResource(rt k8s.ResourceType) []Column {
 	return k8s.DefaultRegistry.ColumnsFor(rt)
@@ -219,14 +263,14 @@ func (m TableModel) handleSearchKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 		}
 		return m, nil
 
-	case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && string(msg.Runes) == "j"):
+	case msg.Type == tea.KeyDown:
 		if len(m.rows) > 0 && m.cursor < len(m.rows)-1 {
 			m.cursor++
 			m.ensureCursorVisible()
 			return m, m.emitCursorChanged()
 		}
 
-	case msg.Type == tea.KeyUp || (msg.Type == tea.KeyRunes && string(msg.Runes) == "k"):
+	case msg.Type == tea.KeyUp:
 		if m.cursor > 0 {
 			m.cursor--
 			m.ensureCursorVisible()

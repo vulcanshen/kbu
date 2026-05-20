@@ -189,6 +189,135 @@ func TestNamespacePickerModel_InactiveIgnoresKeys(t *testing.T) {
 	}
 }
 
+// ── Search ────────────────────────────────────────────────────────────────
+
+func TestNamespacePickerModel_SlashEntersSearchMode(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('/'))
+	if !m.searching {
+		t.Error("'/' must enter search mode")
+	}
+}
+
+func TestNamespacePickerModel_SearchFiltersList(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("mon")})
+
+	items := m.filtered()
+	if len(items) != 1 || items[0] != "monitoring" {
+		t.Errorf("expected only 'monitoring', got %v", items)
+	}
+}
+
+func TestNamespacePickerModel_EnterInSearchReleasesFocusOnly(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("default")})
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.searching {
+		t.Error("Enter in search mode must release search focus")
+	}
+	if m.searchQuery != "default" {
+		t.Errorf("Enter must keep filter, got query %q", m.searchQuery)
+	}
+	if !m.IsActive() {
+		t.Error("Enter in search mode must not close popup")
+	}
+	if cmd != nil {
+		if msg := runBatchForMsg[NamespaceChangedMsg](cmd); msg != nil {
+			t.Error("Enter in search mode must NOT emit NamespaceChangedMsg")
+		}
+	}
+}
+
+func TestNamespacePickerModel_JKInSearchModeAreTyped(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(keyMsg('j'))
+	m, _ = m.Update(keyMsg('k'))
+
+	if m.cursor != 0 {
+		t.Errorf("j/k in search must not move cursor, got %d", m.cursor)
+	}
+	if m.searchQuery != "jk" {
+		t.Errorf("j/k in search must be typed, got query %q", m.searchQuery)
+	}
+}
+
+func TestNamespacePickerModel_ArrowsInSearchModeNavigate(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+
+	if m.cursor != 1 {
+		t.Errorf("Down arrow in search must move cursor, got %d", m.cursor)
+	}
+}
+
+func TestNamespacePickerModel_JNavigatesAfterEnterReleasesFocus(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}) // matches All Namespaces & default
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})                     // exit search
+
+	if m.searching {
+		t.Fatal("expected search released after Enter")
+	}
+	m, _ = m.Update(keyMsg('j'))
+	if m.cursor != 1 {
+		t.Errorf("j after Enter must navigate filtered list, got cursor %d", m.cursor)
+	}
+}
+
+func TestNamespacePickerModel_EscInSearchClearsFilter(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("xyz")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+
+	if m.searching {
+		t.Error("Esc in search must exit search mode")
+	}
+	if m.searchQuery != "" {
+		t.Errorf("Esc must clear query, got %q", m.searchQuery)
+	}
+	if !m.IsActive() {
+		t.Error("Esc in search must NOT close popup")
+	}
+}
+
+func TestNamespacePickerModel_NSearchableInSearchMode(t *testing.T) {
+	// In search mode, 'n' should be a typed character, not close popup.
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(keyMsg('n'))
+
+	if !m.IsActive() {
+		t.Error("'n' in search mode must not close popup")
+	}
+	if m.searchQuery != "n" {
+		t.Errorf("'n' in search must be typed; got query %q", m.searchQuery)
+	}
+}
+
 // ── Helper ────────────────────────────────────────────────────────────────
 
 // runBatchForMsg executes cmds from a tea.Batch until it finds one that

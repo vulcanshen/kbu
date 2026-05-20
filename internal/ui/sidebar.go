@@ -93,6 +93,25 @@ func newSidebarFromRegistry(t *theme.Theme, reg *k8s.Registry) SidebarModel {
 	return m
 }
 
+// CopyableContent returns the visible sidebar tree as plain text (respecting
+// the active search filter). Categories are flush-left, resources indented
+// with two spaces. Used by the global `y` key.
+func (m SidebarModel) CopyableContent() string {
+	items := m.visibleItems()
+	if len(items) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(items))
+	for _, it := range items {
+		if it.isCategory {
+			lines = append(lines, it.label)
+		} else {
+			lines = append(lines, "  "+it.label)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // RefreshCategories rebuilds sidebar categories from the registry.
 func (m *SidebarModel) RefreshCategories(reg *k8s.Registry) {
 	catGroups := reg.SidebarCategories()
@@ -222,10 +241,10 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 			m.resetCursorToFirstMatch()
 		}
 		return m, nil
-	case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && string(msg.Runes) == "j"):
+	case msg.Type == tea.KeyDown:
 		visible := m.visibleItems()
 		return m.moveDown(visible)
-	case msg.Type == tea.KeyUp || (msg.Type == tea.KeyRunes && string(msg.Runes) == "k"):
+	case msg.Type == tea.KeyUp:
 		visible := m.visibleItems()
 		return m.moveUp(visible)
 	case msg.Type == tea.KeyRunes:

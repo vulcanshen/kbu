@@ -114,13 +114,16 @@ func (m SplashModel) Render(width, height int) string {
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	logoW := cols * 2
 	done := m.revealedCount >= len(m.pixelOrder)
-	titleText, hintText := " ", " "
+	titleText, taglineText, hintText := " ", " ", " "
 	if done {
 		titleText = "K M 8"
+		taglineText = "Hi! It's KubeMate."
 		hintText = dimStyle.Render("press q or Esc to close")
 	}
 	caption := "\n\n" +
 		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, titleText) +
+		"\n" +
+		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, taglineText) +
 		"\n\n" +
 		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, hintText)
 

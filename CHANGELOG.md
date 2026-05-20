@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.7] - 2026-05-20
+
+### Added
+- **Detail tab is now YAML** (renamed from "Detail"). Renders the resource's serialized YAML — equivalent to `kubectl get -o yaml` but sourced from the informer cache so display is instant. `apiVersion` / `kind` are restored on the deep-copied object before marshaling (client-go strips TypeMeta from cached typed objects); `managedFields` are stripped.
+- **Container drill-down shows YAML too**: extracts `spec.containers[i]` and `status.containerStatuses[i]` (or init equivalents) into a `{spec, status}` document.
+- **YAML syntax highlighting**: keys, list dashes, comments, and `---` separators are colored per line; safe round-trip (strip ANSI = original text).
+- **Clipboard copy (`y`)**: global key copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` needed). Sidebar copies the navigation tree, Table copies header + filtered rows, Detail/YAML copies raw unwrapped YAML so it is paste-ready. A bordered toast popup (`Copied!`) confirms for 1 s. New `y copy` hint added to the status line.
+- **Search (`/`) in namespace and context popups**: type to filter; `Enter` releases input focus (filter kept) so `j/k` can navigate; `Esc` clears filter; `Backspace` deletes a character. Empty result shows `(no matches)`.
+- **Content reflow on panel resize**: expanding (`=`) and restoring (`-`) the panel now re-wraps Detail/YAML, Events, and Logs to the new width. Logs are stored as raw `(container, text)` pairs and wrapped at render time.
+
+### Changed
+- **Long values now wrap instead of truncating with `…`** — applies to Detail tab values, Events message column, Log lines, and YAML lines. Continuation lines indent to the value column.
+- **Detail tab spacing tightened**: removed blank lines between Labels / Annotations / Fields / Containers sections; label column shrunk from 14 to 12 chars; container field column from 10 to 8.
+- **Panel expand key `+` → `=`** so it works without Shift. `-` still restores.
+- **Search input fixed in panel 1/2/3 + popups**: `j`/`k` are now typed as characters in search mode (previously hijacked as navigation, blocking inputs like "kafka" or "jenkins"). `↑`/`↓` remain for navigation while searching.
+- **Namespace and context popup titles updated** with a Nerd Font glyph: `󱧌 Namespaces` and `󱧌 Contexts`.
+- **Toast popup style aligned with picker popups** (same `#74c7ec` border, `󱧌` title glyph).
+- **Easter egg hotkey `K` → `V`**; `K M 8` caption now followed by `Hi! It's KubeMate.` tagline.
+
+### Fixed
+- **YAML output was missing `apiVersion` / `kind`**: client-go strips TypeMeta on objects pulled from the informer cache; km8 now restores GVK via `scheme.Scheme.ObjectKinds` before marshaling.
+
+### Documentation
+- README key bindings updated for `=`/`-` expand, `y` copy, YAML tab; Features list refreshed.
+
 ## [v1.0.6] - 2026-05-18
 
 ### Added
