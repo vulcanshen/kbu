@@ -6,9 +6,17 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
+
+// logLine holds an unrendered log entry. Wrapping is deferred to render time
+// so log output reflows correctly when the panel is resized.
+type logLine struct {
+	container string
+	text      string
+}
 
 // DetailTab identifies which tab is active in the detail panel.
 type DetailTab int
@@ -33,7 +41,7 @@ type DetailModel struct {
 	theme        *theme.Theme
 	hasData      bool
 	pendingG     bool
-	logLines     []string
+	logLines     []logLine
 	maxLogLines  int
 	resourceType k8s.ResourceType
 	searching    bool
@@ -50,7 +58,7 @@ func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{
 		activeTab:   DetailTabInfo,
-		tabs:        []string{"Detail", "Events"},
+		tabs:        []string{"YAML", "Events"},
 		theme:       t,
 		maxLogLines: 1000,
 	}
@@ -171,10 +179,10 @@ func (m DetailModel) handleSearchKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 			m.scrollOffset = 0
 		}
 		return m, nil
-	case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && string(msg.Runes) == "j"):
+	case msg.Type == tea.KeyDown:
 		m = m.scrollDown()
 		return m, nil
-	case msg.Type == tea.KeyUp || (msg.Type == tea.KeyRunes && string(msg.Runes) == "k"):
+	case msg.Type == tea.KeyUp:
 		m = m.scrollUp()
 		return m, nil
 	case msg.Type == tea.KeyRunes:
@@ -309,15 +317,42 @@ func (m DetailModel) View() string {
 	return b.String()
 }
 
-// SetSize sets the dimensions of the detail panel.
+// SetSize sets the dimensions of the detail panel. When the width changes the
+// content lines are rebuilt so wrap points reflow to the new width — this is
+// what makes panel expand (= / -) feel correct.
 func (m *DetailModel) SetSize(width, height int) {
+	widthChanged := width != m.width
 	m.width = width
 	m.height = height
+	if widthChanged && m.hasData {
+		m.buildContentLines()
+	}
 }
 
 // SetFocused sets whether the detail panel is focused.
 func (m *DetailModel) SetFocused(focused bool) {
 	m.focused = focused
+}
+
+// CopyableContent returns the current tab's content as plain text (no ANSI
+// codes), respecting the active search filter. Used by the global `y` key
+// to copy the visible panel content to the clipboard.
+//
+// On the Detail tab, when YAML is available and no search filter is active,
+// the raw unwrapped YAML is returned so it stays valid for paste-back use.
+func (m DetailModel) CopyableContent() string {
+	if !m.hasData {
+		return ""
+	}
+	if m.ActiveTabName() == "YAML" && m.detail.YAML != "" && m.searchQuery == "" {
+		return strings.TrimRight(m.detail.YAML, "\n")
+	}
+	lines := m.filteredContentLines()
+	plain := make([]string, len(lines))
+	for i, l := range lines {
+		plain[i] = strings.TrimRight(ansi.Strip(l), " ")
+	}
+	return strings.Join(plain, "\n")
 }
 
 // ScrollInfo returns scroll position for the detail panel.
@@ -370,11 +405,11 @@ func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
 	def := k8s.DefaultRegistry.Get(rt)
 	if def != nil && def.HasLogs {
-		m.tabs = []string{"Detail", "Logs", "Events"}
+		m.tabs = []string{"YAML", "Logs", "Events"}
 	} else if rt == k8s.ResourceEvents {
-		m.tabs = []string{"Detail"}
+		m.tabs = []string{"YAML"}
 	} else {
-		m.tabs = []string{"Detail", "Events"}
+		m.tabs = []string{"YAML", "Events"}
 	}
 	m.activeTab = 0
 	m.scrollOffset = 0
@@ -396,15 +431,17 @@ func (m DetailModel) ActiveTabName() string {
 	if int(m.activeTab) < len(m.tabs) {
 		return m.tabs[m.activeTab]
 	}
-	return "Detail"
+	return "YAML"
 }
 
 // AppendLogLine appends a formatted log line to the log buffer.
 // If the buffer exceeds maxLogLines, the oldest lines are trimmed.
 // If the Logs tab is active, content lines are rebuilt.
+//
+// Raw (container, text) pairs are stored; wrapping happens at render time so
+// log output reflows on resize.
 func (m *DetailModel) AppendLogLine(container, text string) {
-	formatted := "  " + container + " │ " + text
-	m.logLines = append(m.logLines, formatted)
+	m.logLines = append(m.logLines, logLine{container: container, text: text})
 	if len(m.logLines) > m.maxLogLines {
 		m.logLines = m.logLines[len(m.logLines)-m.maxLogLines:]
 	}
@@ -416,7 +453,7 @@ func (m *DetailModel) AppendLogLine(container, text string) {
 // buildContentLines rebuilds the pre-rendered content lines for the current tab.
 func (m *DetailModel) buildContentLines() {
 	switch m.ActiveTabName() {
-	case "Detail":
+	case "YAML":
 		m.contentLines = m.buildInfoLines()
 	case "Logs":
 		m.contentLines = m.buildLogLines()
@@ -429,17 +466,30 @@ func (m DetailModel) buildInfoLines() []string {
 	if !m.hasData {
 		return nil
 	}
+	if m.detail.YAML != "" {
+		return m.buildYAMLLines()
+	}
 
 	labelStyle := m.theme.DetailLabelStyle()
 	valueStyle := m.theme.DetailValueStyle()
 
+	const labelW = 12
+	const indent = "  "
+	valueAvail := m.width - len(indent) - labelW
+
 	var lines []string
 
-	// Standard fields with aligned label column.
 	addField := func(label, value string) {
-		l := labelStyle.Render(fmt.Sprintf("%-14s", label))
-		v := valueStyle.Render(value)
-		lines = append(lines, "  "+l+v)
+		labelCol := labelStyle.Render(fmt.Sprintf("%-*s", labelW, label))
+		valueLines := wrapPlain(value, valueAvail)
+		if len(valueLines) == 0 {
+			valueLines = []string{""}
+		}
+		lines = append(lines, indent+labelCol+valueStyle.Render(valueLines[0]))
+		contIndent := indent + strings.Repeat(" ", labelW)
+		for _, v := range valueLines[1:] {
+			lines = append(lines, contIndent+valueStyle.Render(v))
+		}
 	}
 
 	if m.detail.Name != "" {
@@ -462,20 +512,26 @@ func (m DetailModel) buildInfoLines() []string {
 	if len(m.detail.Labels) > 0 {
 		keys := sortedKeys(m.detail.Labels)
 		if len(keys) <= 3 {
-			// Inline: Labels:  key=val, key=val
 			var pairs []string
 			for _, k := range keys {
 				pairs = append(pairs, k+"="+m.detail.Labels[k])
 			}
-			l := labelStyle.Render(fmt.Sprintf("%-14s", "Labels:"))
-			v := valueStyle.Render(strings.Join(pairs, ", "))
-			lines = append(lines, "  "+l+v)
+			addField("Labels:", strings.Join(pairs, ", "))
 		} else {
-			lines = append(lines, "")
-			lines = append(lines, "  "+labelStyle.Render("Labels:"))
+			lines = append(lines, indent+labelStyle.Render("Labels:"))
+			subAvail := m.width - 4
+			subIndent := "    "
+			contIndent := "      "
 			for _, k := range keys {
 				v := m.detail.Labels[k]
-				lines = append(lines, "    "+valueStyle.Render(k+"="+v))
+				wrapped := wrapPlain(k+"="+v, subAvail)
+				if len(wrapped) == 0 {
+					continue
+				}
+				lines = append(lines, subIndent+valueStyle.Render(wrapped[0]))
+				for _, cont := range wrapped[1:] {
+					lines = append(lines, contIndent+valueStyle.Render(cont))
+				}
 			}
 		}
 	}
@@ -484,49 +540,60 @@ func (m DetailModel) buildInfoLines() []string {
 	if len(m.detail.Annotations) > 0 {
 		keys := sortedKeys(m.detail.Annotations)
 		if len(keys) <= 3 {
-			// Inline: Annotations:  key=val, key=val
 			var pairs []string
 			for _, k := range keys {
 				pairs = append(pairs, k+"="+m.detail.Annotations[k])
 			}
-			l := labelStyle.Render(fmt.Sprintf("%-14s", "Annotations:"))
-			v := valueStyle.Render(strings.Join(pairs, ", "))
-			lines = append(lines, "  "+l+v)
+			addField("Annotations:", strings.Join(pairs, ", "))
 		} else {
-			lines = append(lines, "")
-			lines = append(lines, "  "+labelStyle.Render("Annotations:"))
+			lines = append(lines, indent+labelStyle.Render("Annotations:"))
+			subAvail := m.width - 4
+			subIndent := "    "
+			contIndent := "      "
 			for _, k := range keys {
 				v := m.detail.Annotations[k]
-				lines = append(lines, "    "+valueStyle.Render(k+"="+v))
+				wrapped := wrapPlain(k+"="+v, subAvail)
+				if len(wrapped) == 0 {
+					continue
+				}
+				lines = append(lines, subIndent+valueStyle.Render(wrapped[0]))
+				for _, cont := range wrapped[1:] {
+					lines = append(lines, contIndent+valueStyle.Render(cont))
+				}
 			}
 		}
 	}
 
 	// Extra fields.
-	if len(m.detail.Fields) > 0 {
-		lines = append(lines, "")
-		for _, f := range m.detail.Fields {
-			addField(f.Label+":", f.Value)
-		}
+	for _, f := range m.detail.Fields {
+		addField(f.Label+":", f.Value)
 	}
 
 	// Containers section.
 	if len(m.detail.Containers) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, "  "+labelStyle.Render("Containers:"))
+		lines = append(lines, indent+labelStyle.Render("Containers:"))
+		const cFieldW = 8
+		cFieldAvail := m.width - 6 - cFieldW
 		for _, c := range m.detail.Containers {
 			prefix := "  "
 			if c.Init {
 				prefix = "  (init) "
 			}
-			nameStr := labelStyle.Render(prefix + c.Name)
-			lines = append(lines, "  "+nameStr)
+			lines = append(lines, indent+labelStyle.Render(prefix+c.Name))
 
 			addContainerField := func(label, value string) {
-				if value != "" {
-					l := labelStyle.Render(fmt.Sprintf("      %-10s", label))
-					v := valueStyle.Render(value)
-					lines = append(lines, "  "+l+v)
+				if value == "" {
+					return
+				}
+				labelCol := labelStyle.Render(fmt.Sprintf("%-*s", cFieldW, label))
+				wrapped := wrapPlain(value, cFieldAvail)
+				if len(wrapped) == 0 {
+					wrapped = []string{""}
+				}
+				lines = append(lines, "      "+labelCol+valueStyle.Render(wrapped[0]))
+				contIndent := "      " + strings.Repeat(" ", cFieldW)
+				for _, v := range wrapped[1:] {
+					lines = append(lines, contIndent+valueStyle.Render(v))
 				}
 			}
 			addContainerField("Image:", c.Image)
@@ -546,6 +613,36 @@ func (m DetailModel) buildInfoLines() []string {
 	}
 
 	return lines
+}
+
+// buildYAMLLines renders the resource's raw YAML with a 2-space left indent,
+// wrapping long lines and applying syntax highlighting per line.
+func (m DetailModel) buildYAMLLines() []string {
+	raw := strings.TrimRight(m.detail.YAML, "\n")
+	if raw == "" {
+		return nil
+	}
+	valueStyle := m.theme.DetailValueStyle()
+	const indent = "  "
+	const contIndent = "    "
+	avail := m.width - len(indent)
+	var out []string
+	for _, line := range strings.Split(raw, "\n") {
+		if avail <= 0 {
+			out = append(out, indent+highlightYAMLLine(line, m.theme))
+			continue
+		}
+		wrapped := wrapPlain(line, avail)
+		if len(wrapped) == 0 {
+			out = append(out, indent)
+			continue
+		}
+		out = append(out, indent+highlightYAMLLine(wrapped[0], m.theme))
+		for _, w := range wrapped[1:] {
+			out = append(out, contIndent+valueStyle.Render(w))
+		}
+	}
+	return out
 }
 
 func (m DetailModel) buildEventLines() []string {
@@ -578,8 +675,8 @@ func (m DetailModel) buildEventLines() []string {
 		}
 	}
 
-	// Cap message width to avoid overly wide lines.
-	maxMsgW := m.width - typeW - reasonW - objectW - ageW - 12 // 4 gaps of 2 + leading spaces
+	// Cap message width so MESSAGE column wraps within panel.
+	maxMsgW := m.width - typeW - reasonW - objectW - ageW - 12 // 4 gaps of 2 + leading 2 + trailing 2
 	if maxMsgW < 10 {
 		maxMsgW = 10
 	}
@@ -590,25 +687,65 @@ func (m DetailModel) buildEventLines() []string {
 	labelStyle := m.theme.DetailLabelStyle()
 	valueStyle := m.theme.DetailValueStyle()
 
-	formatRow := func(t, r, o, msg, age string) string {
-		// Truncate message if needed.
-		if len(msg) > messageW {
-			msg = msg[:messageW-1] + "…"
+	// Indent for message continuation lines: leading 2 + typeW + 2 + reasonW + 2 + objectW + 2
+	msgIndent := strings.Repeat(" ", 2+typeW+2+reasonW+2+objectW+2)
+
+	formatRows := func(t, r, o, msg, age string) []string {
+		msgLines := wrapPlain(msg, messageW)
+		if len(msgLines) == 0 {
+			msgLines = []string{""}
 		}
-		return fmt.Sprintf("  %-*s  %-*s  %-*s  %-*s  %-*s",
-			typeW, t, reasonW, r, objectW, o, messageW, msg, ageW, age)
+		first := fmt.Sprintf("  %-*s  %-*s  %-*s  %-*s  %-*s",
+			typeW, t, reasonW, r, objectW, o, messageW, msgLines[0], ageW, age)
+		out := []string{first}
+		for _, cont := range msgLines[1:] {
+			out = append(out, msgIndent+cont)
+		}
+		return out
 	}
 
 	var lines []string
-	header := formatRow("TYPE", "REASON", "OBJECT", "MESSAGE", "AGE")
-	lines = append(lines, labelStyle.Render(header))
+	for _, row := range formatRows("TYPE", "REASON", "OBJECT", "MESSAGE", "AGE") {
+		lines = append(lines, labelStyle.Render(row))
+	}
 
 	for _, e := range m.events {
-		row := formatRow(e.Type, e.Reason, e.Object, e.Message, e.Age)
-		lines = append(lines, valueStyle.Render(row))
+		for _, row := range formatRows(e.Type, e.Reason, e.Object, e.Message, e.Age) {
+			lines = append(lines, valueStyle.Render(row))
+		}
 	}
 
 	return lines
+}
+
+// wrapPlain wraps plain (no ANSI) text to the given width, breaking at word
+// boundaries when possible. Returns one string per output line. The returned
+// lines do not include any indentation — callers prepend continuation indent.
+func wrapPlain(text string, width int) []string {
+	if width <= 0 {
+		return []string{text}
+	}
+	if len(text) <= width {
+		return []string{text}
+	}
+	var out []string
+	rest := text
+	for len(rest) > width {
+		cut := width
+		// If the boundary char is a space, break exactly at width — keeps
+		// "hello world" intact when width == 11.
+		if rest[width] != ' ' {
+			if idx := strings.LastIndex(rest[:width], " "); idx > 0 {
+				cut = idx
+			}
+		}
+		out = append(out, strings.TrimRight(rest[:cut], " "))
+		rest = strings.TrimLeft(rest[cut:], " ")
+	}
+	if rest != "" {
+		out = append(out, rest)
+	}
+	return out
 }
 
 func (m DetailModel) buildLogLines() []string {
@@ -618,7 +755,23 @@ func (m DetailModel) buildLogLines() []string {
 	if len(m.logLines) == 0 {
 		return []string{"  " + m.theme.DetailValueStyle().Render("Waiting for logs...")}
 	}
-	return m.logLines
+	var lines []string
+	for _, ll := range m.logLines {
+		prefix := "  " + ll.container + " │ "
+		textW := m.width - len(prefix)
+		wrapped := wrapPlain(ll.text, textW)
+		if len(wrapped) == 0 {
+			wrapped = []string{""}
+		}
+		lines = append(lines, prefix+wrapped[0])
+		if len(wrapped) > 1 {
+			contIndent := "  " + strings.Repeat(" ", len(ll.container)) + " │ "
+			for _, w := range wrapped[1:] {
+				lines = append(lines, contIndent+w)
+			}
+		}
+	}
+	return lines
 }
 
 // sortedKeys returns the keys of a map sorted alphabetically.

@@ -49,6 +49,11 @@ type ResourceItem struct {
 }
 
 // ResourceDetail holds structured detail for a resource.
+//
+// YAML, if non-empty, is the canonical serialized form of the resource — the
+// detail panel renders it instead of the structured Fields/Containers when
+// available. Structured fields are still used for synthetic detail views
+// (e.g. container drill-down) that have no native YAML.
 type ResourceDetail struct {
 	Name        string
 	Namespace   string
@@ -59,6 +64,7 @@ type ResourceDetail struct {
 	Annotations map[string]string
 	Fields      []DetailField
 	Containers  []ContainerInfo
+	YAML        string
 }
 
 // DetailField is a key-value pair for resource-specific detail.

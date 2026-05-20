@@ -1,12 +1,43 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
+
+func TestSidebarModel_SearchJKAreTypedNotNavigation(t *testing.T) {
+	m := newTestSidebar()
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(keyMsg('j'))
+	m, _ = m.Update(keyMsg('k'))
+
+	if m.searchQuery != "jk" {
+		t.Errorf("j/k in search must be typed as chars, got query %q", m.searchQuery)
+	}
+	// Cursor may jump to first match due to filtering — that's expected. The
+	// regression we guard against is j/k bypassing the rune handler entirely.
+}
+
+func TestSidebarModel_CopyableContent(t *testing.T) {
+	m := newTestSidebar()
+	got := m.CopyableContent()
+	if got == "" {
+		t.Fatal("expected non-empty copyable content")
+	}
+	// Category should be flush-left.
+	if !strings.Contains(got, "\nWorkloads\n") {
+		t.Errorf("expected flush-left category 'Workloads', got:\n%s", got)
+	}
+	// Resources should be indented with two spaces.
+	if !strings.Contains(got, "  Pods") {
+		t.Errorf("expected indented 'Pods', got:\n%s", got)
+	}
+}
 
 func newTestSidebar() SidebarModel {
 	t := theme.DefaultTheme()

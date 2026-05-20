@@ -10,11 +10,13 @@ import (
 
 // ContextPickerModel is an overlay that lets the user switch kubeconfig contexts.
 type ContextPickerModel struct {
-	contexts []string
-	current  string
-	cursor   int
-	animator PopupAnimator
-	theme    *theme.Theme
+	contexts    []string
+	current     string
+	cursor      int
+	animator    PopupAnimator
+	theme       *theme.Theme
+	searching   bool
+	searchQuery string
 }
 
 // NewContextPickerModel creates a new context picker.
@@ -31,6 +33,8 @@ func (m *ContextPickerModel) Open(contexts []string, current string) tea.Cmd {
 	m.contexts = contexts
 	m.current = current
 	m.cursor = 0
+	m.searching = false
+	m.searchQuery = ""
 	for i, c := range contexts {
 		if c == current {
 			m.cursor = i
@@ -38,6 +42,20 @@ func (m *ContextPickerModel) Open(contexts []string, current string) tea.Cmd {
 		}
 	}
 	return m.animator.Open()
+}
+
+func (m ContextPickerModel) filtered() []string {
+	if m.searchQuery == "" {
+		return m.contexts
+	}
+	q := strings.ToLower(m.searchQuery)
+	var out []string
+	for _, c := range m.contexts {
+		if strings.Contains(strings.ToLower(c), q) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // Close hides the picker.
@@ -61,30 +79,89 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 	if !m.animator.IsInteractive() {
 		return m, nil
 	}
-
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "j", "down":
-			if m.cursor < len(m.contexts)-1 {
-				m.cursor++
-			}
-		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "enter":
-			selected := m.contexts[m.cursor]
-			closeCmd := m.animator.Close()
-			return m, tea.Batch(closeCmd, func() tea.Msg {
-				return ContextChangedMsg{Context: selected}
-			})
-		case "esc", "c":
-			return m, m.animator.Close()
-		}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
 	}
-
+	if m.searching {
+		return m.handleSearchKey(keyMsg)
+	}
+	items := m.filtered()
+	switch keyMsg.String() {
+	case "/":
+		m.searching = true
+		m.searchQuery = ""
+		m.cursor = 0
+		return m, nil
+	case "j", "down":
+		if m.cursor < len(items)-1 {
+			m.cursor++
+		}
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "enter":
+		return m.selectCurrent(items)
+	case "esc", "c":
+		if m.searchQuery != "" {
+			m.searchQuery = ""
+			m.cursor = 0
+			return m, nil
+		}
+		return m, m.animator.Close()
+	}
 	return m, nil
+}
+
+func (m ContextPickerModel) handleSearchKey(msg tea.KeyMsg) (ContextPickerModel, tea.Cmd) {
+	switch {
+	case msg.Type == tea.KeyEscape:
+		m.searching = false
+		m.searchQuery = ""
+		m.cursor = 0
+		return m, nil
+	case msg.Type == tea.KeyEnter:
+		// Release search focus, keep filter. j/k navigation becomes available;
+		// a second Enter then selects.
+		m.searching = false
+		return m, nil
+	case msg.Type == tea.KeyBackspace:
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.cursor = 0
+		}
+		return m, nil
+	case msg.Type == tea.KeyDown:
+		items := m.filtered()
+		if m.cursor < len(items)-1 {
+			m.cursor++
+		}
+		return m, nil
+	case msg.Type == tea.KeyUp:
+		if m.cursor > 0 {
+			m.cursor--
+		}
+		return m, nil
+	case msg.Type == tea.KeyRunes:
+		for _, r := range msg.Runes {
+			m.searchQuery += string(r)
+		}
+		m.cursor = 0
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m ContextPickerModel) selectCurrent(items []string) (ContextPickerModel, tea.Cmd) {
+	if len(items) == 0 || m.cursor >= len(items) {
+		return m, nil
+	}
+	selected := items[m.cursor]
+	closeCmd := m.animator.Close()
+	return m, tea.Batch(closeCmd, func() tea.Msg {
+		return ContextChangedMsg{Context: selected}
+	})
 }
 
 // View renders the context picker (no-op; rendering via RenderPopup + overlay).
@@ -107,33 +184,39 @@ func (m ContextPickerModel) renderFullPopup() string {
 	boxWidth := 54
 	innerW := boxWidth - 2
 
+	items := m.filtered()
+
 	maxVisible := 10
 	start := 0
 	if m.cursor >= maxVisible {
 		start = m.cursor - maxVisible + 1
 	}
 	end := start + maxVisible
-	if end > len(m.contexts) {
-		end = len(m.contexts)
+	if end > len(items) {
+		end = len(items)
 	}
 
 	var lines []string
-	for i := start; i < end; i++ {
-		marker := "  "
-		if m.contexts[i] == m.current {
-			marker = "* "
-		}
-		label := marker + m.contexts[i]
-		if i == m.cursor {
-			lines = append(lines, selectedStyle.Width(innerW).Render(label))
-		} else {
-			lines = append(lines, normalStyle.Width(innerW).Render(label))
+	if len(items) == 0 {
+		lines = append(lines, normalStyle.Width(innerW).Render(" (no matches)"))
+	} else {
+		for i := start; i < end; i++ {
+			marker := "  "
+			if items[i] == m.current {
+				marker = "* "
+			}
+			label := marker + items[i]
+			if i == m.cursor {
+				lines = append(lines, selectedStyle.Width(innerW).Render(label))
+			} else {
+				lines = append(lines, normalStyle.Width(innerW).Render(label))
+			}
 		}
 	}
 	body := strings.Join(lines, "\n")
 
-	title := "Select Context"
-	dashesAfter := innerW - 1 - len(title)
+	title := popupGlyph + " Contexts"
+	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -143,8 +226,14 @@ func (m ContextPickerModel) renderFullPopup() string {
 
 	leftBorder := bStyle.Render("│")
 	rightBorder := bStyle.Render("│")
-	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
+
+	bodyLines := []string{""}
+	if m.searching || m.searchQuery != "" {
+		bodyLines = append(bodyLines, strings.Split(renderSearchBox(m.searchQuery, m.searching, innerW, m.theme), "\n")...)
+	}
+	bodyLines = append(bodyLines, strings.Split(body, "\n")...)
 	bodyLines = append(bodyLines, "")
+
 	for _, line := range bodyLines {
 		lw := lipgloss.Width(line)
 		pad := ""
@@ -154,8 +243,8 @@ func (m ContextPickerModel) renderFullPopup() string {
 		b.WriteString(leftBorder + line + pad + rightBorder + "\n")
 	}
 
-	hint := " Enter: select  Esc: cancel "
-	bottomDashes := innerW - len(hint) - 1
+	hint := " Enter: select  /: search  Esc: cancel "
+	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}

@@ -45,6 +45,7 @@ func (m StatusLineModel) hints() []hint {
 		{"j/k", "scroll"},
 		{"u/d", "page"},
 		{"gg/G", "top/bot"},
+		{"y", "copy"},
 	}
 	switch m.activePanel {
 	case SidebarPanel:
@@ -68,13 +69,13 @@ func (m StatusLineModel) hints() []hint {
 			hint{"s", "shell"},
 			hint{"e", "edit"},
 			hint{"D", "delete"},
-			hint{"+/-", "expand"},
+			hint{"=/-", "expand/restore"},
 		)
 	case DetailPanel:
 		return append(nav,
 			hint{"/", "search"},
 			hint{"h/l", "tab"},
-			hint{"+/-", "expand"},
+			hint{"=/-", "expand/restore"},
 		)
 	}
 	return nil

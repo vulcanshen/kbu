@@ -45,6 +45,7 @@ type AppModel struct {
 	appLog          AppLogModel
 	confirm         ConfirmModel
 	splash          SplashModel
+	toast           ToastModel
 
 	activePanel     Panel
 	width           int
@@ -101,6 +102,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		appLog:          NewAppLogModel(t),
 		confirm:         NewConfirmModel(t),
 		splash:          NewSplashModel(),
+		toast:           NewToastModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfgEditor:       cfgEditor,
@@ -253,7 +255,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.watcher.Stop()
 			m.logStreamer.Stop()
 			return m, tea.Quit
-		case "K":
+		case "V":
 			return m, m.splash.Show()
 		case "?":
 			m.help.SetSize(m.width, m.height)
@@ -329,7 +331,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						deleteResource(m.currentResource, item.Name, item.Namespace, m.k8sClient.ContextName()))
 				}
 			}
-		case "+":
+		case "=":
 			if m.activePanel == DetailPanel {
 				m.detailExpanded = true
 				return m, nil
@@ -344,6 +346,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.tableExpanded = false
 				return m, nil
 			}
+		case "y":
+			return m, copyToClipboardCmd(m.focusedPanelContent())
 		}
 
 	case ResourceSelectedMsg:
@@ -419,7 +423,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// In drill-down: selected a container
 			if msg.Index >= 0 && msg.Index < len(m.drillDownContainers) {
 				c := m.drillDownContainers[msg.Index]
-				detail := containerToDetail(c, m.drillDownPod.Name, m.drillDownPod.Namespace)
+				detail := containerToDetail(c, *m.drillDownPod)
 				m.detail.SetDetail(detail, nil)
 				m.detail.logLines = nil
 				m.logStreamer.Start(m.drillDownPod.Name, m.drillDownPod.Namespace, []string{c.Name})
@@ -632,6 +636,22 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appLog.Info(fmt.Sprintf("connected to %s (%s)", msg.info.ContextName, msg.info.ServerURL))
 		return m, nil
 
+	case ClipboardCopiedMsg:
+		notice := fmt.Sprintf("copied %d lines", msg.Lines)
+		if msg.Lines == 1 {
+			notice = "copied 1 line"
+		}
+		m.appLog.Info(notice)
+		return m, m.toast.Show("Copied!")
+
+	case ClipboardCopyFailedMsg:
+		m.appLog.Warn("copy: " + msg.Reason)
+		return m, nil
+
+	case toastDismissMsg:
+		m.toast.Update(msg)
+		return m, nil
+
 	case CRDsDiscoveredMsg:
 		if msg.Err != nil {
 			m.appLog.Warn("CRD discovery failed: " + msg.Err.Error())
@@ -729,6 +749,10 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.namespacePicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
+	if m.toast.IsActive() {
+		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
 	return mainView
 }
 
@@ -788,7 +812,7 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 		m.statusLine.SetDrillDown(true)
 		if len(m.drillDownContainers) > 0 {
 			c := m.drillDownContainers[0]
-			d := containerToDetail(c, item.Name, item.Namespace)
+			d := containerToDetail(c, item)
 			m.detail.SetDetail(d, nil)
 			m.detail.logLines = nil
 			m.logStreamer.Start(item.Name, item.Namespace, []string{c.Name})
@@ -914,9 +938,17 @@ func containerRows(containers []k8s.ContainerInfo) [][]string {
 	return rows
 }
 
-func containerToDetail(c k8s.ContainerInfo, podName, namespace string) k8s.ResourceDetail {
+func containerToDetail(c k8s.ContainerInfo, pod k8s.ResourceItem) k8s.ResourceDetail {
+	name := c.Name
+	if c.Init {
+		name = "(init) " + name
+	}
+	yaml := k8s.MarshalContainerYAML(pod, c.Name)
+
+	// Structured fields are kept as a fallback for the rare case where YAML
+	// extraction fails (e.g. pod.Raw not a *corev1.Pod).
 	fields := []k8s.DetailField{
-		{Label: "Pod", Value: podName},
+		{Label: "Pod", Value: pod.Name},
 		{Label: "Image", Value: c.Image},
 		{Label: "State", Value: c.State},
 	}
@@ -931,14 +963,11 @@ func containerToDetail(c k8s.ContainerInfo, podName, namespace string) k8s.Resou
 	if c.Ports != "" {
 		fields = append(fields, k8s.DetailField{Label: "Ports", Value: c.Ports})
 	}
-	name := c.Name
-	if c.Init {
-		name = "(init) " + name
-	}
 	return k8s.ResourceDetail{
 		Name:      name,
-		Namespace: namespace,
+		Namespace: pod.Namespace,
 		Kind:      "Container",
+		YAML:      yaml,
 		Fields:    fields,
 	}
 }
@@ -1042,6 +1071,18 @@ func shellExec(podName, namespace, container, contextName string) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return EditDoneMsg{Output: "no changes"} // suppress success badge
 	})
+}
+
+func (m AppModel) focusedPanelContent() string {
+	switch m.activePanel {
+	case SidebarPanel:
+		return m.sidebar.CopyableContent()
+	case TablePanel:
+		return m.table.CopyableContent()
+	case DetailPanel:
+		return m.detail.CopyableContent()
+	}
+	return ""
 }
 
 func (m *AppModel) setPanel(p Panel) {
@@ -1281,6 +1322,7 @@ func fetchResourceDetail(client *k8s.Client, rt k8s.ResourceType, item k8s.Resou
 			}
 		}()
 		detail := k8s.GetResourceDetail(rt, item)
+		detail.YAML = k8s.MarshalItemYAML(item)
 		events, _ := k8s.FetchResourceEvents(context.Background(), client.Clientset(), item.Name, item.Namespace)
 		return ResourceDetailMsg{Detail: detail, Events: events}
 	}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,6 +33,36 @@ func sampleRows(n int) [][]string {
 }
 
 // keyMsg is declared in sidebar_test.go (same package)
+
+func TestTableModel_CopyableContent(t *testing.T) {
+	m := newTestTable()
+	m.SetRows(sampleRows(3))
+	got := m.CopyableContent()
+	if got == "" {
+		t.Fatal("expected non-empty copyable content")
+	}
+	// Header should be present (Pods has a "Name" column).
+	if !strings.Contains(got, "Name") {
+		t.Errorf("expected header to contain Name, got:\n%s", got)
+	}
+	// All sample row names must appear.
+	for _, want := range []string{"pod-0", "pod-1", "pod-2"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected row %q in output, got:\n%s", want, got)
+		}
+	}
+	// One header line + three rows.
+	if lines := strings.Count(got, "\n") + 1; lines != 4 {
+		t.Errorf("expected 4 lines (header + 3 rows), got %d:\n%s", lines, got)
+	}
+}
+
+func TestTableModel_CopyableContent_EmptyWhenNoRows(t *testing.T) {
+	m := newTestTable()
+	if got := m.CopyableContent(); got != "" {
+		t.Errorf("expected empty when no rows, got %q", got)
+	}
+}
 
 func TestTableModel_InitialState(t *testing.T) {
 	m := newTestTable()
@@ -456,6 +487,22 @@ func TestTableModel_SearchNavigateWhileSearching(t *testing.T) {
 	// Still in search mode.
 	if !m.searching {
 		t.Error("expected to still be in search mode after navigating")
+	}
+}
+
+func TestTableModel_SearchJKAreTypedNotNavigation(t *testing.T) {
+	m := newTestTable()
+	m.SetRows(sampleRows(5))
+
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(keyMsg('j'))
+	m, _ = m.Update(keyMsg('k'))
+
+	if m.cursor != 0 {
+		t.Errorf("j/k in search must not move cursor, got %d", m.cursor)
+	}
+	if m.searchQuery != "jk" {
+		t.Errorf("j/k in search must be typed, got query %q", m.searchQuery)
 	}
 }
 
