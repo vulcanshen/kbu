@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.9] - 2026-05-21
+
+### Added
+- **9 new built-in resource types** (17 → 26 total):
+  - **Storage** (new category): `PersistentVolumes` (cluster-scoped), `PersistentVolumeClaims`, `StorageClasses` (cluster-scoped)
+  - **Autoscaling** (new category): `HorizontalPodAutoscalers` (autoscaling/v2), `PodDisruptionBudgets`
+  - **Network**: `NetworkPolicies`, `EndpointSlices` (replaces legacy `Endpoints` — K8s 1.21+ primary type), `IngressClasses` (cluster-scoped)
+  - **RBAC**: `ServiceAccounts` (completes the Pod → SA → RoleBinding lookup chain)
+- **Three new drill-down chains**:
+  - **PVC → mounting Pods** — filters pods by `spec.volumes[].persistentVolumeClaim.claimName`
+  - **HPA → target workload** — resolves `spec.scaleTargetRef` to Deployment / StatefulSet / DaemonSet; child type adapts per HPA target kind
+  - **PDB → protected Pods** — pods matching `spec.selector`
+- **Sidebar label truncation with ellipsis** — long names like `PersistentVolumeClaims` and `HorizontalPodAutoscalers` clip with `…` instead of overflowing the panel. Full name is recoverable from panel 2 border title on selection. Clipboard copy (`y`) keeps untruncated labels for paste.
+
+### Changed
+- **Drill-down child type is now resolved per item** (internal): `DrillDownConfig.ChildType` (fixed field) replaced with `ChildTypeFor` (resolver function). Existing drill-downs use a `StaticChildType(t)` wrapper — no behavior change. HPA's resolver returns the actual target kind (e.g. `ResourceDeployments` when targeting a Deployment, `ResourceStatefulSets` when targeting a StatefulSet) so the drilled-into table uses the correct column schema.
+- **HPA drill-down now goes to the target workload, not its pods.** Pressing Enter on an HPA lists the Deployment / StatefulSet / DaemonSet it controls (as a single-row list); a second Enter then descends into that workload's pods. The previous behavior jumped straight to leaf pods via the target's selector — pragmatic but lossy and inconsistent with how every other "follow the reference" drill-down works (Ingress → Service, RoleBinding → Role).
+
+### Internal
+- Dropped unused `ResourceType.ChildResourceType()` method (no callers).
+
 ## [v1.0.8] - 2026-05-21
 
 ### Added
