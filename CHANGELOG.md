@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.8] - 2026-05-21
+
+### Added
+- **Log follow-tail**: the Logs tab now sticks to the bottom as new lines arrive — no need to press `G` to keep up with `kubectl logs -f`-style output. A `▼` marker in Panel 3's title (`[3] Logs ▼`) shows when follow is active.
+- **Auto-pause on scroll up**: pressing `k` / `↑` / `u` / `gg` / mouse-wheel-up while on the Logs tab pauses the auto-scroll so you can read history without being yanked back. `G` jumps to the bottom AND resumes follow in one motion. `kj` suffices to pause in place — no dedicated toggle key needed.
+
 ## [v1.0.7] - 2026-05-20
 
 ### Added
