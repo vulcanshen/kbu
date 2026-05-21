@@ -46,6 +46,7 @@ type DetailModel struct {
 	resourceType k8s.ResourceType
 	searching    bool
 	searchQuery  string
+	followTail   bool // Logs tab: stick to bottom on new lines until user scrolls up
 }
 
 // IsSearching returns true if the detail panel is in search mode.
@@ -61,8 +62,12 @@ func NewDetailModel(t *theme.Theme) DetailModel {
 		tabs:        []string{"YAML", "Events"},
 		theme:       t,
 		maxLogLines: 1000,
+		followTail:  true,
 	}
 }
+
+// FollowTail reports whether the Logs tab auto-scrolls to the bottom on new lines.
+func (m DetailModel) FollowTail() bool { return m.followTail }
 
 // Init implements tea.Model.
 func (m DetailModel) Init() tea.Cmd {
@@ -101,6 +106,7 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 		m.pendingG = false
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == 'g' {
 			m.scrollOffset = 0
+			m = m.disableFollowIfLogs()
 			return m, nil
 		}
 		// Not a second g — fall through to normal handling.
@@ -142,6 +148,7 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 			if m.scrollOffset < 0 {
 				m.scrollOffset = 0
 			}
+			m = m.disableFollowIfLogs()
 		case '/':
 			m.searching = true
 			m.searchQuery = ""
@@ -231,11 +238,23 @@ func (m DetailModel) scrollUp() DetailModel {
 	if m.scrollOffset > 0 {
 		m.scrollOffset--
 	}
-	return m
+	return m.disableFollowIfLogs()
 }
 
 func (m DetailModel) scrollToBottom() DetailModel {
 	m.scrollOffset = m.maxScrollOffset()
+	if m.ActiveTabName() == "Logs" {
+		m.followTail = true
+	}
+	return m
+}
+
+// disableFollowIfLogs turns off follow-tail when the user manually scrolls up
+// inside the Logs tab. Outside of Logs it is a no-op.
+func (m DetailModel) disableFollowIfLogs() DetailModel {
+	if m.ActiveTabName() == "Logs" {
+		m.followTail = false
+	}
 	return m
 }
 
@@ -261,6 +280,10 @@ func (m DetailModel) switchToTab(tab DetailTab) DetailModel {
 		m.activeTab = tab
 		m.scrollOffset = 0
 		m.buildContentLines()
+		if m.ActiveTabName() == "Logs" {
+			m.followTail = true
+			m.scrollOffset = m.maxScrollOffset()
+		}
 	}
 	return m
 }
@@ -326,6 +349,9 @@ func (m *DetailModel) SetSize(width, height int) {
 	m.height = height
 	if widthChanged && m.hasData {
 		m.buildContentLines()
+		if m.ActiveTabName() == "Logs" && m.followTail {
+			m.scrollOffset = m.maxScrollOffset()
+		}
 	}
 }
 
@@ -390,6 +416,18 @@ func (m DetailModel) TabTitle() string {
 	return strings.Join(parts, "─")
 }
 
+// ActiveTabTitle returns the active tab name with a state marker suffix when
+// applicable — currently used to surface follow-tail state on the Logs tab.
+// Embed this in Panel 3's border title (which scopes to the active tab only),
+// rather than the full TabTitle bar on Panel 2.
+func (m DetailModel) ActiveTabTitle() string {
+	name := m.ActiveTabName()
+	if name == "Logs" && m.followTail {
+		return name + " ▼"
+	}
+	return name
+}
+
 // ClearDetail clears the detail data.
 func (m *DetailModel) ClearDetail() {
 	m.detail = k8s.ResourceDetail{}
@@ -447,6 +485,9 @@ func (m *DetailModel) AppendLogLine(container, text string) {
 	}
 	if m.ActiveTabName() == "Logs" {
 		m.buildContentLines()
+		if m.followTail {
+			m.scrollOffset = m.maxScrollOffset()
+		}
 	}
 }
 

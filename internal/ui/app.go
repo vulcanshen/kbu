@@ -697,7 +697,7 @@ func (m AppModel) View() string {
 	if m.detailExpanded {
 		panelH := m.height - 1 - m.statusLine.LineCount()
 		m.detail.SetSize(m.width-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), m.width, panelH, true, m.theme, m.detail.ScrollInfo())
+		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle(), m.width, panelH, true, m.theme, m.detail.ScrollInfo())
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, fullPanel, statusLine)
 	} else if m.tableExpanded {
 		_, _, upperH, detailH := m.panelSizes()
@@ -706,7 +706,7 @@ func (m AppModel) View() string {
 		m.detail.SetSize(fw-2, detailH-2)
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, fw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), fw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle(), fw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 		middle := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	} else {
@@ -719,7 +719,7 @@ func (m AppModel) View() string {
 		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo())
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabName(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 
 		rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
 		middle := lipgloss.JoinHorizontal(lipgloss.Top, sidebarPanel, rightSide)

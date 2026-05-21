@@ -556,3 +556,164 @@ func TestDetailModel_ClearDetail(t *testing.T) {
 		t.Errorf("expected scrollOffset=0 after ClearDetail, got %d", m.scrollOffset)
 	}
 }
+
+// ── Follow-tail (Logs auto-scroll) ─────────────────────────────────────────
+
+func TestDetailModel_FollowTail_DefaultOn(t *testing.T) {
+	m := newTestDetail()
+	if !m.FollowTail() {
+		t.Error("expected followTail=true by default")
+	}
+}
+
+func TestDetailModel_FollowTail_AppendSnapsToBottom(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(1) // Logs
+
+	// Spam enough lines that scroll has somewhere to go.
+	for i := 0; i < 100; i++ {
+		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+	}
+
+	if !m.followTail {
+		t.Fatal("expected followTail=true on Logs tab by default")
+	}
+	if m.scrollOffset != m.maxScrollOffset() {
+		t.Errorf("expected scroll glued to bottom while following: offset=%d, max=%d", m.scrollOffset, m.maxScrollOffset())
+	}
+}
+
+func TestDetailModel_FollowTail_AppendDoesNotMoveWhenPaused(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(1) // Logs, followTail=true at bottom
+
+	// Fill some lines, then user scrolls up — disables follow.
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+	}
+	m, _ = m.Update(keyMsg('k'))
+	if m.followTail {
+		t.Fatal("expected scrolling up to disable followTail")
+	}
+	pausedAt := m.scrollOffset
+
+	// New lines arrive — scroll offset must not change.
+	for i := 50; i < 60; i++ {
+		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+	}
+	if m.scrollOffset != pausedAt {
+		t.Errorf("expected scroll to stay put while paused: was %d, now %d", pausedAt, m.scrollOffset)
+	}
+}
+
+func TestDetailModel_FollowTail_ScrollUpDisablesOnLogsOnly(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+
+	// YAML tab: scrollUp must NOT touch followTail (out-of-context).
+	if m.ActiveTabName() != "YAML" {
+		t.Fatalf("expected YAML active, got %s", m.ActiveTabName())
+	}
+	m, _ = m.Update(keyMsg('k'))
+	if !m.followTail {
+		t.Error("scrolling up on YAML tab must not disable followTail")
+	}
+
+	// Logs tab: scrollUp disables.
+	m = m.switchToTab(1)
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+	}
+	m, _ = m.Update(keyMsg('k'))
+	if m.followTail {
+		t.Error("scrolling up on Logs must disable followTail")
+	}
+}
+
+func TestDetailModel_FollowTail_GReEnables(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(1)
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+	}
+	m, _ = m.Update(keyMsg('k')) // disable follow
+	if m.followTail {
+		t.Fatal("setup: k must disable followTail")
+	}
+
+	// G jumps to bottom AND resumes follow — "catch up + tail" is one action.
+	m, _ = m.Update(keyMsg('G'))
+	if m.scrollOffset != m.maxScrollOffset() {
+		t.Errorf("expected G to jump to bottom, got offset=%d max=%d", m.scrollOffset, m.maxScrollOffset())
+	}
+	if !m.followTail {
+		t.Error("expected G on Logs tab to re-enable followTail")
+	}
+}
+
+func TestDetailModel_FollowTail_GOutsideLogsDoesNotEnable(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	// YAML tab — followTail should remain whatever it is; we don't want G on
+	// a non-Logs tab to flip a state that's irrelevant there.
+	m.followTail = false
+	m, _ = m.Update(keyMsg('G'))
+	if m.followTail {
+		t.Error("G on a non-Logs tab must not flip followTail")
+	}
+}
+
+func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(1) // Logs
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+	}
+	m, _ = m.Update(keyMsg('k')) // pause
+	if m.followTail {
+		t.Fatal("setup: k must disable followTail")
+	}
+
+	// Leave Logs and return → state resets to follow.
+	m = m.switchToTab(0) // YAML
+	m = m.switchToTab(1) // Logs
+	if !m.followTail {
+		t.Error("re-entering Logs tab must reset followTail to true")
+	}
+}
+
+func TestDetailModel_ActiveTabTitle_FollowMarker(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(1) // Logs, followTail=true
+
+	if got := m.ActiveTabTitle(); got != "Logs ▼" {
+		t.Errorf("expected active tab title 'Logs ▼' when following, got %q", got)
+	}
+
+	// Pause via scroll up.
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+	}
+	m, _ = m.Update(keyMsg('k'))
+	if got := m.ActiveTabTitle(); got != "Logs" {
+		t.Errorf("expected active tab title 'Logs' when paused, got %q", got)
+	}
+
+	// The multi-tab bar (TabTitle, Panel 2) must NOT carry the marker —
+	// it now only reflects which tab is active, not Logs state.
+	if strings.Contains(m.TabTitle(), "▼") {
+		t.Errorf("TabTitle (Panel 2 tab bar) must not carry follow marker, got %q", m.TabTitle())
+	}
+}
