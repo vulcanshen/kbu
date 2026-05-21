@@ -11,6 +11,7 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -1573,6 +1574,193 @@ func fetchPodsForHPA(ctx context.Context, cs kubernetes.Interface, item Resource
 		return []ResourceItem{}, nil
 	}
 	return fetchPodsWithSelector(ctx, cs, item.Namespace, selector)
+}
+
+// ---------------------------------------------------------------------------
+// NetworkPolicy
+// ---------------------------------------------------------------------------
+
+// formatLabelSelector renders a LabelSelector as a kubectl-style string.
+// Returns "<all>" for an empty selector (matches all pods), "<none>" for nil.
+func formatLabelSelector(ls *metav1.LabelSelector) string {
+	if ls == nil {
+		return "<none>"
+	}
+	sel, err := metav1.LabelSelectorAsSelector(ls)
+	if err != nil {
+		return "<invalid>"
+	}
+	s := sel.String()
+	if s == "" {
+		return "<all>"
+	}
+	return s
+}
+
+func fetchNetworkPolicies(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.NetworkingV1().NetworkPolicies(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing networkpolicies: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		np := &list.Items[i]
+		types := make([]string, 0, len(np.Spec.PolicyTypes))
+		for _, t := range np.Spec.PolicyTypes {
+			types = append(types, string(t))
+		}
+		items = append(items, ResourceItem{
+			Name:      np.Name,
+			Namespace: np.Namespace,
+			UID:       string(np.UID),
+			Raw:       np,
+			Row: []string{
+				np.Name,
+				formatLabelSelector(&np.Spec.PodSelector),
+				strings.Join(types, ","),
+				formatAge(np.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailNetworkPolicy(item ResourceItem) ResourceDetail {
+	np, _ := item.Raw.(*networkingv1.NetworkPolicy)
+	d := baseDetail(item, "NetworkPolicy", np.ObjectMeta)
+	types := make([]string, 0, len(np.Spec.PolicyTypes))
+	for _, t := range np.Spec.PolicyTypes {
+		types = append(types, string(t))
+	}
+	d.Fields = []DetailField{
+		{Label: "PodSelector", Value: formatLabelSelector(&np.Spec.PodSelector)},
+		{Label: "PolicyTypes", Value: strings.Join(types, ",")},
+		{Label: "IngressRules", Value: fmt.Sprintf("%d", len(np.Spec.Ingress))},
+		{Label: "EgressRules", Value: fmt.Sprintf("%d", len(np.Spec.Egress))},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// EndpointSlice
+// ---------------------------------------------------------------------------
+
+func fetchEndpointSlices(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.DiscoveryV1().EndpointSlices(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing endpointslices: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		es := &list.Items[i]
+		ports := make([]string, 0, len(es.Ports))
+		for _, p := range es.Ports {
+			protocol := "TCP"
+			if p.Protocol != nil {
+				protocol = string(*p.Protocol)
+			}
+			portNum := int32(0)
+			if p.Port != nil {
+				portNum = *p.Port
+			}
+			ports = append(ports, fmt.Sprintf("%d/%s", portNum, protocol))
+		}
+		endpoints := make([]string, 0, len(es.Endpoints))
+		for _, ep := range es.Endpoints {
+			endpoints = append(endpoints, ep.Addresses...)
+		}
+		items = append(items, ResourceItem{
+			Name:      es.Name,
+			Namespace: es.Namespace,
+			UID:       string(es.UID),
+			Raw:       es,
+			Row: []string{
+				es.Name,
+				string(es.AddressType),
+				strings.Join(ports, ","),
+				strings.Join(endpoints, ","),
+				formatAge(es.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailEndpointSlice(item ResourceItem) ResourceDetail {
+	es, _ := item.Raw.(*discoveryv1.EndpointSlice)
+	d := baseDetail(item, "EndpointSlice", es.ObjectMeta)
+	ports := make([]string, 0, len(es.Ports))
+	for _, p := range es.Ports {
+		protocol := "TCP"
+		if p.Protocol != nil {
+			protocol = string(*p.Protocol)
+		}
+		portNum := int32(0)
+		if p.Port != nil {
+			portNum = *p.Port
+		}
+		ports = append(ports, fmt.Sprintf("%d/%s", portNum, protocol))
+	}
+	endpoints := make([]string, 0, len(es.Endpoints))
+	for _, ep := range es.Endpoints {
+		endpoints = append(endpoints, ep.Addresses...)
+	}
+	d.Fields = []DetailField{
+		{Label: "AddressType", Value: string(es.AddressType)},
+		{Label: "Ports", Value: strings.Join(ports, ",")},
+		{Label: "Endpoints", Value: fmt.Sprintf("%d", len(es.Endpoints))},
+		{Label: "Addresses", Value: strings.Join(endpoints, ",")},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// IngressClass
+// ---------------------------------------------------------------------------
+
+func fetchIngressClasses(ctx context.Context, cs kubernetes.Interface) ([]ResourceItem, error) {
+	list, err := cs.NetworkingV1().IngressClasses().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing ingressclasses: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		ic := &list.Items[i]
+		params := ""
+		if ic.Spec.Parameters != nil {
+			params = fmt.Sprintf("%s/%s", ic.Spec.Parameters.Kind, ic.Spec.Parameters.Name)
+		}
+		items = append(items, ResourceItem{
+			Name:      ic.Name,
+			Namespace: "",
+			UID:       string(ic.UID),
+			Raw:       ic,
+			Row: []string{
+				ic.Name,
+				ic.Spec.Controller,
+				params,
+				formatAge(ic.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailIngressClass(item ResourceItem) ResourceDetail {
+	ic, _ := item.Raw.(*networkingv1.IngressClass)
+	d := baseDetail(item, "IngressClass", ic.ObjectMeta)
+	params := "<none>"
+	if ic.Spec.Parameters != nil {
+		params = fmt.Sprintf("%s/%s", ic.Spec.Parameters.Kind, ic.Spec.Parameters.Name)
+		if ic.Spec.Parameters.Namespace != nil {
+			params = fmt.Sprintf("%s/%s/%s", *ic.Spec.Parameters.Namespace, ic.Spec.Parameters.Kind, ic.Spec.Parameters.Name)
+		}
+	}
+	d.Fields = []DetailField{
+		{Label: "Controller", Value: ic.Spec.Controller},
+		{Label: "Parameters", Value: params},
+	}
+	return d
 }
 
 // ---------------------------------------------------------------------------

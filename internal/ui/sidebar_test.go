@@ -51,7 +51,7 @@ func keyMsg(r rune) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 }
 
-// Visible items layout (30 total):
+// Visible items layout (33 total):
 //  0: Cluster                       (category)
 //  1: Namespaces                    (resource)
 //  2: Nodes                         (resource)
@@ -66,22 +66,25 @@ func keyMsg(r rune) tea.KeyMsg {
 // 11: Network                       (category)
 // 12: Services                      (resource)
 // 13: Ingresses                     (resource)
-// 14: Config                        (category)
-// 15: ConfigMaps                    (resource)
-// 16: Secrets                       (resource)
-// 17: Storage                       (category)
-// 18: PersistentVolumes             (resource)
-// 19: PersistentVolumeClaims        (resource)
-// 20: StorageClasses                (resource)
-// 21: RBAC                          (category)
-// 22: ClusterRoles                  (resource)
-// 23: ClusterRoleBindings           (resource)
-// 24: Roles                         (resource)
-// 25: RoleBindings                  (resource)
-// 26: ServiceAccounts               (resource)
-// 27: Autoscaling                   (category)
-// 28: HorizontalPodAutoscalers      (resource)
-// 29: PodDisruptionBudgets          (resource)
+// 14: NetworkPolicies               (resource)
+// 15: EndpointSlices                (resource)
+// 16: IngressClasses                (resource)
+// 17: Config                        (category)
+// 18: ConfigMaps                    (resource)
+// 19: Secrets                       (resource)
+// 20: Storage                       (category)
+// 21: PersistentVolumes             (resource)
+// 22: PersistentVolumeClaims        (resource)
+// 23: StorageClasses                (resource)
+// 24: RBAC                          (category)
+// 25: ClusterRoles                  (resource)
+// 26: ClusterRoleBindings           (resource)
+// 27: Roles                         (resource)
+// 28: RoleBindings                  (resource)
+// 29: ServiceAccounts               (resource)
+// 30: Autoscaling                   (category)
+// 31: HorizontalPodAutoscalers      (resource)
+// 32: PodDisruptionBudgets          (resource)
 
 func TestSidebarModel_InitialState(t *testing.T) {
 	m := newTestSidebar()
@@ -96,10 +99,10 @@ func TestSidebarModel_InitialState(t *testing.T) {
 		t.Errorf("expected selected=ResourcePods, got %v", m.Selected())
 	}
 
-	// 7 categories (Cluster, Workloads, Network, Config, Storage, RBAC, Autoscaling) + 23 resources = 30
+	// 7 categories (Cluster, Workloads, Network, Config, Storage, RBAC, Autoscaling) + 26 resources = 33
 	visible := m.visibleItems()
-	if len(visible) != 30 {
-		t.Errorf("expected 30 visible items, got %d", len(visible))
+	if len(visible) != 33 {
+		t.Errorf("expected 33 visible items, got %d", len(visible))
 	}
 }
 
@@ -267,12 +270,12 @@ func TestSidebarModel_GG(t *testing.T) {
 func TestSidebarModel_ShiftG(t *testing.T) {
 	m := newTestSidebar()
 
-	// Press G — cursor should go to last resource item (PodDisruptionBudgets, index 29).
+	// Press G — cursor should go to last resource item (PodDisruptionBudgets, index 32).
 	var cmd tea.Cmd
 	m, cmd = m.Update(keyMsg('G'))
 
-	if m.cursor != 29 {
-		t.Errorf("expected cursor=29 (PodDisruptionBudgets) after G, got %d", m.cursor)
+	if m.cursor != 32 {
+		t.Errorf("expected cursor=32 (PodDisruptionBudgets) after G, got %d", m.cursor)
 	}
 
 	// Verify it's the last resource.
@@ -350,17 +353,17 @@ func TestSidebarModel_NavigateUpAtTop(t *testing.T) {
 func TestSidebarModel_NavigateDownAtBottom(t *testing.T) {
 	m := newTestSidebar()
 
-	// Move cursor to last resource (PodDisruptionBudgets, index 29).
+	// Move cursor to last resource (PodDisruptionBudgets, index 32).
 	m, _ = m.Update(keyMsg('G'))
-	if m.cursor != 29 {
-		t.Fatalf("expected cursor=29, got %d", m.cursor)
+	if m.cursor != 32 {
+		t.Fatalf("expected cursor=32, got %d", m.cursor)
 	}
 
-	// Press j at the bottom resource — should stay at 29.
+	// Press j at the bottom resource — should stay at 32.
 	var cmd tea.Cmd
 	m, cmd = m.Update(keyMsg('j'))
-	if m.cursor != 29 {
-		t.Errorf("expected cursor=29 at bottom boundary, got %d", m.cursor)
+	if m.cursor != 32 {
+		t.Errorf("expected cursor=32 at bottom boundary, got %d", m.cursor)
 	}
 
 	// No cmd should be emitted since cursor didn't move.

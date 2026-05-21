@@ -338,6 +338,73 @@ func init() {
 		},
 	})
 
+	// NetworkPolicies (namespaced)
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourceNetworkPolicies,
+		DisplayName:     "NetworkPolicies",
+		KubectlName:     "networkpolicy",
+		Category:        "Network",
+		CategoryOrder:   2,
+		OrderInCategory: 2,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "Pod-Selector", MinWidth: 20},
+			{Title: "Types", MinWidth: 16},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher:  fetchNetworkPolicies,
+		Detailer: detailNetworkPolicy,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, ns string) (watch.Interface, error) {
+			return cs.NetworkingV1().NetworkPolicies(ns).Watch(ctx, metav1.ListOptions{})
+		},
+	})
+
+	// EndpointSlices (namespaced)
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourceEndpointSlices,
+		DisplayName:     "EndpointSlices",
+		KubectlName:     "endpointslice",
+		Category:        "Network",
+		CategoryOrder:   2,
+		OrderInCategory: 3,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "AddressType", MinWidth: 12},
+			{Title: "Ports", MinWidth: 12},
+			{Title: "Endpoints", MinWidth: 20},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher:  fetchEndpointSlices,
+		Detailer: detailEndpointSlice,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, ns string) (watch.Interface, error) {
+			return cs.DiscoveryV1().EndpointSlices(ns).Watch(ctx, metav1.ListOptions{})
+		},
+	})
+
+	// IngressClasses (cluster-scoped)
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourceIngressClasses,
+		DisplayName:     "IngressClasses",
+		KubectlName:     "ingressclass",
+		Category:        "Network",
+		CategoryOrder:   2,
+		OrderInCategory: 4,
+		ClusterScoped:   true,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "Controller", MinWidth: 25},
+			{Title: "Parameters", MinWidth: 20},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher: func(ctx context.Context, cs kubernetes.Interface, _ string) ([]ResourceItem, error) {
+			return fetchIngressClasses(ctx, cs)
+		},
+		Detailer: detailIngressClass,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, _ string) (watch.Interface, error) {
+			return cs.NetworkingV1().IngressClasses().Watch(ctx, metav1.ListOptions{})
+		},
+	})
+
 	// -----------------------------------------------------------------------
 	// Config (order 3)
 	// -----------------------------------------------------------------------

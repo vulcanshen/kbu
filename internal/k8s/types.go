@@ -37,6 +37,10 @@ const (
 
 	ResourceHorizontalPodAutoscalers ResourceType = "horizontalpodautoscalers"
 	ResourcePodDisruptionBudgets     ResourceType = "poddisruptionbudgets"
+
+	ResourceNetworkPolicies ResourceType = "networkpolicies"
+	ResourceEndpointSlices  ResourceType = "endpointslices"
+	ResourceIngressClasses  ResourceType = "ingressclasses"
 )
 
 // String returns the human-readable name of the resource type.
