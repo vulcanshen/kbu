@@ -9,6 +9,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// fetchPodsForPVCDrillDown is a thin wrapper so the DrillDown ChildFetcher
+// signature matches without exposing the helper.
+func fetchPodsForPVCDrillDown(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	return fetchPodsForPVC(ctx, cs, item)
+}
+
 // drillDownBySelector returns a ChildFetcher that extracts the label selector
 // from the parent resource (Deployment, DaemonSet, StatefulSet) and fetches
 // matching pods.
@@ -370,7 +376,91 @@ func init() {
 	})
 
 	// -----------------------------------------------------------------------
-	// RBAC (order 4)
+	// Storage (order 4)
+	// -----------------------------------------------------------------------
+
+	// PersistentVolumes (cluster-scoped)
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourcePersistentVolumes,
+		DisplayName:     "PersistentVolumes",
+		KubectlName:     "persistentvolume",
+		Category:        "Storage",
+		CategoryOrder:   4,
+		OrderInCategory: 0,
+		ClusterScoped:   true,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "Capacity", MinWidth: 10},
+			{Title: "Access", MinWidth: 8},
+			{Title: "Status", MinWidth: 10},
+			{Title: "Claim", MinWidth: 20},
+			{Title: "StorageClass", MinWidth: 15},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher: func(ctx context.Context, cs kubernetes.Interface, _ string) ([]ResourceItem, error) {
+			return fetchPersistentVolumes(ctx, cs)
+		},
+		Detailer: detailPersistentVolume,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, _ string) (watch.Interface, error) {
+			return cs.CoreV1().PersistentVolumes().Watch(ctx, metav1.ListOptions{})
+		},
+	})
+
+	// PersistentVolumeClaims (namespaced) — drill-down to Pods that mount it
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourcePersistentVolumeClaims,
+		DisplayName:     "PersistentVolumeClaims",
+		KubectlName:     "persistentvolumeclaim",
+		Category:        "Storage",
+		CategoryOrder:   4,
+		OrderInCategory: 1,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "Status", MinWidth: 10},
+			{Title: "Volume", MinWidth: 20},
+			{Title: "Capacity", MinWidth: 10},
+			{Title: "Access", MinWidth: 8},
+			{Title: "StorageClass", MinWidth: 15},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher:  fetchPersistentVolumeClaims,
+		Detailer: detailPersistentVolumeClaim,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, ns string) (watch.Interface, error) {
+			return cs.CoreV1().PersistentVolumeClaims(ns).Watch(ctx, metav1.ListOptions{})
+		},
+		DrillDown: &DrillDownConfig{
+			ChildType:     ResourcePods,
+			FetchChildren: fetchPodsForPVCDrillDown,
+		},
+	})
+
+	// StorageClasses (cluster-scoped)
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourceStorageClasses,
+		DisplayName:     "StorageClasses",
+		KubectlName:     "storageclass",
+		Category:        "Storage",
+		CategoryOrder:   4,
+		OrderInCategory: 2,
+		ClusterScoped:   true,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "Provisioner", MinWidth: 20},
+			{Title: "ReclaimPolicy", MinWidth: 12},
+			{Title: "VolumeBinding", MinWidth: 18},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher: func(ctx context.Context, cs kubernetes.Interface, _ string) ([]ResourceItem, error) {
+			return fetchStorageClasses(ctx, cs)
+		},
+		Detailer: detailStorageClass,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, _ string) (watch.Interface, error) {
+			return cs.StorageV1().StorageClasses().Watch(ctx, metav1.ListOptions{})
+		},
+	})
+
+	// -----------------------------------------------------------------------
+	// RBAC (order 5)
 	// -----------------------------------------------------------------------
 
 	// ClusterRoles
@@ -379,7 +469,7 @@ func init() {
 		DisplayName:     "ClusterRoles",
 		KubectlName:     "clusterrole",
 		Category:        "RBAC",
-		CategoryOrder:   4,
+		CategoryOrder:   5,
 		OrderInCategory: 0,
 		ClusterScoped:   true,
 		Columns: []Column{
@@ -401,7 +491,7 @@ func init() {
 		DisplayName:     "ClusterRoleBindings",
 		KubectlName:     "clusterrolebinding",
 		Category:        "RBAC",
-		CategoryOrder:   4,
+		CategoryOrder:   5,
 		OrderInCategory: 1,
 		ClusterScoped:   true,
 		Columns: []Column{
@@ -424,7 +514,7 @@ func init() {
 		DisplayName:     "Roles",
 		KubectlName:     "role",
 		Category:        "RBAC",
-		CategoryOrder:   4,
+		CategoryOrder:   5,
 		OrderInCategory: 2,
 		Columns: []Column{
 			{Title: "Name", MinWidth: 20},
@@ -444,7 +534,7 @@ func init() {
 		DisplayName:     "RoleBindings",
 		KubectlName:     "rolebinding",
 		Category:        "RBAC",
-		CategoryOrder:   4,
+		CategoryOrder:   5,
 		OrderInCategory: 3,
 		Columns: []Column{
 			{Title: "Name", MinWidth: 20},
@@ -456,6 +546,26 @@ func init() {
 		Detailer: detailRoleBinding,
 		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, ns string) (watch.Interface, error) {
 			return cs.RbacV1().RoleBindings(ns).Watch(ctx, metav1.ListOptions{})
+		},
+	})
+
+	// ServiceAccounts
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourceServiceAccounts,
+		DisplayName:     "ServiceAccounts",
+		KubectlName:     "serviceaccount",
+		Category:        "RBAC",
+		CategoryOrder:   5,
+		OrderInCategory: 4,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "Secrets", MinWidth: 8},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher:  fetchServiceAccounts,
+		Detailer: detailServiceAccount,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, ns string) (watch.Interface, error) {
+			return cs.CoreV1().ServiceAccounts(ns).Watch(ctx, metav1.ListOptions{})
 		},
 	})
 }
