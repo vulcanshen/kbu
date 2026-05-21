@@ -564,8 +564,8 @@ func TestTableModel_SearchColumnMatch(t *testing.T) {
 func TestColumnsForResource(t *testing.T) {
 	allTypes := k8s.AllResourceTypes()
 
-	if len(allTypes) != 21 {
-		t.Fatalf("expected 21 resource types, got %d", len(allTypes))
+	if len(allTypes) != 22 {
+		t.Fatalf("expected 22 resource types, got %d", len(allTypes))
 	}
 
 	for _, rt := range allTypes {

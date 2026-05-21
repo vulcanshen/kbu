@@ -34,6 +34,8 @@ const (
 	ResourcePersistentVolumes      ResourceType = "persistentvolumes"
 	ResourcePersistentVolumeClaims ResourceType = "persistentvolumeclaims"
 	ResourceStorageClasses         ResourceType = "storageclasses"
+
+	ResourceHorizontalPodAutoscalers ResourceType = "horizontalpodautoscalers"
 )
 
 // String returns the human-readable name of the resource type.

@@ -51,34 +51,36 @@ func keyMsg(r rune) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 }
 
-// Visible items layout (27 total):
-//  0: Cluster                  (category)
-//  1: Namespaces               (resource)
-//  2: Nodes                    (resource)
-//  3: Events                   (resource)
-//  4: Workloads                (category)
-//  5: Pods                     (resource)  <- initial cursor
-//  6: Deployments              (resource)
-//  7: DaemonSets               (resource)
-//  8: StatefulSets             (resource)
-//  9: Jobs                     (resource)
-// 10: CronJobs                 (resource)
-// 11: Network                  (category)
-// 12: Services                 (resource)
-// 13: Ingresses                (resource)
-// 14: Config                   (category)
-// 15: ConfigMaps               (resource)
-// 16: Secrets                  (resource)
-// 17: Storage                  (category)
-// 18: PersistentVolumes        (resource)
-// 19: PersistentVolumeClaims   (resource)
-// 20: StorageClasses           (resource)
-// 21: RBAC                     (category)
-// 22: ClusterRoles             (resource)
-// 23: ClusterRoleBindings      (resource)
-// 24: Roles                    (resource)
-// 25: RoleBindings             (resource)
-// 26: ServiceAccounts          (resource)
+// Visible items layout (29 total):
+//  0: Cluster                       (category)
+//  1: Namespaces                    (resource)
+//  2: Nodes                         (resource)
+//  3: Events                        (resource)
+//  4: Workloads                     (category)
+//  5: Pods                          (resource)  <- initial cursor
+//  6: Deployments                   (resource)
+//  7: DaemonSets                    (resource)
+//  8: StatefulSets                  (resource)
+//  9: Jobs                          (resource)
+// 10: CronJobs                      (resource)
+// 11: Network                       (category)
+// 12: Services                      (resource)
+// 13: Ingresses                     (resource)
+// 14: Config                        (category)
+// 15: ConfigMaps                    (resource)
+// 16: Secrets                       (resource)
+// 17: Storage                       (category)
+// 18: PersistentVolumes             (resource)
+// 19: PersistentVolumeClaims        (resource)
+// 20: StorageClasses                (resource)
+// 21: RBAC                          (category)
+// 22: ClusterRoles                  (resource)
+// 23: ClusterRoleBindings           (resource)
+// 24: Roles                         (resource)
+// 25: RoleBindings                  (resource)
+// 26: ServiceAccounts               (resource)
+// 27: Autoscaling                   (category)
+// 28: HorizontalPodAutoscalers      (resource)
 
 func TestSidebarModel_InitialState(t *testing.T) {
 	m := newTestSidebar()
@@ -93,10 +95,10 @@ func TestSidebarModel_InitialState(t *testing.T) {
 		t.Errorf("expected selected=ResourcePods, got %v", m.Selected())
 	}
 
-	// 6 categories (Cluster, Workloads, Network, Config, Storage, RBAC) + 21 resources = 27
+	// 7 categories (Cluster, Workloads, Network, Config, Storage, RBAC, Autoscaling) + 22 resources = 29
 	visible := m.visibleItems()
-	if len(visible) != 27 {
-		t.Errorf("expected 27 visible items, got %d", len(visible))
+	if len(visible) != 29 {
+		t.Errorf("expected 29 visible items, got %d", len(visible))
 	}
 }
 
@@ -264,12 +266,12 @@ func TestSidebarModel_GG(t *testing.T) {
 func TestSidebarModel_ShiftG(t *testing.T) {
 	m := newTestSidebar()
 
-	// Press G — cursor should go to last resource item (ServiceAccounts, index 26).
+	// Press G — cursor should go to last resource item (HorizontalPodAutoscalers, index 28).
 	var cmd tea.Cmd
 	m, cmd = m.Update(keyMsg('G'))
 
-	if m.cursor != 26 {
-		t.Errorf("expected cursor=26 (ServiceAccounts) after G, got %d", m.cursor)
+	if m.cursor != 28 {
+		t.Errorf("expected cursor=28 (HorizontalPodAutoscalers) after G, got %d", m.cursor)
 	}
 
 	// Verify it's the last resource.
@@ -278,8 +280,8 @@ func TestSidebarModel_ShiftG(t *testing.T) {
 	if item.isCategory {
 		t.Error("expected cursor on resource, got category")
 	}
-	if item.resourceType != k8s.ResourceServiceAccounts {
-		t.Errorf("expected ServiceAccounts resource, got %v", item.resourceType)
+	if item.resourceType != k8s.ResourceHorizontalPodAutoscalers {
+		t.Errorf("expected HorizontalPodAutoscalers resource, got %v", item.resourceType)
 	}
 
 	if cmd == nil {
@@ -290,8 +292,8 @@ func TestSidebarModel_ShiftG(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
 	}
-	if rsm.Type != k8s.ResourceServiceAccounts {
-		t.Errorf("expected ResourceSelectedMsg.Type=ResourceServiceAccounts, got %v", rsm.Type)
+	if rsm.Type != k8s.ResourceHorizontalPodAutoscalers {
+		t.Errorf("expected ResourceSelectedMsg.Type=ResourceHorizontalPodAutoscalers, got %v", rsm.Type)
 	}
 }
 
@@ -347,17 +349,17 @@ func TestSidebarModel_NavigateUpAtTop(t *testing.T) {
 func TestSidebarModel_NavigateDownAtBottom(t *testing.T) {
 	m := newTestSidebar()
 
-	// Move cursor to last resource (ServiceAccounts, index 26).
+	// Move cursor to last resource (HorizontalPodAutoscalers, index 28).
 	m, _ = m.Update(keyMsg('G'))
-	if m.cursor != 26 {
-		t.Fatalf("expected cursor=26, got %d", m.cursor)
+	if m.cursor != 28 {
+		t.Fatalf("expected cursor=28, got %d", m.cursor)
 	}
 
-	// Press j at the bottom resource — should stay at 26.
+	// Press j at the bottom resource — should stay at 28.
 	var cmd tea.Cmd
 	m, cmd = m.Update(keyMsg('j'))
-	if m.cursor != 26 {
-		t.Errorf("expected cursor=26 at bottom boundary, got %d", m.cursor)
+	if m.cursor != 28 {
+		t.Errorf("expected cursor=28 at bottom boundary, got %d", m.cursor)
 	}
 
 	// No cmd should be emitted since cursor didn't move.
