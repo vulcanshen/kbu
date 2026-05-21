@@ -22,7 +22,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **3-panel lazygit-style layout** -- numbered sidebar, list, and detail panels with scroll indicator
 - **Drill-down navigation** -- Deployment → Pods → Containers
 - **YAML detail view with syntax highlighting** -- `[YAML]` tab shows the resource serialized exactly like `kubectl get -o yaml`; container drill-down shows the extracted `spec`/`status` for that container
-- **Pod log streaming** -- multi-container support with `<container>|<log>` format
+- **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
 - **Container shell exec** -- `kubectl exec` into any container
 - **In-place resource editing** -- fetches YAML with `kubectl get -o yaml`, opens `$EDITOR`, applies with `kubectl apply -f` if the file changed; skips apply on no-op saves. Uses declarative apply semantics — see [Editing Resources](#editing-resources) for implications
 - **Resource deletion** -- `D` with confirmation dialog
@@ -126,6 +126,8 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 |---|---|
 | `h` / `l` | Switch tab (YAML / Events / Logs) |
 | `=` / `-` | Expand / restore panel |
+| `G` | Jump to bottom (on Logs: also resumes follow-tail) |
+| `k` / `↑` / `u` / `gg` | Scroll up (on Logs: pauses follow-tail) |
 
 ### Global
 
