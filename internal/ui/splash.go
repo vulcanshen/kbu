@@ -119,7 +119,7 @@ func (m SplashModel) Render(width, height int) string {
 	titleText, taglineText, hintText := " ", " ", " "
 	if done {
 		titleText = "K M 8"
-		taglineText = "version: " + version.Display()
+		taglineText = version.Display()
 		hintText = dimStyle.Render("press q or Esc to close")
 	}
 	caption := "\n\n" +
