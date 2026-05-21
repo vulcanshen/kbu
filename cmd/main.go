@@ -15,13 +15,12 @@ import (
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 	"github.com/vulcanshen/km8/internal/ui"
+	"github.com/vulcanshen/km8/internal/version"
 )
-
-var Version = "dev"
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		fmt.Println("km8 " + Version)
+		fmt.Println("km8 " + version.Display())
 		return
 	}
 	// Suppress k8s client-go / klog output that would corrupt the TUI.
