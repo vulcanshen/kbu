@@ -365,3 +365,29 @@ func TestSidebarModel_NavigateDownAtBottom(t *testing.T) {
 		t.Error("expected nil cmd when cursor doesn't move at bottom")
 	}
 }
+
+func TestTruncateSidebarLabel(t *testing.T) {
+	tests := []struct {
+		name     string
+		label    string
+		maxWidth int
+		want     string
+	}{
+		{"fits exactly", "Pods", 4, "Pods"},
+		{"fits with room", "Pods", 10, "Pods"},
+		{"truncates long", "PersistentVolumeClaims", 18, "PersistentVolumeC…"},
+		{"truncates to single ellipsis", "PersistentVolumes", 1, "…"},
+		{"zero width returns empty", "Pods", 0, ""},
+		{"negative width returns empty", "Pods", -1, ""},
+		{"empty label", "", 10, ""},
+		{"one char fits", "P", 1, "P"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateSidebarLabel(tt.label, tt.maxWidth)
+			if got != tt.want {
+				t.Errorf("truncateSidebarLabel(%q, %d) = %q, want %q", tt.label, tt.maxWidth, got, tt.want)
+			}
+		})
+	}
+}
