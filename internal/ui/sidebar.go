@@ -433,9 +433,9 @@ func (m SidebarModel) View() string {
 
 		var line string
 		if item.isCategory {
-			line = categoryStyle.Width(m.width).Render(item.label)
+			line = categoryStyle.Width(m.width).Render(truncateSidebarLabel(item.label, m.width))
 		} else {
-			label := "  " + item.label
+			label := "  " + truncateSidebarLabel(item.label, m.width-2)
 			if isCursor && m.focused {
 				line = selectedStyle.Width(m.width).Render(label)
 			} else if isCursor {
@@ -545,6 +545,22 @@ func (m *SidebarModel) SetFocused(focused bool) {
 // Selected returns the currently selected resource type.
 func (m SidebarModel) Selected() k8s.ResourceType {
 	return m.selected
+}
+
+// truncateSidebarLabel trims a sidebar label to fit `maxWidth` cells using `…`.
+// Full name is recoverable from the panel 2 border title once selected, so
+// truncation is acceptable here.
+func truncateSidebarLabel(label string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if len(label) <= maxWidth {
+		return label
+	}
+	if maxWidth == 1 {
+		return "…"
+	}
+	return label[:maxWidth-1] + "…"
 }
 
 // ScrollInfo returns the current cursor position among resources (non-category items).
