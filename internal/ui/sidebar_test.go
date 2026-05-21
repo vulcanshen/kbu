@@ -51,7 +51,7 @@ func keyMsg(r rune) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
 }
 
-// Visible items layout (29 total):
+// Visible items layout (30 total):
 //  0: Cluster                       (category)
 //  1: Namespaces                    (resource)
 //  2: Nodes                         (resource)
@@ -81,6 +81,7 @@ func keyMsg(r rune) tea.KeyMsg {
 // 26: ServiceAccounts               (resource)
 // 27: Autoscaling                   (category)
 // 28: HorizontalPodAutoscalers      (resource)
+// 29: PodDisruptionBudgets          (resource)
 
 func TestSidebarModel_InitialState(t *testing.T) {
 	m := newTestSidebar()
@@ -95,10 +96,10 @@ func TestSidebarModel_InitialState(t *testing.T) {
 		t.Errorf("expected selected=ResourcePods, got %v", m.Selected())
 	}
 
-	// 7 categories (Cluster, Workloads, Network, Config, Storage, RBAC, Autoscaling) + 22 resources = 29
+	// 7 categories (Cluster, Workloads, Network, Config, Storage, RBAC, Autoscaling) + 23 resources = 30
 	visible := m.visibleItems()
-	if len(visible) != 29 {
-		t.Errorf("expected 29 visible items, got %d", len(visible))
+	if len(visible) != 30 {
+		t.Errorf("expected 30 visible items, got %d", len(visible))
 	}
 }
 
@@ -266,12 +267,12 @@ func TestSidebarModel_GG(t *testing.T) {
 func TestSidebarModel_ShiftG(t *testing.T) {
 	m := newTestSidebar()
 
-	// Press G — cursor should go to last resource item (HorizontalPodAutoscalers, index 28).
+	// Press G — cursor should go to last resource item (PodDisruptionBudgets, index 29).
 	var cmd tea.Cmd
 	m, cmd = m.Update(keyMsg('G'))
 
-	if m.cursor != 28 {
-		t.Errorf("expected cursor=28 (HorizontalPodAutoscalers) after G, got %d", m.cursor)
+	if m.cursor != 29 {
+		t.Errorf("expected cursor=29 (PodDisruptionBudgets) after G, got %d", m.cursor)
 	}
 
 	// Verify it's the last resource.
@@ -280,8 +281,8 @@ func TestSidebarModel_ShiftG(t *testing.T) {
 	if item.isCategory {
 		t.Error("expected cursor on resource, got category")
 	}
-	if item.resourceType != k8s.ResourceHorizontalPodAutoscalers {
-		t.Errorf("expected HorizontalPodAutoscalers resource, got %v", item.resourceType)
+	if item.resourceType != k8s.ResourcePodDisruptionBudgets {
+		t.Errorf("expected PodDisruptionBudgets resource, got %v", item.resourceType)
 	}
 
 	if cmd == nil {
@@ -292,8 +293,8 @@ func TestSidebarModel_ShiftG(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
 	}
-	if rsm.Type != k8s.ResourceHorizontalPodAutoscalers {
-		t.Errorf("expected ResourceSelectedMsg.Type=ResourceHorizontalPodAutoscalers, got %v", rsm.Type)
+	if rsm.Type != k8s.ResourcePodDisruptionBudgets {
+		t.Errorf("expected ResourceSelectedMsg.Type=ResourcePodDisruptionBudgets, got %v", rsm.Type)
 	}
 }
 
@@ -349,17 +350,17 @@ func TestSidebarModel_NavigateUpAtTop(t *testing.T) {
 func TestSidebarModel_NavigateDownAtBottom(t *testing.T) {
 	m := newTestSidebar()
 
-	// Move cursor to last resource (HorizontalPodAutoscalers, index 28).
+	// Move cursor to last resource (PodDisruptionBudgets, index 29).
 	m, _ = m.Update(keyMsg('G'))
-	if m.cursor != 28 {
-		t.Fatalf("expected cursor=28, got %d", m.cursor)
+	if m.cursor != 29 {
+		t.Fatalf("expected cursor=29, got %d", m.cursor)
 	}
 
-	// Press j at the bottom resource — should stay at 28.
+	// Press j at the bottom resource — should stay at 29.
 	var cmd tea.Cmd
 	m, cmd = m.Update(keyMsg('j'))
-	if m.cursor != 28 {
-		t.Errorf("expected cursor=28 at bottom boundary, got %d", m.cursor)
+	if m.cursor != 29 {
+		t.Errorf("expected cursor=29 at bottom boundary, got %d", m.cursor)
 	}
 
 	// No cmd should be emitted since cursor didn't move.

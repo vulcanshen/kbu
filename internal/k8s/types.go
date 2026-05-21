@@ -36,6 +36,7 @@ const (
 	ResourceStorageClasses         ResourceType = "storageclasses"
 
 	ResourceHorizontalPodAutoscalers ResourceType = "horizontalpodautoscalers"
+	ResourcePodDisruptionBudgets     ResourceType = "poddisruptionbudgets"
 )
 
 // String returns the human-readable name of the resource type.

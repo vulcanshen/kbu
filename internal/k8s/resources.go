@@ -12,6 +12,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1572,6 +1573,92 @@ func fetchPodsForHPA(ctx context.Context, cs kubernetes.Interface, item Resource
 		return []ResourceItem{}, nil
 	}
 	return fetchPodsWithSelector(ctx, cs, item.Namespace, selector)
+}
+
+// ---------------------------------------------------------------------------
+// PodDisruptionBudget
+// ---------------------------------------------------------------------------
+
+func fetchPodDisruptionBudgets(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.PolicyV1().PodDisruptionBudgets(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing poddisruptionbudgets: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		pdb := &list.Items[i]
+		minAvail := ""
+		if pdb.Spec.MinAvailable != nil {
+			minAvail = pdb.Spec.MinAvailable.String()
+		}
+		maxUnavail := ""
+		if pdb.Spec.MaxUnavailable != nil {
+			maxUnavail = pdb.Spec.MaxUnavailable.String()
+		}
+		items = append(items, ResourceItem{
+			Name:      pdb.Name,
+			Namespace: pdb.Namespace,
+			UID:       string(pdb.UID),
+			Raw:       pdb,
+			Row: []string{
+				pdb.Name,
+				minAvail,
+				maxUnavail,
+				fmt.Sprintf("%d", pdb.Status.DisruptionsAllowed),
+				formatAge(pdb.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailPodDisruptionBudget(item ResourceItem) ResourceDetail {
+	pdb, _ := item.Raw.(*policyv1.PodDisruptionBudget)
+	d := baseDetail(item, "PodDisruptionBudget", pdb.ObjectMeta)
+	minAvail := "<unset>"
+	if pdb.Spec.MinAvailable != nil {
+		minAvail = pdb.Spec.MinAvailable.String()
+	}
+	maxUnavail := "<unset>"
+	if pdb.Spec.MaxUnavailable != nil {
+		maxUnavail = pdb.Spec.MaxUnavailable.String()
+	}
+	selector := "<none>"
+	if pdb.Spec.Selector != nil {
+		if sel, err := metav1.LabelSelectorAsSelector(pdb.Spec.Selector); err == nil {
+			selector = sel.String()
+			if selector == "" {
+				selector = "<all pods>"
+			}
+		}
+	}
+	d.Fields = []DetailField{
+		{Label: "MinAvailable", Value: minAvail},
+		{Label: "MaxUnavailable", Value: maxUnavail},
+		{Label: "DisruptionsAllowed", Value: fmt.Sprintf("%d", pdb.Status.DisruptionsAllowed)},
+		{Label: "CurrentHealthy", Value: fmt.Sprintf("%d", pdb.Status.CurrentHealthy)},
+		{Label: "DesiredHealthy", Value: fmt.Sprintf("%d", pdb.Status.DesiredHealthy)},
+		{Label: "ExpectedPods", Value: fmt.Sprintf("%d", pdb.Status.ExpectedPods)},
+		{Label: "Selector", Value: selector},
+	}
+	return d
+}
+
+// fetchPodsForPDB lists pods matched by the PDB's selector — these are the
+// pods the budget protects from voluntary disruption.
+func fetchPodsForPDB(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	pdb, ok := item.Raw.(*policyv1.PodDisruptionBudget)
+	if !ok {
+		return nil, fmt.Errorf("PDB item missing typed Raw")
+	}
+	if pdb.Spec.Selector == nil {
+		return []ResourceItem{}, nil
+	}
+	sel, err := metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("parsing PDB selector: %w", err)
+	}
+	return fetchPodsWithSelector(ctx, cs, item.Namespace, sel.String())
 }
 
 // ---------------------------------------------------------------------------
