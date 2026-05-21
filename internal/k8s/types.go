@@ -113,14 +113,6 @@ func (r ResourceType) SupportsDrillDown() bool {
 	return false
 }
 
-// ChildResourceType returns what resource type the drill-down shows.
-func (r ResourceType) ChildResourceType() ResourceType {
-	if def := DefaultRegistry.Get(r); def != nil && def.DrillDown != nil {
-		return def.DrillDown.ChildType
-	}
-	return ""
-}
-
 // KubectlName returns the kubectl resource name (e.g. "pod", "deployment").
 func (r ResourceType) KubectlName() string {
 	if def := DefaultRegistry.Get(r); def != nil {

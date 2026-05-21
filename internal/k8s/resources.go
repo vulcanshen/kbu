@@ -69,8 +69,9 @@ func FetchChildResources(ctx context.Context, clientset kubernetes.Interface, pa
 	if def == nil || def.DrillDown == nil || def.DrillDown.FetchChildren == nil {
 		return "", nil, fmt.Errorf("drill-down not supported for %s", parentType)
 	}
+	childType := def.DrillDown.ChildTypeFor(item)
 	children, err := def.DrillDown.FetchChildren(ctx, clientset, item)
-	return def.DrillDown.ChildType, children, err
+	return childType, children, err
 }
 
 func fetchPodsWithSelector(ctx context.Context, cs kubernetes.Interface, namespace, selector string) ([]ResourceItem, error) {
@@ -1531,49 +1532,100 @@ func detailHorizontalPodAutoscaler(item ResourceItem) ResourceDetail {
 	return d
 }
 
-// fetchPodsForHPA resolves the HPA's scaleTargetRef and returns the target
-// workload's pods. Supports Deployment / StatefulSet / ReplicaSet / DaemonSet
-// targets; other kinds return an empty list (no error).
-func fetchPodsForHPA(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+// hpaTargetChildType returns the km8 ResourceType matching the HPA's
+// scaleTargetRef.Kind. Returns "" for unsupported kinds (ReplicaSet and
+// anything we don't render in the sidebar).
+func hpaTargetChildType(item ResourceItem) ResourceType {
+	hpa, ok := item.Raw.(*autoscalingv2.HorizontalPodAutoscaler)
+	if !ok {
+		return ""
+	}
+	switch hpa.Spec.ScaleTargetRef.Kind {
+	case "Deployment":
+		return ResourceDeployments
+	case "StatefulSet":
+		return ResourceStatefulSets
+	case "DaemonSet":
+		return ResourceDaemonSets
+	default:
+		return ""
+	}
+}
+
+// fetchHPATarget resolves the HPA's scaleTargetRef and returns the single
+// target workload (Deployment / StatefulSet / DaemonSet) as a list-of-1
+// matching that resource type's row schema. Unsupported kinds (e.g.
+// ReplicaSet) return an empty list with no error.
+func fetchHPATarget(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
 	hpa, ok := item.Raw.(*autoscalingv2.HorizontalPodAutoscaler)
 	if !ok {
 		return nil, fmt.Errorf("HPA item missing typed Raw")
 	}
 	ref := hpa.Spec.ScaleTargetRef
-	var selector string
 	switch ref.Kind {
 	case "Deployment":
 		dep, err := cs.AppsV1().Deployments(item.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("resolving deployment %s: %w", ref.Name, err)
 		}
-		sel, _ := metav1.LabelSelectorAsSelector(dep.Spec.Selector)
-		selector = sel.String()
+		replicas := int32(0)
+		if dep.Spec.Replicas != nil {
+			replicas = *dep.Spec.Replicas
+		}
+		return []ResourceItem{{
+			Name:      dep.Name,
+			Namespace: dep.Namespace,
+			UID:       string(dep.UID),
+			Raw:       dep,
+			Row: []string{
+				dep.Name,
+				fmt.Sprintf("%d/%d", dep.Status.ReadyReplicas, replicas),
+				fmt.Sprintf("%d", dep.Status.UpdatedReplicas),
+				fmt.Sprintf("%d", dep.Status.AvailableReplicas),
+				formatAge(dep.CreationTimestamp.Time),
+			},
+		}}, nil
 	case "StatefulSet":
 		ss, err := cs.AppsV1().StatefulSets(item.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("resolving statefulset %s: %w", ref.Name, err)
 		}
-		sel, _ := metav1.LabelSelectorAsSelector(ss.Spec.Selector)
-		selector = sel.String()
-	case "ReplicaSet":
-		rs, err := cs.AppsV1().ReplicaSets(item.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("resolving replicaset %s: %w", ref.Name, err)
+		replicas := int32(0)
+		if ss.Spec.Replicas != nil {
+			replicas = *ss.Spec.Replicas
 		}
-		sel, _ := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
-		selector = sel.String()
+		return []ResourceItem{{
+			Name:      ss.Name,
+			Namespace: ss.Namespace,
+			UID:       string(ss.UID),
+			Raw:       ss,
+			Row: []string{
+				ss.Name,
+				fmt.Sprintf("%d/%d", ss.Status.ReadyReplicas, replicas),
+				formatAge(ss.CreationTimestamp.Time),
+			},
+		}}, nil
 	case "DaemonSet":
 		ds, err := cs.AppsV1().DaemonSets(item.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("resolving daemonset %s: %w", ref.Name, err)
 		}
-		sel, _ := metav1.LabelSelectorAsSelector(ds.Spec.Selector)
-		selector = sel.String()
+		return []ResourceItem{{
+			Name:      ds.Name,
+			Namespace: ds.Namespace,
+			UID:       string(ds.UID),
+			Raw:       ds,
+			Row: []string{
+				ds.Name,
+				fmt.Sprintf("%d", ds.Status.DesiredNumberScheduled),
+				fmt.Sprintf("%d", ds.Status.CurrentNumberScheduled),
+				fmt.Sprintf("%d", ds.Status.NumberReady),
+				formatAge(ds.CreationTimestamp.Time),
+			},
+		}}, nil
 	default:
 		return []ResourceItem{}, nil
 	}
-	return fetchPodsWithSelector(ctx, cs, item.Namespace, selector)
 }
 
 // ---------------------------------------------------------------------------

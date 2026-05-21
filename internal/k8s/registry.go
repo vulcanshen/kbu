@@ -28,9 +28,22 @@ type WatchStarterFunc func(ctx context.Context, clientset kubernetes.Interface, 
 // ChildFetcher fetches child resources for drill-down.
 type ChildFetcher func(ctx context.Context, clientset kubernetes.Interface, item ResourceItem) ([]ResourceItem, error)
 
+// ChildTypeResolver returns the ResourceType of children produced for a given
+// parent item. Per-item resolution lets a single drill-down config produce
+// different child types depending on what the parent points at (e.g. HPA
+// drilling down to Deployment vs StatefulSet vs DaemonSet). Returning "" is
+// allowed; FetchChildren should return an empty list / error in that case.
+type ChildTypeResolver func(item ResourceItem) ResourceType
+
+// StaticChildType is a ChildTypeResolver that always returns the same type —
+// used for drill-downs whose child type doesn't depend on the parent item.
+func StaticChildType(t ResourceType) ChildTypeResolver {
+	return func(_ ResourceItem) ResourceType { return t }
+}
+
 // DrillDownConfig defines drill-down behavior for a resource type.
 type DrillDownConfig struct {
-	ChildType     ResourceType
+	ChildTypeFor  ChildTypeResolver
 	FetchChildren ChildFetcher
 }
 

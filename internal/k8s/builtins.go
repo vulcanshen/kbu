@@ -15,8 +15,8 @@ func fetchPodsForPVCDrillDown(ctx context.Context, cs kubernetes.Interface, item
 	return fetchPodsForPVC(ctx, cs, item)
 }
 
-func fetchPodsForHPADrillDown(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
-	return fetchPodsForHPA(ctx, cs, item)
+func fetchHPATargetDrillDown(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	return fetchHPATarget(ctx, cs, item)
 }
 
 func fetchPodsForPDBDrillDown(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
@@ -156,7 +156,7 @@ func init() {
 			return cs.CoreV1().Pods(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourcePods,
+			ChildTypeFor:  StaticChildType(ResourcePods),
 			FetchChildren: nil, // Pod→Container is special-cased in UI
 		},
 		HasLogs: true,
@@ -183,7 +183,7 @@ func init() {
 			return cs.AppsV1().Deployments(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourcePods,
+			ChildTypeFor:  StaticChildType(ResourcePods),
 			FetchChildren: drillDownBySelector("Deployment"),
 		},
 	})
@@ -209,7 +209,7 @@ func init() {
 			return cs.AppsV1().DaemonSets(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourcePods,
+			ChildTypeFor:  StaticChildType(ResourcePods),
 			FetchChildren: drillDownBySelector("DaemonSet"),
 		},
 	})
@@ -233,7 +233,7 @@ func init() {
 			return cs.AppsV1().StatefulSets(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourcePods,
+			ChildTypeFor:  StaticChildType(ResourcePods),
 			FetchChildren: drillDownBySelector("StatefulSet"),
 		},
 	})
@@ -258,7 +258,7 @@ func init() {
 			return cs.BatchV1().Jobs(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourcePods,
+			ChildTypeFor:  StaticChildType(ResourcePods),
 			FetchChildren: fetchPodsForJobDrillDown,
 		},
 	})
@@ -284,7 +284,7 @@ func init() {
 			return cs.BatchV1().CronJobs(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourceJobs,
+			ChildTypeFor:  StaticChildType(ResourceJobs),
 			FetchChildren: fetchJobsForCronJobDrillDown,
 		},
 	})
@@ -504,7 +504,7 @@ func init() {
 			return cs.CoreV1().PersistentVolumeClaims(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourcePods,
+			ChildTypeFor:  StaticChildType(ResourcePods),
 			FetchChildren: fetchPodsForPVCDrillDown,
 		},
 	})
@@ -671,8 +671,8 @@ func init() {
 			return cs.AutoscalingV2().HorizontalPodAutoscalers(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourcePods,
-			FetchChildren: fetchPodsForHPADrillDown,
+			ChildTypeFor:  hpaTargetChildType,
+			FetchChildren: fetchHPATargetDrillDown,
 		},
 	})
 
@@ -697,7 +697,7 @@ func init() {
 			return cs.PolicyV1().PodDisruptionBudgets(ns).Watch(ctx, metav1.ListOptions{})
 		},
 		DrillDown: &DrillDownConfig{
-			ChildType:     ResourcePods,
+			ChildTypeFor:  StaticChildType(ResourcePods),
 			FetchChildren: fetchPodsForPDBDrillDown,
 		},
 	})
