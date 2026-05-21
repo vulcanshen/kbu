@@ -7,6 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/vulcanshen/km8/internal/version"
 )
 
 type splashTickMsg struct{}
@@ -117,7 +119,7 @@ func (m SplashModel) Render(width, height int) string {
 	titleText, taglineText, hintText := " ", " ", " "
 	if done {
 		titleText = "K M 8"
-		taglineText = "Hi! It's KubeMate."
+		taglineText = "version: " + version.Display()
 		hintText = dimStyle.Render("press q or Esc to close")
 	}
 	caption := "\n\n" +
