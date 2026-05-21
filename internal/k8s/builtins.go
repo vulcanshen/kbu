@@ -15,6 +15,10 @@ func fetchPodsForPVCDrillDown(ctx context.Context, cs kubernetes.Interface, item
 	return fetchPodsForPVC(ctx, cs, item)
 }
 
+func fetchPodsForHPADrillDown(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	return fetchPodsForHPA(ctx, cs, item)
+}
+
 // drillDownBySelector returns a ChildFetcher that extracts the label selector
 // from the parent resource (Deployment, DaemonSet, StatefulSet) and fetches
 // matching pods.
@@ -566,6 +570,38 @@ func init() {
 		Detailer: detailServiceAccount,
 		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, ns string) (watch.Interface, error) {
 			return cs.CoreV1().ServiceAccounts(ns).Watch(ctx, metav1.ListOptions{})
+		},
+	})
+
+	// -----------------------------------------------------------------------
+	// Autoscaling (order 6)
+	// -----------------------------------------------------------------------
+
+	// HorizontalPodAutoscalers — drill-down to target workload's pods
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourceHorizontalPodAutoscalers,
+		DisplayName:     "HorizontalPodAutoscalers",
+		KubectlName:     "horizontalpodautoscaler",
+		Category:        "Autoscaling",
+		CategoryOrder:   6,
+		OrderInCategory: 0,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "Reference", MinWidth: 20},
+			{Title: "Min", MinWidth: 5},
+			{Title: "Max", MinWidth: 5},
+			{Title: "Replicas", MinWidth: 8},
+			{Title: "Targets", MinWidth: 12},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher:  fetchHorizontalPodAutoscalers,
+		Detailer: detailHorizontalPodAutoscaler,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, ns string) (watch.Interface, error) {
+			return cs.AutoscalingV2().HorizontalPodAutoscalers(ns).Watch(ctx, metav1.ListOptions{})
+		},
+		DrillDown: &DrillDownConfig{
+			ChildType:     ResourcePods,
+			FetchChildren: fetchPodsForHPADrillDown,
 		},
 	})
 }

@@ -28,6 +28,7 @@ func TestResourceType_KubectlName(t *testing.T) {
 		{ResourcePersistentVolumes, "persistentvolume"},
 		{ResourcePersistentVolumeClaims, "persistentvolumeclaim"},
 		{ResourceStorageClasses, "storageclass"},
+		{ResourceHorizontalPodAutoscalers, "horizontalpodautoscaler"},
 	}
 
 	for _, tt := range tests {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -1446,6 +1447,131 @@ func detailStorageClass(item ResourceItem) ResourceDetail {
 		{Label: "Parameters", Value: fmt.Sprintf("%d", len(sc.Parameters))},
 	}
 	return d
+}
+
+// ---------------------------------------------------------------------------
+// HorizontalPodAutoscaler
+// ---------------------------------------------------------------------------
+
+// hpaTargetSummary returns a short "current/target" string for the first
+// Resource-type metric, or "<n metrics>" when multiple non-Resource metrics
+// exist. Empty when no metrics are reported.
+func hpaTargetSummary(hpa *autoscalingv2.HorizontalPodAutoscaler) string {
+	if len(hpa.Spec.Metrics) == 0 {
+		return ""
+	}
+	if len(hpa.Spec.Metrics) > 1 {
+		return fmt.Sprintf("<%d metrics>", len(hpa.Spec.Metrics))
+	}
+	m := hpa.Spec.Metrics[0]
+	if m.Resource == nil || m.Resource.Target.AverageUtilization == nil {
+		return string(m.Type)
+	}
+	target := *m.Resource.Target.AverageUtilization
+	current := "<unknown>"
+	for _, cm := range hpa.Status.CurrentMetrics {
+		if cm.Resource != nil && cm.Resource.Name == m.Resource.Name && cm.Resource.Current.AverageUtilization != nil {
+			current = fmt.Sprintf("%d%%", *cm.Resource.Current.AverageUtilization)
+			break
+		}
+	}
+	return fmt.Sprintf("%s/%d%%", current, target)
+}
+
+func fetchHorizontalPodAutoscalers(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.AutoscalingV2().HorizontalPodAutoscalers(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing horizontalpodautoscalers: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		hpa := &list.Items[i]
+		ref := fmt.Sprintf("%s/%s", hpa.Spec.ScaleTargetRef.Kind, hpa.Spec.ScaleTargetRef.Name)
+		minPods := int32(1)
+		if hpa.Spec.MinReplicas != nil {
+			minPods = *hpa.Spec.MinReplicas
+		}
+		items = append(items, ResourceItem{
+			Name:      hpa.Name,
+			Namespace: hpa.Namespace,
+			UID:       string(hpa.UID),
+			Raw:       hpa,
+			Row: []string{
+				hpa.Name,
+				ref,
+				fmt.Sprintf("%d", minPods),
+				fmt.Sprintf("%d", hpa.Spec.MaxReplicas),
+				fmt.Sprintf("%d", hpa.Status.CurrentReplicas),
+				hpaTargetSummary(hpa),
+				formatAge(hpa.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailHorizontalPodAutoscaler(item ResourceItem) ResourceDetail {
+	hpa, _ := item.Raw.(*autoscalingv2.HorizontalPodAutoscaler)
+	d := baseDetail(item, "HorizontalPodAutoscaler", hpa.ObjectMeta)
+	minPods := int32(1)
+	if hpa.Spec.MinReplicas != nil {
+		minPods = *hpa.Spec.MinReplicas
+	}
+	d.Fields = []DetailField{
+		{Label: "Reference", Value: fmt.Sprintf("%s/%s", hpa.Spec.ScaleTargetRef.Kind, hpa.Spec.ScaleTargetRef.Name)},
+		{Label: "MinReplicas", Value: fmt.Sprintf("%d", minPods)},
+		{Label: "MaxReplicas", Value: fmt.Sprintf("%d", hpa.Spec.MaxReplicas)},
+		{Label: "CurrentReplicas", Value: fmt.Sprintf("%d", hpa.Status.CurrentReplicas)},
+		{Label: "DesiredReplicas", Value: fmt.Sprintf("%d", hpa.Status.DesiredReplicas)},
+		{Label: "Targets", Value: hpaTargetSummary(hpa)},
+		{Label: "Metrics", Value: fmt.Sprintf("%d", len(hpa.Spec.Metrics))},
+	}
+	return d
+}
+
+// fetchPodsForHPA resolves the HPA's scaleTargetRef and returns the target
+// workload's pods. Supports Deployment / StatefulSet / ReplicaSet / DaemonSet
+// targets; other kinds return an empty list (no error).
+func fetchPodsForHPA(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	hpa, ok := item.Raw.(*autoscalingv2.HorizontalPodAutoscaler)
+	if !ok {
+		return nil, fmt.Errorf("HPA item missing typed Raw")
+	}
+	ref := hpa.Spec.ScaleTargetRef
+	var selector string
+	switch ref.Kind {
+	case "Deployment":
+		dep, err := cs.AppsV1().Deployments(item.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("resolving deployment %s: %w", ref.Name, err)
+		}
+		sel, _ := metav1.LabelSelectorAsSelector(dep.Spec.Selector)
+		selector = sel.String()
+	case "StatefulSet":
+		ss, err := cs.AppsV1().StatefulSets(item.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("resolving statefulset %s: %w", ref.Name, err)
+		}
+		sel, _ := metav1.LabelSelectorAsSelector(ss.Spec.Selector)
+		selector = sel.String()
+	case "ReplicaSet":
+		rs, err := cs.AppsV1().ReplicaSets(item.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("resolving replicaset %s: %w", ref.Name, err)
+		}
+		sel, _ := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
+		selector = sel.String()
+	case "DaemonSet":
+		ds, err := cs.AppsV1().DaemonSets(item.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("resolving daemonset %s: %w", ref.Name, err)
+		}
+		sel, _ := metav1.LabelSelectorAsSelector(ds.Spec.Selector)
+		selector = sel.String()
+	default:
+		return []ResourceItem{}, nil
+	}
+	return fetchPodsWithSelector(ctx, cs, item.Namespace, selector)
 }
 
 // ---------------------------------------------------------------------------
