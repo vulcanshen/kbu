@@ -19,6 +19,10 @@ func fetchPodsForHPADrillDown(ctx context.Context, cs kubernetes.Interface, item
 	return fetchPodsForHPA(ctx, cs, item)
 }
 
+func fetchPodsForPDBDrillDown(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	return fetchPodsForPDB(ctx, cs, item)
+}
+
 // drillDownBySelector returns a ChildFetcher that extracts the label selector
 // from the parent resource (Deployment, DaemonSet, StatefulSet) and fetches
 // matching pods.
@@ -602,6 +606,32 @@ func init() {
 		DrillDown: &DrillDownConfig{
 			ChildType:     ResourcePods,
 			FetchChildren: fetchPodsForHPADrillDown,
+		},
+	})
+
+	// PodDisruptionBudgets — drill-down to selector-matched pods
+	DefaultRegistry.Register(&ResourceDefinition{
+		Type:            ResourcePodDisruptionBudgets,
+		DisplayName:     "PodDisruptionBudgets",
+		KubectlName:     "poddisruptionbudget",
+		Category:        "Autoscaling",
+		CategoryOrder:   6,
+		OrderInCategory: 1,
+		Columns: []Column{
+			{Title: "Name", MinWidth: 20},
+			{Title: "Min Available", MinWidth: 12},
+			{Title: "Max Unavailable", MinWidth: 14},
+			{Title: "Allowed", MinWidth: 8},
+			{Title: "Age", MinWidth: 8},
+		},
+		Fetcher:  fetchPodDisruptionBudgets,
+		Detailer: detailPodDisruptionBudget,
+		WatchStarter: func(ctx context.Context, cs kubernetes.Interface, ns string) (watch.Interface, error) {
+			return cs.PolicyV1().PodDisruptionBudgets(ns).Watch(ctx, metav1.ListOptions{})
+		},
+		DrillDown: &DrillDownConfig{
+			ChildType:     ResourcePods,
+			FetchChildren: fetchPodsForPDBDrillDown,
 		},
 	})
 }
