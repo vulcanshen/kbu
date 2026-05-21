@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.0.10] - 2026-05-21
+
+### Changed
+- **Splash easter egg now shows the build version** instead of the `Hi! It's KubeMate.` tagline. Tagged releases display `v1.0.10`, local `go build` output displays `dev`. Quick way to confirm what release is running without quitting + `km8 --version`.
+- **`--version` output prefixes tagged releases with `v`** (`km8 v1.0.10`); `dev` builds remain `km8 dev`. The `v` is added by `version.Display()` so the on-disk constant matches the goreleaser convention of stripping the tag's `v` prefix.
+
+### Internal
+- Build version moved from `cmd/main.go` to a new `internal/version` package so both `cmd/` and `internal/ui/splash.go` can read it without import cycles. goreleaser ldflags target updated to `github.com/vulcanshen/km8/internal/version.Version`.
+
 ## [v1.0.9] - 2026-05-21
 
 ### Added
