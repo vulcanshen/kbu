@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -1204,6 +1205,289 @@ func formatSubject(s rbacv1.Subject) string {
 		return fmt.Sprintf("%s:%s/%s", s.Kind, s.Namespace, s.Name)
 	}
 	return fmt.Sprintf("%s:%s", s.Kind, s.Name)
+}
+
+// ---------------------------------------------------------------------------
+// PersistentVolume / PersistentVolumeClaim / StorageClass
+// ---------------------------------------------------------------------------
+
+// shortAccessModes formats PV/PVC access modes using kubectl shorthand
+// (RWO / ROX / RWX / RWOP), comma-joined.
+func shortAccessModes(modes []corev1.PersistentVolumeAccessMode) string {
+	short := make([]string, 0, len(modes))
+	for _, m := range modes {
+		switch m {
+		case corev1.ReadWriteOnce:
+			short = append(short, "RWO")
+		case corev1.ReadOnlyMany:
+			short = append(short, "ROX")
+		case corev1.ReadWriteMany:
+			short = append(short, "RWX")
+		case corev1.ReadWriteOncePod:
+			short = append(short, "RWOP")
+		}
+	}
+	return strings.Join(short, ",")
+}
+
+func fetchPersistentVolumes(ctx context.Context, cs kubernetes.Interface) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing persistentvolumes: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		pv := &list.Items[i]
+		capacity := ""
+		if q, ok := pv.Spec.Capacity[corev1.ResourceStorage]; ok {
+			capacity = q.String()
+		}
+		claim := ""
+		if pv.Spec.ClaimRef != nil {
+			claim = fmt.Sprintf("%s/%s", pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name)
+		}
+		items = append(items, ResourceItem{
+			Name:      pv.Name,
+			Namespace: "",
+			UID:       string(pv.UID),
+			Raw:       pv,
+			Row: []string{
+				pv.Name,
+				capacity,
+				shortAccessModes(pv.Spec.AccessModes),
+				string(pv.Status.Phase),
+				claim,
+				pv.Spec.StorageClassName,
+				formatAge(pv.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailPersistentVolume(item ResourceItem) ResourceDetail {
+	pv, _ := item.Raw.(*corev1.PersistentVolume)
+	d := baseDetail(item, "PersistentVolume", pv.ObjectMeta)
+	capacity := ""
+	if q, ok := pv.Spec.Capacity[corev1.ResourceStorage]; ok {
+		capacity = q.String()
+	}
+	claim := "<unbound>"
+	if pv.Spec.ClaimRef != nil {
+		claim = fmt.Sprintf("%s/%s", pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name)
+	}
+	d.Fields = []DetailField{
+		{Label: "Capacity", Value: capacity},
+		{Label: "AccessModes", Value: shortAccessModes(pv.Spec.AccessModes)},
+		{Label: "ReclaimPolicy", Value: string(pv.Spec.PersistentVolumeReclaimPolicy)},
+		{Label: "Status", Value: string(pv.Status.Phase)},
+		{Label: "Claim", Value: claim},
+		{Label: "StorageClass", Value: pv.Spec.StorageClassName},
+	}
+	if pv.Status.Reason != "" {
+		d.Fields = append(d.Fields, DetailField{Label: "Reason", Value: pv.Status.Reason})
+	}
+	return d
+}
+
+func fetchPersistentVolumeClaims(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().PersistentVolumeClaims(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing persistentvolumeclaims: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		pvc := &list.Items[i]
+		capacity := ""
+		if q, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
+			capacity = q.String()
+		}
+		sc := ""
+		if pvc.Spec.StorageClassName != nil {
+			sc = *pvc.Spec.StorageClassName
+		}
+		items = append(items, ResourceItem{
+			Name:      pvc.Name,
+			Namespace: pvc.Namespace,
+			UID:       string(pvc.UID),
+			Raw:       pvc,
+			Row: []string{
+				pvc.Name,
+				string(pvc.Status.Phase),
+				pvc.Spec.VolumeName,
+				capacity,
+				shortAccessModes(pvc.Status.AccessModes),
+				sc,
+				formatAge(pvc.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailPersistentVolumeClaim(item ResourceItem) ResourceDetail {
+	pvc, _ := item.Raw.(*corev1.PersistentVolumeClaim)
+	d := baseDetail(item, "PersistentVolumeClaim", pvc.ObjectMeta)
+	requestCap := ""
+	if q, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
+		requestCap = q.String()
+	}
+	statusCap := ""
+	if q, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
+		statusCap = q.String()
+	}
+	sc := "<default>"
+	if pvc.Spec.StorageClassName != nil {
+		sc = *pvc.Spec.StorageClassName
+	}
+	d.Fields = []DetailField{
+		{Label: "Status", Value: string(pvc.Status.Phase)},
+		{Label: "Volume", Value: pvc.Spec.VolumeName},
+		{Label: "RequestedCapacity", Value: requestCap},
+		{Label: "BoundCapacity", Value: statusCap},
+		{Label: "AccessModes", Value: shortAccessModes(pvc.Status.AccessModes)},
+		{Label: "StorageClass", Value: sc},
+	}
+	return d
+}
+
+// fetchPodsForPVC returns Pods in the PVC's namespace that mount it via
+// spec.volumes[].persistentVolumeClaim.claimName.
+func fetchPodsForPVC(ctx context.Context, cs kubernetes.Interface, item ResourceItem) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().Pods(item.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing pods: %w", err)
+	}
+	items := make([]ResourceItem, 0)
+	for i := range list.Items {
+		p := &list.Items[i]
+		uses := false
+		for _, vol := range p.Spec.Volumes {
+			if vol.PersistentVolumeClaim != nil && vol.PersistentVolumeClaim.ClaimName == item.Name {
+				uses = true
+				break
+			}
+		}
+		if !uses {
+			continue
+		}
+		ready, total := podReadyCounts(p)
+		items = append(items, ResourceItem{
+			Name:      p.Name,
+			Namespace: p.Namespace,
+			UID:       string(p.UID),
+			Raw:       p,
+			Row: []string{
+				p.Name,
+				fmt.Sprintf("%d/%d", ready, total),
+				string(p.Status.Phase),
+				fmt.Sprintf("%d", podRestarts(p)),
+				formatAge(p.CreationTimestamp.Time),
+				p.Spec.NodeName,
+			},
+		})
+	}
+	return items, nil
+}
+
+func fetchStorageClasses(ctx context.Context, cs kubernetes.Interface) ([]ResourceItem, error) {
+	list, err := cs.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing storageclasses: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		sc := &list.Items[i]
+		reclaim := ""
+		if sc.ReclaimPolicy != nil {
+			reclaim = string(*sc.ReclaimPolicy)
+		}
+		binding := ""
+		if sc.VolumeBindingMode != nil {
+			binding = string(*sc.VolumeBindingMode)
+		}
+		items = append(items, ResourceItem{
+			Name:      sc.Name,
+			Namespace: "",
+			UID:       string(sc.UID),
+			Raw:       sc,
+			Row: []string{
+				sc.Name,
+				sc.Provisioner,
+				reclaim,
+				binding,
+				formatAge(sc.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailStorageClass(item ResourceItem) ResourceDetail {
+	sc, _ := item.Raw.(*storagev1.StorageClass)
+	d := baseDetail(item, "StorageClass", sc.ObjectMeta)
+	reclaim := "<default>"
+	if sc.ReclaimPolicy != nil {
+		reclaim = string(*sc.ReclaimPolicy)
+	}
+	binding := "<default>"
+	if sc.VolumeBindingMode != nil {
+		binding = string(*sc.VolumeBindingMode)
+	}
+	allowExpand := "false"
+	if sc.AllowVolumeExpansion != nil && *sc.AllowVolumeExpansion {
+		allowExpand = "true"
+	}
+	d.Fields = []DetailField{
+		{Label: "Provisioner", Value: sc.Provisioner},
+		{Label: "ReclaimPolicy", Value: reclaim},
+		{Label: "VolumeBindingMode", Value: binding},
+		{Label: "AllowVolumeExpansion", Value: allowExpand},
+		{Label: "Parameters", Value: fmt.Sprintf("%d", len(sc.Parameters))},
+	}
+	return d
+}
+
+// ---------------------------------------------------------------------------
+// ServiceAccount
+// ---------------------------------------------------------------------------
+
+func fetchServiceAccounts(ctx context.Context, cs kubernetes.Interface, ns string) ([]ResourceItem, error) {
+	list, err := cs.CoreV1().ServiceAccounts(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing serviceaccounts: %w", err)
+	}
+	items := make([]ResourceItem, 0, len(list.Items))
+	for i := range list.Items {
+		sa := &list.Items[i]
+		items = append(items, ResourceItem{
+			Name:      sa.Name,
+			Namespace: sa.Namespace,
+			UID:       string(sa.UID),
+			Raw:       sa,
+			Row: []string{
+				sa.Name,
+				fmt.Sprintf("%d", len(sa.Secrets)),
+				formatAge(sa.CreationTimestamp.Time),
+			},
+		})
+	}
+	return items, nil
+}
+
+func detailServiceAccount(item ResourceItem) ResourceDetail {
+	sa, _ := item.Raw.(*corev1.ServiceAccount)
+	d := baseDetail(item, "ServiceAccount", sa.ObjectMeta)
+	automount := "true"
+	if sa.AutomountServiceAccountToken != nil && !*sa.AutomountServiceAccountToken {
+		automount = "false"
+	}
+	d.Fields = []DetailField{
+		{Label: "Secrets", Value: fmt.Sprintf("%d", len(sa.Secrets))},
+		{Label: "ImagePullSecrets", Value: fmt.Sprintf("%d", len(sa.ImagePullSecrets))},
+		{Label: "AutomountToken", Value: automount},
+	}
+	return d
 }
 
 // ---------------------------------------------------------------------------

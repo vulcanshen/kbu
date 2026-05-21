@@ -20,6 +20,14 @@ func TestResourceType_KubectlName(t *testing.T) {
 		{ResourceConfigMaps, "configmap"},
 		{ResourceSecrets, "secret"},
 		{ResourceEvents, "event"},
+		{ResourceClusterRoles, "clusterrole"},
+		{ResourceClusterRoleBindings, "clusterrolebinding"},
+		{ResourceRoles, "role"},
+		{ResourceRoleBindings, "rolebinding"},
+		{ResourceServiceAccounts, "serviceaccount"},
+		{ResourcePersistentVolumes, "persistentvolume"},
+		{ResourcePersistentVolumeClaims, "persistentvolumeclaim"},
+		{ResourceStorageClasses, "storageclass"},
 	}
 
 	for _, tt := range tests {

@@ -29,6 +29,11 @@ const (
 	ResourceClusterRoleBindings ResourceType = "clusterrolebindings"
 	ResourceRoles               ResourceType = "roles"
 	ResourceRoleBindings        ResourceType = "rolebindings"
+	ResourceServiceAccounts     ResourceType = "serviceaccounts"
+
+	ResourcePersistentVolumes      ResourceType = "persistentvolumes"
+	ResourcePersistentVolumeClaims ResourceType = "persistentvolumeclaims"
+	ResourceStorageClasses         ResourceType = "storageclasses"
 )
 
 // String returns the human-readable name of the resource type.
