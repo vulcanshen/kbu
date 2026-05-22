@@ -198,7 +198,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 	body := strings.Join(lines, "\n")
 
-	title := popupGlyph + " Namespaces"
+	title := " Namespaces"
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0

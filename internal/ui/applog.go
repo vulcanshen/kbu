@@ -320,8 +320,8 @@ func (m AppLogModel) renderFullPopup() string {
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 
-	title := "App Log"
-	dashes := innerW - 1 - len(title)
+	title := " App Log"
+	dashes := innerW - 1 - lipgloss.Width(title)
 	if dashes < 0 {
 		dashes = 0
 	}

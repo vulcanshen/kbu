@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"github.com/hinshun/vt10x"
 )
@@ -38,13 +40,26 @@ type PtyView struct {
 
 	done *atomic.Bool
 	mu   *sync.Mutex
+
+	// Scrollback: a ring buffer of historical lines captured from the PTY
+	// byte stream. scrollOffset is how many lines back from the latest we're
+	// currently displaying; 0 = live (use vt10x). Mouse wheel adjusts it.
+	// pendingLine is a pointer because strings.Builder may not be value-copied
+	// (its internal addr-check panics) — PtyView itself is value-copied through
+	// Update's receiver, so any inline Builder would race + panic.
+	scrollback   []string
+	pendingLine  *strings.Builder
+	pendingCR    bool // last byte was \r — wait for next byte to decide CRLF vs progress-bar reset
+	scrollOffset int
 }
 
-func NewPtyView() PtyView {
-	return PtyView{}
+const maxScrollbackLines = 10000
+
+func NewPtyView() *PtyView {
+	return &PtyView{}
 }
 
-func (p PtyView) IsActive() bool { return p.active }
+func (p *PtyView) IsActive() bool { return p.active }
 
 // Start launches cmd in a PTY sized to fit a popup inside hostW × hostH.
 // Returns a tick Cmd that drives the render loop and exit detection.
@@ -56,6 +71,9 @@ func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int) tea.Cmd {
 	p.hostH = hostH
 	p.done = &atomic.Bool{}
 	p.mu = &sync.Mutex{}
+	p.scrollback = nil
+	p.pendingLine = &strings.Builder{}
+	p.scrollOffset = 0
 
 	cols, rows := p.ptyDims()
 	p.term = vt10x.New(vt10x.WithSize(cols, rows))
@@ -89,6 +107,7 @@ func (p *PtyView) readLoop() {
 		if n > 0 {
 			p.mu.Lock()
 			_, _ = p.term.Write(buf[:n])
+			p.captureToScrollback(buf[:n])
 			p.mu.Unlock()
 		}
 		if err != nil {
@@ -98,6 +117,72 @@ func (p *PtyView) readLoop() {
 	_ = p.cmd.Wait()
 	p.done.Store(true)
 }
+
+// captureToScrollback splits the PTY byte stream into lines and appends them
+// to the ring buffer. Carriage returns reset the pending line (terminals use
+// \r alone for in-place updates like progress bars — we keep the latest
+// content). ANSI escape sequences are stripped before storage so cursor-
+// positioning, color, and clear codes don't become invisible "blank" entries
+// (zsh / fancy prompts emit dozens of these per command). mu must be held by
+// caller.
+func (p *PtyView) captureToScrollback(buf []byte) {
+	// Detect clear-screen sequences and reset scrollback to match the
+	// terminal's visible state:
+	//   `\x1b[2J`     — erase entire screen
+	//   `\x1b[3J`     — erase scrollback (xterm extension)
+	//   `\x1b[H\x1b[J` — cursor home + erase-below (what macOS `clear` sends)
+	//   `\x1bc`        — RIS (full terminal reset)
+	// `\x1b[J` alone is NOT enough (zsh prompt redraw uses it too) — must
+	// be preceded by cursor-home to confirm a screen clear.
+	if bytes.Contains(buf, []byte("\x1b[2J")) ||
+		bytes.Contains(buf, []byte("\x1b[3J")) ||
+		bytes.Contains(buf, []byte("\x1b[H\x1b[J")) ||
+		bytes.Contains(buf, []byte("\x1bc")) {
+		p.scrollback = nil
+		p.scrollOffset = 0
+		p.pendingLine.Reset()
+		p.pendingCR = false
+		return
+	}
+	for _, b := range buf {
+		// Resolve a pending \r based on what follows. \r\n is a line
+		// terminator (CRLF); a lone \r is an in-place progress-bar reset.
+		// macOS shells (zsh / oh-my-zsh) emit CRLF — without this the line
+		// gets reset before the \n commits it, leaving scrollback empty.
+		if p.pendingCR {
+			p.pendingCR = false
+			if b == '\n' {
+				p.commitScrollbackLine()
+				continue
+			}
+			p.pendingLine.Reset()
+		}
+		switch b {
+		case '\r':
+			p.pendingCR = true
+		case '\n':
+			p.commitScrollbackLine()
+		default:
+			p.pendingLine.WriteByte(b)
+		}
+	}
+}
+
+func (p *PtyView) commitScrollbackLine() {
+	raw := p.pendingLine.String()
+	// Filter using the visible content (post-strip) so pure-ANSI lines like
+	// zsh prompt repaints don't become invisible "blank" entries — but
+	// STORE the raw line so its colors / styles re-render correctly when
+	// the user scrolls back.
+	if strings.TrimSpace(ansi.Strip(raw)) != "" {
+		p.scrollback = append(p.scrollback, raw)
+		if len(p.scrollback) > maxScrollbackLines {
+			p.scrollback = p.scrollback[len(p.scrollback)-maxScrollbackLines:]
+		}
+	}
+	p.pendingLine.Reset()
+}
+
 
 // Stop force-terminates the PTY subprocess (if still running) and clears state.
 func (p *PtyView) Stop() {
@@ -113,7 +198,7 @@ func (p *PtyView) Stop() {
 	p.term = nil
 }
 
-func (p PtyView) Update(msg tea.Msg) (PtyView, tea.Cmd) {
+func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 	if !p.active {
 		return p, nil
 	}
@@ -132,17 +217,95 @@ func (p PtyView) Update(msg tea.Msg) (PtyView, tea.Cmd) {
 		return p, p.tick()
 
 	case tea.KeyMsg:
+		// Scrollback navigation keys (PgUp/PgDn/Home/End) intercept ONLY
+		// when the PTY isn't in alt-screen mode — i.e. plain shell output.
+		// Full-screen apps (vim / nvim / less / htop / kubectl edit's
+		// editor) switch to alt screen, so we forward all keys to them
+		// and they keep PgUp/PgDn/Home/End semantics. Match on
+		// msg.String() so terminal-specific encodings of these keys are
+		// all caught.
+		altScreen := p.term != nil && p.term.Mode()&vt10x.ModeAltScreen != 0
+		if p.term != nil && !altScreen {
+			switch msg.String() {
+			case "pgup", "shift+pgup":
+				p.scrollPage(-1)
+				return p, nil
+			case "pgdown", "shift+pgdown":
+				p.scrollPage(1)
+				return p, nil
+			case "home", "shift+home":
+				p.scrollToEnd(-1) // top of scrollback
+				return p, nil
+			case "end", "shift+end":
+				p.scrollToEnd(1) // back to live
+				return p, nil
+			}
+		}
 		if p.ptmx == nil {
 			return p, nil
 		}
 		appCursor := p.term != nil && p.term.Mode()&vt10x.ModeAppCursor != 0
 		raw := ptyKeyBytes(msg, appCursor)
 		if len(raw) > 0 {
+			// Typing snaps the view back to live — standard terminal
+			// behavior. User scrolled to read history, now they're
+			// interacting again, so jump back to the prompt.
+			p.scrollOffset = 0
 			_, _ = p.ptmx.Write(raw)
 		}
 		return p, nil
 	}
 	return p, nil
+}
+
+// scrollToEnd jumps to the top (direction=-1, oldest line at top of viewport)
+// or bottom (direction=+1, live) of the scrollback. Wired to Home / End.
+// Shell line-edit users have Ctrl+A / Ctrl+E as readline-native equivalents.
+func (p *PtyView) scrollToEnd(direction int) {
+	if p.term == nil {
+		return
+	}
+	_, rows := p.term.Size()
+	p.mu.Lock()
+	total := len(p.scrollback)
+	p.mu.Unlock()
+	maxOffset := total - rows
+	if maxOffset <= 0 {
+		p.scrollOffset = 0
+		return
+	}
+	if direction < 0 {
+		p.scrollOffset = maxOffset
+	} else {
+		p.scrollOffset = 0
+	}
+}
+
+// scrollPage moves the scrollback view by one viewport.
+// direction = -1 → PgUp (look further back, scrollOffset grows).
+// direction = +1 → PgDown (look forward, scrollOffset shrinks; 0 = live).
+// Clamped to [0, total-rows]; if the buffer fits in the viewport,
+// scrollOffset is forced to 0.
+func (p *PtyView) scrollPage(direction int) {
+	if p.term == nil {
+		return
+	}
+	_, rows := p.term.Size()
+	p.mu.Lock()
+	total := len(p.scrollback)
+	p.mu.Unlock()
+	maxOffset := total - rows
+	if maxOffset <= 0 {
+		p.scrollOffset = 0
+		return
+	}
+	p.scrollOffset -= direction * rows
+	if p.scrollOffset < 0 {
+		p.scrollOffset = 0
+	}
+	if p.scrollOffset > maxOffset {
+		p.scrollOffset = maxOffset
+	}
 }
 
 // SetSize updates the host dimensions and resizes the underlying PTY so the
@@ -167,7 +330,7 @@ func (p *PtyView) SetSize(hostW, hostH int) {
 // fixed (preserving host parity so overlay.Composite centers symmetrically)
 // and asymmetric: horizontal margin is wider than vertical because terminals
 // are typically much wider than tall.
-func (p PtyView) ptyDims() (cols, rows int) {
+func (p *PtyView) ptyDims() (cols, rows int) {
 	const (
 		popupMarginX = 2
 		popupMarginY = 1
@@ -185,45 +348,90 @@ func (p PtyView) ptyDims() (cols, rows int) {
 	return cols, rows
 }
 
-func (p PtyView) View() string { return "" }
+func (p *PtyView) View() string { return "" }
 
 // RenderPopup builds the title bar + bordered PTY grid as a single string
 // ready for overlay.Composite over the main view.
-func (p PtyView) RenderPopup() string {
+func (p *PtyView) RenderPopup() string {
 	if !p.active || p.term == nil {
 		return ""
 	}
 	cols, rows := p.term.Size()
 
-	p.mu.Lock()
-	cursorX, cursorY := -1, -1
-	if p.term.CursorVisible() {
-		c := p.term.Cursor()
-		cursorX, cursorY = c.X, c.Y
-	}
 	var lines []string
-	for y := 0; y < rows; y++ {
-		var line strings.Builder
-		for x := 0; x < cols; x++ {
-			glyph := p.term.Cell(x, y)
-			isCursor := x == cursorX && y == cursorY
-			line.WriteString(renderGlyph(glyph, isCursor))
+	p.mu.Lock()
+	// Re-clamp scrollOffset against the latest scrollback length + viewport.
+	// The wheel handler clamps too, but a window-resize between events can
+	// shrink the maximum without re-clamping the existing offset.
+	total := len(p.scrollback)
+	maxOffset := total - rows
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if p.scrollOffset > maxOffset {
+		p.scrollOffset = maxOffset
+	}
+	if p.scrollOffset > 0 && maxOffset > 0 {
+		// Scrollback mode: render a slice of historical lines instead of
+		// vt10x's live state. end never exceeds total, start never below 0.
+		end := total - p.scrollOffset
+		start := end - rows
+		if start < 0 {
+			start = 0
 		}
-		lines = append(lines, line.String())
+		for _, l := range p.scrollback[start:end] {
+			// Lines hold raw output (with ANSI color codes preserved).
+			// Use visual-width (ansi.StringWidth) for layout math — len()
+			// would count escape bytes and break the popup grid.
+			w := ansi.StringWidth(l)
+			if w > cols {
+				l = ansi.Truncate(l, cols, "")
+			} else if w < cols {
+				l = l + strings.Repeat(" ", cols-w)
+			}
+			lines = append(lines, l)
+		}
+		// Bottom-pad with blanks so the viewport is always exactly `rows`
+		// lines tall. Without this, scrolling far enough up to expose the
+		// head of the buffer would leave the bottom of the popup empty
+		// (background bleeds through the overlay).
+		for len(lines) < rows {
+			lines = append(lines, strings.Repeat(" ", cols))
+		}
+	} else {
+		cursorX, cursorY := -1, -1
+		if p.term.CursorVisible() {
+			c := p.term.Cursor()
+			cursorX, cursorY = c.X, c.Y
+		}
+		for y := 0; y < rows; y++ {
+			var line strings.Builder
+			for x := 0; x < cols; x++ {
+				glyph := p.term.Cell(x, y)
+				isCursor := x == cursorX && y == cursorY
+				line.WriteString(renderGlyph(glyph, isCursor))
+			}
+			lines = append(lines, line.String())
+		}
 	}
 	p.mu.Unlock()
 
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#74c7ec"))
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F0AE49")).Bold(true)
 
+	// Title gains a [SCROLLED N] marker while the user is viewing history so
+	// the state is unmistakable. Cleared the moment scrollOffset returns to 0
+	// (mouse wheel down to the bottom = back to live).
+	titleText := p.title
+
 	// Manually compose ╭─ 󰵅 Title ────╮ / │ content │ / ╰─────╯ so the title
 	// sits inside the top border line and shares the same popup glyph as the
 	// other popup overlays (toast / confirm / namespace / context).
 	// Note: `─` is 3 bytes in UTF-8 so we must NOT use len() for visual widths.
-	title := " " + popupGlyph + " " + p.title + " "
+	title := " " + titleText + " "
 	titleW := lipgloss.Width(title)
 	if titleW > cols-2 {
-		title = " " + popupGlyph + " "
+		title = " "
 		titleW = lipgloss.Width(title)
 	}
 	const leadDashCount = 2

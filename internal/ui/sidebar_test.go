@@ -397,3 +397,46 @@ func TestTruncateSidebarLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestSidebarModel_Search_CategoryMatchExpandsAllItems(t *testing.T) {
+	m := newTestSidebar()
+	m.searchQuery = "cluster"
+	items := m.visibleItems()
+
+	// Cluster category header should appear and ALL its native children
+	// (Namespaces / Nodes / Events) should be visible — that's the new
+	// category-match behavior. Other categories with item-level matches
+	// (e.g. RBAC's ClusterRoles) may also appear, which is intended.
+	clusterHeaderIdx := -1
+	for i, it := range items {
+		if it.isCategory && strings.EqualFold(it.label, "Cluster") {
+			clusterHeaderIdx = i
+			break
+		}
+	}
+	if clusterHeaderIdx < 0 {
+		t.Fatal("expected Cluster category header when searching 'cluster'")
+	}
+	clusterChildren := 0
+	for i := clusterHeaderIdx + 1; i < len(items) && !items[i].isCategory; i++ {
+		clusterChildren++
+	}
+	if clusterChildren < 3 {
+		t.Errorf("expected ≥3 children under Cluster on category match, got %d", clusterChildren)
+	}
+}
+
+func TestSidebarModel_Search_ItemMatchOnlyShowsMatching(t *testing.T) {
+	m := newTestSidebar()
+	m.searchQuery = "pods"
+	items := m.visibleItems()
+
+	// Item-level match: only the category containing matching items appears.
+	// Cluster category shouldn't appear because "Namespaces" / "Nodes" / "Events"
+	// don't contain "pods".
+	for _, it := range items {
+		if it.isCategory && strings.EqualFold(it.label, "Cluster") {
+			t.Errorf("Cluster category should not appear when searching 'pods'")
+		}
+	}
+}
