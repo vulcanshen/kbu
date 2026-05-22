@@ -49,3 +49,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTION_TOKEN: ${{ secrets.ACTION_TOKEN }}
+      - name: Force release body from CHANGELOG (goreleaser's --release-notes is unreliable)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -s RELEASE_NOTES.md ]; then
+            gh release edit "${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md
+          else
+            echo "RELEASE_NOTES.md is empty — skipping body override"
+          fi
