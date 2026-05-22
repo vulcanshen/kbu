@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
@@ -46,6 +45,7 @@ type AppModel struct {
 	confirm         ConfirmModel
 	splash          SplashModel
 	toast           ToastModel
+	ptyView         PtyView
 
 	activePanel     Panel
 	width           int
@@ -103,6 +103,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		confirm:         NewConfirmModel(t),
 		splash:          NewSplashModel(),
 		toast:           NewToastModel(t),
+		ptyView:         NewPtyView(),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfgEditor:       cfgEditor,
@@ -142,6 +143,23 @@ func discoverCRDs(client *k8s.Client) tea.Cmd {
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	if _, ok := msg.(quitConfirmedMsg); ok {
+		m.watcher.Stop()
+		m.logStreamer.Stop()
+		return m, tea.Quit
+	}
+
+	// PtyExitMsg arrives AFTER ptyView has already Stop()ed itself, so this
+	// handler lives outside the IsActive() guard — it cleans up app-level
+	// state when the subprocess finishes.
+	if exit, ok := msg.(PtyExitMsg); ok {
+		m.editing = false
+		if exit.ExitCode != 0 {
+			m.appLog.Warn(fmt.Sprintf("subprocess exited with code %d", exit.ExitCode))
+		}
+		return m, nil
+	}
+
 	if m.splash.IsActive() {
 		var cmd tea.Cmd
 		m.splash, cmd = m.splash.Update(msg)
@@ -166,6 +184,28 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
+	}
+
+	// PtyView intercepts keys / ticks / resizes while a subprocess is running.
+	// Other messages (watch updates, detail fetches, animation ticks) fall
+	// through to the normal handlers — they update underlying state silently
+	// behind the PTY popup so that when the subprocess exits, the table /
+	// detail panels are already current.
+	if m.ptyView.IsActive() {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			m.width = msg.Width
+			m.height = msg.Height
+			m.ready = true
+			m.layout()
+			m.ptyView.SetSize(m.width, m.height)
+			return m, nil
+		case tea.KeyMsg, ptyTickMsg:
+			var cmd tea.Cmd
+			m.ptyView, cmd = m.ptyView.Update(msg)
+			return m, cmd
+		}
+		// fall through
 	}
 
 	if m.confirm.IsActive() {
@@ -251,10 +291,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "ctrl+c":
 			m.watcher.Stop()
 			m.logStreamer.Stop()
 			return m, tea.Quit
+		case "q":
+			quitCmd := func() tea.Msg {
+				return quitConfirmedMsg{}
+			}
+			return m, m.confirm.Show(ConfirmQuit, "Quit km8?", "", quitCmd)
 		case "V":
 			return m, m.splash.Show()
 		case "?":
@@ -313,8 +358,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				idx := m.table.SelectedRow()
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
-					m.editing = true
-					return m, editResource(m.currentResource, item.Name, item.Namespace, m.k8sClient.ContextName())
+					detail := fmt.Sprintf("kubectl edit %s/%s", m.currentResource.KubectlName(), item.Name)
+					if item.Namespace != "" {
+						detail += " -n " + item.Namespace
+					}
+					startCmd := func() tea.Msg {
+						return startEditMsg{resource: m.currentResource, item: item, contextName: m.k8sClient.ContextName()}
+					}
+					return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
 				}
 			}
 		case "s":
@@ -544,79 +595,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
-	case editTempReadyMsg:
-		editorCmd := resolveEditor(m.cfgEditor)
-		parts := strings.Fields(editorCmd)
-		c := exec.Command(parts[0], append(parts[1:], msg.path)...)
-		return m, tea.ExecProcess(c, func(err error) tea.Msg {
-			if err != nil {
-				return editEditorCrashedMsg{path: msg.path}
-			}
-			return editEditorDoneMsg{path: msg.path, original: msg.original, resource: msg.resource, namespace: msg.namespace, contextName: msg.contextName}
-		})
+	case startShellExecMsg:
+		cmd := buildKubectlExecCmd(msg.podName, msg.namespace, msg.container, msg.contextName)
+		title := fmt.Sprintf("Shell: pod/%s → %s", msg.podName, msg.container)
+		return m, m.ptyView.Start(cmd, title, m.width, m.height)
 
-	case editFetchFailedMsg:
-		m.editing = false
-		return m, func() tea.Msg { return ResourceErrorMsg{Err: msg.err} }
-
-	case editEditorCrashedMsg:
-		m.editing = false
-		os.Remove(msg.path)
-		m.appLog.Warn("editor exited with error — edit cancelled")
-		return m, nil
-
-	case editEditorDoneMsg:
-		return m, func() tea.Msg {
-			defer os.Remove(msg.path)
-			edited, err := os.ReadFile(msg.path)
-			if err != nil || bytes.Equal(edited, msg.original) {
-				return EditDoneMsg{Resource: msg.resource, Namespace: msg.namespace, Output: "no changes"}
-			}
-			var buf bytes.Buffer
-			args := []string{"apply", "-f", msg.path}
-			if msg.contextName != "" {
-				args = append(args, "--context", msg.contextName)
-			}
-			c := exec.Command("kubectl", args...)
-			c.Stdout = &buf
-			c.Stderr = &buf
-			applyErr := c.Run()
-			output := strings.TrimSpace(buf.String())
-			if applyErr != nil {
-				return editApplyFailedMsg{resource: msg.resource, namespace: msg.namespace, output: output}
-			}
-			return EditDoneMsg{Resource: msg.resource, Namespace: msg.namespace, Output: output}
+	case startEditMsg:
+		m.editing = true
+		title := fmt.Sprintf("Edit: %s/%s", msg.resource.KubectlName(), msg.item.Name)
+		if msg.item.Namespace != "" {
+			title += " (" + msg.item.Namespace + ")"
 		}
-
-	case editApplyFailedMsg:
-		m.editing = false
-		m.appLog.Warn("kubectl apply failed: " + msg.output)
-		config.WriteAuditEntry("edit", msg.resource, msg.namespace, "FAILED: "+msg.output) //nolint
-		return m, func() tea.Msg {
-			return ResourceErrorMsg{Err: fmt.Errorf("apply failed: %s", msg.output)}
-		}
-
-	case EditDoneMsg:
-		m.editing = false
-		if msg.Output == "no changes" {
-			m.appLog.Info("edit: " + msg.Resource + " — no changes")
-		} else {
-			m.appLog.Success("edit: " + msg.Resource + " — " + msg.Output)
-			m.successNotice = "applied"
-			m.successNoticeID++
-			id := m.successNoticeID
-			cmds = append(cmds, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-				return successNoticeClearMsg{id: id}
-			}))
-		}
-		config.WriteAuditEntry("edit", msg.Resource, msg.Namespace, msg.Output) //nolint
-		return m, tea.Batch(cmds...)
-
-	case successNoticeClearMsg:
-		if msg.id == m.successNoticeID {
-			m.successNotice = ""
-		}
-		return m, nil
+		cmd := buildKubectlEditCmd(msg.resource, msg.item, msg.contextName, m.cfgEditor)
+		config.WriteAuditEntry("edit", msg.resource.KubectlName()+"/"+msg.item.Name, msg.item.Namespace, "started") //nolint
+		m.appLog.Info("edit: " + msg.resource.KubectlName() + "/" + msg.item.Name)
+		return m, m.ptyView.Start(cmd, title, m.width, m.height)
 
 	case DeleteDoneMsg:
 		out := strings.TrimSpace(msg.Output)
@@ -751,6 +744,10 @@ func (m AppModel) View() string {
 
 	if m.toast.IsActive() {
 		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.ptyView.IsActive() {
+		mainView = overlay.Composite(m.ptyView.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	return mainView
@@ -1057,20 +1054,32 @@ func (m *AppModel) execShell() tea.Cmd {
 	return showCmd
 }
 
+// shellExec returns a Cmd that asks AppModel to launch a PTY for kubectl exec.
+// AppModel cannot start the PTY directly from inside confirm's onConfirm
+// closure because the closure has no access to model state — so we round-trip
+// through startShellExecMsg.
 func shellExec(podName, namespace, container, contextName string) tea.Cmd {
-	ctxFlag := ""
-	if contextName != "" {
-		ctxFlag = " --context " + contextName
+	return func() tea.Msg {
+		return startShellExecMsg{
+			podName:     podName,
+			namespace:   namespace,
+			container:   container,
+			contextName: contextName,
+		}
 	}
-	script := fmt.Sprintf(
-		"clear; printf '\\033[?25h'; printf '\\033[1;32m<<km8-Shell>>\\033[0m Pod: \\033[1;34m%s/%s\\033[0m | Container: \\033[1;33m%s\\033[0m\\n\\n'; kubectl exec -it %s -n %s -c %s%s -- /bin/sh; clear",
-		namespace, podName, container,
-		podName, namespace, container, ctxFlag,
-	)
-	c := exec.Command("sh", "-c", script)
-	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return EditDoneMsg{Output: "no changes"} // suppress success badge
-	})
+}
+
+type startShellExecMsg struct {
+	podName, namespace, container, contextName string
+}
+
+func buildKubectlExecCmd(podName, namespace, container, contextName string) *exec.Cmd {
+	args := []string{"exec", "-it", podName, "-n", namespace, "-c", container}
+	if contextName != "" {
+		args = append(args, "--context", contextName)
+	}
+	args = append(args, "--", "/bin/sh")
+	return exec.Command("kubectl", args...)
 }
 
 func (m AppModel) focusedPanelContent() string {
@@ -1223,52 +1232,68 @@ func fetchContexts(client *k8s.Client) tea.Cmd {
 	}
 }
 
-// editResource fetches the resource YAML and writes it to a temp file.
-// The editor is opened in the next step (editTempReadyMsg handler).
-// resolveEditor returns the editor to use, in priority order:
-// config.Editor → $VISUAL → $EDITOR → platform default (vi / notepad).
-func resolveEditor(cfgEditor string) string {
-	for _, v := range []string{cfgEditor, os.Getenv("VISUAL"), os.Getenv("EDITOR")} {
-		if v != "" {
-			return v
-		}
+// buildKubectlEditCmd assembles the `kubectl edit` command to run inside the
+// PtyView. cfgEditor (from config.yaml) is exposed as $KUBE_EDITOR so kubectl
+// honors the user's choice; if empty, kubectl falls back to $EDITOR / $VISUAL
+// / vi / notepad on its own.
+//
+// The env is sanitized: vt10x is a basic VT100/xterm emulator and doesn't
+// respond to advanced queries (DA1, color reports, etc.) that editors like
+// nvim send when they detect terminal-program env vars (TERM_PROGRAM,
+// KITTY_*, ITERM_*). Inheriting those values causes nvim to wait for query
+// responses and time out on exit, producing a noticeable lag.
+func buildKubectlEditCmd(rt k8s.ResourceType, item k8s.ResourceItem, contextName, cfgEditor string) *exec.Cmd {
+	args := []string{"edit", rt.KubectlName() + "/" + item.Name}
+	if item.Namespace != "" {
+		args = append(args, "-n", item.Namespace)
 	}
-	if runtime.GOOS == "windows" {
-		return "notepad"
+	if contextName != "" {
+		args = append(args, "--context", contextName)
 	}
-	return "vi"
+	c := exec.Command("kubectl", args...)
+	c.Env = sanitizeEditorEnv(cfgEditor)
+	return c
 }
 
-func editResource(rt k8s.ResourceType, name, namespace, contextName string) tea.Cmd {
-	return func() tea.Msg {
-		args := []string{"get", rt.KubectlName(), name, "-o", "yaml"}
-		if namespace != "" {
-			args = append(args, "-n", namespace)
-		}
-		if contextName != "" {
-			args = append(args, "--context", contextName)
-		}
-		out, err := exec.Command("kubectl", args...).Output()
-		if err != nil {
-			return editFetchFailedMsg{err: fmt.Errorf("kubectl get: %w", err)}
-		}
-		f, err := os.CreateTemp("", "km8-edit-*.yaml")
-		if err != nil {
-			return editFetchFailedMsg{err: fmt.Errorf("create temp file: %w", err)}
-		}
-		defer f.Close()
-		if _, err := f.Write(out); err != nil {
-			os.Remove(f.Name())
-			return editFetchFailedMsg{err: fmt.Errorf("write temp file: %w", err)}
-		}
-		return editTempReadyMsg{
-			path:        f.Name(),
-			original:    out,
-			resource:    rt.KubectlName() + "/" + name,
-			namespace:   namespace,
-			contextName: contextName,
-		}
+func sanitizeEditorEnv(cfgEditor string) []string {
+	strip := []string{
+		"TERM_PROGRAM",
+		"TERM_PROGRAM_VERSION",
+		"TERM_SESSION_ID",
+		"KITTY_WINDOW_ID",
+		"KITTY_PUBLIC_KEY",
+		"ITERM_SESSION_ID",
+		"ITERM_PROFILE",
+		"LC_TERMINAL",
+		"LC_TERMINAL_VERSION",
+		"WEZTERM_EXECUTABLE",
+		"WEZTERM_PANE",
+		"GHOSTTY_RESOURCES_DIR",
+		"COLORTERM",
+		"TERM",
+		"KUBE_EDITOR",
 	}
+	stripSet := make(map[string]struct{}, len(strip))
+	for _, k := range strip {
+		stripSet[k] = struct{}{}
+	}
+	env := make([]string, 0, len(os.Environ()))
+	for _, v := range os.Environ() {
+		eq := strings.IndexByte(v, '=')
+		if eq < 0 {
+			env = append(env, v)
+			continue
+		}
+		if _, drop := stripSet[v[:eq]]; drop {
+			continue
+		}
+		env = append(env, v)
+	}
+	env = append(env, "TERM=xterm-256color")
+	if cfgEditor != "" {
+		env = append(env, "KUBE_EDITOR="+cfgEditor)
+	}
+	return env
 }
 
 func deleteResource(rt k8s.ResourceType, name, namespace, contextName string) tea.Cmd {

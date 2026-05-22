@@ -13,6 +13,8 @@ type ConfirmAction int
 const (
 	ConfirmShellExec ConfirmAction = iota
 	ConfirmDelete
+	ConfirmQuit
+	ConfirmEdit
 )
 
 type ConfirmModel struct {
@@ -94,7 +96,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	msgStyle := lipgloss.NewStyle().Bold(true)
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
 
-	title := "Confirm"
+	title := popupGlyph + " Confirm"
 	hint := " Enter/y: confirm  Esc/n: cancel "
 
 	// Cap inner width at 70% of screen (or 80 chars if no screen size).
@@ -113,7 +115,7 @@ func (m ConfirmModel) renderFullPopup() string {
 			innerW = w
 		}
 	}
-	if w := len(title) + 4; w > innerW {
+	if w := lipgloss.Width(title) + 4; w > innerW {
 		innerW = w
 	}
 	if w := len(hint) + 4; w > innerW {
@@ -136,7 +138,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	}
 	body := strings.Join(lines, "\n")
 
-	dashesAfter := innerW - 1 - len(title)
+	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
