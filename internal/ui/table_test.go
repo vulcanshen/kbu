@@ -584,3 +584,29 @@ func TestColumnsForResource(t *testing.T) {
 		}
 	}
 }
+
+func TestPodStatusColor_Classification(t *testing.T) {
+	th := theme.DefaultTheme()
+	cases := []struct {
+		status string
+		want   string // expected theme color
+		bucket string
+	}{
+		{"Running", th.Status.Running, "running"},
+		{"Succeeded", th.Status.Running, "running"},
+		{"Pending", th.Status.Pending, "pending"},
+		{"ContainerCreating", th.Status.Pending, "pending"},
+		{"CrashLoopBackOff", th.Status.Error, "error"},
+		{"ImagePullBackOff", th.Status.Error, "error"},
+		{"OOMKilled", th.Status.Error, "error"},
+		{"Init:CrashLoopBackOff", th.Status.Error, "error"},
+		{"Terminating", th.Status.Unknown, "unknown"},
+		{"SomeNovelStatus", "", "fallthrough"},
+	}
+	for _, c := range cases {
+		got := podStatusColor(c.status, th)
+		if got != c.want {
+			t.Errorf("podStatusColor(%q) → %q (bucket %s), want %q", c.status, got, c.bucket, c.want)
+		}
+	}
+}

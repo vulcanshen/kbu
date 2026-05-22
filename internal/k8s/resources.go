@@ -320,7 +320,7 @@ func fetchPods(ctx context.Context, cs kubernetes.Interface, ns string) ([]Resou
 			Row: []string{
 				p.Name,
 				fmt.Sprintf("%d/%d", ready, total),
-				string(p.Status.Phase),
+				PodStatus(p),
 				fmt.Sprintf("%d", restarts),
 				formatAge(p.CreationTimestamp.Time),
 				p.Spec.NodeName,
@@ -328,6 +328,36 @@ func fetchPods(ctx context.Context, cs kubernetes.Interface, ns string) ([]Resou
 		})
 	}
 	return items, nil
+}
+
+// PodStatus returns the human-visible status string for a pod — matching the
+// STATUS column of `kubectl get pods`. The bare Pod.Status.Phase misses common
+// transient states because the Phase stays "Running" while individual
+// containers are in CrashLoopBackOff / ImagePullBackOff / etc.; this walks
+// container statuses to pull out the reason kubectl would display.
+func PodStatus(p *corev1.Pod) string {
+	if p.DeletionTimestamp != nil {
+		return "Terminating"
+	}
+	// Init containers first — Init:Reason format when they're failing or
+	// stuck waiting on something other than the routine PodInitializing.
+	for _, cs := range p.Status.InitContainerStatuses {
+		if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" && cs.State.Waiting.Reason != "PodInitializing" {
+			return "Init:" + cs.State.Waiting.Reason
+		}
+		if cs.State.Terminated != nil && cs.State.Terminated.ExitCode != 0 && cs.State.Terminated.Reason != "" {
+			return "Init:" + cs.State.Terminated.Reason
+		}
+	}
+	for _, cs := range p.Status.ContainerStatuses {
+		if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
+			return cs.State.Waiting.Reason
+		}
+		if cs.State.Terminated != nil && cs.State.Terminated.Reason != "" {
+			return cs.State.Terminated.Reason
+		}
+	}
+	return string(p.Status.Phase)
 }
 
 func podReadyCounts(p *corev1.Pod) (ready, total int) {

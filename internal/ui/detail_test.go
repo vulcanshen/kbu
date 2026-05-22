@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -715,5 +716,65 @@ func TestDetailModel_ActiveTabTitle_FollowMarker(t *testing.T) {
 	// it now only reflects which tab is active, not Logs state.
 	if strings.Contains(m.TabTitle(), "▼") {
 		t.Errorf("TabTitle (Panel 2 tab bar) must not carry follow marker, got %q", m.TabTitle())
+	}
+}
+
+func TestContainerLogColor_Stable(t *testing.T) {
+	// Same name → same color across calls.
+	c1 := containerLogColor("nginx")
+	c2 := containerLogColor("nginx")
+	if c1 != c2 {
+		t.Errorf("containerLogColor not stable for nginx: %q vs %q", c1, c2)
+	}
+}
+
+func TestContainerLogColor_Distinguishes(t *testing.T) {
+	// Common sibling container names should not all collapse to one color.
+	// Not a guarantee for any specific pair (palette is small), but the set
+	// of 4 typical names should land on at least 2 distinct colors.
+	names := []string{"nginx", "sidecar", "redis", "envoy"}
+	seen := map[lipgloss.Color]bool{}
+	for _, n := range names {
+		seen[containerLogColor(n)] = true
+	}
+	if len(seen) < 2 {
+		t.Errorf("expected ≥2 distinct colors across %v, got %d", names, len(seen))
+	}
+}
+
+func TestDetailModel_SpinnerLifecycle(t *testing.T) {
+	m := newTestDetail()
+
+	if m.IsRefetching() {
+		t.Fatal("new model must not be refetching")
+	}
+	if got := m.SpinnerSuffix(); got != "" {
+		t.Errorf("SpinnerSuffix when not refetching = %q, want empty", got)
+	}
+
+	cmd := m.BeginRefetch()
+	if cmd == nil {
+		t.Fatal("BeginRefetch must return a tick Cmd")
+	}
+	if !m.IsRefetching() {
+		t.Error("after BeginRefetch, IsRefetching must be true")
+	}
+	if got := m.SpinnerSuffix(); got == "" {
+		t.Error("SpinnerSuffix while refetching must be non-empty")
+	}
+
+	// SetDetail clears the spinner.
+	m.SetDetail(k8s.ResourceDetail{}, nil)
+	if m.IsRefetching() {
+		t.Error("SetDetail must clear refetching")
+	}
+	if got := m.SpinnerSuffix(); got != "" {
+		t.Errorf("SpinnerSuffix after SetDetail = %q, want empty", got)
+	}
+
+	// BeginRefetch is idempotent — second call returns nil.
+	_ = m.BeginRefetch()
+	if c := m.BeginRefetch(); c != nil {
+		t.Error("BeginRefetch while already refetching must return nil")
 	}
 }
