@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.2.0] - 2026-05-22
+
+### Added
+- **KM8erm — embedded shell terminal** (`T` key). Opens the user's login shell (`$SHELL -l`, fallback `/bin/sh`) inside a PtyView popup with the user's full env and cwd intact — essentially `ssh localhost` embedded in km8. The popup title shows the short hostname (`.local` mDNS suffix stripped) so it's clear which machine you're connected to. Solves the "I need to drop out of km8 to run `kubectl apply -f foo.yaml`" friction without re-implementing every kubectl verb inside the TUI.
+- **PTY scrollback** — 10,000-line ring buffer captures every output line that flows through any PtyView popup (KM8erm, `s` shell exec, `e` edit). Navigate with `PgUp` / `PgDn` (page) and `Home` / `End` (top / live). Typing any other key snaps the view back to live. ANSI color codes are preserved so the rendered history looks exactly like the live output. Scrollback automatically resets when the subprocess clears the screen (`clear` / `\x1b[2J` / `\x1b[H\x1b[J` / `\x1b[3J` / `\x1bc`).
+- **Per-container colored log labels** — multi-container pods are now visually distinguishable line-by-line. Each container name gets a stable color (FNV hash → 8-entry Catppuccin palette).
+- **Colored Pod STATUS column** — green for `Running` / `Succeeded` / `Completed`, yellow for `Pending` / `ContainerCreating` / `PodInitializing`, red for `CrashLoopBackOff` / `ImagePullBackOff` / `OOMKilled` / `Evicted` / `Error` / `Failed` / `Init:<reason>`, gray for `Terminating` / `Unknown`.
+- **Sidebar category-name search** — typing `/` followed by a category name (e.g. `cluster`) now expands the matching category and shows all its children, not only resource items whose own label contains the query.
+- **Detail panel refetch spinner** — Panel 3 border title shows an animated braille spinner while `fetchResourceDetail` is in flight (after edits, on row select, etc.). Effectively invisible on fast clusters; useful on remote clusters with noticeable API round-trips.
+- **Per-popup distinct icons** — toast, confirm, help, applog, context picker, namespace picker, and PtyView each get their own Nerd Font glyph in the title bar, replacing the single shared `󰵅` from v1.1.0.
+
+### Changed
+- **Pod STATUS column now shows the kubectl-equivalent reason** rather than the raw `Pod.Status.Phase`. A pod stuck in CrashLoopBackOff used to display `Running` (because Phase remains Running while containers fail); it now displays `CrashLoopBackOff`. Matches `kubectl get pods` exactly. New `k8s.PodStatus(p *corev1.Pod) string` helper.
+- **Scrollback keys (`PgUp` / `PgDn` / `Home` / `End`) only intercept in non-alt-screen mode.** When a full-screen app like vim / nvim / less / htop switches to alt screen, these keys forward to the app as usual so paging inside the app keeps working. Plain shells (zsh / bash) don't bind these keys by default, so users with shell line-editing habits use the readline-native `Ctrl+A` / `Ctrl+E` for beginning / end of line — unchanged.
+
+### Fixed
+- **PTY scrollback CRLF handling** — macOS shells (and Windows) emit `\r\n` as line terminator. Previous `\r`-as-reset logic was clearing pending line content before `\n` could commit it, so scrollback was always empty. Now a `pendingCR` flag distinguishes `\r\n` (line terminator) from a lone `\r` (progress-bar in-place reset).
+- **PTY scrollback ANSI-only filter** — zsh prompts emit dozens of pure-ANSI repaint sequences per command. These were being stored as empty scrollback entries that looked like "blank lines I scrolled into". Now `commitScrollbackLine` filters entries whose ANSI-stripped form is whitespace-only.
+- **nvim shutdown lag in edit popup** — was caused by inherited terminal-program env vars (`TERM_PROGRAM`, `KITTY_*`, `ITERM_*`) telling nvim to probe for terminal-specific features that the embedded PTY can't answer. Editor subprocess env is now sanitized; `TERM=xterm-256color` is forced. Remaining lag is nvim's own LSP / plugin teardown (use `editor: nvim --noplugin` in config.yaml to skip).
+
+### Internal
+- New `terminalTitle()` + `buildShellTerminalCmd()` helpers in `internal/ui/app.go` for the `T` key flow.
+- `PtyView` gains `scrollback []string`, `pendingLine *strings.Builder`, `pendingCR bool`, `scrollOffset int` fields and `captureToScrollback` / `commitScrollbackLine` / `scrollPage` / `scrollToEnd` methods.
+- `DetailModel` gains `refetching` / `spinnerFrame` state + `BeginRefetch` / `SpinnerSuffix` / `advanceSpinner` methods and a `detailSpinnerTickMsg` routed unconditionally (focus-agnostic) so the spinner keeps ticking while the user is on Sidebar / Table panels.
+- `AppModel.ptyView` switched from value to pointer (`*PtyView`) — the background readLoop writes to scrollback fields concurrently, and value-receiver copies of PtyView triggered race-detector hits in `tea.KeyMsg` / `tea.MouseMsg` paths.
+- Sidebar `visibleItems` extended with `catMatch` short-circuit so category-name matches preserve all children.
+
 ## [v1.1.0] - 2026-05-22
 
 ### Added

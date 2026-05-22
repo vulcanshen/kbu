@@ -24,8 +24,12 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **YAML detail view with syntax highlighting** -- `[YAML]` tab shows the resource serialized exactly like `kubectl get -o yaml`; container drill-down shows the extracted `spec`/`status` for that container
 - **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
 - **Edit & shell exec via embedded PTY** -- `e` runs `kubectl edit` and `s` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
+- **KM8erm internal terminal** -- `T` opens an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do
+- **PTY scrollback** -- 10k-line history for all PTY popups (KM8erm, shell exec, edit). `PgUp` / `PgDn` page, `Home` / `End` jump to top / live. Disabled in alt-screen apps (vim, less, htop) so they keep their own paging
+- **Colored Pod status** -- `Running` green, `Pending` yellow, `CrashLoopBackOff` / `ImagePullBackOff` / `OOMKilled` red, `Terminating` gray. STATUS column shows the kubectl-equivalent reason, not raw `Pod.Status.Phase`
+- **Per-container colored log labels** -- multi-container pods are visually distinguishable line-by-line; stable color per container name
 - **Resource deletion** -- `D` with confirmation dialog
-- **Search/filter** -- `/` to search in all three panels and in the namespace/context picker popups
+- **Search/filter** -- `/` to search in all three panels and in the namespace/context picker popups. Sidebar search also matches category names (e.g. "cluster" expands the Cluster category)
 - **Clipboard copy (`y`)** -- copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required)
 - **Namespace and context switching** -- `n` / `c`
 - **Detail tabs** -- YAML / Events / Logs (Logs tab only for Pods)
@@ -134,12 +138,23 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 |---|---|
 | `n` | Switch namespace (`/` to filter inside the popup) |
 | `c` | Switch context (`/` to filter inside the popup) |
+| `T` | Open KM8erm (embedded shell — login shell, full env, host cwd) |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
 | `!` | App log |
 | `?` | Toggle help |
 | `q` | Quit km8 (asks for confirmation) |
 | `Ctrl+C` | Quit km8 immediately (no confirm) |
 | `Esc` | Close current modal / overlay |
+
+### PTY popups (KM8erm, edit, shell exec)
+
+| Key | Action |
+|---|---|
+| `PgUp` / `PgDn` | Scroll history by one page |
+| `Home` / `End` | Jump to top of history / back to live |
+| Any other key | Snap back to live, key forwards to subprocess |
+
+Scrollback is disabled when a full-screen app (vim, less, htop) takes over the PTY via alt-screen; those keys forward to the app instead so it keeps its own paging.
 
 ## Editing Resources
 
