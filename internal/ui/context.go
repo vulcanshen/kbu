@@ -215,7 +215,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 	}
 	body := strings.Join(lines, "\n")
 
-	title := popupGlyph + " Contexts"
+	title := " Contexts"
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0

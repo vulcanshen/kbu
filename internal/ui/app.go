@@ -45,7 +45,7 @@ type AppModel struct {
 	confirm         ConfirmModel
 	splash          SplashModel
 	toast           ToastModel
-	ptyView         PtyView
+	ptyView         *PtyView
 
 	activePanel     Panel
 	width           int
@@ -311,6 +311,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confirm.Show(ConfirmQuit, "Quit km8?", "", quitCmd)
 		case "V":
 			return m, m.splash.Show()
+		case "T":
+			cmd := buildShellTerminalCmd()
+			return m, m.ptyView.Start(cmd, terminalTitle(), m.width, m.height)
 		case "?":
 			m.help.SetSize(m.width, m.height)
 			return m, m.help.Toggle()
@@ -1101,6 +1104,35 @@ func buildKubectlExecCmd(podName, namespace, container, contextName string) *exe
 	}
 	args = append(args, "--", "/bin/sh")
 	return exec.Command("kubectl", args...)
+}
+
+// buildShellTerminalCmd assembles the user's login shell command for the
+// internal terminal popup. Inherits env / cwd from km8 so the user's aliases,
+// PATH, and current directory are exactly what they'd see in a regular
+// terminal — like `ssh localhost` but embedded.
+func buildShellTerminalCmd() *exec.Cmd {
+	sh := os.Getenv("SHELL")
+	if sh == "" {
+		sh = "/bin/sh"
+	}
+	// -l → login shell, sources .zprofile/.bash_profile/etc. so the user
+	// gets the same environment as a fresh terminal tab.
+	return exec.Command(sh, "-l")
+}
+
+// terminalTitle returns the popup title for the internal terminal — the
+// host's short name prefixed with a terminal glyph, mirroring how an ssh
+// prompt identifies the connection. `.local` mDNS suffix is stripped so
+// common macOS hostnames don't trail it. The "KM8erm" prefix (vs the
+// generic "Terminal") avoids the latter being filtered as keyword garbage
+// in screenshots / shared snippets.
+func terminalTitle() string {
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		return "KM8erm"
+	}
+	h = strings.TrimSuffix(h, ".local")
+	return "KM8erm: " + h
 }
 
 func (m AppModel) focusedPanelContent() string {

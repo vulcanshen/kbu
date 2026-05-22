@@ -11,8 +11,8 @@ import (
 
 const (
 	toastDuration = 1 * time.Second
-	popupGlyph    = "󰵅" // Nerd Font glyph (PUA U+F19CC), shared by popup titles
-	toastTitle    = popupGlyph + " "
+	popupGlyph    = "󰵅 " // legacy shared glyph — kept for any code still referencing it
+	toastTitle    = "󰵅 "
 )
 
 // ToastModel renders a transient centered popup that auto-dismisses.

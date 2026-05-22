@@ -459,13 +459,16 @@ func (m SidebarModel) View() string {
 }
 
 // visibleItems computes the flat list of visible items, filtered by search query.
+// A category-level match (e.g. typing "cluster") expands the whole category;
+// otherwise only individual resource items matching the query are shown.
 func (m SidebarModel) visibleItems() []visibleItem {
 	query := strings.ToLower(m.searchQuery)
 	var items []visibleItem
 	for ci, cat := range m.categories {
+		catMatch := query != "" && strings.Contains(strings.ToLower(cat.Label), query)
 		var children []visibleItem
 		for ri, res := range cat.Items {
-			if query != "" && !strings.Contains(strings.ToLower(res.Label), query) {
+			if query != "" && !catMatch && !strings.Contains(strings.ToLower(res.Label), query) {
 				continue
 			}
 			children = append(children, visibleItem{

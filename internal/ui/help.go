@@ -118,7 +118,7 @@ func (m HelpModel) RenderPopup() string {
 func (m HelpModel) renderFullPopup() string {
 	content := m.helpContent()
 
-	boxWidth := 46
+	boxWidth := 52
 	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
@@ -141,7 +141,7 @@ func (m HelpModel) renderFullPopup() string {
 	body := strings.Join(lines, "\n")
 	panelH := len(lines) + 4
 
-	title := "Keybindings"
+	title := " Keybindings"
 	innerW := boxWidth - 2
 	dashesAfter := innerW - 1 - len(title)
 	if dashesAfter < 0 {
@@ -211,9 +211,15 @@ func (m HelpModel) helpContent() []helpEntry {
 		{isSection: true, text: "Global"},
 		{key: "n", desc: "Switch namespace"},
 		{key: "c", desc: "Switch context"},
+		{key: "T", desc: "Open internal terminal"},
 		{key: "y", desc: "Copy focused panel"},
 		{key: "!", desc: "App log"},
 		{key: "?", desc: "Toggle help"},
 		{key: "q / Esc", desc: "Quit / back"},
+		{isSection: true, text: "PTY popup scrollback"},
+		{key: "PgUp / PgDn", desc: "Scroll history page"},
+		{key: "Home / End", desc: "Top / back to live"},
+		{key: "(typing)", desc: "Snap back to live"},
+		{key: "vim / less", desc: "Keys forward; no scrollback"},
 	}
 }
