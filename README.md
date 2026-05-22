@@ -23,8 +23,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Drill-down navigation** -- Deployment / DaemonSet / StatefulSet / Job → Pods → Containers; CronJob → Jobs; HPA → target workload; PVC → mounting Pods; PDB → protected Pods
 - **YAML detail view with syntax highlighting** -- `[YAML]` tab shows the resource serialized exactly like `kubectl get -o yaml`; container drill-down shows the extracted `spec`/`status` for that container
 - **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
-- **Container shell exec** -- `kubectl exec` into any container
-- **In-place resource editing** -- fetches YAML with `kubectl get -o yaml`, opens `$EDITOR`, applies with `kubectl apply -f` if the file changed; skips apply on no-op saves. Uses declarative apply semantics — see [Editing Resources](#editing-resources) for implications
+- **Edit & shell exec via embedded PTY** -- `e` runs `kubectl edit` and `s` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
 - **Resource deletion** -- `D` with confirmation dialog
 - **Search/filter** -- `/` to search in all three panels and in the namespace/context picker popups
 - **Clipboard copy (`y`)** -- copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required)
@@ -116,9 +115,9 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 |---|---|
 | `/` | Search / filter |
 | `Enter` | Drill down |
-| `e` | Edit resource (get → editor → apply) |
-| `D` | Delete resource |
-| `s` | Shell into container |
+| `e` | Edit resource via `kubectl edit` (asks for confirmation) |
+| `D` | Delete resource (asks for confirmation) |
+| `s` | Shell into container via `kubectl exec -it` (asks for confirmation) |
 
 ### Detail (Panel 3)
 
@@ -138,25 +137,29 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 | `y` | Copy focused panel content to clipboard (OSC 52) |
 | `!` | App log |
 | `?` | Toggle help |
-| `q` / `Esc` | Quit / back |
+| `q` | Quit km8 (asks for confirmation) |
+| `Ctrl+C` | Quit km8 immediately (no confirm) |
+| `Esc` | Close current modal / overlay |
 
 ## Editing Resources
 
-Pressing `e` on a resource runs a three-step flow:
+Pressing `e` on a resource runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.
 
-1. **Fetch** — `kubectl get <resource> -o yaml --context <ctx>` writes the YAML to a temp file
-2. **Edit** — your `$EDITOR` opens the temp file (editor resolution: `config.yaml editor` → `$VISUAL` → `$EDITOR` → `vi` / `notepad`)
-3. **Apply** — if the file changed, `kubectl apply -f <tmpfile> --context <ctx>` is run; if nothing changed, the apply is skipped entirely
+The editor is resolved by kubectl itself in this priority order:
 
-**Differences from `kubectl edit`:**
+1. `$KUBE_EDITOR` (km8 sets this if `editor` is configured in `config.yaml`)
+2. `$EDITOR`
+3. `vi` (Linux/macOS) or `notepad` (Windows)
 
-| | km8 `e` | `kubectl edit` |
-|---|---|---|
-| Apply method | `kubectl apply` (declarative) | Strategic merge patch |
-| Concurrency check | None — no `resourceVersion` enforcement | Uses `resourceVersion` to detect conflicts |
-| Annotation side-effect | Sets `last-applied-configuration` | Does not set it |
+When the editor exits, the popup closes and the table refreshes via the resource watch — no manual reload needed.
 
-Because km8 uses `kubectl apply`, it is not suitable for resources actively managed by Helm or operators — the annotation may interfere with their reconciliation loop. For those resources, use `kubectl edit` directly.
+### Why an embedded PTY?
+
+Earlier versions of km8 ran the editor through `tea.ExecProcess` and applied the result with `kubectl apply -f`. That approach leaked kubectl's confirmation messages into the host terminal's scrollback after quitting km8, and the apply-vs-edit semantic mismatch surprised users coming from `kubectl edit`. The PTY popup keeps everything inside km8 and uses `kubectl edit` directly so behavior is exactly what `kubectl edit` users expect.
+
+### Note for nvim users
+
+If your nvim setup has noticeable shutdown lag inside the popup (LSP attach/detach, plugin teardown), set `editor: "nvim --noplugin"` in `config.yaml` to skip plugin loading for the kubectl-edit session only. Your everyday `nvim` is unaffected.
 
 ## Context Isolation
 
@@ -183,7 +186,8 @@ Logs (crash and audit) are written to the `logs/` subdirectory of the config dir
 ```yaml
 default_context: ""      # kubeconfig context (default: current-context)
 default_namespace: ""    # namespace filter (default: all namespaces)
-editor: ""               # editor override (default: $VISUAL → $EDITOR → vi)
+editor: ""               # exposed to kubectl as $KUBE_EDITOR
+                         # (default: kubectl falls back to $EDITOR → vi / notepad)
 ```
 
 ### theme.yaml
