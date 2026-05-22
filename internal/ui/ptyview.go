@@ -183,7 +183,6 @@ func (p *PtyView) commitScrollbackLine() {
 	p.pendingLine.Reset()
 }
 
-
 // Stop force-terminates the PTY subprocess (if still running) and clears state.
 func (p *PtyView) Stop() {
 	if p.cmd != nil && p.cmd.Process != nil && p.done != nil && !p.done.Load() {
