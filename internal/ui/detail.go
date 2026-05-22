@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
@@ -47,6 +49,49 @@ type DetailModel struct {
 	searching    bool
 	searchQuery  string
 	followTail   bool // Logs tab: stick to bottom on new lines until user scrolls up
+	refetching   bool // true while fetchResourceDetail is in-flight; drives spinner
+	spinnerFrame int
+}
+
+type detailSpinnerTickMsg struct{}
+
+var detailSpinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
+
+// BeginRefetch marks the panel as refetching and returns a Cmd that drives
+// the spinner animation. AppModel calls this whenever it dispatches
+// fetchResourceDetail; SetDetail clears the flag when the new data arrives.
+func (m *DetailModel) BeginRefetch() tea.Cmd {
+	if m.refetching {
+		return nil // already ticking
+	}
+	m.refetching = true
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
+		return detailSpinnerTickMsg{}
+	})
+}
+
+// IsRefetching reports whether the spinner should be shown.
+func (m DetailModel) IsRefetching() bool { return m.refetching }
+
+// SpinnerSuffix returns " <frame>" while refetching, or "" otherwise. Embed in
+// the panel border title so the user has a visible "loading" affordance.
+func (m DetailModel) SpinnerSuffix() string {
+	if !m.refetching {
+		return ""
+	}
+	return " " + string(detailSpinnerFrames[m.spinnerFrame%len(detailSpinnerFrames)])
+}
+
+// advanceSpinner moves to the next frame and returns the next tick command,
+// or nil when refetching has finished.
+func (m *DetailModel) advanceSpinner() tea.Cmd {
+	if !m.refetching {
+		return nil
+	}
+	m.spinnerFrame++
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
+		return detailSpinnerTickMsg{}
+	})
 }
 
 // IsSearching returns true if the detail panel is in search mode.
@@ -80,6 +125,9 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	case ResourceDetailMsg:
 		m.SetDetail(msg.Detail, msg.Events)
 		return m, nil
+
+	case detailSpinnerTickMsg:
+		return m, m.advanceSpinner()
 
 	case tea.KeyMsg:
 		if !m.focused {
@@ -400,6 +448,7 @@ func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventIte
 	m.events = events
 	m.hasData = true
 	m.scrollOffset = 0
+	m.refetching = false // fresh data arrived — stop the spinner
 	m.buildContentLines()
 }
 
@@ -789,6 +838,31 @@ func wrapPlain(text string, width int) []string {
 	return out
 }
 
+// containerLogPalette is the set of foreground colors assigned to container
+// log prefixes. 8 entries chosen for visual distinguishability on dark
+// terminal backgrounds (Catppuccin-aligned).
+var containerLogPalette = []lipgloss.Color{
+	"#f38ba8", // red
+	"#fab387", // peach
+	"#f9e2af", // yellow
+	"#a6e3a1", // green
+	"#94e2d5", // teal
+	"#89b4fa", // blue
+	"#cba6f7", // mauve
+	"#f5c2e7", // pink
+}
+
+// containerLogColor returns a stable per-container color via a tiny FNV-ish
+// hash. Same container name always maps to the same palette entry across the
+// session, so users can visually associate a color with a container.
+func containerLogColor(name string) lipgloss.Color {
+	h := uint32(2166136261)
+	for _, b := range []byte(name) {
+		h = (h ^ uint32(b)) * 16777619
+	}
+	return containerLogPalette[int(h)%len(containerLogPalette)]
+}
+
 func (m DetailModel) buildLogLines() []string {
 	if m.resourceType != k8s.ResourcePods {
 		return []string{"  " + m.theme.DetailValueStyle().Render("Logs not available for this resource type")}
@@ -798,13 +872,17 @@ func (m DetailModel) buildLogLines() []string {
 	}
 	var lines []string
 	for _, ll := range m.logLines {
-		prefix := "  " + ll.container + " │ "
-		textW := m.width - len(prefix)
+		// Compute width against the plain prefix so wrapping math ignores
+		// ANSI escapes embedded in the styled prefix below.
+		plainPrefix := "  " + ll.container + " │ "
+		textW := m.width - len(plainPrefix)
 		wrapped := wrapPlain(ll.text, textW)
 		if len(wrapped) == 0 {
 			wrapped = []string{""}
 		}
-		lines = append(lines, prefix+wrapped[0])
+		nameStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
+		styledPrefix := "  " + nameStyle.Render(ll.container) + " │ "
+		lines = append(lines, styledPrefix+wrapped[0])
 		if len(wrapped) > 1 {
 			contIndent := "  " + strings.Repeat(" ", len(ll.container)) + " │ "
 			for _, w := range wrapped[1:] {

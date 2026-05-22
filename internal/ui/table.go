@@ -448,7 +448,8 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		if i < len(values) {
 			val = values[i]
 		}
-		// Pad or truncate
+		// Pad or truncate (plain — visual width = byte length here since
+		// resource Row strings are ASCII).
 		if len(val) > w {
 			if w > 1 {
 				val = val[:w-1] + "…"
@@ -460,6 +461,10 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		} else {
 			val = val + strings.Repeat(" ", w-len(val))
 		}
+		// Inject per-column color AFTER padding so the cell's visual width
+		// stays exactly w. Only fires when this column is the Pod STATUS
+		// column and the value is a known status — other cells pass through.
+		val = m.stylizeCell(i, val)
 		parts = append(parts, val)
 	}
 
@@ -472,6 +477,57 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 	}
 
 	return style.Render(line)
+}
+
+// stylizeCell colors known semantic cells (currently only Pod STATUS) using
+// the theme's status palette. The injected ANSI codes do not change the
+// cell's visual width — padding has already happened. Selected rows skip
+// styling so the row's background highlight reads cleanly.
+func (m TableModel) stylizeCell(colIdx int, padded string) string {
+	if m.resourceType != k8s.ResourcePods {
+		return padded
+	}
+	// Pod columns are: NAME, READY, STATUS, RESTARTS, AGE, NODE (index 2 is STATUS)
+	if colIdx != 2 {
+		return padded
+	}
+	trimmed := strings.TrimSpace(padded)
+	color := podStatusColor(trimmed, m.theme)
+	if color == "" {
+		return padded
+	}
+	// Find the trimmed status word inside the padded slot and wrap just that
+	// span so the trailing spaces stay uncolored (avoids selected-row bg
+	// bleed showing colored space).
+	idx := strings.Index(padded, trimmed)
+	if idx < 0 {
+		return padded
+	}
+	styled := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(trimmed)
+	return padded[:idx] + styled + padded[idx+len(trimmed):]
+}
+
+// podStatusColor classifies a pod status string into one of the theme's
+// status color buckets. Unknown statuses return "" so the renderer leaves
+// them at the default foreground.
+func podStatusColor(status string, t *theme.Theme) string {
+	switch status {
+	case "Running", "Succeeded", "Completed":
+		return t.Status.Running
+	case "Pending", "ContainerCreating", "PodInitializing", "Init:PodInitializing":
+		return t.Status.Pending
+	case "CrashLoopBackOff", "Error", "ImagePullBackOff", "ErrImagePull",
+		"CreateContainerConfigError", "CreateContainerError",
+		"InvalidImageName", "Evicted", "OOMKilled", "Failed":
+		return t.Status.Error
+	case "Terminating", "Unknown":
+		return t.Status.Unknown
+	}
+	// Generic Init:<Reason> fallback: treat as error since unusual.
+	if strings.HasPrefix(status, "Init:") {
+		return t.Status.Error
+	}
+	return ""
 }
 
 // SetColumns replaces the column definitions and resets the table state.

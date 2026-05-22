@@ -149,6 +149,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	// detailSpinnerTickMsg drives the panel 3 refetch spinner; routed
+	// unconditionally regardless of focus so the spinner keeps animating even
+	// while the user is on Sidebar/Table panels.
+	if _, ok := msg.(detailSpinnerTickMsg); ok {
+		var cmd tea.Cmd
+		m.detail, cmd = m.detail.Update(msg)
+		return m, cmd
+	}
+
 	// PtyExitMsg arrives AFTER ptyView has already Stop()ed itself, so this
 	// handler lives outside the IsActive() guard — it cleans up app-level
 	// state when the subprocess finishes.
@@ -449,6 +458,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if idx >= 0 && idx < len(msg.Items) {
 				item := msg.Items[idx]
 				cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.Type, item))
+				if c := m.detail.BeginRefetch(); c != nil {
+					cmds = append(cmds, c)
+				}
 				if msg.Type == k8s.ResourcePods && !m.logsActive {
 					containers := k8s.ContainerNames(item.Raw)
 					if len(containers) > 0 {
@@ -486,6 +498,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Index >= 0 && msg.Index < len(m.items) && len(m.table.rows) > 0 {
 			item := m.items[msg.Index]
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
+			if c := m.detail.BeginRefetch(); c != nil {
+				cmds = append(cmds, c)
+			}
 			if m.currentResource == k8s.ResourcePods {
 				containers := k8s.ContainerNames(item.Raw)
 				if len(containers) > 0 {
@@ -583,6 +598,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusLine.SetDrillDown(true)
 		if len(msg.children) > 0 {
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.childType, msg.children[0]))
+			if c := m.detail.BeginRefetch(); c != nil {
+				cmds = append(cmds, c)
+			}
 			if msg.childType == k8s.ResourcePods {
 				containers := k8s.ContainerNames(msg.children[0].Raw)
 				if len(containers) > 0 {
@@ -690,7 +708,7 @@ func (m AppModel) View() string {
 	if m.detailExpanded {
 		panelH := m.height - 1 - m.statusLine.LineCount()
 		m.detail.SetSize(m.width-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle(), m.width, panelH, true, m.theme, m.detail.ScrollInfo())
+		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), m.width, panelH, true, m.theme, m.detail.ScrollInfo())
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, fullPanel, statusLine)
 	} else if m.tableExpanded {
 		_, _, upperH, detailH := m.panelSizes()
@@ -699,7 +717,7 @@ func (m AppModel) View() string {
 		m.detail.SetSize(fw-2, detailH-2)
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, fw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle(), fw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), fw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 		middle := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	} else {
@@ -712,7 +730,7 @@ func (m AppModel) View() string {
 		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo())
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 
 		rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
 		middle := lipgloss.JoinHorizontal(lipgloss.Top, sidebarPanel, rightSide)
@@ -891,6 +909,9 @@ func (m *AppModel) refreshDetailForCurrent() tea.Cmd {
 	item := m.items[idx]
 	var cmds []tea.Cmd
 	cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
+	if c := m.detail.BeginRefetch(); c != nil {
+		cmds = append(cmds, c)
+	}
 	if m.currentResource == k8s.ResourcePods {
 		containers := k8s.ContainerNames(item.Raw)
 		if len(containers) > 0 {
