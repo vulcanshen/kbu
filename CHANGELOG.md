@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.1.0] - 2026-05-22
+
+### Added
+- **Embedded PTY for `e` (edit) and `s` (shell exec)** — kubectl runs inside an in-app virtual terminal (`creack/pty` + `hinshun/vt10x`) rather than commandeering the host terminal via `tea.ExecProcess`. The popup is rendered as a centered overlay with a titled border (`╭─ 󰵅 Edit: deployment/nginx (default) ─╮`); 24-bit RGB colors, attributes, and the cursor are all preserved so editors like nvim render exactly as they would standalone. Closes the long-standing "kubectl edit leaves residue in scrollback after quitting km8" issue — subprocess output never touches the host terminal buffer.
+- **Confirm popup before `e` (edit)** — pressing `e` now opens the same confirmation dialog used by `s` and `D`, showing the exact `kubectl edit <kind>/<name> -n <ns>` invocation. Prevents accidental edits and keeps the action key UX consistent across edit / shell / delete.
+- **Confirm popup before `q` (quit)** — pressing `q` no longer exits immediately; it asks `Quit km8?` with Enter to confirm. `Ctrl+C` still bypasses confirmation for the emergency case.
+
+### Changed
+- **`e` (edit) now runs `kubectl edit` directly**, not `kubectl get -o yaml → temp file → editor → kubectl apply`. The patch strategy and validation behavior now match `kubectl edit` exactly; users no longer see apply-semantics surprises (e.g. server-side apply behavior diverging from strategic merge patch).
+- **`s` (shell exec) replaced its `sh -c "clear; ...; clear"` wrapper** with a direct `kubectl exec -it ... -- /bin/sh` inside the PTY popup. Fixes Windows shell exec which was previously broken (no `sh` binary on Windows).
+- **Popup title decoration unified** — confirm, namespaces, contexts, toast, and PTY overlay all use the same `popupGlyph` (Nerd Font 󰵅) inside the top border.
+
+### Fixed
+- **PTY popup symmetric centering** — fixed margin (1 row top/bottom, 2 cols left/right) so left/right and top/bottom margins are always equal regardless of host terminal size. Previous percentage-based sizing produced off-by-one asymmetry on odd-width terminals.
+- **PTY popup border alignment** — top border `╮` was rendered off-screen because `len("──")` returns byte count (6 for UTF-8 box-drawing chars) instead of visual width (2). Now uses an explicit visual-width constant.
+
+### Internal
+- New `internal/ui/ptyview.go` — embedded VT100/xterm terminal renderer with key forwarding, SIGWINCH-aware resize, and exit detection.
+- New dependencies: `github.com/creack/pty v1.1.24`, `github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02`.
+- Editor subprocess environment is sanitized — strips `TERM_PROGRAM`, `KITTY_*`, `ITERM_*`, `LC_TERMINAL`, `WEZTERM_*`, `GHOSTTY_*`, `COLORTERM` and forces `TERM=xterm-256color`. nvim was probing for terminal-program features and timing out on exit when the embedded PTY did not respond; the strip eliminates the wait.
+- Cell rendering fast-path — default-styled cells skip lipgloss style allocation entirely, cutting ~30k Render calls per second on a typical 80×24 popup at 20 ticks/s.
+- vt10x 24-bit RGB colors (encoded as `r<<16|g<<8|b`) are now correctly translated to lipgloss `#RRGGBB` instead of being emitted as uninterpretable integer strings (which made nvim render entirely white).
+- Removed: `editResource`, `editTempReadyMsg`, `editEditorDoneMsg`, `editApplyFailedMsg`, `editEditorCrashedMsg`, `editFetchFailedMsg`, `EditDoneMsg`, `successNoticeClearMsg`, `resolveEditor` — replaced by the PTY pipeline.
+
 ## [v1.0.10] - 2026-05-21
 
 ### Changed
