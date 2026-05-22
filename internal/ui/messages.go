@@ -2,6 +2,18 @@ package ui
 
 import "github.com/vulcanshen/km8/internal/k8s"
 
+// quitConfirmedMsg is emitted by the quit confirm dialog when the user
+// confirms exit. AppModel handles it by stopping streams and calling tea.Quit.
+type quitConfirmedMsg struct{}
+
+// startEditMsg is emitted by the edit confirm dialog when the user confirms
+// editing a resource. AppModel handles it by launching kubectl edit in PTY.
+type startEditMsg struct {
+	resource    k8s.ResourceType
+	item        k8s.ResourceItem
+	contextName string
+}
+
 // Panel identifies which UI panel has focus.
 type Panel int
 
@@ -74,50 +86,6 @@ type EditResourceMsg struct {
 	Name         string
 	Namespace    string
 }
-
-// EditDoneMsg is sent when the edit flow finishes (editor closed + apply done).
-type EditDoneMsg struct {
-	Resource  string // e.g. "pods/my-pod"
-	Namespace string
-	Output    string // kubectl apply output
-}
-
-// editFetchFailedMsg is sent when kubectl get or temp file creation fails.
-type editFetchFailedMsg struct{ err error }
-
-// editTempReadyMsg is sent after the YAML has been fetched and written to a temp file.
-type editTempReadyMsg struct {
-	path        string
-	original    []byte // original YAML bytes for change detection
-	resource    string
-	namespace   string
-	contextName string // kubeconfig context to pass to kubectl subprocess
-}
-
-// editEditorDoneMsg is sent after the editor exits cleanly.
-type editEditorDoneMsg struct {
-	path        string
-	original    []byte
-	resource    string
-	namespace   string
-	contextName string
-}
-
-// editEditorCrashedMsg is sent when the editor exits with a non-zero code.
-type editEditorCrashedMsg struct {
-	path string
-}
-
-// editApplyFailedMsg is sent when kubectl apply returns a non-zero exit code.
-type editApplyFailedMsg struct {
-	resource  string
-	namespace string
-	output    string
-}
-
-// successNoticeClearMsg clears the success badge in the status bar.
-// id must match AppModel.successNoticeID to avoid stale timers clearing a newer badge.
-type successNoticeClearMsg struct{ id int }
 
 // DeleteDoneMsg is sent when kubectl delete finishes.
 type DeleteDoneMsg struct {

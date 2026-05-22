@@ -42,6 +42,7 @@ type hint struct {
 
 func (m StatusLineModel) hints() []hint {
 	nav := []hint{
+		{"q", "quit"},
 		{"j/k", "scroll"},
 		{"u/d", "page"},
 		{"gg/G", "top/bot"},
