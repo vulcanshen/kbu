@@ -134,6 +134,38 @@ func buildGenericLinkEntries(detail k8s.ResourceDetail) []linkEntry {
 	return entries
 }
 
+// linksApplicable returns false for kinds where the Links tab has nothing
+// meaningful to surface. Such kinds drop the tab entirely (handled by
+// SetResourceType) instead of showing an empty pane.
+func linksApplicable(rt k8s.ResourceType) bool {
+	return rt != k8s.ResourceNamespaces
+}
+
+// linksImplemented returns true if km8 has a Links builder for this kind.
+// Kinds that pass linksApplicable but fail linksImplemented show the
+// "not yet supported" placeholder instead of "no links to show" — the
+// distinction matters: empty means "this instance has no refs", not
+// "we haven't written the code yet".
+//
+// Keep this list in sync with k8s/links.go builders + EnrichLinks dispatch.
+func linksImplemented(rt k8s.ResourceType) bool {
+	switch rt {
+	case k8s.ResourceClusterRoles,
+		k8s.ResourceStorageClasses,
+		k8s.ResourceIngressClasses:
+		return false
+	}
+	return true
+}
+
+// Placeholder strings rendered when linkEntries is empty. They distinguish
+// "implemented, but this instance has nothing to drill to" from "kind not
+// supported yet — wait for an update."
+const (
+	linksPlaceholderEmpty       = "(no links to show — press Y for full YAML)"
+	linksPlaceholderUnsupported = "(Links not yet supported for this kind — press Y for full YAML)"
+)
+
 func ownerDisplay(ref k8s.RefTarget) string {
 	// Short kind label + name. Use the registry display name when available,
 	// otherwise fall back to the raw type string.
@@ -145,16 +177,16 @@ func ownerDisplay(ref k8s.RefTarget) string {
 }
 
 // renderLinkEntries turns the entry list into display lines, applying
-// styles and adding a cursor highlight on `cursor`. Returns:
+// styles and adding a cursor highlight on `cursor`. The caller picks the
+// placeholder text shown when entries is empty — that's how we surface
+// "no links to show" vs "kind not yet supported" without renderLinkEntries
+// having to know about resource types. Returns:
 //   - lines:           rendered display lines
 //   - selectableIdxs:  indices into `entries` that the cursor can land on
 //   - cursorLine:      display-line index of the cursor row (-1 if none) —
 //     used by the caller to auto-scroll the viewport so
 //     the cursor stays visible
-//
-// When entries is empty, returns a single placeholder line pointing users at
-// the Y popup, so the tab never renders as a blank panel.
-func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Theme) (lines []string, selectableIdxs []int, cursorLine int) {
+func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Theme, placeholder string) (lines []string, selectableIdxs []int, cursorLine int) {
 	cursorLine = -1
 	labelStyle := t.DetailLabelStyle()
 	valueStyle := t.DetailValueStyle()
@@ -167,7 +199,7 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 	const indent = "  "
 
 	if len(entries) == 0 {
-		lines = append(lines, indent+dimStyle.Render("(no links for this resource — press Y for full YAML)"))
+		lines = append(lines, indent+dimStyle.Render(placeholder))
 		return lines, nil, -1
 	}
 
