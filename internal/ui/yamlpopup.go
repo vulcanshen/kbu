@@ -1,0 +1,437 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/vulcanshen/km8/internal/k8s"
+	"github.com/vulcanshen/km8/internal/theme"
+)
+
+// YamlPopupModel renders the full YAML of a resource in a large overlay popup.
+// Supports j/k/u/d/gg/G scroll, / search (Enter commits; n/N step through
+// matches), e to dispatch kubectl edit on the same resource (no confirm — user
+// already inspected before pressing), and Esc/q to close.
+type YamlPopupModel struct {
+	yaml         string
+	rawLines     []string
+	contentLines []string
+	scrollOffset int
+	width        int
+	height       int
+	theme        *theme.Theme
+	animator     PopupAnimator
+
+	// Edit target captured at Open() time.
+	resource    k8s.ResourceType
+	item        k8s.ResourceItem
+	contextName string
+
+	// Search state.
+	searching   bool
+	searchQuery string
+	matchLines  []int
+	matchCursor int
+
+	pendingG bool
+}
+
+// NewYamlPopupModel constructs a YamlPopupModel.
+func NewYamlPopupModel(t *theme.Theme) YamlPopupModel {
+	return YamlPopupModel{
+		theme:    t,
+		animator: NewPopupAnimator("yamlpopup", lipgloss.Color("#74c7ec")),
+	}
+}
+
+// Open populates the popup with YAML for a specific resource, captures the
+// edit target, and begins the open animation.
+func (m *YamlPopupModel) Open(yaml string, rt k8s.ResourceType, item k8s.ResourceItem, ctxName string) tea.Cmd {
+	m.yaml = strings.TrimRight(yaml, "\n")
+	m.resource = rt
+	m.item = item
+	m.contextName = ctxName
+	m.scrollOffset = 0
+	m.searching = false
+	m.searchQuery = ""
+	m.matchLines = nil
+	m.matchCursor = 0
+	m.pendingG = false
+	m.rebuildContent()
+	return m.animator.Open()
+}
+
+// Close begins the close animation.
+func (m *YamlPopupModel) Close() tea.Cmd { return m.animator.Close() }
+
+// IsActive reports whether the popup is being drawn (including animations).
+func (m YamlPopupModel) IsActive() bool { return m.animator.IsActive() }
+
+// IsInteractive reports whether the popup should accept input.
+func (m YamlPopupModel) IsInteractive() bool { return m.animator.IsInteractive() }
+
+// HandleTick routes animation tick messages to the popup animator.
+func (m *YamlPopupModel) HandleTick(msg AnimTickMsg) tea.Cmd {
+	if msg.Target != m.animator.Target {
+		return nil
+	}
+	return m.animator.Tick()
+}
+
+// SetSize records the screen dimensions used to size the popup.
+func (m *YamlPopupModel) SetSize(w, h int) {
+	m.width = w
+	m.height = h
+}
+
+func (m *YamlPopupModel) rebuildContent() {
+	if m.yaml == "" {
+		m.rawLines = nil
+		m.contentLines = nil
+		return
+	}
+	m.rawLines = strings.Split(m.yaml, "\n")
+	m.contentLines = make([]string, len(m.rawLines))
+	for i, l := range m.rawLines {
+		m.contentLines[i] = highlightYAMLLine(l, m.theme)
+	}
+}
+
+// Update handles keyboard input.
+func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
+	if !m.animator.IsInteractive() {
+		return m, nil
+	}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	if m.searching {
+		return m.handleSearchKey(keyMsg)
+	}
+
+	switch keyMsg.String() {
+	case "esc", "q":
+		m.pendingG = false
+		return m, m.animator.Close()
+	case "j", "down":
+		if m.scrollOffset < m.maxScrollOffset() {
+			m.scrollOffset++
+		}
+		m.pendingG = false
+	case "k", "up":
+		if m.scrollOffset > 0 {
+			m.scrollOffset--
+		}
+		m.pendingG = false
+	case "d":
+		half := m.contentHeight() / 2
+		if half < 1 {
+			half = 1
+		}
+		m.scrollOffset += half
+		if m.scrollOffset > m.maxScrollOffset() {
+			m.scrollOffset = m.maxScrollOffset()
+		}
+		m.pendingG = false
+	case "u":
+		half := m.contentHeight() / 2
+		if half < 1 {
+			half = 1
+		}
+		m.scrollOffset -= half
+		if m.scrollOffset < 0 {
+			m.scrollOffset = 0
+		}
+		m.pendingG = false
+	case "G":
+		m.scrollOffset = m.maxScrollOffset()
+		m.pendingG = false
+	case "g":
+		if m.pendingG {
+			m.scrollOffset = 0
+			m.pendingG = false
+		} else {
+			m.pendingG = true
+		}
+	case "/":
+		m.searching = true
+		m.searchQuery = ""
+		m.matchLines = nil
+		m.matchCursor = 0
+		m.pendingG = false
+	case "n":
+		if len(m.matchLines) > 0 {
+			m.matchCursor = (m.matchCursor + 1) % len(m.matchLines)
+			m.scrollToMatch()
+		}
+		m.pendingG = false
+	case "N":
+		if len(m.matchLines) > 0 {
+			m.matchCursor = (m.matchCursor - 1 + len(m.matchLines)) % len(m.matchLines)
+			m.scrollToMatch()
+		}
+		m.pendingG = false
+	case "e":
+		// Direct edit dispatch. User already inspected the YAML in this popup
+		// so we skip the confirm step that the table-level `e` uses.
+		if m.item.Name == "" {
+			return m, nil
+		}
+		closeCmd := m.animator.Close()
+		rt, item, ctx := m.resource, m.item, m.contextName
+		return m, tea.Batch(closeCmd, func() tea.Msg {
+			return startEditMsg{resource: rt, item: item, contextName: ctx}
+		})
+	}
+	return m, nil
+}
+
+func (m YamlPopupModel) handleSearchKey(msg tea.KeyMsg) (YamlPopupModel, tea.Cmd) {
+	switch {
+	case msg.Type == tea.KeyEscape:
+		m.searching = false
+		m.searchQuery = ""
+		m.matchLines = nil
+		m.matchCursor = 0
+		return m, nil
+	case msg.Type == tea.KeyEnter:
+		m.searching = false
+		m.computeMatches()
+		m.scrollToMatch()
+		return m, nil
+	case msg.Type == tea.KeyBackspace:
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+		}
+		return m, nil
+	case msg.Type == tea.KeyRunes:
+		for _, r := range msg.Runes {
+			m.searchQuery += string(r)
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *YamlPopupModel) computeMatches() {
+	m.matchLines = nil
+	m.matchCursor = 0
+	if m.searchQuery == "" {
+		return
+	}
+	q := strings.ToLower(m.searchQuery)
+	for i, l := range m.rawLines {
+		if strings.Contains(strings.ToLower(l), q) {
+			m.matchLines = append(m.matchLines, i)
+		}
+	}
+}
+
+func (m *YamlPopupModel) scrollToMatch() {
+	if len(m.matchLines) == 0 {
+		return
+	}
+	target := m.matchLines[m.matchCursor]
+	contentH := m.contentHeight()
+	if target < m.scrollOffset || target >= m.scrollOffset+contentH {
+		m.scrollOffset = target - contentH/2
+		if m.scrollOffset < 0 {
+			m.scrollOffset = 0
+		}
+		if m.scrollOffset > m.maxScrollOffset() {
+			m.scrollOffset = m.maxScrollOffset()
+		}
+	}
+}
+
+func (m YamlPopupModel) popupWidth() int {
+	if m.width <= 0 {
+		return 60
+	}
+	w := m.width * 70 / 100
+	if w < 40 {
+		w = 40
+	}
+	if w > m.width-4 {
+		w = m.width - 4
+	}
+	return w
+}
+
+func (m YamlPopupModel) popupHeight() int {
+	if m.height <= 0 {
+		return 20
+	}
+	h := m.height * 80 / 100
+	if h < 10 {
+		h = 10
+	}
+	if h > m.height-4 {
+		h = m.height - 4
+	}
+	return h
+}
+
+// contentHeight is how many YAML lines fit in the body, accounting for the
+// optional search box at the top.
+func (m YamlPopupModel) contentHeight() int {
+	h := m.popupHeight() - 4 // borders + leading/trailing blank
+	if m.searching || m.searchQuery != "" {
+		h -= 3 // search box is 3 lines
+	}
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+// MatchCount returns the number of search matches (for tests + indicator).
+func (m YamlPopupModel) MatchCount() int { return len(m.matchLines) }
+
+// MatchCursor returns the current match index (for tests).
+func (m YamlPopupModel) MatchCursor() int { return m.matchCursor }
+
+// ScrollOffset returns the current scroll position (for tests).
+func (m YamlPopupModel) ScrollOffset() int { return m.scrollOffset }
+
+// SearchQuery returns the current search query (for tests).
+func (m YamlPopupModel) SearchQuery() string { return m.searchQuery }
+
+// IsSearching reports whether the popup is in search-input mode (for tests).
+func (m YamlPopupModel) IsSearching() bool { return m.searching }
+
+func (m YamlPopupModel) maxScrollOffset() int {
+	n := len(m.contentLines) - m.contentHeight()
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+// View is a no-op; rendering happens via RenderPopup + overlay composition.
+func (m YamlPopupModel) View() string { return "" }
+
+// RenderPopup returns the popup frame (respecting animation state).
+func (m YamlPopupModel) RenderPopup() string {
+	return m.animator.RenderFrame(m.renderFullPopup())
+}
+
+func (m YamlPopupModel) renderFullPopup() string {
+	bc := lipgloss.Color("#74c7ec")
+	bStyle := lipgloss.NewStyle().Foreground(bc)
+	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	markerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Sidebar.CategoryFg)).Bold(true)
+
+	boxW := m.popupWidth()
+	panelH := m.popupHeight()
+	innerW := boxW - 2
+	contentH := m.contentHeight()
+	bodyW := innerW - 2 // 2 columns reserved for match-cursor marker
+
+	title := "  YAML — " + m.resource.KubectlName() + "/" + m.item.Name
+	if m.item.Namespace != "" {
+		title += " (" + m.item.Namespace + ")"
+	}
+	if lipgloss.Width(title) > innerW-1 {
+		title = ansiTruncate(title, innerW-1)
+	}
+	dashesAfter := innerW - 1 - lipgloss.Width(title)
+	if dashesAfter < 0 {
+		dashesAfter = 0
+	}
+
+	var b strings.Builder
+	b.WriteString(bStyle.Render("╭─"))
+	b.WriteString(tStyle.Render(title))
+	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter) + "╮"))
+	b.WriteString("\n")
+
+	leftBorder := bStyle.Render("│")
+	rightBorder := bStyle.Render("│")
+
+	var lines []string
+	lines = append(lines, "")
+	if m.searching || m.searchQuery != "" {
+		lines = append(lines, strings.Split(renderSearchBox(m.searchQuery, m.searching, innerW, m.theme), "\n")...)
+	}
+
+	// Content slice.
+	start := m.scrollOffset
+	if start > len(m.contentLines) {
+		start = len(m.contentLines)
+	}
+	end := start + contentH
+	if end > len(m.contentLines) {
+		end = len(m.contentLines)
+	}
+
+	currentMatchLine := -1
+	if !m.searching && len(m.matchLines) > 0 {
+		currentMatchLine = m.matchLines[m.matchCursor]
+	}
+
+	for i := start; i < end; i++ {
+		marker := "  "
+		if i == currentMatchLine {
+			marker = markerStyle.Render("▸ ")
+		}
+		line := m.contentLines[i]
+		if lipgloss.Width(line) > bodyW {
+			line = ansiTruncate(line, bodyW)
+		}
+		lines = append(lines, marker+line)
+	}
+	if len(m.contentLines) == 0 {
+		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+		lines = append(lines, dim.Render("  (no YAML — resource may still be loading)"))
+	}
+	lines = append(lines, "")
+
+	for len(lines) < panelH-2 {
+		lines = append(lines, "")
+	}
+	lines = lines[:panelH-2]
+
+	for _, l := range lines {
+		lw := lipgloss.Width(l)
+		if lw > innerW {
+			l = ansiTruncate(l, innerW)
+			lw = lipgloss.Width(l)
+		}
+		pad := ""
+		if lw < innerW {
+			pad = strings.Repeat(" ", innerW-lw)
+		}
+		if l == "" {
+			b.WriteString(leftBorder + strings.Repeat(" ", innerW) + rightBorder)
+		} else {
+			b.WriteString(leftBorder + l + pad + rightBorder)
+		}
+		b.WriteString("\n")
+	}
+
+	hint := " e:edit /:search j/k u/d gg/G Esc:close "
+	indicator := ""
+	if total := len(m.contentLines); total > 0 {
+		shownEnd := m.scrollOffset + contentH
+		if shownEnd > total {
+			shownEnd = total
+		}
+		indicator = fmt.Sprintf(" %d-%d / %d ", m.scrollOffset+1, shownEnd, total)
+		if len(m.matchLines) > 0 && !m.searching {
+			indicator = fmt.Sprintf(" %d/%d match %s", m.matchCursor+1, len(m.matchLines), indicator)
+		}
+	}
+	bottomDashes := innerW - lipgloss.Width(hint) - lipgloss.Width(indicator) - 1
+	if bottomDashes < 0 {
+		bottomDashes = 0
+	}
+	b.WriteString(bStyle.Render("╰─"))
+	b.WriteString(tStyle.Render(hint))
+	b.WriteString(bStyle.Render(strings.Repeat("─", bottomDashes) + indicator + "╯"))
+
+	return b.String()
+}

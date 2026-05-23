@@ -100,6 +100,11 @@ func (m DetailModel) IsSearching() bool { return m.searching }
 // HasActiveFilter returns true if a search filter is active.
 func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
 
+// YAMLContent returns the raw YAML for the resource currently shown in the
+// detail panel, or "" if no YAML is loaded. Used by the global `Y` key to
+// open the YAML popup.
+func (m DetailModel) YAMLContent() string { return m.detail.YAML }
+
 // NewDetailModel creates a new detail model with no data and the Detail tab active.
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{

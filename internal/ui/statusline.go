@@ -47,6 +47,7 @@ func (m StatusLineModel) hints() []hint {
 		{"u/d", "page"},
 		{"gg/G", "top/bot"},
 		{"y", "copy"},
+		{"Y", "yaml"},
 		{"T", "term"},
 	}
 	switch m.activePanel {

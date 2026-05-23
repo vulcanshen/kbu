@@ -21,7 +21,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Vim-style navigation** -- `j`/`k`, `u`/`d` page scroll, `gg`/`G`, `/` search
 - **3-panel lazygit-style layout** -- numbered sidebar, list, and detail panels with scroll indicator
 - **Drill-down navigation** -- Deployment / DaemonSet / StatefulSet / Job → Pods → Containers; CronJob → Jobs; HPA → target workload; PVC → mounting Pods; PDB → protected Pods
-- **YAML detail view with syntax highlighting** -- `[YAML]` tab shows the resource serialized exactly like `kubectl get -o yaml`; container drill-down shows the extracted `spec`/`status` for that container
+- **YAML detail view with syntax highlighting** -- `[YAML]` tab shows the resource serialized exactly like `kubectl get -o yaml`; container drill-down shows the extracted `spec`/`status` for that container. Press `Y` (anywhere) to open the full YAML in a large popup with `j/k/u/d/gg/G` scroll, `/` search (`n`/`N` step through matches), and `e` to dispatch `kubectl edit` directly from the popup
 - **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
 - **Edit & shell exec via embedded PTY** -- `e` runs `kubectl edit` and `s` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
 - **KM8erm internal terminal** -- `T` opens an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do
@@ -31,7 +31,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Resource deletion** -- `D` with confirmation dialog
 - **Search/filter** -- `/` to search in all three panels and in the namespace/context picker popups. Sidebar search also matches category names (e.g. "cluster" expands the Cluster category)
 - **Clipboard copy (`y`)** -- copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required)
-- **Namespace and context switching** -- `n` / `c`
+- **Namespace and context switching** -- `n`/`N` for namespace, `c`/`C` for context (uppercase aliases for users who prefer them; both open the same picker)
 - **Detail tabs** -- YAML / Events / Logs (Logs tab only for Pods)
 - **Long values wrap, never truncate** -- applies to YAML, Events, and Logs; wrap points reflow on panel resize
 - **Panel expand** -- `=`/`-` to toggle full-screen Table or Detail panel
@@ -136,10 +136,11 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 
 | Key | Action |
 |---|---|
-| `n` | Switch namespace (`/` to filter inside the popup) |
-| `c` | Switch context (`/` to filter inside the popup) |
+| `n` / `N` | Switch namespace (`/` to filter inside the popup) |
+| `c` / `C` | Switch context (`/` to filter inside the popup) |
 | `T` | Open KM8erm (embedded shell — login shell, full env, host cwd) |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
+| `Y` | Open YAML popup (`j/k/u/d/gg/G` scroll, `/` search, `e` edit, `Esc` close) |
 | `!` | App log |
 | `?` | Toggle help |
 | `q` | Quit km8 (asks for confirmation) |

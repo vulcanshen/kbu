@@ -46,6 +46,7 @@ type AppModel struct {
 	splash          SplashModel
 	toast           ToastModel
 	ptyView         *PtyView
+	yamlPopup       YamlPopupModel
 
 	activePanel     Panel
 	width           int
@@ -104,6 +105,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		splash:          NewSplashModel(),
 		toast:           NewToastModel(t),
 		ptyView:         NewPtyView(),
+		yamlPopup:       NewYamlPopupModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfgEditor:       cfgEditor,
@@ -192,6 +194,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.namespacePicker.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
+		if c := m.yamlPopup.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
 		return m, tea.Batch(animCmds...)
 	}
 
@@ -270,6 +275,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg, tea.MouseMsg:
 			var cmd tea.Cmd
 			m.namespacePicker, cmd = m.namespacePicker.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
+	if m.yamlPopup.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.yamlPopup, cmd = m.yamlPopup.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -361,9 +378,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
 				return m, m.exitDrillDown()
 			}
-		case "n":
+		case "n", "N":
 			return m, fetchNamespaces(m.k8sClient)
-		case "c":
+		case "c", "C":
 			return m, fetchContexts(m.k8sClient)
 		case "e":
 			if !m.editing && m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
@@ -411,6 +428,22 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "y":
 			return m, copyToClipboardCmd(m.focusedPanelContent())
+		case "Y":
+			yaml := m.detail.YAMLContent()
+			if yaml == "" {
+				return m, nil
+			}
+			var resource k8s.ResourceType
+			var item k8s.ResourceItem
+			if !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
+				idx := m.table.SelectedRow()
+				if idx >= 0 && idx < len(m.items) {
+					resource = m.currentResource
+					item = m.items[idx]
+				}
+			}
+			m.yamlPopup.SetSize(m.width, m.height)
+			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
 		}
 
 	case ResourceSelectedMsg:
@@ -761,6 +794,11 @@ func (m AppModel) View() string {
 
 	if m.namespacePicker.IsActive() {
 		mainView = overlay.Composite(m.namespacePicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.yamlPopup.IsActive() {
+		m.yamlPopup.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.yamlPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.toast.IsActive() {

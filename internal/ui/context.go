@@ -103,7 +103,7 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 		}
 	case "enter":
 		return m.selectCurrent(items)
-	case "esc", "c":
+	case "esc", "c", "C":
 		if m.searchQuery != "" {
 			m.searchQuery = ""
 			m.cursor = 0
