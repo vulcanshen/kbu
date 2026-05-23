@@ -16,14 +16,27 @@ import (
 // matches), e to dispatch kubectl edit on the same resource (no confirm — user
 // already inspected before pressing), and Esc/q to close.
 type YamlPopupModel struct {
-	yaml         string
-	rawLines     []string
+	yaml string
+	// rawLines is the source YAML split by newline. searchQuery matches
+	// against these; matchLines indices refer to this slice.
+	rawLines []string
+	// contentLines are the rendered DISPLAY lines — long raw lines are word-
+	// wrapped to fit the popup body width, then highlighted. One raw line
+	// may produce 1+ display lines (see contentLineRaw).
 	contentLines []string
-	scrollOffset int
-	width        int
-	height       int
-	theme        *theme.Theme
-	animator     PopupAnimator
+	// contentLineRaw[i] = index into rawLines that display line i came from.
+	// Used to (a) map matchLines (raw indices) to display positions for
+	// auto-scroll and (b) extend the current-match background highlight
+	// across all wrapped chunks of the same raw line.
+	contentLineRaw []int
+	// lastBuiltWidth caches the body width content was wrapped for, so we
+	// only rebuild on actual width changes (not every render call).
+	lastBuiltWidth int
+	scrollOffset   int
+	width          int
+	height         int
+	theme          *theme.Theme
+	animator       PopupAnimator
 
 	// Edit target captured at Open() time.
 	resource    k8s.ResourceType
@@ -81,23 +94,67 @@ func (m *YamlPopupModel) HandleTick(msg AnimTickMsg) tea.Cmd {
 	return m.animator.Tick()
 }
 
-// SetSize records the screen dimensions used to size the popup.
+// SetSize records the screen dimensions used to size the popup and rebuilds
+// wrapped content when the body width changes (so reflow happens on resize).
 func (m *YamlPopupModel) SetSize(w, h int) {
 	m.width = w
 	m.height = h
+	if m.yaml != "" && m.bodyWidth() != m.lastBuiltWidth {
+		m.rebuildContent()
+	}
+}
+
+// bodyWidth is the column budget for a single YAML line inside the popup
+// (popup inner width minus the 2 borders).
+func (m YamlPopupModel) bodyWidth() int {
+	w := m.popupWidth() - 2
+	if w < 10 {
+		w = 10
+	}
+	return w
 }
 
 func (m *YamlPopupModel) rebuildContent() {
 	if m.yaml == "" {
 		m.rawLines = nil
 		m.contentLines = nil
+		m.contentLineRaw = nil
+		m.lastBuiltWidth = 0
 		return
 	}
 	m.rawLines = strings.Split(m.yaml, "\n")
-	m.contentLines = make([]string, len(m.rawLines))
-	for i, l := range m.rawLines {
-		m.contentLines[i] = highlightYAMLLine(l, m.theme)
+	w := m.bodyWidth()
+	m.lastBuiltWidth = w
+
+	m.contentLines = m.contentLines[:0]
+	m.contentLineRaw = m.contentLineRaw[:0]
+	for i, raw := range m.rawLines {
+		chunks := wrapPlain(raw, w)
+		if len(chunks) == 0 {
+			// Empty raw line still takes one display row so blank lines in
+			// the YAML render as blank rows (don't collapse).
+			m.contentLines = append(m.contentLines, "")
+			m.contentLineRaw = append(m.contentLineRaw, i)
+			continue
+		}
+		for _, chunk := range chunks {
+			m.contentLines = append(m.contentLines, highlightYAMLLine(chunk, m.theme))
+			m.contentLineRaw = append(m.contentLineRaw, i)
+		}
 	}
+}
+
+// firstDisplayLineForRaw returns the smallest display-line index whose source
+// raw line == rawIdx, or -1 if not found. Used by search auto-scroll: after
+// the user commits a query, we jump the viewport to the first wrapped chunk
+// of the matched raw line.
+func (m YamlPopupModel) firstDisplayLineForRaw(rawIdx int) int {
+	for i, r := range m.contentLineRaw {
+		if r == rawIdx {
+			return i
+		}
+	}
+	return -1
 }
 
 // Update handles keyboard input.
@@ -243,7 +300,11 @@ func (m *YamlPopupModel) scrollToMatch() {
 	if len(m.matchLines) == 0 {
 		return
 	}
-	target := m.matchLines[m.matchCursor]
+	rawTarget := m.matchLines[m.matchCursor]
+	target := m.firstDisplayLineForRaw(rawTarget)
+	if target < 0 {
+		return
+	}
 	contentH := m.contentHeight()
 	if target < m.scrollOffset || target >= m.scrollOffset+contentH {
 		m.scrollOffset = target - contentH/2
@@ -260,7 +321,10 @@ func (m YamlPopupModel) popupWidth() int {
 	if m.width <= 0 {
 		return 60
 	}
-	w := m.width * 70 / 100
+	// 85% leaves a small margin so the popup doesn't kiss the terminal
+	// edges; bumped from 70% — wrap (instead of truncate) means tight
+	// horizontal real estate matters less.
+	w := m.width * 85 / 100
 	if w < 40 {
 		w = 40
 	}
@@ -385,18 +449,21 @@ func (m YamlPopupModel) renderFullPopup() string {
 		end = len(m.contentLines)
 	}
 
-	currentMatchLine := -1
+	// Current match is identified by its RAW line index; with wrapping a
+	// single raw match may span multiple consecutive display lines, so we
+	// highlight every display row whose source raw line is the match.
+	currentMatchRaw := -1
 	if !m.searching && len(m.matchLines) > 0 {
-		currentMatchLine = m.matchLines[m.matchCursor]
+		currentMatchRaw = m.matchLines[m.matchCursor]
 	}
 
 	for i := start; i < end; i++ {
-		if i == currentMatchLine {
-			// Full-row highlight on the current match. Strip ANSI from the raw
-			// line first because lipgloss Background composes poorly with
-			// existing per-token foreground escapes (resets reintroduce the
-			// default bg, leaving holes in the highlight).
-			plain := ansi.Strip(m.rawLines[i])
+		isMatch := currentMatchRaw >= 0 && i < len(m.contentLineRaw) && m.contentLineRaw[i] == currentMatchRaw
+		if isMatch {
+			// Full-row highlight. Strip ANSI from the display chunk so lipgloss
+			// Background composes cleanly (per-token foregrounds inside the
+			// styled line would leak default bg through the row otherwise).
+			plain := ansi.Strip(m.contentLines[i])
 			if lipgloss.Width(plain) > innerW {
 				plain = ansiTruncate(plain, innerW)
 			}

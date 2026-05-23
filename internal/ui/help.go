@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
@@ -120,7 +121,7 @@ func (m HelpModel) RenderPopup() string {
 // Long descriptions wrap onto continuation lines indented under the desc
 // column so the popup fits a standard 80-col terminal.
 func (m HelpModel) renderFullPopup() string {
-	const colW = 38
+	const colW = 36
 	const gutterW = 2
 	innerW := colW*2 + gutterW
 
@@ -163,6 +164,13 @@ func (m HelpModel) renderFullPopup() string {
 	rightBorder := bStyle.Render("│")
 	for _, line := range bodyLines {
 		lw := lipgloss.Width(line)
+		// Safety net: clamp to innerW so a single overlong row never punches
+		// through the right border. wrapPlain breaks at word boundaries and
+		// will leave words longer than width oversized — truncate here.
+		if lw > innerW {
+			line = ansi.Truncate(line, innerW, "")
+			lw = lipgloss.Width(line)
+		}
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
