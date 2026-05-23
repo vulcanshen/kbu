@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Persistent KM8erm**: pressing `T` no longer kills and respawns the shell every time. Inside the popup, `Alt+T` hides it without killing the subprocess; pressing `T` from outside reattaches. Cwd, history, env vars, and background jobs are all preserved across hide / show cycles. The status bar carries a marker showing the state — green `▌ attached` while the popup is visible, amber `▌ km8erm` while the shell is hidden in the background. The shell is killed cleanly when km8 quits (`q` confirm or `Ctrl+C`). `Alt+T` only applies to KM8erm (Shell-kind PTY); `kubectl edit` and `kubectl exec` popups treat it as a normal keypress because their lifecycle is bounded by the subprocess they wrap.
+- Pressing `e` (edit) or `s` (shell exec) while a PTY is alive (visible or hidden) now refuses with a toast / app log warning instead of clobbering the in-flight subprocess — close the current PTY first (`exit` in the shell, or `Alt+T` then `exit`).
 - **`Y` opens a full-screen YAML popup** for the currently-selected resource. Supports `j` / `k` line scroll, `u` / `d` half-page scroll, `gg` / `G` jump to top / bottom, `/` search (`Enter` commits; `n` / `N` step through matches with a full-row highlight on the current match like the panel-view selected row), and `e` to dispatch `kubectl edit` on the same resource directly from the popup (skips the confirm step that the table-level `e` uses — by the time you press `e` here, you've already inspected the YAML). `Esc` / `q` close. The search box border shifts color from cyan (actively editing the query) to amber (filter committed, navigating matches) so the locked state is visible at a glance. Solves the "YAML wall in narrow vertical Panel 3 is hard to read" problem without giving up on having YAML at all.
 - **Uppercase aliases for namespace / context pickers**: `N` and `C` open the same pickers as `n` and `c`. Transitional — lowercase will be deprecated later. Rationale: lowercase keys felt too easy to misfire ("any letter pops up a popup"), and `n` / `c` clash with vim mental models (`n` = next-search, `c` = change).
 
@@ -14,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - New `YamlPopupModel` in `internal/ui/yamlpopup.go` modelled on `HelpModel` / `AppLogModel` (PopupAnimator + content lines + scroll offset + search state). Captures edit target at `Open()` time so `e` knows what to dispatch even after the user has scrolled around.
 - New `DetailModel.YAMLContent()` accessor exposes the loaded YAML for popup rendering without leaking the internal `k8s.ResourceDetail` field.
 - `NamespacePickerModel` and `ContextPickerModel` now accept the uppercase form as a close-key alias.
+- `PtyView` gains `hidden bool` + `kind PtyKind` (Shell / Edit / Exec). `IsActive()` now means "alive AND visible"; new `IsAlive()` reports the underlying subprocess state. `Hide()` is a no-op for Edit / Exec kinds (transient — never hide). `Show(w,h)` re-syncs PTY size before un-hiding so a window resize while hidden doesn't leave the shell rendering at stale dimensions. `Start()` takes a `PtyKind` argument.
+- `StatusBarModel.ViewFull(unreadErrors, success, *PtyMarker)` is the new render entry point; `ViewWithBadge` keeps working as a thin wrapper for callers that don't pass a marker.
 
 ## [v1.2.0] - 2026-05-22
 

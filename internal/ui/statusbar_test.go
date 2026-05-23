@@ -108,6 +108,43 @@ func TestStatusBarModel_ViewWithBadge_NoBadge(t *testing.T) {
 	}
 }
 
+// ── PtyMarker ──────────────────────────────────────────────────────────────
+
+func TestStatusBarModel_ViewFull_NoPtyMarker(t *testing.T) {
+	m := newTestStatusBar()
+	v := m.ViewFull(0, "", nil)
+	if strings.Contains(v, "attached") || strings.Contains(v, "km8erm") {
+		t.Error("no PTY marker requested — bar must not render one")
+	}
+}
+
+func TestStatusBarModel_ViewFull_AttachedMarker(t *testing.T) {
+	m := newTestStatusBar()
+	v := m.ViewFull(0, "", &PtyMarker{Visible: true, Label: " attached"})
+	if !strings.Contains(v, "attached") {
+		t.Error("visible PTY marker must surface 'attached' label")
+	}
+}
+
+func TestStatusBarModel_ViewFull_HiddenMarker(t *testing.T) {
+	m := newTestStatusBar()
+	v := m.ViewFull(0, "", &PtyMarker{Visible: false, Label: " km8erm"})
+	if !strings.Contains(v, "km8erm") {
+		t.Error("hidden PTY marker must surface 'km8erm' label")
+	}
+}
+
+func TestStatusBarModel_ViewFull_MarkerCoexistsWithErrorBadge(t *testing.T) {
+	m := newTestStatusBar()
+	v := m.ViewFull(3, "", &PtyMarker{Visible: false, Label: " km8erm"})
+	if !strings.Contains(v, "km8erm") {
+		t.Error("marker must survive when an error badge is also present")
+	}
+	if !strings.Contains(v, "3 errors") {
+		t.Error("error badge must still render alongside marker")
+	}
+}
+
 // ── Height ─────────────────────────────────────────────────────────────────
 
 func TestStatusBarModel_Height_IsOne(t *testing.T) {
