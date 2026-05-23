@@ -159,21 +159,30 @@ func (p *PtyView) tick() tea.Cmd {
 }
 
 func (p *PtyView) readLoop() {
+	// Capture pointers to the subprocess + PTY file BEFORE entering the loop.
+	// Stop() may run concurrently (q-quit kills the popup) and clear p.cmd /
+	// p.ptmx — we don't want the readLoop to nil-deref mid-Wait. Local refs
+	// stay valid; the underlying *exec.Cmd handles concurrent Kill + Wait.
+	ptmx := p.ptmx
+	cmd := p.cmd
+	done := p.done
 	buf := make([]byte, 4096)
 	for {
-		n, err := p.ptmx.Read(buf)
+		n, err := ptmx.Read(buf)
 		if n > 0 {
 			p.mu.Lock()
-			_, _ = p.term.Write(buf[:n])
-			p.captureToScrollback(buf[:n])
+			if p.term != nil {
+				_, _ = p.term.Write(buf[:n])
+				p.captureToScrollback(buf[:n])
+			}
 			p.mu.Unlock()
 		}
 		if err != nil {
 			break
 		}
 	}
-	_ = p.cmd.Wait()
-	p.done.Store(true)
+	_ = cmd.Wait()
+	done.Store(true)
 }
 
 // captureToScrollback splits the PTY byte stream into lines and appends them
@@ -241,19 +250,29 @@ func (p *PtyView) commitScrollbackLine() {
 	p.pendingLine.Reset()
 }
 
-// Stop force-terminates the PTY subprocess (if still running) and clears state.
+// Stop force-terminates the PTY subprocess (if still running). Idempotent.
+// Safe to call concurrently with readLoop — readLoop holds local pointer
+// copies of cmd / ptmx, so clearing p.cmd / p.ptmx here cannot nil-deref it.
+// Subsequent term access in readLoop is gated by mu + a nil check.
 func (p *PtyView) Stop() {
-	if p.cmd != nil && p.cmd.Process != nil && p.done != nil && !p.done.Load() {
-		_ = p.cmd.Process.Kill()
+	if !p.active {
+		return
 	}
-	if p.ptmx != nil {
-		_ = p.ptmx.Close()
+	cmd, ptmx := p.cmd, p.ptmx
+	done := p.done
+	if cmd != nil && cmd.Process != nil && done != nil && !done.Load() {
+		_ = cmd.Process.Kill()
+	}
+	if ptmx != nil {
+		_ = ptmx.Close()
 	}
 	p.active = false
 	p.hidden = false
+	p.mu.Lock()
+	p.term = nil
+	p.mu.Unlock()
 	p.cmd = nil
 	p.ptmx = nil
-	p.term = nil
 }
 
 func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {

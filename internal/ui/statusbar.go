@@ -59,26 +59,25 @@ func (m StatusBarModel) ViewWithBadge(unreadErrors int, successNotice string) st
 	return m.ViewFull(unreadErrors, successNotice, nil)
 }
 
-// ViewFull renders the status bar with optional PTY marker. The marker is
-// placed immediately left of the error / success badge so both can coexist
-// (e.g. KM8erm hidden while a watch error fired).
+// ViewFull renders the status bar with optional PTY marker. The PTY marker
+// sits in the LEFT segment right after `ns:` so it doesn't fight the
+// error / success badge on the right for space.
 func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *PtyMarker) string {
 	ctx := m.theme.StatusBarContextStyle().Render(fmt.Sprintf("ctx: %s", m.clusterInfo.ContextName))
 	cluster := m.theme.StatusBarClusterStyle().Render(fmt.Sprintf("cluster: %s", m.clusterInfo.ClusterName))
 	ns := m.theme.StatusBarNamespaceStyle().Render(fmt.Sprintf("ns: %s", m.namespace))
 
-	left := fmt.Sprintf(" %s  %s  %s", ctx, cluster, ns)
 	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
-
 	badgeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Bold(true)
 
-	var ptyPart string
+	left := fmt.Sprintf(" %s  %s  %s", ctx, cluster, ns)
 	if pty != nil {
 		color := m.theme.Status.Pending // amber when hidden
 		if pty.Visible {
 			color = m.theme.Status.Running // green when attached
 		}
-		ptyPart = badgeStyle.Background(lipgloss.Color(color)).Render(fmt.Sprintf("  %s ", pty.Label))
+		ptyChip := badgeStyle.Background(lipgloss.Color(color)).Render(fmt.Sprintf(" %s ", pty.Label))
+		left = left + "  " + ptyChip
 	}
 
 	var badgePart string
@@ -91,12 +90,11 @@ func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *Pt
 		badgePart = badgeStyle.Background(lipgloss.Color(m.theme.Status.Running)).Render(badgeText)
 	}
 
-	rightW := lipgloss.Width(ptyPart) + lipgloss.Width(badgePart)
-	if rightW == 0 {
+	if badgePart == "" {
 		return barStyle.Width(m.width).Render(left)
 	}
-	leftPart := barStyle.Width(m.width - rightW).Render(left)
-	return leftPart + ptyPart + badgePart
+	leftPart := barStyle.Width(m.width - lipgloss.Width(badgePart)).Render(left)
+	return leftPart + badgePart
 }
 
 func (m StatusBarModel) Height() int {

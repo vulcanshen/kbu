@@ -349,12 +349,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confirm.Show(ConfirmQuit, "Quit km8?", "", quitCmd)
 		case "V":
 			return m, m.splash.Show()
-		case "T":
-			// Reattach the existing KM8erm shell if one is hidden in the
-			// background; otherwise spawn a fresh shell. T from outside is
-			// always "show", never "hide" — Alt+T inside the popup is the
-			// hide path. See PROGRESS.md [2] for the full mental model.
+		case "alt+t", "alt+T":
+			// Alt+T is the single KM8erm toggle:
+			//   - no shell alive   → spawn KM8erm
+			//   - alive, hidden    → reattach (show)
+			//   - alive, visible   → handled inside PtyView.Update (hides)
+			// The "visible" branch never reaches here because PtyView
+			// intercepts keys when IsActive() is true. Edit/Exec PTYs alive:
+			// refuse, same as table-level edit/shell guard.
 			if m.ptyView.IsAlive() {
+				if m.ptyView.Kind() != PtyKindShell {
+					m.appLog.Warn("close active PTY before opening KM8erm")
+					return m, m.toast.Show("Close PTY (exit to close)")
+				}
 				m.ptyView.Show(m.width, m.height)
 				return m, nil
 			}
