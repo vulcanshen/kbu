@@ -130,15 +130,20 @@ func (m HelpModel) renderFullPopup() string {
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 
 	groups := m.groupedContent()
-	leftGroups, rightGroups := splitGroupsForColumns(groups)
-	leftLines := m.renderColumn(leftGroups, colW)
-	rightLines := m.renderColumn(rightGroups, colW)
-	for len(leftLines) < len(rightLines) {
-		leftLines = append(leftLines, "")
+	descW := colW - 2 /*indent*/ - 14 /*key*/ - 1 /*space*/
+	if descW < 8 {
+		descW = 8
 	}
-	for len(rightLines) < len(leftLines) {
-		rightLines = append(rightLines, "")
-	}
+	leftGroups, rightGroups := splitGroupsForColumns(groups, descW)
+
+	// Render each section to its own line slice first so we know the natural
+	// height of every column. Padding to a common target height is then
+	// distributed as gaps BETWEEN sections (not piled at the bottom) so both
+	// columns end at the same row AND section breaks feel naturally spaced.
+	leftSections := m.renderSections(leftGroups, colW, descW)
+	rightSections := m.renderSections(rightGroups, colW, descW)
+	leftLines := joinColumnSections(leftSections, columnTarget(leftSections, rightSections))
+	rightLines := joinColumnSections(rightSections, columnTarget(leftSections, rightSections))
 
 	gutter := strings.Repeat(" ", gutterW)
 	var bodyLines []string
@@ -224,48 +229,85 @@ func (m HelpModel) groupedContent() []helpGroup {
 	return groups
 }
 
-// splitGroupsForColumns greedily packs groups into the left column until the
-// running line-count exceeds half of the total, then dumps the rest into the
-// right column. Keeps each section intact.
-func splitGroupsForColumns(groups []helpGroup) (left, right []helpGroup) {
+// splitGroupsForColumns chooses the split point that minimises the height
+// difference between the two columns. Counts wrap-continuation lines (long
+// descriptions wrapped to multiple rows) because they contribute to actual
+// column height even though there's only "1 entry".
+//
+// Greedy + look-ahead: for each group, place on the side that brings the
+// (currently-running) totals closer to balance. Preserves group order so
+// sections still flow naturally top-to-bottom.
+func splitGroupsForColumns(groups []helpGroup, descW int) (left, right []helpGroup) {
+	sizes := make([]int, len(groups))
 	total := 0
-	for _, g := range groups {
-		total += 1 + len(g.entries) // section header + entries
+	for i, g := range groups {
+		sizes[i] = groupHeight(g, descW)
+		total += sizes[i]
 	}
-	target := total / 2
-	running := 0
-	for _, g := range groups {
-		if running >= target && len(left) > 0 {
+	leftSum := 0
+	for i, g := range groups {
+		// Diff if we put g on the left vs leave the running totals as-is.
+		addLeft := abs(leftSum + sizes[i] - (total - leftSum - sizes[i]))
+		stay := abs(leftSum - (total - leftSum))
+		if addLeft < stay && len(left) <= len(right)+1 {
+			left = append(left, g)
+			leftSum += sizes[i]
+		} else if len(right) == 0 || stay <= addLeft {
 			right = append(right, g)
-			continue
+		} else {
+			left = append(left, g)
+			leftSum += sizes[i]
 		}
-		left = append(left, g)
-		running += 1 + len(g.entries)
+	}
+	if len(left) == 0 && len(right) > 0 {
+		// Edge case: everything ended up on the right (e.g. first group huge).
+		// Move first back to left so the layout is never empty-left.
+		left = append(left, right[0])
+		right = right[1:]
 	}
 	return left, right
 }
 
-func (m HelpModel) renderColumn(groups []helpGroup, colW int) []string {
+// groupHeight counts visible rows for a section: 1 title + per-entry wrap
+// line count (1 if desc fits in descW, more if it wraps).
+func groupHeight(g helpGroup, descW int) int {
+	h := 0
+	if g.title != "" {
+		h++
+	}
+	for _, e := range g.entries {
+		w := wrapPlain(e.desc, descW)
+		if len(w) == 0 {
+			h++
+		} else {
+			h += len(w)
+		}
+	}
+	return h
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// renderSections returns one rendered line slice per group (no gaps yet —
+// joinColumnSections inserts gaps later, sized so both columns end at the
+// same row).
+func (m HelpModel) renderSections(groups []helpGroup, colW, descW int) [][]string {
 	sectionStyle := lipgloss.NewStyle().Bold(true)
 	keyStyle := m.theme.DetailLabelStyle()
 	descStyle := m.theme.DetailValueStyle()
 
-	// Layout: 2-space indent + 14-col key + 1 space + desc, so descriptions
-	// can use the rest. Long descs wrap onto continuation lines that align
-	// under the desc column.
 	const keyW = 14
 	const indent = "  "
-	descW := colW - len(indent) - keyW - 1
-	if descW < 8 {
-		descW = 8
-	}
 	contIndent := indent + strings.Repeat(" ", keyW+1)
 
-	var lines []string
+	out := make([][]string, len(groups))
 	for i, g := range groups {
-		if i > 0 {
-			lines = append(lines, "") // single blank between sections
-		}
+		var lines []string
 		if g.title != "" {
 			lines = append(lines, sectionStyle.Render(" "+g.title))
 		}
@@ -280,8 +322,78 @@ func (m HelpModel) renderColumn(groups []helpGroup, colW int) []string {
 				lines = append(lines, contIndent+descStyle.Render(w))
 			}
 		}
+		out[i] = lines
 	}
-	return lines
+	return out
+}
+
+// columnTarget is the row count both columns should match. Pick the taller
+// natural height — the shorter column gets its inter-section gaps inflated
+// to fill the difference.
+func columnTarget(left, right [][]string) int {
+	sum := func(s [][]string) int {
+		t := 0
+		for _, b := range s {
+			t += len(b)
+		}
+		return t + max(0, len(s)-1) // 1 minimum gap between sections
+	}
+	l, r := sum(left), sum(right)
+	if l > r {
+		return l
+	}
+	return r
+}
+
+// joinColumnSections concatenates sections with blank-line gaps, sized so
+// the column ends up exactly `target` rows tall. Extra padding is
+// distributed evenly across the inter-section gaps (instead of dumped at
+// the bottom), so section headers stay vertically balanced across columns.
+func joinColumnSections(sections [][]string, target int) []string {
+	contentRows := 0
+	for _, s := range sections {
+		contentRows += len(s)
+	}
+	gapCount := len(sections) - 1
+	if gapCount < 0 {
+		gapCount = 0
+	}
+	extraRows := target - contentRows
+	if extraRows < gapCount {
+		extraRows = gapCount // at least 1 blank between every two sections
+	}
+
+	gapSize := 1
+	remainder := 0
+	if gapCount > 0 {
+		gapSize = extraRows / gapCount
+		if gapSize < 1 {
+			gapSize = 1
+		}
+		remainder = extraRows - gapSize*gapCount
+	}
+
+	var out []string
+	for i, s := range sections {
+		out = append(out, s...)
+		if i < len(sections)-1 {
+			gap := gapSize
+			if i < remainder {
+				gap++
+			}
+			for j := 0; j < gap; j++ {
+				out = append(out, "")
+			}
+		}
+	}
+	return out
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // padRight extends a styled string with trailing spaces so its visual width
