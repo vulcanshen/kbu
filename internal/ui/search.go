@@ -8,7 +8,14 @@ import (
 )
 
 func renderSearchBox(query string, active bool, width int, t *theme.Theme) string {
-	bc := lipgloss.Color(t.Sidebar.CategoryFg)
+	return renderSearchBoxWithColor(query, active, width, t, lipgloss.Color(t.Sidebar.CategoryFg))
+}
+
+// renderSearchBoxWithColor renders the search box with a caller-supplied
+// border color. Use to express "filter locked" state (e.g. amber/orange after
+// the user commits a query with Enter and focus shifts back to content).
+func renderSearchBoxWithColor(query string, active bool, width int, t *theme.Theme, borderColor lipgloss.Color) string {
+	bc := borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 
 	innerW := width - 2

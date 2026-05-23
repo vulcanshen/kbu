@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -323,13 +324,15 @@ func (m YamlPopupModel) renderFullPopup() string {
 	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
-	markerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Sidebar.CategoryFg)).Bold(true)
+	// matchRowStyle highlights the line under the search cursor with the same
+	// background treatment as panel-view selected rows, so users get a
+	// consistent "this is what you're on" cue across the app.
+	matchRowStyle := m.theme.TableSelectedRowStyle()
 
 	boxW := m.popupWidth()
 	panelH := m.popupHeight()
 	innerW := boxW - 2
 	contentH := m.contentHeight()
-	bodyW := innerW - 2 // 2 columns reserved for match-cursor marker
 
 	title := "  YAML — " + m.resource.KubectlName() + "/" + m.item.Name
 	if m.item.Namespace != "" {
@@ -354,8 +357,14 @@ func (m YamlPopupModel) renderFullPopup() string {
 
 	var lines []string
 	lines = append(lines, "")
-	if m.searching || m.searchQuery != "" {
-		lines = append(lines, strings.Split(renderSearchBox(m.searchQuery, m.searching, innerW, m.theme), "\n")...)
+	switch {
+	case m.searching:
+		lines = append(lines, strings.Split(renderSearchBox(m.searchQuery, true, innerW, m.theme), "\n")...)
+	case m.searchQuery != "":
+		// Filter locked: dimmer/warmer border so user knows the query is
+		// committed and j/k/n/N navigate matches in content.
+		lockedColor := lipgloss.Color(m.theme.Status.Pending)
+		lines = append(lines, strings.Split(renderSearchBoxWithColor(m.searchQuery, false, innerW, m.theme, lockedColor), "\n")...)
 	}
 
 	// Content slice.
@@ -374,15 +383,23 @@ func (m YamlPopupModel) renderFullPopup() string {
 	}
 
 	for i := start; i < end; i++ {
-		marker := "  "
 		if i == currentMatchLine {
-			marker = markerStyle.Render("▸ ")
+			// Full-row highlight on the current match. Strip ANSI from the raw
+			// line first because lipgloss Background composes poorly with
+			// existing per-token foreground escapes (resets reintroduce the
+			// default bg, leaving holes in the highlight).
+			plain := ansi.Strip(m.rawLines[i])
+			if lipgloss.Width(plain) > innerW {
+				plain = ansiTruncate(plain, innerW)
+			}
+			lines = append(lines, matchRowStyle.Width(innerW).Render(plain))
+		} else {
+			line := m.contentLines[i]
+			if lipgloss.Width(line) > innerW {
+				line = ansiTruncate(line, innerW)
+			}
+			lines = append(lines, line)
 		}
-		line := m.contentLines[i]
-		if lipgloss.Width(line) > bodyW {
-			line = ansiTruncate(line, bodyW)
-		}
-		lines = append(lines, marker+line)
 	}
 	if len(m.contentLines) == 0 {
 		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))

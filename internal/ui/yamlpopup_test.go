@@ -256,6 +256,56 @@ func TestYamlPopup_CloseWithQ(t *testing.T) {
 	}
 }
 
+func TestYamlPopup_SearchLockedStateRenders(t *testing.T) {
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+
+	// Open search, type, commit
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "image" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.IsSearching() {
+		t.Fatal("post-Enter: expected IsSearching()=false (filter locked, not editing)")
+	}
+	if m.SearchQuery() == "" {
+		t.Fatal("post-Enter: expected SearchQuery to persist")
+	}
+	if m.MatchCount() == 0 {
+		t.Fatal("post-Enter: expected matches")
+	}
+
+	view := m.RenderPopup()
+	if !strings.Contains(view, "image") {
+		t.Error("locked-state render must still surface the committed query")
+	}
+}
+
+func TestYamlPopup_CurrentMatchRowHighlighted(t *testing.T) {
+	// Open popup, commit a search, render. Strip ANSI from output and ensure
+	// the current-match line is present in plain form (full-row highlight uses
+	// a background which leaves the plain content intact).
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "nginx:1.27" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.MatchCount() == 0 {
+		t.Fatal("expected at least one match for 'nginx:1.27'")
+	}
+
+	view := m.RenderPopup()
+	if !strings.Contains(view, "nginx:1.27.1") {
+		t.Error("rendered popup must contain the matched image string on the highlighted line")
+	}
+}
+
 func TestYamlPopup_EmptyYAMLDoesNotCrash(t *testing.T) {
 	m := newTestYamlPopup()
 	m.Open("", k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
