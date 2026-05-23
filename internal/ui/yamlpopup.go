@@ -357,14 +357,10 @@ func (m YamlPopupModel) renderFullPopup() string {
 
 	var lines []string
 	lines = append(lines, "")
-	switch {
-	case m.searching:
-		lines = append(lines, strings.Split(renderSearchBox(m.searchQuery, true, innerW, m.theme), "\n")...)
-	case m.searchQuery != "":
-		// Filter locked: dimmer/warmer border so user knows the query is
-		// committed and j/k/n/N navigate matches in content.
-		lockedColor := lipgloss.Color(m.theme.Status.Pending)
-		lines = append(lines, strings.Split(renderSearchBoxWithColor(m.searchQuery, false, innerW, m.theme, lockedColor), "\n")...)
+	if m.searching || m.searchQuery != "" {
+		// renderSearchBox auto-picks amber when !active && query != "" (locked
+		// filter), so the call site doesn't need to branch on the two states.
+		lines = append(lines, strings.Split(renderSearchBox(m.searchQuery, m.searching, innerW, m.theme), "\n")...)
 	}
 
 	// Content slice.
