@@ -76,7 +76,9 @@ func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *Pt
 		if pty.Visible {
 			color = m.theme.Status.Running // green when attached
 		}
-		ptyChip := badgeStyle.Background(lipgloss.Color(color)).Render(fmt.Sprintf(" %s ", pty.Label))
+		// Colored text, no background — lighter visual weight than the
+		// error / success badges so it doesn't compete for attention.
+		ptyChip := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true).Render(pty.Label)
 		left = left + "  " + ptyChip
 	}
 

@@ -266,12 +266,15 @@ func (m YamlPopupModel) popupHeight() int {
 	if m.height <= 0 {
 		return 20
 	}
-	h := m.height * 80 / 100
+	// 90% leaves ~5% margin top/bottom — halved from the previous 80%/10% to
+	// recover screen real estate that the popup was wasting as vertical
+	// padding.
+	h := m.height * 90 / 100
 	if h < 10 {
 		h = 10
 	}
-	if h > m.height-4 {
-		h = m.height - 4
+	if h > m.height-2 {
+		h = m.height - 2
 	}
 	return h
 }

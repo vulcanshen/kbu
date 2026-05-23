@@ -827,16 +827,23 @@ func (m DetailModel) buildLogLines() []string {
 		return []string{"  " + m.theme.DetailValueStyle().Render("Waiting for logs...")}
 	}
 	var lines []string
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	for _, ll := range m.logLines {
 		// Build plain + styled prefixes side by side. Plain is for wrap-width
 		// math (avoid counting ANSI escapes); styled is what we actually emit.
+		//
+		// Aggregate prefix uses `<pod>@<container> │ <text>` — `@` ties the
+		// pod-hash to its container visually (like an email/network address)
+		// while `│` separates the prefix block from the log line itself.
+		// Distinct separators make the three segments unambiguous even when
+		// pod-hash and container name colors are similar.
 		var plainPrefix, styledPrefix string
 		if ll.pod != "" {
 			tag := podHashTag(ll.pod)
 			podStyle := lipgloss.NewStyle().Foreground(podLogColor(ll.pod)).Bold(true)
 			ctrStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
-			plainPrefix = "  " + tag + " │ " + ll.container + " │ "
-			styledPrefix = "  " + podStyle.Render(tag) + " │ " + ctrStyle.Render(ll.container) + " │ "
+			plainPrefix = "  " + tag + "@" + ll.container + " │ "
+			styledPrefix = "  " + podStyle.Render(tag) + dimStyle.Render("@") + ctrStyle.Render(ll.container) + " │ "
 		} else {
 			ctrStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
 			plainPrefix = "  " + ll.container + " │ "
