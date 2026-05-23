@@ -52,10 +52,15 @@ type RowSelectedMsg struct {
 	Index int
 }
 
-// ResourceDetailMsg carries detail data for the selected resource.
+// ResourceDetailMsg carries detail data for the selected resource. ItemUID
+// is the k8s UID of the item that triggered the fetch — the handler
+// compares it against the currently selected item and drops stale
+// results (slow fetch finishing after the user moved on). Required:
+// out-of-order arrivals are otherwise indistinguishable from current ones.
 type ResourceDetailMsg struct {
-	Detail k8s.ResourceDetail
-	Events []k8s.EventItem
+	ItemUID string
+	Detail  k8s.ResourceDetail
+	Events  []k8s.EventItem
 }
 
 // NamespaceListMsg carries the list of available namespaces.

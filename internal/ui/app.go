@@ -668,6 +668,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ResourceDetailMsg:
+		// Drop stale results — a fetch that finished after the user moved
+		// on to a different row would otherwise overwrite the right detail
+		// with the wrong one. Critical for kinds whose EnrichLinks does a
+		// cluster-wide List (ClusterRole / StorageClass / IngressClass),
+		// where latency easily lets order get scrambled. Also drops when
+		// currentItemUID is empty (namespace/context change cleared the
+		// selection between dispatch and reply).
+		if msg.ItemUID == "" || msg.ItemUID != m.currentItemUID() {
+			return m, nil
+		}
 		m.detail.SetDetail(msg.Detail, msg.Events)
 		return m, nil
 
@@ -1124,6 +1134,22 @@ func (m *AppModel) exitDrillDown() tea.Cmd {
 	}
 
 	return nil
+}
+
+// currentItemUID returns the UID of the row currently highlighted in the
+// table, or "" when no row is selectable (empty list, cursor out of range).
+// Used to drop stale fetch results — async fetches that finish after the
+// user has moved on to a different row would otherwise overwrite the
+// freshly displayed detail.
+func (m AppModel) currentItemUID() string {
+	if len(m.items) == 0 {
+		return ""
+	}
+	idx := m.table.SelectedRow()
+	if idx < 0 || idx >= len(m.items) {
+		return ""
+	}
+	return m.items[idx].UID
 }
 
 func (m *AppModel) refreshDetailForCurrent() tea.Cmd {
@@ -1627,11 +1653,11 @@ func fetchResourceDetail(client *k8s.Client, rt k8s.ResourceType, item k8s.Resou
 		detail := k8s.GetResourceDetail(rt, item)
 		detail.YAML = k8s.MarshalItemYAML(item)
 		// Kind-specific Links data that needs an API call (Service →
-		// selector→pods, future: Ingress → backend services, HPA → target).
+		// selector→pods, ClusterRole → bindings, StorageClass → PVCs, ...).
 		// EnrichLinks is a no-op for kinds without extra resolution.
 		k8s.EnrichLinks(ctx, client.Clientset(), rt, item, &detail)
 		events, _ := k8s.FetchResourceEvents(ctx, client.Clientset(), item.Name, item.Namespace)
-		return ResourceDetailMsg{Detail: detail, Events: events}
+		return ResourceDetailMsg{ItemUID: item.UID, Detail: detail, Events: events}
 	}
 }
 
