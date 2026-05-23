@@ -715,12 +715,27 @@ func (m DetailModel) ActiveTabTitle() string {
 }
 
 // tabLabel returns the per-tab label as it should appear in the tab bar,
-// including the (N) drill-level suffix for the Links tab.
+// including the drill-level suffix for the Links tab. The "↳N" arrow
+// reads as "you've gone N levels down" — more visual than the older
+// "(N)" parens.
 func (m DetailModel) tabLabel(name string) string {
 	if name == "Links" && m.Depth() > 1 {
-		return fmt.Sprintf("Links(%d)", m.Depth())
+		return fmt.Sprintf("Links ↳%d", m.Depth())
 	}
 	return name
+}
+
+// BorderTopRightHint returns a short string to render at the top-right
+// of panel 3's border, or "" when no hint applies. Currently used to
+// surface the breadcrumb key when the user is in a drill chain on the
+// Links tab — discoverable affordance for "press b to see where you've
+// been". The chosen format keeps the hotkey in brackets so the user
+// can pattern-match it against `b` in the help screen.
+func (m DetailModel) BorderTopRightHint() string {
+	if m.ActiveTabName() == "Links" && m.Depth() > 1 {
+		return "[b]readcrumbs"
+	}
+	return ""
 }
 
 // ClearDetail clears the detail data.
