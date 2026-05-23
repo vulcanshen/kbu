@@ -123,12 +123,12 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	}
 
 	// First pass: pick innerW from label widths so short chains use a
-	// snug popup; long chains expand up to maxInnerW.
+	// snug popup; long chains expand up to maxInnerW. Matches the
+	// renderEntry layout: " " + "N. " + marker(2) + label.
 	innerW := lipgloss.Width(title) + 4
 	for i, ref := range m.chain {
 		levelTag := fmt.Sprintf("%d.", i+1)
-		// 1 (lead) + len(tag) + 1 + marker(2) + label + 2 (cursor pad)
-		w := 1 + lipgloss.Width(levelTag) + 1 + 2 + lipgloss.Width(refDisplay(ref)) + 2
+		w := 1 + lipgloss.Width(levelTag) + 1 + 2 + lipgloss.Width(refDisplay(ref))
 		if w > innerW {
 			innerW = w
 		}
@@ -182,54 +182,64 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 // renderEntry produces the one or more display lines for a single chain
 // entry. Long labels wrap to fit innerW; cursor styling spans every
 // wrapped line so the highlight reads as one block.
+//
+// Layout invariant: every line (cursor or not) is exactly innerW wide
+// and starts with a single leading space, so the "N." column lines up
+// across rows regardless of cursor state. The cursor highlight wraps
+// the full innerW-wide content (including the leading space) so it
+// reads as a continuous block flush with both inner borders.
 func (m BreadcrumbPopupModel) renderEntry(
 	i int, ref k8s.RefTarget, innerW int,
 	levelStyle, cursorStyle, currentMarkStyle lipgloss.Style,
 ) []string {
 	levelTag := fmt.Sprintf("%d.", i+1)
-	prefix := " " + levelTag + " "
+	labelPrefix := levelTag + " " // "2. "  (NO leading space — that's added once at line level below)
+	labelPrefixW := lipgloss.Width(labelPrefix)
 	const markerW = 2
 	marker := "  "
 	if i == len(m.chain)-1 {
 		marker = "● "
 	}
 
-	prefixW := lipgloss.Width(prefix)
-	contentW := innerW - 2 // leading + trailing cursor pad
-	labelBudget := contentW - prefixW - markerW
+	// Width budget for the label chunk. Line layout:
+	//   " " + labelPrefix + marker + chunk + pad-to-innerW
+	//   ^1    ^labelPrefixW ^markerW ^?
+	labelBudget := innerW - 1 - labelPrefixW - markerW
 	if labelBudget < 10 {
 		labelBudget = 10
 	}
 	chunks := wrapPlain(refDisplay(ref), labelBudget)
-	contIndent := strings.Repeat(" ", prefixW+markerW)
+	contIndent := strings.Repeat(" ", labelPrefixW+markerW)
 	isCursor := i == m.cursor
 
 	out := make([]string, 0, len(chunks))
 	for ci, chunk := range chunks {
-		var plain string
+		var bodyPlain string
 		if ci == 0 {
-			plain = prefix + marker + chunk
+			bodyPlain = labelPrefix + marker + chunk
 		} else {
-			plain = contIndent + chunk
+			bodyPlain = contIndent + chunk
 		}
-		if w := lipgloss.Width(plain); w < contentW {
-			plain = plain + strings.Repeat(" ", contentW-w)
+		// Pad the body to fill all the way to the right border so the
+		// cursor highlight (when present) becomes a clean rectangle.
+		padW := innerW - 1 - lipgloss.Width(bodyPlain)
+		if padW < 0 {
+			padW = 0
 		}
+		pad := strings.Repeat(" ", padW)
+
 		if isCursor {
-			out = append(out, cursorStyle.Render(" "+plain+" "))
+			out = append(out, cursorStyle.Render(" "+bodyPlain+pad))
 			continue
 		}
-		// Non-cursor row: re-style the prefix + marker pieces while
-		// keeping continuation lines as plain whitespace.
 		if ci == 0 {
 			markerStyled := marker
 			if marker == "● " {
-				markerStyled = currentMarkStyle.Render("● ")
+				markerStyled = currentMarkStyle.Render(marker)
 			}
-			rest := strings.TrimPrefix(plain, prefix+marker)
-			out = append(out, " "+levelStyle.Render(levelTag)+" "+markerStyled+rest)
+			out = append(out, " "+levelStyle.Render(levelTag)+" "+markerStyled+chunk+pad)
 		} else {
-			out = append(out, " "+plain)
+			out = append(out, " "+bodyPlain+pad)
 		}
 	}
 	return out
