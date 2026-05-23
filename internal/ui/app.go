@@ -28,9 +28,21 @@ type drillDownMsg struct {
 	children   []k8s.ResourceItem
 }
 
-const sidebarWidthPercent = 20
-const minSidebarWidth = 24
-const detailHeightPercent = 40
+// Main view layout — absolute cells, no percentages. Stack model:
+//
+//	horizontal: hMargin + sidebar(sw) + hSpace + rightSide(rw) + hMargin = m.width
+//	vertical:   statusBar(1) + middle + statusLine = m.height
+//	right side: table(upperH) + vSpace + detail(detailH) = middleH
+//	sidebar:    fills middleH (no internal vSpace)
+//
+// Only sw and detailH are pinned; everything else falls out by subtraction.
+const (
+	panelSidebarWidth = 28 // panel 1 (sidebar) — fixed absolute width
+	panelDetailHeight = 14 // panel 3 (detail)  — fixed absolute height
+	panelHMargin      = 1  // cells between terminal left/right edge and panels
+	panelHSpace       = 1  // cells between sidebar and right side
+	panelVSpace       = 1  // rows between table and detail
+)
 
 type AppModel struct {
 	sidebar         SidebarModel
@@ -856,22 +868,29 @@ func (m AppModel) View() string {
 
 	if m.detailExpanded {
 		panelH := m.height - 1 - m.statusLine.LineCount()
-		m.detail.SetSize(m.width-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), m.width, panelH, true, m.theme, m.detail.ScrollInfo())
-		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, fullPanel, statusLine)
+		panelW := m.width - 2*panelHMargin
+		m.detail.SetSize(panelW-2, panelH-2)
+		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, panelH, true, m.theme, m.detail.ScrollInfo())
+		hMargin := blankColumn(panelHMargin, panelH)
+		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, fullPanel, hMargin)
+		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	} else if m.tableExpanded {
 		_, _, upperH, detailH := m.panelSizes()
-		fw := m.width
-		m.table.SetSize(fw-2, upperH-2)
-		m.detail.SetSize(fw-2, detailH-2)
+		panelW := m.width - 2*panelHMargin
+		m.table.SetSize(panelW-2, upperH-2)
+		m.detail.SetSize(panelW-2, detailH-2)
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
-		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, fw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), fw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
-		middle := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
-		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
+		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
+		vSpaceRow := strings.Repeat(" ", panelW)
+		middle := lipgloss.JoinVertical(lipgloss.Left, tablePanel, vSpaceRow, detailPanel)
+		fullH := upperH + panelVSpace + detailH
+		hMargin := blankColumn(panelHMargin, fullH)
+		middleWithMargins := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, middle, hMargin)
+		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middleWithMargins, statusLine)
 	} else {
 		sw, rw, upperH, detailH := m.panelSizes()
-		fullH := upperH + detailH
+		fullH := upperH + panelVSpace + detailH // sidebar matches right side total height
 		m.sidebar.SetSize(sw-2, fullH-2)
 		m.table.SetSize(rw-2, upperH-2)
 		m.detail.SetSize(rw-2, detailH-2)
@@ -881,8 +900,15 @@ func (m AppModel) View() string {
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
 		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 
-		rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
-		middle := lipgloss.JoinHorizontal(lipgloss.Top, sidebarPanel, rightSide)
+		// 1-row gap between table and detail on the right side.
+		vSpaceRow := strings.Repeat(" ", rw)
+		rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, vSpaceRow, detailPanel)
+
+		// 1-col gap between sidebar and right side, plus 1-col margins on
+		// the outer edges so panel borders sit 1 cell inside the terminal.
+		hMargin := blankColumn(panelHMargin, fullH)
+		hSpace := blankColumn(panelHSpace, fullH)
+		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, sidebarPanel, hSpace, rightSide, hMargin)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	}
 
@@ -937,31 +963,71 @@ func (m *AppModel) layout() {
 	m.detail.SetSize(rw-2, detailH-2)
 }
 
+// panelSizes derives panel dimensions purely by subtraction from the terminal
+// size, using the absolute constants above.
+//
+// Horizontal: m.width = hMargin + sw + hSpace + rw + hMargin
+// Vertical:   middleH = m.height - statusBar(1) - statusLine.LineCount()
+//
+//	middleH = upperH + vSpace + detailH      (right side)
+//	middleH = sidebar height                 (left side, no vSpace)
 func (m AppModel) panelSizes() (sw, rw, upperH, detailH int) {
-	sw = m.width * sidebarWidthPercent / 100
-	if sw < minSidebarWidth {
-		sw = minSidebarWidth
-	}
-	if sw > m.width/2 {
-		sw = m.width / 2
-	}
-	rw = m.width - sw
+	sw = panelSidebarWidth
+	rw = m.width - 2*panelHMargin - panelHSpace - sw
 
-	totalH := m.height - 1 - m.statusLine.LineCount() // status bar + status line(s)
-	if totalH < 6 {
-		totalH = 6
+	middleH := m.height - 1 - m.statusLine.LineCount()
+	detailH = panelDetailHeight
+	upperH = middleH - panelVSpace - detailH
+
+	// Tiny-terminal sanity clamps. Layout still expressed as
+	// `available - reserved`, just rebalanced when reserved exceeds
+	// available.
+	const (
+		minSw      = 12
+		minRw      = 20
+		minUpperH  = 4
+		minDetailH = 4
+	)
+	if sw > m.width-2*panelHMargin-panelHSpace-minRw {
+		sw = m.width - 2*panelHMargin - panelHSpace - minRw
+	}
+	if sw < minSw {
+		sw = minSw
+	}
+	rw = m.width - 2*panelHMargin - panelHSpace - sw
+	if rw < minRw {
+		rw = minRw
 	}
 
-	detailH = totalH * detailHeightPercent / 100
-	if detailH < 5 {
-		detailH = 5
+	if middleH < minUpperH+panelVSpace+minDetailH {
+		middleH = minUpperH + panelVSpace + minDetailH
 	}
-	upperH = totalH - detailH
-	if upperH < 4 {
-		upperH = 4
-		detailH = totalH - upperH
+	if detailH > middleH-panelVSpace-minUpperH {
+		detailH = middleH - panelVSpace - minUpperH
+	}
+	if detailH < minDetailH {
+		detailH = minDetailH
+	}
+	upperH = middleH - panelVSpace - detailH
+	if upperH < minUpperH {
+		upperH = minUpperH
+		detailH = middleH - panelVSpace - upperH
 	}
 	return
+}
+
+// blankColumn builds a w×h block of spaces, suitable for use as a horizontal
+// spacer column in lipgloss.JoinHorizontal. Returns "" for zero or negative
+// dimensions.
+func blankColumn(w, h int) string {
+	if w <= 0 || h <= 0 {
+		return ""
+	}
+	line := strings.Repeat(" ", w)
+	if h == 1 {
+		return line
+	}
+	return strings.Repeat(line+"\n", h-1) + line
 }
 
 func (m *AppModel) enterDrillDown() tea.Cmd {
