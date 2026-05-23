@@ -141,30 +141,11 @@ func linksApplicable(rt k8s.ResourceType) bool {
 	return rt != k8s.ResourceNamespaces
 }
 
-// linksImplemented returns true if km8 has a Links builder for this kind.
-// Kinds that pass linksApplicable but fail linksImplemented show the
-// "not yet supported" placeholder instead of "no links to show" — the
-// distinction matters: empty means "this instance has no refs", not
-// "we haven't written the code yet".
-//
-// Keep this list in sync with k8s/links.go builders + EnrichLinks dispatch.
-func linksImplemented(rt k8s.ResourceType) bool {
-	switch rt {
-	case k8s.ResourceClusterRoles,
-		k8s.ResourceStorageClasses,
-		k8s.ResourceIngressClasses:
-		return false
-	}
-	return true
-}
-
-// Placeholder strings rendered when linkEntries is empty. They distinguish
-// "implemented, but this instance has nothing to drill to" from "kind not
-// supported yet — wait for an update."
-const (
-	linksPlaceholderEmpty       = "(no links to show — press Y for full YAML)"
-	linksPlaceholderUnsupported = "(Links not yet supported for this kind — press Y for full YAML)"
-)
+// linksPlaceholderEmpty is shown when the active resource has no refs to
+// drill into right now. Every non-Namespace kind has a Links builder, so
+// this is the only placeholder users will see — empty means "this
+// instance genuinely has nothing", not "we haven't written the code yet."
+const linksPlaceholderEmpty = "(no links to show — press Y for full YAML)"
 
 func ownerDisplay(ref k8s.RefTarget) string {
 	// Short kind label + name. Use the registry display name when available,

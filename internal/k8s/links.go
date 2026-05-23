@@ -12,6 +12,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -742,6 +743,145 @@ func enrichRoleBindings(ctx context.Context, cs kubernetes.Interface, item Resou
 	}
 	detail.Links = append(detail.Links, LinkSection{
 		Title:   fmt.Sprintf("Bound by (%d)", len(entries)),
+		Entries: entries,
+	})
+}
+
+// enrichClusterRoleBindings: list ClusterRoleBindings + cluster-wide
+// RoleBindings whose RoleRef points back at this ClusterRole. Two API
+// calls; runs cluster-wide because RoleBindings can live in any namespace.
+func enrichClusterRoleBindings(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	cr, ok := item.Raw.(*rbacv1.ClusterRole)
+	if !ok {
+		return
+	}
+
+	crbList, err := cs.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		var entries []LinkRow
+		for i := range crbList.Items {
+			b := &crbList.Items[i]
+			if b.RoleRef.Kind != "ClusterRole" || b.RoleRef.Name != cr.Name {
+				continue
+			}
+			entries = append(entries, LinkRow{
+				Label: "  " + b.Name,
+				Value: "ClusterRoleBinding",
+				Ref:   &RefTarget{Type: ResourceClusterRoleBindings, Name: b.Name},
+			})
+		}
+		if len(entries) > 0 {
+			detail.Links = append(detail.Links, LinkSection{
+				Title:   fmt.Sprintf("ClusterRoleBindings (%d)", len(entries)),
+				Entries: entries,
+			})
+		}
+	}
+
+	rbList, err := cs.RbacV1().RoleBindings("").List(ctx, metav1.ListOptions{})
+	if err == nil {
+		var entries []LinkRow
+		for i := range rbList.Items {
+			b := &rbList.Items[i]
+			if b.RoleRef.Kind != "ClusterRole" || b.RoleRef.Name != cr.Name {
+				continue
+			}
+			entries = append(entries, LinkRow{
+				Label: "  " + b.Namespace + "/" + b.Name,
+				Value: "RoleBinding",
+				Ref:   &RefTarget{Type: ResourceRoleBindings, Name: b.Name, Namespace: b.Namespace},
+			})
+		}
+		if len(entries) > 0 {
+			detail.Links = append(detail.Links, LinkSection{
+				Title:   fmt.Sprintf("RoleBindings (%d)", len(entries)),
+				Entries: entries,
+			})
+		}
+	}
+}
+
+// enrichStorageClassPVCs: cluster-wide PVC list filtered to those whose
+// spec.storageClassName matches. Doesn't try to resolve "default class"
+// semantics — only explicit references count, so a PVC that relies on the
+// default-class annotation won't show up here unless it set the name.
+func enrichStorageClassPVCs(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	sc, ok := item.Raw.(*storagev1.StorageClass)
+	if !ok {
+		return
+	}
+	list, err := cs.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	var entries []LinkRow
+	for i := range list.Items {
+		pvc := &list.Items[i]
+		name := ""
+		if pvc.Spec.StorageClassName != nil {
+			name = *pvc.Spec.StorageClassName
+		}
+		if name != sc.Name {
+			continue
+		}
+		entries = append(entries, LinkRow{
+			Label: "  " + pvc.Namespace + "/" + pvc.Name,
+			Value: string(pvc.Status.Phase),
+			Ref: &RefTarget{
+				Type:      ResourcePersistentVolumeClaims,
+				Name:      pvc.Name,
+				Namespace: pvc.Namespace,
+			},
+		})
+	}
+	if len(entries) == 0 {
+		return
+	}
+	detail.Links = append(detail.Links, LinkSection{
+		Title:   fmt.Sprintf("PVCs (%d)", len(entries)),
+		Entries: entries,
+	})
+}
+
+// enrichIngressClassIngresses: cluster-wide Ingress list filtered by
+// spec.ingressClassName == this class. Only the modern field is checked;
+// the deprecated `kubernetes.io/ingress.class` annotation is intentionally
+// ignored — clusters still on it can update the annotation to the field
+// or skip this Links entry.
+func enrichIngressClassIngresses(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	ic, ok := item.Raw.(*networkingv1.IngressClass)
+	if !ok {
+		return
+	}
+	list, err := cs.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	var entries []LinkRow
+	for i := range list.Items {
+		ing := &list.Items[i]
+		cls := ""
+		if ing.Spec.IngressClassName != nil {
+			cls = *ing.Spec.IngressClassName
+		}
+		if cls != ic.Name {
+			continue
+		}
+		entries = append(entries, LinkRow{
+			Label: "  " + ing.Namespace + "/" + ing.Name,
+			Value: "Ingress",
+			Ref: &RefTarget{
+				Type:      ResourceIngresses,
+				Name:      ing.Name,
+				Namespace: ing.Namespace,
+			},
+		})
+	}
+	if len(entries) == 0 {
+		return
+	}
+	detail.Links = append(detail.Links, LinkSection{
+		Title:   fmt.Sprintf("Ingresses (%d)", len(entries)),
 		Entries: entries,
 	})
 }

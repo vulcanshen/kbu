@@ -652,11 +652,7 @@ func (m *DetailModel) buildContentLines() {
 	switch m.ActiveTabName() {
 	case "Links":
 		m.rebuildLinkEntries()
-		placeholder := linksPlaceholderEmpty
-		if !linksImplemented(m.resourceType) {
-			placeholder = linksPlaceholderUnsupported
-		}
-		lines, _, cursorLine := renderLinkEntries(m.linkEntries, m.linkCursor, m.width, m.theme, placeholder)
+		lines, _, cursorLine := renderLinkEntries(m.linkEntries, m.linkCursor, m.width, m.theme, linksPlaceholderEmpty)
 		m.contentLines = lines
 		m.linkCursorLine = cursorLine
 	case "Logs":
