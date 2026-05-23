@@ -60,10 +60,33 @@ type DetailModel struct {
 
 	// Links tab state: entries are the logical rows (drillable + info +
 	// section headers); linkCursor is the index of the currently-selected
-	// entry. Cursor only lands on selectable entries (sections skipped).
+	// entry within the *current level*. Cursor only lands on selectable
+	// entries (sections skipped).
 	linkEntries    []linkEntry
 	linkCursor     int
 	linkCursorLine int // display-line index of cursor row; -1 when none
+
+	// drillStack is the chain of resources the user has drilled into via
+	// the Links tab (level 2+). Empty = at level 1 (root = the
+	// table-selected resource, whose data is m.detail). When non-empty,
+	// rebuildLinkEntries reads from drillStack[top].detail instead of
+	// m.detail. rootCursor preserves m.linkCursor at level 1 so it can be
+	// restored when popping back to root.
+	drillStack []drillFrame
+	rootCursor int
+}
+
+// drillFrame represents one level on the Links-tab drill chain. ref is the
+// (kind, ns, name) identity used for cycle detection; item carries the
+// fetched resource (UID + Raw for YAML); detail is the per-level link
+// payload; cursor is the link cursor remembered for this level when the
+// user drilled deeper, so back-navigation puts the cursor right where it
+// was.
+type drillFrame struct {
+	ref    k8s.RefTarget
+	item   k8s.ResourceItem
+	detail k8s.ResourceDetail
+	cursor int
 }
 
 type detailSpinnerTickMsg struct{}
@@ -112,6 +135,18 @@ func (m DetailModel) IsSearching() bool { return m.searching }
 
 // HasActiveFilter returns true if a search filter is active.
 func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
+
+// CurrentLevelYAML returns the YAML for the Links-tab drill level the
+// user is currently viewing — at depth 1 that's the table-selected
+// resource's YAML, at deeper levels it's the YAML of the resource the
+// user has drilled into. Used as the Y-key fallback on the Links tab
+// when the cursor isn't on a drillable entry.
+func (m DetailModel) CurrentLevelYAML() string {
+	if len(m.drillStack) == 0 {
+		return m.detail.YAML
+	}
+	return m.drillStack[len(m.drillStack)-1].detail.YAML
+}
 
 // YAMLContent returns the raw YAML for the resource currently shown in the
 // detail panel, or "" if no YAML is loaded. Used by the global `Y` key to
@@ -248,10 +283,16 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 }
 
 // handleLinkKey intercepts the keys with Links-tab-specific semantics:
-// j/k move the cursor between drillable entries (auto-scrolling the viewport
-// to keep it visible), Enter emits LinkDrillMsg. Returns handled=false to
-// let the caller fall back to the generic per-line scroll handlers for
-// everything else.
+//   - j/k (or arrow keys): move the cursor between drillable entries,
+//     auto-scrolling the viewport so the cursor stays visible.
+//   - Enter / l: drill into the highlighted ref (push a frame onto the
+//     Links chain — emits LinkPushMsg, AppModel handles cycle check + fetch).
+//   - h / Esc: pop one level off the chain. No-op at root level.
+//   - i: open the breadcrumb popup so the user can jump back to any
+//     ancestor level. No-op at root (nothing to navigate).
+//
+// Returns handled=false to let the caller fall back to the generic per-line
+// scroll handlers for everything else.
 func (m DetailModel) handleLinkKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyRunes:
@@ -269,6 +310,15 @@ func (m DetailModel) handleLinkKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) 
 			m.buildContentLines()
 			m = m.scrollLinkCursorIntoView()
 			return m, true, nil
+		case 'l':
+			return m.dispatchLinkPush()
+		case 'h':
+			return m.dispatchLinkPop()
+		case 'i':
+			if m.Depth() <= 1 {
+				return m, true, nil
+			}
+			return m, true, func() tea.Msg { return LinkBreadcrumbMsg{} }
 		}
 	case tea.KeyDown:
 		m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, +1)
@@ -281,16 +331,36 @@ func (m DetailModel) handleLinkKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) 
 		m = m.scrollLinkCursorIntoView()
 		return m, true, nil
 	case tea.KeyEnter:
-		ref := m.SelectedLinkRef()
-		if ref == nil {
-			return m, true, nil
-		}
-		target := *ref
-		return m, true, func() tea.Msg {
-			return LinkDrillMsg{Ref: target}
+		return m.dispatchLinkPush()
+	case tea.KeyEscape:
+		// Esc only handled here when we're drilled in; at root, fall
+		// through so the generic Esc handler (search-clear) can run.
+		if m.Depth() > 1 {
+			return m.dispatchLinkPop()
 		}
 	}
 	return m, false, nil
+}
+
+// dispatchLinkPush emits LinkPushMsg for the cursor-pointed entry. If
+// the cursor isn't on a drillable row, it's a no-op (handled=true so the
+// caller doesn't double-process the key).
+func (m DetailModel) dispatchLinkPush() (DetailModel, bool, tea.Cmd) {
+	ref := m.SelectedLinkRef()
+	if ref == nil {
+		return m, true, nil
+	}
+	target := *ref
+	return m, true, func() tea.Msg { return LinkPushMsg{Ref: target} }
+}
+
+// dispatchLinkPop pops one level off the chain. No-op at root.
+func (m DetailModel) dispatchLinkPop() (DetailModel, bool, tea.Cmd) {
+	if m.Depth() <= 1 {
+		return m, true, nil
+	}
+	m.PopDrillFrame()
+	return m, true, nil
 }
 
 // scrollLinkCursorIntoView nudges scrollOffset so the cursor row is
@@ -535,37 +605,120 @@ func (m DetailModel) ScrollInfo() *ScrollInfo {
 	return &ScrollInfo{Position: pos, Total: len(lines)}
 }
 
-// SetDetail updates the detail data and rebuilds content lines.
+// SetDetail updates the detail data and rebuilds content lines. Resets
+// the Links drill chain — fresh root data invalidates any drilled-into
+// state from the previous selection.
 func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventItem) {
 	m.detail = detail
 	m.events = events
 	m.hasData = true
 	m.scrollOffset = 0
 	m.refetching = false // fresh data arrived — stop the spinner
+	m.drillStack = nil
+	m.rootCursor = -1
+	m.linkCursor = -1
+	m.buildContentLines()
+}
+
+// PushDrillFrame appends a level to the Links drill chain — used after a
+// successful drill fetch (l/Enter on a drillable entry). Saves the
+// outgoing level's cursor so back-navigation restores it.
+func (m *DetailModel) PushDrillFrame(ref k8s.RefTarget, item k8s.ResourceItem, detail k8s.ResourceDetail) {
+	if len(m.drillStack) == 0 {
+		m.rootCursor = m.linkCursor
+	} else {
+		m.drillStack[len(m.drillStack)-1].cursor = m.linkCursor
+	}
+	m.drillStack = append(m.drillStack, drillFrame{
+		ref:    ref,
+		item:   item,
+		detail: detail,
+		cursor: -1,
+	})
+	m.linkCursor = -1
+	m.scrollOffset = 0
+	m.refetching = false
+	m.buildContentLines()
+}
+
+// PopDrillFrame removes the top of the drill chain — used by h/Esc on a
+// deeper level. No-op at level 1. Restores the linkCursor to whatever it
+// was on the level we're returning to.
+func (m *DetailModel) PopDrillFrame() {
+	if len(m.drillStack) == 0 {
+		return
+	}
+	m.drillStack = m.drillStack[:len(m.drillStack)-1]
+	if len(m.drillStack) == 0 {
+		m.linkCursor = m.rootCursor
+	} else {
+		m.linkCursor = m.drillStack[len(m.drillStack)-1].cursor
+	}
+	m.scrollOffset = 0
+	m.buildContentLines()
+}
+
+// JumpToDrillLevel pops frames so the chain is `level` deep. level=1
+// returns to root; level=Depth() is a no-op. Used by the breadcrumb popup
+// when the user picks an ancestor level. Out-of-range levels are ignored.
+func (m *DetailModel) JumpToDrillLevel(level int) {
+	if level < 1 || level > m.Depth() {
+		return
+	}
+	for m.Depth() > level {
+		m.PopDrillFrame()
+	}
+}
+
+// ResetDrillStack returns the panel to level 1 without changing m.detail
+// — used when the user moves to a different table row, which the chain
+// no longer applies to.
+func (m *DetailModel) ResetDrillStack() {
+	if len(m.drillStack) == 0 {
+		return
+	}
+	m.drillStack = nil
+	m.linkCursor = m.rootCursor
+	m.scrollOffset = 0
 	m.buildContentLines()
 }
 
 // TabTitle returns the tab bar string for embedding in the panel border.
+// Adds a `(N)` suffix to the Links tab when the user has drilled deeper
+// — N is the 1-indexed level (1=root, 2=first drill, ...). The
+// breadcrumb popup (`i` key) is the only way to see the full chain;
+// this number is the at-a-glance hint that you're not at root.
 func (m DetailModel) TabTitle() string {
 	var parts []string
 	for i, tab := range m.tabs {
+		label := m.tabLabel(tab)
 		if DetailTab(i) == m.activeTab {
-			parts = append(parts, "["+tab+"]")
+			parts = append(parts, "["+label+"]")
 		} else {
-			parts = append(parts, " "+tab+" ")
+			parts = append(parts, " "+label+" ")
 		}
 	}
 	return strings.Join(parts, "─")
 }
 
 // ActiveTabTitle returns the active tab name with a state marker suffix when
-// applicable — currently used to surface follow-tail state on the Logs tab.
-// Embed this in Panel 3's border title (which scopes to the active tab only),
-// rather than the full TabTitle bar on Panel 2.
+// applicable — currently used to surface follow-tail state on the Logs tab
+// and the drill level on the Links tab. Embed this in Panel 3's border title
+// (which scopes to the active tab only), rather than the full TabTitle bar
+// on Panel 2.
 func (m DetailModel) ActiveTabTitle() string {
 	name := m.ActiveTabName()
 	if name == "Logs" && m.followTail {
 		return name + " ▼"
+	}
+	return m.tabLabel(name)
+}
+
+// tabLabel returns the per-tab label as it should appear in the tab bar,
+// including the (N) drill-level suffix for the Links tab.
+func (m DetailModel) tabLabel(name string) string {
+	if name == "Links" && m.Depth() > 1 {
+		return fmt.Sprintf("Links(%d)", m.Depth())
 	}
 	return name
 }
@@ -662,6 +815,70 @@ func (m *DetailModel) buildContentLines() {
 	}
 }
 
+// RootRef returns the RefTarget identifying the root (table-selected)
+// resource — used by AppModel's cycle-check on drill push.
+func (m DetailModel) RootRef() k8s.RefTarget {
+	return k8s.RefTarget{
+		Type:      m.resourceType,
+		Name:      m.detail.Name,
+		Namespace: m.detail.Namespace,
+	}
+}
+
+// DrillChain returns the full identity chain from root to current top
+// — root first, top last. Used by cycle detection and the breadcrumb
+// popup. At depth 1 it returns just the root.
+func (m DetailModel) DrillChain() []k8s.RefTarget {
+	out := make([]k8s.RefTarget, 0, len(m.drillStack)+1)
+	out = append(out, m.RootRef())
+	for _, f := range m.drillStack {
+		out = append(out, f.ref)
+	}
+	return out
+}
+
+// CurrentLevelItem returns the ResourceItem of the level currently
+// displayed on the Links tab. At root (depth 1) the zero value is
+// returned — the caller (AppModel) substitutes the table-selected item.
+func (m DetailModel) CurrentLevelItem() k8s.ResourceItem {
+	return m.currentLevelItem()
+}
+
+// Depth returns the current Links-tab drill level. Level 1 = root
+// (table-selected resource); level 2+ = drilled in. Always >= 1 when the
+// panel has data.
+func (m DetailModel) Depth() int { return 1 + len(m.drillStack) }
+
+// currentLevelDetail returns the ResourceDetail for the level the user is
+// currently viewing on the Links tab.
+func (m DetailModel) currentLevelDetail() k8s.ResourceDetail {
+	if len(m.drillStack) == 0 {
+		return m.detail
+	}
+	return m.drillStack[len(m.drillStack)-1].detail
+}
+
+// currentLevelKind returns the ResourceType for the level the user is
+// currently viewing on the Links tab. At level 1 this is m.resourceType;
+// at deeper levels it's the drilled-into resource's kind.
+func (m DetailModel) currentLevelKind() k8s.ResourceType {
+	if len(m.drillStack) == 0 {
+		return m.resourceType
+	}
+	return m.drillStack[len(m.drillStack)-1].ref.Type
+}
+
+// currentLevelItem returns the ResourceItem of the current level — used
+// for Y key fallback when the cursor isn't on a drillable entry. Returns
+// zero ResourceItem at level 1 (caller falls back to the table-selected
+// item from AppModel).
+func (m DetailModel) currentLevelItem() k8s.ResourceItem {
+	if len(m.drillStack) == 0 {
+		return k8s.ResourceItem{}
+	}
+	return m.drillStack[len(m.drillStack)-1].item
+}
+
 // rebuildLinkEntries refreshes m.linkEntries based on the current
 // resource type + detail data, and re-clamps the cursor to the first
 // selectable entry when out of bounds.
@@ -671,13 +888,15 @@ func (m *DetailModel) rebuildLinkEntries() {
 		m.linkCursor = -1
 		return
 	}
-	switch m.resourceType {
+	kind := m.currentLevelKind()
+	detail := m.currentLevelDetail()
+	switch kind {
 	case k8s.ResourcePods:
-		m.linkEntries = buildPodLinkEntries(m.detail)
+		m.linkEntries = buildPodLinkEntries(detail)
 	case k8s.ResourceServices:
-		m.linkEntries = buildServiceLinkEntries(m.detail)
+		m.linkEntries = buildServiceLinkEntries(detail)
 	default:
-		m.linkEntries = buildGenericLinkEntries(m.detail)
+		m.linkEntries = buildGenericLinkEntries(detail)
 	}
 	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) ||
 		(m.linkCursor < len(m.linkEntries) && !m.linkEntries[m.linkCursor].isSelectable()) {

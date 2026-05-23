@@ -61,11 +61,13 @@ func appWithItems(items []k8s.ResourceItem, cursor int) AppModel {
 	d := NewDetailModel(th)
 	d.SetResourceType(k8s.ResourcePods)
 	return AppModel{
-		items:   items,
-		table:   tbl,
-		detail:  d,
-		theme:   th,
-		ptyView: NewPtyView(), // AppModel.Update dereferences ptyView early
+		items:           items,
+		table:           tbl,
+		detail:          d,
+		theme:           th,
+		ptyView:         NewPtyView(), // AppModel.Update dereferences ptyView early
+		toast:           NewToastModel(th),
+		breadcrumbPopup: NewBreadcrumbPopupModel(th),
 	}
 }
 
@@ -129,6 +131,79 @@ func TestAppModel_ResourceDetailMsg_DropsStale(t *testing.T) {
 	got2 := updated2.(AppModel)
 	if !got2.detail.hasData {
 		t.Errorf("matching msg must populate detail")
+	}
+}
+
+// TestAppModel_LinkPushMsg_CycleBlocked verifies that drilling into a
+// resource already on the chain is blocked with a toast — prevents
+// infinite-loop navigation like Pod -> ConfigMap -> Pod (same pod).
+func TestAppModel_LinkPushMsg_CycleBlocked(t *testing.T) {
+	items := []k8s.ResourceItem{
+		{Name: "nginx-x", UID: "uid-pod", Namespace: "default", Row: []string{"nginx-x"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+	// Seed root detail so RootRef returns a meaningful ref.
+	m.detail.SetDetail(k8s.ResourceDetail{Name: "nginx-x", Namespace: "default", Kind: "Pod"}, nil)
+
+	// Drilling into the SAME root pod is a cycle.
+	cycleMsg := LinkPushMsg{Ref: k8s.RefTarget{Type: k8s.ResourcePods, Name: "nginx-x", Namespace: "default"}}
+	updated, cmd := m.Update(cycleMsg)
+	got := updated.(AppModel)
+	if got.detail.Depth() != 1 {
+		t.Errorf("cycle should not push a frame, depth=%d", got.detail.Depth())
+	}
+	if cmd == nil {
+		t.Fatal("cycle should return a toast Cmd")
+	}
+	// Execute the Cmd to verify it's the toast (toast.Show returns a Cmd).
+	if msg := cmd(); msg == nil {
+		t.Errorf("cycle toast Cmd returned nil")
+	}
+}
+
+// TestAppModel_linkDrillFetchedMsg_PushesFrame verifies that a successful
+// drill fetch lands on detail.drillStack and depth increases.
+func TestAppModel_linkDrillFetchedMsg_PushesFrame(t *testing.T) {
+	items := []k8s.ResourceItem{
+		{Name: "nginx-x", UID: "uid-pod", Namespace: "default", Row: []string{"nginx-x"}},
+	}
+	m := appWithItems(items, 0)
+	m.detail.SetDetail(k8s.ResourceDetail{Name: "nginx-x", Namespace: "default", Kind: "Pod"}, nil)
+
+	msg := linkDrillFetchedMsg{
+		ref:       k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx", Namespace: "default"},
+		sourceUID: "uid-pod",
+		item:      k8s.ResourceItem{Name: "nginx", Namespace: "default", UID: "uid-dep"},
+		detail:    k8s.ResourceDetail{Name: "nginx", Namespace: "default", Kind: "Deployment"},
+	}
+	updated, _ := m.Update(msg)
+	got := updated.(AppModel)
+	if got.detail.Depth() != 2 {
+		t.Errorf("expected depth 2 after push, got %d", got.detail.Depth())
+	}
+}
+
+// TestAppModel_linkDrillFetchedMsg_StaleDrop verifies that drill results
+// whose sourceUID doesn't match the currently selected table row get
+// dropped (user moved on while the fetch was in flight).
+func TestAppModel_linkDrillFetchedMsg_StaleDrop(t *testing.T) {
+	items := []k8s.ResourceItem{
+		{Name: "nginx-x", UID: "uid-pod", Namespace: "default", Row: []string{"nginx-x"}},
+	}
+	m := appWithItems(items, 0)
+	m.detail.SetDetail(k8s.ResourceDetail{Name: "nginx-x", Namespace: "default", Kind: "Pod"}, nil)
+
+	// sourceUID points at a different pod the user has since left.
+	msg := linkDrillFetchedMsg{
+		ref:       k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
+		sourceUID: "uid-stale",
+		item:      k8s.ResourceItem{Name: "nginx", UID: "uid-dep"},
+		detail:    k8s.ResourceDetail{Name: "nginx", Kind: "Deployment"},
+	}
+	updated, _ := m.Update(msg)
+	if updated.(AppModel).detail.Depth() != 1 {
+		t.Errorf("stale drill result must not push, depth=%d", updated.(AppModel).detail.Depth())
 	}
 }
 
