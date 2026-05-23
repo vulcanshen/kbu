@@ -1216,6 +1216,8 @@ func servicePorts(svc *corev1.Service) string {
 // returns. Quiet on error — the Links tab simply shows fewer entries.
 func EnrichLinks(ctx context.Context, cs kubernetes.Interface, rt ResourceType, item ResourceItem, detail *ResourceDetail) {
 	switch rt {
+	case ResourcePods:
+		enrichPodOwner(ctx, cs, item, detail)
 	case ResourceServices:
 		if svc, ok := item.Raw.(*corev1.Service); ok {
 			detail.ServiceLinks = serviceLinksFor(ctx, cs, svc)

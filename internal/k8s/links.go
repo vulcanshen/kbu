@@ -747,6 +747,45 @@ func enrichRoleBindings(ctx context.Context, cs kubernetes.Interface, item Resou
 	})
 }
 
+// enrichPodOwner resolves a Pod's owner past the ReplicaSet
+// implementation-detail layer. The Pod's OwnerReference points to a
+// ReplicaSet (K8s auto-creates one per Deployment revision), but
+// buildPodLinks already mapped Type to ResourceDeployments — leaving
+// Name pointing at the RS, which doesn't exist as a Deployment. Result:
+// drill into Owner errors with "deployment not found".
+//
+// Fix: look up the RS, find its owning Deployment, replace the Name.
+// No-op when the Pod's owner is a direct-workload kind (DaemonSet,
+// StatefulSet, Job — those already carry the right name) or when the
+// RS lookup fails (RBAC, deleted mid-rollout, ...).
+func enrichPodOwner(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	p, ok := item.Raw.(*corev1.Pod)
+	if !ok || detail.PodLinks == nil || detail.PodLinks.Owner == nil {
+		return
+	}
+	if len(p.OwnerReferences) == 0 {
+		return
+	}
+	if p.OwnerReferences[0].Kind != "ReplicaSet" {
+		return
+	}
+	rsName := p.OwnerReferences[0].Name
+	rs, err := cs.AppsV1().ReplicaSets(p.Namespace).Get(ctx, rsName, metav1.GetOptions{})
+	if err != nil {
+		return
+	}
+	for _, ref := range rs.OwnerReferences {
+		if ref.Kind == "Deployment" {
+			detail.PodLinks.Owner = &RefTarget{
+				Type:      ResourceDeployments,
+				Name:      ref.Name,
+				Namespace: p.Namespace,
+			}
+			return
+		}
+	}
+}
+
 // enrichClusterRoleBindings: list ClusterRoleBindings + cluster-wide
 // RoleBindings whose RoleRef points back at this ClusterRole. Two API
 // calls; runs cluster-wide because RoleBindings can live in any namespace.
