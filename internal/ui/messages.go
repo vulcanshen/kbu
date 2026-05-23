@@ -63,8 +63,23 @@ type NamespaceListMsg struct {
 	Namespaces []string
 }
 
-// LogLineMsg carries a single log line from a container.
+// aggregateLogsReadyMsg carries the resolved pod targets for a workload's
+// aggregate-log stream. Emitted by startAggregateLogs after the pod-list API
+// call completes off the Bubble Tea Update path. err non-nil = no targets;
+// caller should log + skip stream start.
+type aggregateLogsReadyMsg struct {
+	resource k8s.ResourceType
+	itemUID  string
+	targets  []k8s.PodTarget
+	err      error
+}
+
+// LogLineMsg carries a single log line from a container. Pod is empty when
+// streaming from a single pod (single-pod mode — Pod identity is implicit);
+// populated when streaming from a workload's multiple pods (aggregate mode)
+// so the detail panel can render `<pod-hash>│<container>│<text>` prefixes.
 type LogLineMsg struct {
+	Pod       string
 	Container string
 	Text      string
 }

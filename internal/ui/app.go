@@ -533,7 +533,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if c := m.detail.BeginRefetch(); c != nil {
 					cmds = append(cmds, c)
 				}
-				if msg.Type == k8s.ResourcePods && !m.logsActive {
+				switch {
+				case msg.Type == k8s.ResourcePods && !m.logsActive:
 					containers := k8s.ContainerNames(item.Raw)
 					if len(containers) > 0 {
 						m.detail.logLines = nil
@@ -541,6 +542,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.logsActive = true
 						cmds = append(cmds, waitForLogLine(m.logStreamer))
 					}
+				case msg.Type == k8s.ResourceDeployments && !m.logsActive:
+					m.detail.logLines = nil
+					cmds = append(cmds, startAggregateLogs(m.k8sClient, msg.Type, item))
 				}
 			}
 		}
@@ -573,7 +577,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if c := m.detail.BeginRefetch(); c != nil {
 				cmds = append(cmds, c)
 			}
-			if m.currentResource == k8s.ResourcePods {
+			switch m.currentResource {
+			case k8s.ResourcePods:
 				containers := k8s.ContainerNames(item.Raw)
 				if len(containers) > 0 {
 					m.detail.logLines = nil
@@ -581,15 +586,42 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.logsActive = true
 					cmds = append(cmds, waitForLogLine(m.logStreamer))
 				}
-			} else {
+			case k8s.ResourceDeployments:
+				m.logStreamer.Stop()
+				m.logsActive = false
+				m.detail.logLines = nil
+				cmds = append(cmds, startAggregateLogs(m.k8sClient, m.currentResource, item))
+			default:
 				m.logStreamer.Stop()
 				m.logsActive = false
 			}
 		}
 		return m, tea.Batch(cmds...)
 
+	case aggregateLogsReadyMsg:
+		// Stale result guard: user may have navigated to a different row
+		// while the pod-list call was in flight.
+		if msg.resource != m.currentResource {
+			return m, nil
+		}
+		idx := m.table.SelectedRow()
+		if idx < 0 || idx >= len(m.items) || m.items[idx].UID != msg.itemUID {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.appLog.Warn("aggregate logs: " + msg.err.Error())
+			return m, nil
+		}
+		if len(msg.targets) == 0 {
+			m.appLog.Info("aggregate logs: no pods running")
+			return m, nil
+		}
+		m.logStreamer.StartMulti(msg.targets)
+		m.logsActive = true
+		return m, waitForLogLine(m.logStreamer)
+
 	case LogLineMsg:
-		m.detail.AppendLogLine(msg.Container, msg.Text)
+		m.detail.AppendLogLine(msg.Pod, msg.Container, msg.Text)
 		if m.logsActive {
 			cmds = append(cmds, waitForLogLine(m.logStreamer))
 		}
@@ -1500,13 +1532,30 @@ func fetchResourceDetail(client *k8s.Client, rt k8s.ResourceType, item k8s.Resou
 	}
 }
 
+// startAggregateLogs resolves a workload item to its current pod set and emits
+// aggregateLogsReadyMsg with the targets. Runs off the Update path so the API
+// list call doesn't block the UI. Includes the source item's UID so a stale
+// result (e.g. user navigated to a different row in the meantime) can be
+// filtered out by the handler.
+func startAggregateLogs(client *k8s.Client, resource k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+	return func() tea.Msg {
+		targets, err := k8s.PodsForWorkload(context.Background(), client.Clientset(), item, true)
+		return aggregateLogsReadyMsg{
+			resource: resource,
+			itemUID:  item.UID,
+			targets:  targets,
+			err:      err,
+		}
+	}
+}
+
 func waitForLogLine(ls *k8s.LogStreamer) tea.Cmd {
 	return func() tea.Msg {
 		line, ok := <-ls.Lines()
 		if !ok {
 			return nil
 		}
-		return LogLineMsg{Container: line.Container, Text: line.Text}
+		return LogLineMsg{Pod: line.Pod, Container: line.Container, Text: line.Text}
 	}
 }
 

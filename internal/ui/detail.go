@@ -15,7 +15,13 @@ import (
 
 // logLine holds an unrendered log entry. Wrapping is deferred to render time
 // so log output reflows correctly when the panel is resized.
+//
+// pod is empty for single-pod log streams (the user is on a Pod detail view —
+// the pod identity is implicit). For aggregate streams (Deployment / workload
+// kinds), pod carries the source pod name so the render path can emit a
+// three-segment `<pod-hash>│<container>│<text>` prefix.
 type logLine struct {
+	pod       string
 	container string
 	text      string
 }
@@ -493,15 +499,29 @@ func (m *DetailModel) ClearDetail() {
 }
 
 // SetResourceType sets the current resource type and adjusts available tabs.
+// Tab order convention:
+//   - Pods:        YAML  → Logs → Events   (current default; YAML first)
+//   - Deployments: Logs  → YAML → Events   (aggregate Logs is the killer use
+//     case for Deployment detail —
+//     tracking which pod is misbehaving
+//     during a rollout — so put it
+//     first per PROGRESS [3] design)
+//   - Events:      YAML alone
+//   - everything else: YAML → Events
 func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
-	def := k8s.DefaultRegistry.Get(rt)
-	if def != nil && def.HasLogs {
-		m.tabs = []string{"YAML", "Logs", "Events"}
-	} else if rt == k8s.ResourceEvents {
+	switch {
+	case rt == k8s.ResourceDeployments:
+		m.tabs = []string{"Logs", "YAML", "Events"}
+	case rt == k8s.ResourceEvents:
 		m.tabs = []string{"YAML"}
-	} else {
-		m.tabs = []string{"YAML", "Events"}
+	default:
+		def := k8s.DefaultRegistry.Get(rt)
+		if def != nil && def.HasLogs {
+			m.tabs = []string{"YAML", "Logs", "Events"}
+		} else {
+			m.tabs = []string{"YAML", "Events"}
+		}
 	}
 	m.activeTab = 0
 	m.scrollOffset = 0
@@ -530,10 +550,11 @@ func (m DetailModel) ActiveTabName() string {
 // If the buffer exceeds maxLogLines, the oldest lines are trimmed.
 // If the Logs tab is active, content lines are rebuilt.
 //
-// Raw (container, text) pairs are stored; wrapping happens at render time so
-// log output reflows on resize.
-func (m *DetailModel) AppendLogLine(container, text string) {
-	m.logLines = append(m.logLines, logLine{container: container, text: text})
+// Pass pod = "" for single-pod streams. For aggregate streams (Deployment
+// and other workload kinds), pass the source pod name so the render path can
+// label each line with its origin.
+func (m *DetailModel) AppendLogLine(pod, container, text string) {
+	m.logLines = append(m.logLines, logLine{pod: pod, container: container, text: text})
 	if len(m.logLines) > m.maxLogLines {
 		m.logLines = m.logLines[len(m.logLines)-m.maxLogLines:]
 	}
@@ -861,6 +882,18 @@ var containerLogPalette = []lipgloss.Color{
 // hash. Same container name always maps to the same palette entry across the
 // session, so users can visually associate a color with a container.
 func containerLogColor(name string) lipgloss.Color {
+	return fnvPaletteColor(name)
+}
+
+// podLogColor mirrors containerLogColor for the pod dimension in aggregate
+// log streams. Same palette so the two colors blend visually but are derived
+// from different identifiers — two pods running the same container name get
+// distinct pod-color stripes.
+func podLogColor(name string) lipgloss.Color {
+	return fnvPaletteColor(name)
+}
+
+func fnvPaletteColor(name string) lipgloss.Color {
 	h := uint32(2166136261)
 	for _, b := range []byte(name) {
 		h = (h ^ uint32(b)) * 16777619
@@ -868,8 +901,26 @@ func containerLogColor(name string) lipgloss.Color {
 	return containerLogPalette[int(h)%len(containerLogPalette)]
 }
 
+// podHashTag truncates a pod name to its trailing identifier, the random
+// suffix that K8s appends to ReplicaSet pods (`nginx-7f9c4d-abc12` → `abc12`).
+// Falls back to last 6 chars when the name has no dash.
+func podHashTag(name string) string {
+	const want = 5
+	if idx := strings.LastIndex(name, "-"); idx >= 0 && idx < len(name)-1 {
+		tail := name[idx+1:]
+		if len(tail) > want {
+			return tail[len(tail)-want:]
+		}
+		return tail
+	}
+	if len(name) > want {
+		return name[len(name)-want:]
+	}
+	return name
+}
+
 func (m DetailModel) buildLogLines() []string {
-	if m.resourceType != k8s.ResourcePods {
+	if !supportsLogs(m.resourceType) {
 		return []string{"  " + m.theme.DetailValueStyle().Render("Logs not available for this resource type")}
 	}
 	if len(m.logLines) == 0 {
@@ -877,25 +928,47 @@ func (m DetailModel) buildLogLines() []string {
 	}
 	var lines []string
 	for _, ll := range m.logLines {
-		// Compute width against the plain prefix so wrapping math ignores
-		// ANSI escapes embedded in the styled prefix below.
-		plainPrefix := "  " + ll.container + " │ "
+		// Build plain + styled prefixes side by side. Plain is for wrap-width
+		// math (avoid counting ANSI escapes); styled is what we actually emit.
+		var plainPrefix, styledPrefix string
+		if ll.pod != "" {
+			tag := podHashTag(ll.pod)
+			podStyle := lipgloss.NewStyle().Foreground(podLogColor(ll.pod)).Bold(true)
+			ctrStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
+			plainPrefix = "  " + tag + " │ " + ll.container + " │ "
+			styledPrefix = "  " + podStyle.Render(tag) + " │ " + ctrStyle.Render(ll.container) + " │ "
+		} else {
+			ctrStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
+			plainPrefix = "  " + ll.container + " │ "
+			styledPrefix = "  " + ctrStyle.Render(ll.container) + " │ "
+		}
 		textW := m.width - len(plainPrefix)
 		wrapped := wrapPlain(ll.text, textW)
 		if len(wrapped) == 0 {
 			wrapped = []string{""}
 		}
-		nameStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
-		styledPrefix := "  " + nameStyle.Render(ll.container) + " │ "
 		lines = append(lines, styledPrefix+wrapped[0])
 		if len(wrapped) > 1 {
-			contIndent := "  " + strings.Repeat(" ", len(ll.container)) + " │ "
+			// Visual-width math: prefix has 2 leading spaces + identifier(s) +
+			// " │ " (3 cols). Continuation needs same total visual width up
+			// to the rightmost " │ " so text columns align.
+			prefixCols := lipgloss.Width(plainPrefix)
+			contIndent := strings.Repeat(" ", prefixCols-3) + " │ "
 			for _, w := range wrapped[1:] {
 				lines = append(lines, contIndent+w)
 			}
 		}
 	}
 	return lines
+}
+
+// supportsLogs reports whether a resource type has a Logs tab in its detail
+// panel. Pods stream single-pod; Deployments stream aggregate from the
+// current-generation ReplicaSet pods. Other workload kinds (StatefulSet,
+// DaemonSet, Job) follow the same aggregate pattern but are out of scope
+// for this iteration.
+func supportsLogs(rt k8s.ResourceType) bool {
+	return rt == k8s.ResourcePods || rt == k8s.ResourceDeployments
 }
 
 // sortedKeys returns the keys of a map sorted alphabetically.
