@@ -4,10 +4,14 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
-const maxStatusLineRows = 2
+// Status line is now strictly one row. The previous dynamic 1–2 row layout
+// made vertical math messy and the bottom of the screen jitter when the
+// hint set changed.
+const statusLineRows = 1
 
 type StatusLineModel struct {
 	activePanel Panel
@@ -40,130 +44,100 @@ type hint struct {
 	desc string
 }
 
+// hints returns the panel-specific discoverable keys. Universal vim-style
+// navigation (j/k, u/d, gg/G) is intentionally omitted — users learn those
+// once, and the help popup (`?`) is the full reference. Status line surfaces
+// only the keys that change meaning by panel or aren't obvious from the
+// content itself.
 func (m StatusLineModel) hints() []hint {
-	nav := []hint{
+	always := []hint{
+		{"?", "help"},
 		{"q", "quit"},
-		{"j/k", "scroll"},
-		{"u/d", "page"},
-		{"gg/G", "top/bot"},
-		{"y", "copy"},
+	}
+	var panel []hint
+	switch m.activePanel {
+	case SidebarPanel:
+		panel = []hint{
+			{"n", "ns"},
+			{"c", "ctx"},
+		}
+	case TablePanel:
+		if m.drillDown {
+			panel = []hint{
+				{"/", "filter"},
+				{"s", "shell"},
+				{"esc", "back"},
+			}
+		} else {
+			panel = []hint{
+				{"/", "filter"},
+				{"Enter", "drill"},
+				{"e", "edit"},
+				{"s", "shell"},
+				{"D", "del"},
+			}
+		}
+	case DetailPanel:
+		panel = []hint{
+			{"/", "filter"},
+			{"h/l", "tab"},
+			{"=/-", "expand"},
+		}
+	}
+	right := []hint{
 		{"Y", "yaml"},
 		{"M-T", "term"},
 	}
-	switch m.activePanel {
-	case SidebarPanel:
-		return append(nav,
-			hint{"n", "ns"},
-			hint{"c", "ctx"},
-			hint{"e", "edit"},
-		)
-	case TablePanel:
-		if m.drillDown {
-			return append(nav,
-				hint{"/", "search"},
-				hint{"h/l", "tab"},
-				hint{"s", "shell"},
-				hint{"esc", "back"},
-			)
-		}
-		return append(nav,
-			hint{"/", "search"},
-			hint{"h/l", "tab"},
-			hint{"s", "shell"},
-			hint{"e", "edit"},
-			hint{"D", "delete"},
-			hint{"=/-", "expand/restore"},
-		)
-	case DetailPanel:
-		return append(nav,
-			hint{"/", "search"},
-			hint{"h/l", "tab"},
-			hint{"=/-", "expand/restore"},
-		)
-	}
-	return nil
+	return append(append(always, panel...), right...)
 }
 
-type renderedHint struct {
-	s string
-	w int
-}
-
-func (m StatusLineModel) renderedHints() []renderedHint {
+func (m StatusLineModel) renderedHints() []string {
 	keyStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.StatusLine.Foreground)).
 		Bold(true)
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6c7086"))
 
-	var out []renderedHint
+	var out []string
 	for _, h := range m.hints() {
-		s := keyStyle.Render(h.key) + " " + descStyle.Render(h.desc)
-		out = append(out, renderedHint{s: s, w: lipgloss.Width(s)})
+		out = append(out, keyStyle.Render(h.key)+" "+descStyle.Render(h.desc))
 	}
 	return out
 }
 
-// layoutLines packs hints into up to maxStatusLineRows lines, dropping the
-// trailing hints that do not fit.
-func (m StatusLineModel) layoutLines() []string {
+// layoutLine packs all hints into a single row. If the total width exceeds
+// the terminal, trailing hints are dropped (silent truncation — they're
+// still in the help popup).
+func (m StatusLineModel) layoutLine() string {
 	hints := m.renderedHints()
-	if m.width <= 0 {
-		var b strings.Builder
-		b.WriteString(" ")
-		for i, h := range hints {
-			if i > 0 {
-				b.WriteString("  ")
-			}
-			b.WriteString(h.s)
-		}
-		return []string{b.String()}
+	if len(hints) == 0 {
+		return " "
 	}
 
-	var lines []string
-	var current strings.Builder
-	currentW := 1
-	current.WriteString(" ")
-
-	for _, h := range hints {
+	var b strings.Builder
+	b.WriteString(" ")
+	current := 1
+	for i, h := range hints {
 		sep := "  "
 		sepW := 2
-		if currentW == 1 {
+		if i == 0 {
 			sep = ""
 			sepW = 0
 		}
-		if currentW+sepW+h.w+1 > m.width {
-			if currentW > 1 {
-				lines = append(lines, current.String())
-				if len(lines) >= maxStatusLineRows {
-					return lines
-				}
-				current.Reset()
-				current.WriteString(" ")
-				currentW = 1
-				sep, sepW = "", 0
-			}
-			if currentW+sepW+h.w+1 > m.width {
-				continue
-			}
+		hw := lipgloss.Width(h)
+		if m.width > 0 && current+sepW+hw+1 > m.width {
+			break
 		}
-		current.WriteString(sep)
-		current.WriteString(h.s)
-		currentW += sepW + h.w
+		b.WriteString(sep)
+		b.WriteString(h)
+		current += sepW + hw
 	}
-	if currentW > 1 {
-		lines = append(lines, current.String())
-	}
-	if len(lines) == 0 {
-		lines = append(lines, " ")
-	}
-	return lines
+	return b.String()
 }
 
-// LineCount returns how many rows the status line will occupy.
-func (m StatusLineModel) LineCount() int {
-	return len(m.layoutLines())
-}
+// LineCount returns the fixed status line height. Kept as a method so
+// callers using m.statusLine.LineCount() in vertical math still work.
+func (m StatusLineModel) LineCount() int { return statusLineRows }
 
 func (m StatusLineModel) View() string {
 	return m.ViewWithError(0, "")
@@ -174,7 +148,7 @@ func (m StatusLineModel) ViewWithError(unreadErrors int, lastError string) strin
 }
 
 func (m StatusLineModel) ViewWithNotice(unreadErrors int, lastError, lastSuccess string) string {
-	lines := m.layoutLines()
+	line := m.layoutLine()
 	barStyle := m.theme.StatusLineStyle().Padding(0, 0)
 
 	// Error takes priority over success.
@@ -188,27 +162,25 @@ func (m StatusLineModel) ViewWithNotice(unreadErrors int, lastError, lastSuccess
 		noticeColor = m.theme.Status.Running
 	}
 
-	styled := make([]string, 0, len(lines))
-	for i, line := range lines {
-		isLast := i == len(lines)-1
-		if isLast && noticeText != "" {
-			lineW := lipgloss.Width(line)
-			maxLen := m.width - lineW - 4
-			if maxLen > 10 {
-				text := noticeText
-				if lipgloss.Width(text) > maxLen {
-					text = text[:maxLen-1] + "…"
-				}
-				leftPart := barStyle.Width(lineW + 2).Render(line)
-				noticePart := lipgloss.NewStyle().
-					Foreground(lipgloss.Color(noticeColor)).
-					Width(m.width - lineW - 2).
-					Render(" " + text)
-				styled = append(styled, leftPart+noticePart)
-				continue
-			}
-		}
-		styled = append(styled, barStyle.Width(m.width).Render(line))
+	if noticeText == "" || m.width <= 0 {
+		return barStyle.Width(m.width).Render(line)
 	}
-	return strings.Join(styled, "\n")
+
+	lineW := lipgloss.Width(line)
+	maxLen := m.width - lineW - 4
+	if maxLen < 10 {
+		// Not enough room for the notice — drop it (the App Log popup
+		// still has the full text).
+		return barStyle.Width(m.width).Render(line)
+	}
+	text := noticeText
+	if lipgloss.Width(text) > maxLen {
+		text = ansi.Truncate(text, maxLen-1, "") + "…"
+	}
+	leftPart := barStyle.Width(lineW + 2).Render(line)
+	noticePart := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(noticeColor)).
+		Width(m.width - lineW - 2).
+		Render(" " + text)
+	return leftPart + noticePart
 }

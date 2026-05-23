@@ -37,7 +37,7 @@ type drillDownMsg struct {
 //
 // Only sw and detailH are pinned; everything else falls out by subtraction.
 const (
-	panelSidebarWidth = 28 // panel 1 (sidebar) — fixed absolute width
+	panelSidebarWidth = 24 // panel 1 (sidebar) — fixed absolute width
 	panelDetailHeight = 14 // panel 3 (detail)  — fixed absolute height
 	panelHMargin      = 1  // cells between terminal left/right edge and panels
 	panelHSpace       = 1  // cells between sidebar and right side
