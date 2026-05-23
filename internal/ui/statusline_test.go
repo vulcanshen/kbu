@@ -24,7 +24,7 @@ func TestStatusLineModel_Hints_Sidebar(t *testing.T) {
 }
 
 func TestStatusLineModel_Hints_GlobalsOnAllPanels(t *testing.T) {
-	// `?` (help), `q` (quit), `Y` (YAML popup), `M-T` (KM8erm) are global
+	// `?` (help), `q` (quit), `Y` (YAML popup), `M-t` (KM8erm) are global
 	// one-key actions that should be discoverable from any panel.
 	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
 		m := newTestStatusLine()
@@ -33,7 +33,7 @@ func TestStatusLineModel_Hints_GlobalsOnAllPanels(t *testing.T) {
 		mustContain(t, keys, "?", "panel must show help hint")
 		mustContain(t, keys, "q", "panel must show quit hint")
 		mustContain(t, keys, "Y", "panel must show YAML popup hint")
-		mustContain(t, keys, "M-T", "panel must show KM8erm hint")
+		mustContain(t, keys, "M-t", "panel must show KM8erm hint")
 	}
 }
 

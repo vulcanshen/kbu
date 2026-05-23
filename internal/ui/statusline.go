@@ -86,7 +86,7 @@ func (m StatusLineModel) hints() []hint {
 	}
 	right := []hint{
 		{"Y", "yaml"},
-		{"M-T", "term"},
+		{"M-t", "term"},
 	}
 	return append(append(always, panel...), right...)
 }

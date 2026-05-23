@@ -459,7 +459,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{isSection: true, text: "Global"},
 		{key: "n / N", desc: "Switch namespace"},
 		{key: "c / C", desc: "Switch context"},
-		{key: "Alt+T", desc: "Toggle KM8erm (spawn/show/hide)"},
+		{key: "Alt+t", desc: "Toggle KM8erm (spawn/show/hide)"},
 		{key: "y", desc: "Copy focused panel"},
 		{key: "Y", desc: "YAML popup (y:copy e:edit /:search)"},
 		{key: "!", desc: "App log"},

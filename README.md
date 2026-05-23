@@ -26,7 +26,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
 - **Aggregate logs for Deployments** -- selecting a Deployment streams logs from **every pod in the current ReplicaSet** into a single Logs tab (also the default tab for Deployment detail). Lines are prefixed `<pod-hash>│<container>│<text>` with each segment in its own stable color, so during a rollout you can spot at a glance which pod is throwing errors without drill-down. Pods churning during rollout: the stream snapshots at row-select; re-select the Deployment row to refresh. Falls back to Deployment selector when current-ReplicaSet lookup fails (e.g. missing RBAC on ReplicaSet)
 - **Edit & shell exec via embedded PTY** -- `e` runs `kubectl edit` and `s` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
-- **KM8erm internal terminal** -- `Alt+T` toggles an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do. The shell is **persistent**: pressing `Alt+T` while the popup is visible hides it without killing the shell; pressing it again reattaches (cwd, history, env, background jobs all preserved). A green `attached` / amber `km8erm` chip in the status bar (right after `ns:`) shows which state you're in
+- **KM8erm internal terminal** -- `Alt+t` toggles an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do. The shell is **persistent**: pressing `Alt+t` while the popup is visible hides it without killing the shell; pressing it again reattaches (cwd, history, env, background jobs all preserved). A green `attached` / amber `km8erm` chip in the status bar (right after `ns:`) shows which state you're in
 - **PTY scrollback** -- 10k-line history for all PTY popups (KM8erm, shell exec, edit). `PgUp` / `PgDn` page, `Home` / `End` jump to top / live. Disabled in alt-screen apps (vim, less, htop) so they keep their own paging
 - **Colored Pod status** -- `Running` green, `Pending` yellow, `CrashLoopBackOff` / `ImagePullBackOff` / `OOMKilled` red, `Terminating` gray. STATUS column shows the kubectl-equivalent reason, not raw `Pod.Status.Phase`
 - **Per-container colored log labels** -- multi-container pods are visually distinguishable line-by-line; stable color per container name
@@ -142,7 +142,7 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 |---|---|
 | `n` / `N` | Switch namespace (`/` to filter inside the popup) |
 | `c` / `C` | Switch context (`/` to filter inside the popup) |
-| `Alt+T` | Toggle KM8erm (spawn / show / hide; shell stays alive across hide) |
+| `Alt+t` | Toggle KM8erm (spawn / show / hide; shell stays alive across hide) |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
 | `Y` | Open YAML popup (`j/k/u/d/gg/G` scroll, `/` search, `y` copy, `e` edit, `Esc` close) |
 | `!` | App log |
