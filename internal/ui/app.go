@@ -59,6 +59,7 @@ type AppModel struct {
 	toast           ToastModel
 	ptyView         *PtyView
 	yamlPopup       YamlPopupModel
+	breadcrumbPopup BreadcrumbPopupModel
 
 	activePanel     Panel
 	width           int
@@ -118,6 +119,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		toast:           NewToastModel(t),
 		ptyView:         NewPtyView(),
 		yamlPopup:       NewYamlPopupModel(t),
+		breadcrumbPopup: NewBreadcrumbPopupModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfgEditor:       cfgEditor,
@@ -212,6 +214,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.yamlPopup.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.breadcrumbPopup.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
@@ -327,6 +332,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.breadcrumbPopup.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.breadcrumbPopup, cmd = m.breadcrumbPopup.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -404,11 +421,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cyclePanelReverse()
 			return m, nil
 		case "h":
+			// On Links tab at depth>1, h pops the drill chain — let it
+			// fall through to DetailModel by skipping the tab-switch
+			// intercept. Otherwise h switches tabs as before.
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Links" && m.detail.Depth() > 1 {
+				break
+			}
 			if m.activePanel == TablePanel || m.activePanel == DetailPanel {
 				m.detail = m.detail.PrevTab()
 				return m, nil
 			}
 		case "l":
+			// On Links tab with cursor on a drillable entry, l pushes
+			// the chain — fall through to DetailModel. Otherwise l
+			// switches tabs.
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Links" && m.detail.SelectedLinkRef() != nil {
+				break
+			}
 			if m.activePanel == TablePanel || m.activePanel == DetailPanel {
 				m.detail = m.detail.NextTab()
 				return m, nil
@@ -477,13 +506,29 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "y":
 			return m, copyToClipboardCmd(m.focusedPanelContent())
 		case "Y":
-			yaml := m.detail.YAMLContent()
+			// Cursor-aware on the Links tab: if the cursor sits on a
+			// drillable entry, fetch + popup THAT entry's YAML (via
+			// LinkDrillMsg). If no drillable cursor (empty / non-link
+			// row), fall through to the current level's own YAML — at
+			// depth 1 that's the table-selected resource's YAML
+			// (existing behavior), at deeper levels it's the resource
+			// the user has drilled into.
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Links" {
+				if ref := m.detail.SelectedLinkRef(); ref != nil {
+					target := *ref
+					return m, func() tea.Msg { return LinkDrillMsg{Ref: target} }
+				}
+			}
+			yaml := m.detail.CurrentLevelYAML()
 			if yaml == "" {
 				return m, nil
 			}
 			var resource k8s.ResourceType
 			var item k8s.ResourceItem
-			if !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
+			if m.detail.Depth() > 1 {
+				resource = m.detail.currentLevelKind()
+				item = m.detail.CurrentLevelItem()
+			} else if !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
 				idx := m.table.SelectedRow()
 				if idx >= 0 && idx < len(m.items) {
 					resource = m.currentResource
@@ -585,6 +630,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Index >= 0 && msg.Index < len(m.items) && len(m.table.rows) > 0 {
 			item := m.items[msg.Index]
+			// Reset Links-tab drill chain immediately on row change so the
+			// user doesn't briefly see the previous row's drill state while
+			// the new detail fetch is in flight.
+			m.detail.ResetDrillStack()
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
 			if c := m.detail.BeginRefetch(); c != nil {
 				cmds = append(cmds, c)
@@ -611,9 +660,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case LinkDrillMsg:
-		// User pressed Enter on an Links ref. Fetch the target resource
-		// off the Update path so the API call doesn't freeze the UI; the
-		// fetched item lands as resourceFetchedForDrillMsg and opens YamlPopup.
+		// User pressed Y on a drillable Links entry. Fetch the target
+		// resource off the Update path and open its YAML in a popup.
 		ref := msg.Ref
 		client := m.k8sClient
 		cmd := func() tea.Msg {
@@ -625,6 +673,63 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return resourceFetchedForDrillMsg{ref: ref, item: item, yaml: yaml}
 		}
 		return m, cmd
+
+	case LinkPushMsg:
+		// User pressed Enter / l on a drillable entry. Cycle-check
+		// against the existing chain (kind+ns+name — k8s makes this
+		// triple unique within a kind so it's effectively UID-equivalent
+		// without needing the fetch first), then dispatch the drill
+		// fetch. Stale guard: sourceUID lets the result-handler drop
+		// fetches whose source row has changed.
+		sourceUID := m.currentItemUID()
+		if sourceUID == "" {
+			return m, nil
+		}
+		for _, existing := range m.detail.DrillChain() {
+			if existing.Type == msg.Ref.Type && existing.Name == msg.Ref.Name && existing.Namespace == msg.Ref.Namespace {
+				return m, m.toast.Show(fmt.Sprintf("cycle blocked: %s/%s already in chain", msg.Ref.Type, msg.Ref.Name))
+			}
+		}
+		ref := msg.Ref
+		client := m.k8sClient
+		fetchCmd := func() tea.Msg {
+			ctx := context.Background()
+			item, err := k8s.FetchResourceByRef(ctx, client.Clientset(), ref)
+			if err != nil {
+				return linkDrillFetchedMsg{ref: ref, sourceUID: sourceUID, err: err}
+			}
+			detail := k8s.GetResourceDetail(ref.Type, item)
+			detail.YAML = k8s.MarshalItemYAML(item)
+			k8s.EnrichLinks(ctx, client.Clientset(), ref.Type, item, &detail)
+			return linkDrillFetchedMsg{ref: ref, sourceUID: sourceUID, item: item, detail: detail}
+		}
+		batch := []tea.Cmd{fetchCmd}
+		if c := m.detail.BeginRefetch(); c != nil {
+			batch = append(batch, c)
+		}
+		return m, tea.Batch(batch...)
+
+	case linkDrillFetchedMsg:
+		if msg.sourceUID != m.currentItemUID() {
+			return m, nil // user moved on
+		}
+		if msg.err != nil {
+			m.appLog.Warn(fmt.Sprintf("drill push %s/%s: %s", msg.ref.Type, msg.ref.Name, msg.err.Error()))
+			return m, m.toast.Show(fmt.Sprintf("drill failed: %s", msg.err.Error()))
+		}
+		m.detail.PushDrillFrame(msg.ref, msg.item, msg.detail)
+		return m, nil
+
+	case LinkBreadcrumbMsg:
+		if m.detail.Depth() <= 1 {
+			return m, nil
+		}
+		m.breadcrumbPopup.SetSize(m.width, m.height)
+		return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
+
+	case LinkJumpMsg:
+		m.detail.JumpToDrillLevel(msg.Level)
+		return m, nil
 
 	case resourceFetchedForDrillMsg:
 		if msg.err != nil {
@@ -945,6 +1050,11 @@ func (m AppModel) View() string {
 	if m.yamlPopup.IsActive() {
 		m.yamlPopup.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.yamlPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.breadcrumbPopup.IsActive() {
+		m.breadcrumbPopup.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.breadcrumbPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.toast.IsActive() {

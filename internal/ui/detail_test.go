@@ -377,23 +377,198 @@ func TestDetailModel_LinksCursor_JKMovesBetweenSelectable(t *testing.T) {
 	}
 }
 
-func TestDetailModel_LinksEnter_EmitsDrillMsg(t *testing.T) {
+func TestDetailModel_LinksEnter_EmitsPushMsg(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodLinksDetail(), nil)
 	m = m.switchToTab(1)
 
-	// Cursor on Owner; Enter must emit LinkDrillMsg with the Owner ref.
+	// Cursor on Owner; Enter now drills into the link chain (push), not the
+	// YAML popup. Y is the new key for cursor-pointed YAML.
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter on drillable entry must return a Cmd")
 	}
-	drill, ok := cmd().(LinkDrillMsg)
+	push, ok := cmd().(LinkPushMsg)
 	if !ok {
-		t.Fatalf("expected LinkDrillMsg, got %T", cmd())
+		t.Fatalf("expected LinkPushMsg, got %T", cmd())
 	}
-	if drill.Ref.Type != k8s.ResourceDeployments || drill.Ref.Name != "nginx" {
-		t.Errorf("expected drill to deployment/nginx, got %v", drill.Ref)
+	if push.Ref.Type != k8s.ResourceDeployments || push.Ref.Name != "nginx" {
+		t.Errorf("expected push to deployment/nginx, got %v", push.Ref)
+	}
+}
+
+func TestDetailModel_DrillStack_PushPop(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	if m.Depth() != 1 {
+		t.Fatalf("initial depth should be 1, got %d", m.Depth())
+	}
+
+	// Drill into the deployment owner.
+	depDetail := k8s.ResourceDetail{
+		Name: "nginx", Namespace: "default", Kind: "Deployment",
+	}
+	depRef := k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx", Namespace: "default"}
+	depItem := k8s.ResourceItem{Name: "nginx", Namespace: "default", UID: "uid-dep"}
+	m.PushDrillFrame(depRef, depItem, depDetail)
+	if m.Depth() != 2 {
+		t.Errorf("after push, depth should be 2, got %d", m.Depth())
+	}
+	if m.currentLevelKind() != k8s.ResourceDeployments {
+		t.Errorf("current kind should be Deployments after push, got %s", m.currentLevelKind())
+	}
+
+	// Pop back to root.
+	m.PopDrillFrame()
+	if m.Depth() != 1 {
+		t.Errorf("after pop, depth should be 1, got %d", m.Depth())
+	}
+	if m.currentLevelKind() != k8s.ResourcePods {
+		t.Errorf("current kind should be Pods at root, got %s", m.currentLevelKind())
+	}
+}
+
+func TestDetailModel_DrillStack_JumpToLevel(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	for _, name := range []string{"dep", "rs", "cfg"} {
+		m.PushDrillFrame(
+			k8s.RefTarget{Type: k8s.ResourceDeployments, Name: name, Namespace: "default"},
+			k8s.ResourceItem{Name: name, Namespace: "default", UID: "uid-" + name},
+			k8s.ResourceDetail{Name: name, Namespace: "default"},
+		)
+	}
+	if m.Depth() != 4 {
+		t.Fatalf("expected depth 4, got %d", m.Depth())
+	}
+	// Jump back to level 2.
+	m.JumpToDrillLevel(2)
+	if m.Depth() != 2 {
+		t.Errorf("after jump, depth should be 2, got %d", m.Depth())
+	}
+	// Jump to root.
+	m.JumpToDrillLevel(1)
+	if m.Depth() != 1 {
+		t.Errorf("after jump to root, depth should be 1, got %d", m.Depth())
+	}
+}
+
+func TestDetailModel_DrillStack_ResetOnSetDetail(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m.PushDrillFrame(
+		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
+		k8s.ResourceItem{}, k8s.ResourceDetail{},
+	)
+	if m.Depth() != 2 {
+		t.Fatalf("setup failed: depth %d", m.Depth())
+	}
+	// Setting fresh detail (e.g. table cursor moved) must wipe the chain.
+	m.SetDetail(samplePodLinksDetail(), nil)
+	if m.Depth() != 1 {
+		t.Errorf("SetDetail must reset drillStack, got depth %d", m.Depth())
+	}
+}
+
+func TestDetailModel_TabTitle_ShowsLevelWhenDrilled(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m = m.switchToTab(1) // Links
+	if got := m.ActiveTabTitle(); got != "Links" {
+		t.Errorf("at root, ActiveTabTitle should be 'Links', got %q", got)
+	}
+	m.PushDrillFrame(
+		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
+		k8s.ResourceItem{}, k8s.ResourceDetail{},
+	)
+	if got := m.ActiveTabTitle(); got != "Links(2)" {
+		t.Errorf("at depth 2, ActiveTabTitle should be 'Links(2)', got %q", got)
+	}
+}
+
+func TestDetailModel_LinksH_PopsFrame(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m = m.switchToTab(1)
+	m.PushDrillFrame(
+		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
+		k8s.ResourceItem{}, k8s.ResourceDetail{},
+	)
+	// h must pop one level.
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if cmd != nil {
+		t.Errorf("h should not emit a Cmd, got %T", cmd)
+	}
+	if updated.Depth() != 1 {
+		t.Errorf("after h, depth should be 1, got %d", updated.Depth())
+	}
+}
+
+func TestDetailModel_LinksI_EmitsBreadcrumbMsgAtDepthGT1(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m = m.switchToTab(1)
+
+	// At depth 1, i is a no-op (no chain to display).
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	if cmd != nil {
+		t.Errorf("i at depth 1 should not emit a Cmd, got %T", cmd())
+	}
+
+	// At depth 2, i emits LinkBreadcrumbMsg.
+	m.PushDrillFrame(
+		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
+		k8s.ResourceItem{}, k8s.ResourceDetail{},
+	)
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	if cmd == nil {
+		t.Fatal("i at depth >1 must emit LinkBreadcrumbMsg")
+	}
+	if _, ok := cmd().(LinkBreadcrumbMsg); !ok {
+		t.Errorf("expected LinkBreadcrumbMsg, got %T", cmd())
+	}
+}
+
+func TestDetailModel_DrillChain_RootFirst(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m.PushDrillFrame(
+		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx", Namespace: "default"},
+		k8s.ResourceItem{}, k8s.ResourceDetail{},
+	)
+	chain := m.DrillChain()
+	if len(chain) != 2 {
+		t.Fatalf("chain should have 2 entries, got %d", len(chain))
+	}
+	if chain[0].Type != k8s.ResourcePods || chain[0].Name != "nginx-7f9c4d-abc12" {
+		t.Errorf("chain[0] should be root Pod, got %+v", chain[0])
+	}
+	if chain[1].Type != k8s.ResourceDeployments {
+		t.Errorf("chain[1] should be Deployment, got %+v", chain[1])
+	}
+}
+
+func TestDetailModel_LinksL_EmitsPushMsg(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m = m.switchToTab(1)
+
+	// `l` is the explicit drill-deeper key (vim right = into the chain).
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if cmd == nil {
+		t.Fatal("l on drillable entry must return a Cmd")
+	}
+	if _, ok := cmd().(LinkPushMsg); !ok {
+		t.Fatalf("expected LinkPushMsg from l, got %T", cmd())
 	}
 }
 

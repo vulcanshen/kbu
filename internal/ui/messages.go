@@ -68,11 +68,45 @@ type NamespaceListMsg struct {
 	Namespaces []string
 }
 
-// LinkDrillMsg is emitted when the user presses Enter on a drillable
-// entry in the Links tab (Owner, Node, ServiceAccount, ...). AppModel
-// handles it by fetching the target resource and opening a YamlPopup.
+// LinkDrillMsg is emitted when the user presses Y on a Links-tab entry —
+// it asks AppModel to fetch the cursor-pointed resource and open its
+// YAML in a popup. (Y replaces the Enter-opens-YAML behavior that used to
+// exist before Enter was reassigned to drill-into-Links.)
 type LinkDrillMsg struct {
 	Ref k8s.RefTarget
+}
+
+// LinkPushMsg is emitted when the user presses Enter / l on a drillable
+// Links-tab entry — it asks AppModel to fetch the target and push it onto
+// the Links-tab drill chain (so the panel re-renders showing the target's
+// links). AppModel does a cycle pre-check (kind+ns+name against the
+// existing chain) before dispatching the fetch; cycle hit → toast + drop.
+type LinkPushMsg struct {
+	Ref k8s.RefTarget
+}
+
+// linkDrillFetchedMsg carries the fetched resource for a LinkPushMsg.
+// SourceUID is the table-selected item's UID at dispatch time — the
+// handler drops the message when the table selection has moved on,
+// mirroring the stale-drop guard on ResourceDetailMsg.
+type linkDrillFetchedMsg struct {
+	ref       k8s.RefTarget
+	sourceUID string
+	item      k8s.ResourceItem
+	detail    k8s.ResourceDetail
+	err       error
+}
+
+// LinkBreadcrumbMsg is emitted when the user presses `i` on the Links
+// tab at depth>1 — opens the breadcrumb popup so they can jump back to
+// any ancestor level.
+type LinkBreadcrumbMsg struct{}
+
+// LinkJumpMsg is emitted by the breadcrumb popup when the user picks a
+// level to jump back to. Level=1 means root; values >Depth are clamped
+// by the handler.
+type LinkJumpMsg struct {
+	Level int
 }
 
 // resourceFetchedForDrillMsg carries a resource fetched in response to an
