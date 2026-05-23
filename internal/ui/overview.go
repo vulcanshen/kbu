@@ -57,6 +57,23 @@ func buildPodOverviewEntries(detail k8s.ResourceDetail) []overviewEntry {
 		})
 	}
 
+	if len(po.Volumes) > 0 {
+		entries = append(entries, overviewEntry{section: true, label: "Volumes"})
+		for _, v := range po.Volumes {
+			e := overviewEntry{label: "  " + v.Name}
+			if v.Ref != nil {
+				// Drillable: show "kind/name" so the user sees which resource
+				// they'll drill into. Visual:  config-volume   configMap/nginx-config →
+				e.value = v.Kind + "/" + v.Ref.Name
+				e.ref = v.Ref
+			} else {
+				// Informational: emptyDir / hostPath / projected / ...
+				e.value = "(" + v.Kind + ")"
+			}
+			entries = append(entries, e)
+		}
+	}
+
 	if len(po.InitImages) > 0 || len(po.Images) > 0 {
 		entries = append(entries, overviewEntry{section: true, label: "Images"})
 		for _, img := range po.InitImages {

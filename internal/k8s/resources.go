@@ -445,7 +445,40 @@ func buildPodOverview(p *corev1.Pod) *PodOverviewData {
 	for _, c := range p.Spec.Containers {
 		o.Images = append(o.Images, c.Image)
 	}
+	for _, v := range p.Spec.Volumes {
+		o.Volumes = append(o.Volumes, volumeRefFromPodVolume(v, p.Namespace))
+	}
 	return o
+}
+
+// volumeRefFromPodVolume maps a corev1.Volume to a VolumeRef with its source
+// kind + (when relevant) a drill target. ConfigMap / Secret / PVC sources
+// drill to the referenced object; emptyDir / hostPath / projected / etc are
+// informational only (no concrete K8s resource to navigate to).
+func volumeRefFromPodVolume(v corev1.Volume, ns string) VolumeRef {
+	vr := VolumeRef{Name: v.Name}
+	switch {
+	case v.ConfigMap != nil:
+		vr.Kind = "configMap"
+		vr.Ref = &RefTarget{Type: ResourceConfigMaps, Name: v.ConfigMap.Name, Namespace: ns}
+	case v.Secret != nil:
+		vr.Kind = "secret"
+		vr.Ref = &RefTarget{Type: ResourceSecrets, Name: v.Secret.SecretName, Namespace: ns}
+	case v.PersistentVolumeClaim != nil:
+		vr.Kind = "pvc"
+		vr.Ref = &RefTarget{Type: ResourcePersistentVolumeClaims, Name: v.PersistentVolumeClaim.ClaimName, Namespace: ns}
+	case v.EmptyDir != nil:
+		vr.Kind = "emptyDir"
+	case v.HostPath != nil:
+		vr.Kind = "hostPath"
+	case v.Projected != nil:
+		vr.Kind = "projected"
+	case v.DownwardAPI != nil:
+		vr.Kind = "downwardAPI"
+	default:
+		vr.Kind = "other"
+	}
+	return vr
 }
 
 // kindToResourceType maps a K8s "Kind" string (as it appears in

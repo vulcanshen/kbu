@@ -840,17 +840,14 @@ func (m AppModel) View() string {
 		return m.splash.Render(m.width, m.height)
 	}
 
+	// KM8erm marker: render ONLY when the shell is alive but hidden — that's
+	// the state the user can't otherwise see ("is there a shell waiting for
+	// me?"). When the popup is visible, the popup's border already says
+	// "KM8erm: hostname" so a status-bar duplicate just adds noise; when no
+	// shell is running, nothing to mark.
 	var ptyMarker *PtyMarker
-	if m.ptyView != nil && m.ptyView.IsAlive() && m.ptyView.Kind() == PtyKindShell {
-		// KM8erm marker: green "attached" when popup is visible (border
-		// already shows "KM8erm: hostname" — avoid duplicating the name)
-		// vs amber "km8erm" when hidden in the background so the user knows
-		// the session is still there.
-		if m.ptyView.IsActive() {
-			ptyMarker = &PtyMarker{Visible: true, Label: " attached"}
-		} else {
-			ptyMarker = &PtyMarker{Visible: false, Label: " km8erm"}
-		}
+	if m.ptyView != nil && m.ptyView.IsAlive() && m.ptyView.Kind() == PtyKindShell && m.ptyView.IsHidden() {
+		ptyMarker = &PtyMarker{Visible: false, Label: " km8erm"}
 	}
 	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker)
 	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage(), "")

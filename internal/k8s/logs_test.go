@@ -190,6 +190,50 @@ func TestBuildPodOverview_SkipsDefaultServiceAccount(t *testing.T) {
 	}
 }
 
+func TestBuildPodOverview_VolumesMapToDrillRefs(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "default"},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{Name: "config", VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "nginx-config"},
+					},
+				}},
+				{Name: "tls", VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{SecretName: "nginx-tls"},
+				}},
+				{Name: "data", VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data-pvc"},
+				}},
+				{Name: "tmp", VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				}},
+			},
+		},
+	}
+	po := buildPodOverview(pod)
+	if len(po.Volumes) != 4 {
+		t.Fatalf("expected 4 volume refs, got %d", len(po.Volumes))
+	}
+	got := map[string]VolumeRef{}
+	for _, v := range po.Volumes {
+		got[v.Name] = v
+	}
+	if got["config"].Kind != "configMap" || got["config"].Ref == nil || got["config"].Ref.Type != ResourceConfigMaps || got["config"].Ref.Name != "nginx-config" {
+		t.Errorf("config volume mapped wrong: %+v", got["config"])
+	}
+	if got["tls"].Kind != "secret" || got["tls"].Ref == nil || got["tls"].Ref.Type != ResourceSecrets || got["tls"].Ref.Name != "nginx-tls" {
+		t.Errorf("tls volume mapped wrong: %+v", got["tls"])
+	}
+	if got["data"].Kind != "pvc" || got["data"].Ref == nil || got["data"].Ref.Type != ResourcePersistentVolumeClaims || got["data"].Ref.Name != "data-pvc" {
+		t.Errorf("pvc volume mapped wrong: %+v", got["data"])
+	}
+	if got["tmp"].Kind != "emptyDir" || got["tmp"].Ref != nil {
+		t.Errorf("emptyDir volume must be informational (no Ref), got %+v", got["tmp"])
+	}
+}
+
 func TestBuildPodOverview_UnknownOwnerKindOmits(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
