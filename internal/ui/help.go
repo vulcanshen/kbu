@@ -117,8 +117,10 @@ func (m HelpModel) RenderPopup() string {
 // renderFullPopup builds the complete popup. Two-column layout — sections
 // are packed left-to-right to keep total height short on modern keybinding
 // lists (~30 entries) without making the popup tall enough to need scroll.
+// Long descriptions wrap onto continuation lines indented under the desc
+// column so the popup fits a standard 80-col terminal.
 func (m HelpModel) renderFullPopup() string {
-	const colW = 42
+	const colW = 38
 	const gutterW = 2
 	innerW := colW*2 + gutterW
 
@@ -128,8 +130,8 @@ func (m HelpModel) renderFullPopup() string {
 
 	groups := m.groupedContent()
 	leftGroups, rightGroups := splitGroupsForColumns(groups)
-	leftLines := m.renderColumn(leftGroups)
-	rightLines := m.renderColumn(rightGroups)
+	leftLines := m.renderColumn(leftGroups, colW)
+	rightLines := m.renderColumn(rightGroups, colW)
 	for len(leftLines) < len(rightLines) {
 		leftLines = append(leftLines, "")
 	}
@@ -235,10 +237,21 @@ func splitGroupsForColumns(groups []helpGroup) (left, right []helpGroup) {
 	return left, right
 }
 
-func (m HelpModel) renderColumn(groups []helpGroup) []string {
+func (m HelpModel) renderColumn(groups []helpGroup, colW int) []string {
 	sectionStyle := lipgloss.NewStyle().Bold(true)
 	keyStyle := m.theme.DetailLabelStyle()
 	descStyle := m.theme.DetailValueStyle()
+
+	// Layout: 2-space indent + 14-col key + 1 space + desc, so descriptions
+	// can use the rest. Long descs wrap onto continuation lines that align
+	// under the desc column.
+	const keyW = 14
+	const indent = "  "
+	descW := colW - len(indent) - keyW - 1
+	if descW < 8 {
+		descW = 8
+	}
+	contIndent := indent + strings.Repeat(" ", keyW+1)
 
 	var lines []string
 	for i, g := range groups {
@@ -249,8 +262,15 @@ func (m HelpModel) renderColumn(groups []helpGroup) []string {
 			lines = append(lines, sectionStyle.Render(" "+g.title))
 		}
 		for _, e := range g.entries {
-			key := keyStyle.Width(14).Render(e.key)
-			lines = append(lines, "  "+key+descStyle.Render(e.desc))
+			wrapped := wrapPlain(e.desc, descW)
+			if len(wrapped) == 0 {
+				wrapped = []string{""}
+			}
+			key := keyStyle.Width(keyW).Render(e.key)
+			lines = append(lines, indent+key+" "+descStyle.Render(wrapped[0]))
+			for _, w := range wrapped[1:] {
+				lines = append(lines, contIndent+descStyle.Render(w))
+			}
 		}
 	}
 	return lines
