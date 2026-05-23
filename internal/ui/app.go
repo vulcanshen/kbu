@@ -598,8 +598,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
-	case OverviewDrillMsg:
-		// User pressed Enter on an Overview ref. Fetch the target resource
+	case LinkDrillMsg:
+		// User pressed Enter on an Links ref. Fetch the target resource
 		// off the Update path so the API call doesn't freeze the UI; the
 		// fetched item lands as resourceFetchedForDrillMsg and opens YamlPopup.
 		ref := msg.Ref

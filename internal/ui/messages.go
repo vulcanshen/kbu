@@ -63,15 +63,15 @@ type NamespaceListMsg struct {
 	Namespaces []string
 }
 
-// OverviewDrillMsg is emitted when the user presses Enter on a drillable
-// entry in the Overview tab (Owner, Node, ServiceAccount, ...). AppModel
+// LinkDrillMsg is emitted when the user presses Enter on a drillable
+// entry in the Links tab (Owner, Node, ServiceAccount, ...). AppModel
 // handles it by fetching the target resource and opening a YamlPopup.
-type OverviewDrillMsg struct {
+type LinkDrillMsg struct {
 	Ref k8s.RefTarget
 }
 
 // resourceFetchedForDrillMsg carries a resource fetched in response to an
-// OverviewDrillMsg, ready to populate a YamlPopup. err non-nil = fetch
+// LinkDrillMsg, ready to populate a YamlPopup. err non-nil = fetch
 // failed; caller should toast + skip popup.
 type resourceFetchedForDrillMsg struct {
 	ref  k8s.RefTarget

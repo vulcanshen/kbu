@@ -61,8 +61,8 @@ func TestDetailModel_InitialState(t *testing.T) {
 	if len(m.tabs) != 2 {
 		t.Errorf("expected 2 tabs (no Logs for non-Pod), got %d", len(m.tabs))
 	}
-	if m.tabs[0] != "Overview" || m.tabs[1] != "Events" {
-		t.Errorf("expected tabs=[Overview, Events], got %v", m.tabs)
+	if m.tabs[0] != "Links" || m.tabs[1] != "Events" {
+		t.Errorf("expected tabs=[Links, Events], got %v", m.tabs)
 	}
 	if m.scrollOffset != 0 {
 		t.Errorf("expected scrollOffset=0, got %d", m.scrollOffset)
@@ -90,7 +90,7 @@ func TestDetailModel_SetDetail(t *testing.T) {
 
 func TestDetailModel_SwitchTab(t *testing.T) {
 	m := newTestDetail()
-	m.SetResourceType(k8s.ResourcePods) // 3 tabs: Logs, Overview, Events
+	m.SetResourceType(k8s.ResourcePods) // 3 tabs: Logs, Links, Events
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	if m.activeTab != 0 {
@@ -100,13 +100,13 @@ func TestDetailModel_SwitchTab(t *testing.T) {
 		t.Fatalf("expected default tab=Logs for Pod, got %s", m.ActiveTabName())
 	}
 
-	// ']' cycles Logs → Overview
+	// ']' cycles Logs → Links
 	m, _ = m.Update(keyMsg(']'))
-	if m.ActiveTabName() != "Overview" {
-		t.Errorf("expected Overview after first ']', got %s", m.ActiveTabName())
+	if m.ActiveTabName() != "Links" {
+		t.Errorf("expected Links after first ']', got %s", m.ActiveTabName())
 	}
 
-	// ']' cycles Overview → Events
+	// ']' cycles Links → Events
 	m, _ = m.Update(keyMsg(']'))
 	if m.ActiveTabName() != "Events" {
 		t.Errorf("expected Events after second ']', got %s", m.ActiveTabName())
@@ -129,7 +129,7 @@ func TestDetailModel_ScrollDown(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods) // gives us Logs tab at index 0
 	m.SetDetail(sampleDetail(), sampleEvents())
-	// Logs tab scrolls by line — Overview tab uses j/k for cursor navigation,
+	// Logs tab scrolls by line — Links tab uses j/k for cursor navigation,
 	// so use Logs as the scroll-mechanics testbed.
 	m = m.switchToTab(0)
 	for i := 0; i < 50; i++ {
@@ -266,7 +266,7 @@ func TestDetailModel_Deployment_TabOrderLogsFirst(t *testing.T) {
 	if len(m.tabs) != 3 {
 		t.Fatalf("expected 3 tabs for Deployment, got %d (%v)", len(m.tabs), m.tabs)
 	}
-	wantOrder := []string{"Logs", "Overview", "Events"}
+	wantOrder := []string{"Logs", "Links", "Events"}
 	for i, want := range wantOrder {
 		if m.tabs[i] != want {
 			t.Errorf("tab %d: expected %q, got %q", i, want, m.tabs[i])
@@ -296,14 +296,14 @@ func TestDetailModel_AppendLogLine_AggregatePrefix(t *testing.T) {
 	}
 }
 
-// ── Overview tab + drill ─────────────────────────────────────────────────
+// ── Links tab + drill ─────────────────────────────────────────────────
 
-func samplePodOverviewDetail() k8s.ResourceDetail {
+func samplePodLinksDetail() k8s.ResourceDetail {
 	return k8s.ResourceDetail{
 		Name:      "nginx-7f9c4d-abc12",
 		Namespace: "default",
 		Kind:      "Pod",
-		PodOverview: &k8s.PodOverviewData{
+		PodLinks: &k8s.PodLinksData{
 			Owner: &k8s.RefTarget{
 				Type: k8s.ResourceDeployments, Name: "nginx", Namespace: "default",
 			},
@@ -314,30 +314,34 @@ func samplePodOverviewDetail() k8s.ResourceDetail {
 	}
 }
 
-func TestDetailModel_OverviewTab_RendersDrillableRefs(t *testing.T) {
+func TestDetailModel_LinksTab_RendersDrillableRefs(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodOverviewDetail(), nil)
-	m = m.switchToTab(1) // Overview
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m = m.switchToTab(1) // Links
 
 	joined := strings.Join(m.contentLines, "\n")
-	for _, want := range []string{"Owner", "Node", "ServiceAccount", "worker-3", "nginx-sa", "nginx:1.27.1"} {
+	for _, want := range []string{"Owner", "Node", "ServiceAccount", "worker-3", "nginx-sa"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("Overview must contain %q, got:\n%s", want, joined)
+			t.Errorf("Links must contain %q, got:\n%s", want, joined)
 		}
+	}
+	// Strict Links: container images are NOT included (not a K8s resource).
+	if strings.Contains(joined, "nginx:1.27.1") {
+		t.Errorf("Links must not include image strings (use Y popup for that), got:\n%s", joined)
 	}
 }
 
-func TestDetailModel_OverviewCursor_LandsOnFirstSelectable(t *testing.T) {
+func TestDetailModel_LinksCursor_LandsOnFirstSelectable(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodOverviewDetail(), nil)
+	m.SetDetail(samplePodLinksDetail(), nil)
 	m = m.switchToTab(1)
 
-	if m.overviewCursor < 0 || m.overviewCursor >= len(m.overviewEntries) {
-		t.Fatalf("cursor out of bounds: %d (entries %d)", m.overviewCursor, len(m.overviewEntries))
+	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) {
+		t.Fatalf("cursor out of bounds: %d (entries %d)", m.linkCursor, len(m.linkEntries))
 	}
-	got := m.overviewEntries[m.overviewCursor]
+	got := m.linkEntries[m.linkCursor]
 	if !got.isSelectable() {
 		t.Errorf("cursor must land on selectable entry, got section header %q", got.label)
 	}
@@ -346,77 +350,65 @@ func TestDetailModel_OverviewCursor_LandsOnFirstSelectable(t *testing.T) {
 	}
 }
 
-func TestDetailModel_OverviewCursor_JKMovesBetweenSelectable(t *testing.T) {
+func TestDetailModel_LinksCursor_JKMovesBetweenSelectable(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodOverviewDetail(), nil)
+	m.SetDetail(samplePodLinksDetail(), nil)
 	m = m.switchToTab(1)
 
 	// Initial: Owner
-	if m.overviewEntries[m.overviewCursor].label != "Owner" {
-		t.Fatalf("setup: cursor expected on Owner, got %q", m.overviewEntries[m.overviewCursor].label)
+	if m.linkEntries[m.linkCursor].label != "Owner" {
+		t.Fatalf("setup: cursor expected on Owner, got %q", m.linkEntries[m.linkCursor].label)
 	}
 	// j → Node
 	m, _ = m.Update(keyMsg('j'))
-	if m.overviewEntries[m.overviewCursor].label != "Node" {
-		t.Errorf("after j: expected Node, got %q", m.overviewEntries[m.overviewCursor].label)
+	if m.linkEntries[m.linkCursor].label != "Node" {
+		t.Errorf("after j: expected Node, got %q", m.linkEntries[m.linkCursor].label)
 	}
 	// j → ServiceAccount
 	m, _ = m.Update(keyMsg('j'))
-	if m.overviewEntries[m.overviewCursor].label != "ServiceAccount" {
-		t.Errorf("after j×2: expected ServiceAccount, got %q", m.overviewEntries[m.overviewCursor].label)
+	if m.linkEntries[m.linkCursor].label != "ServiceAccount" {
+		t.Errorf("after j×2: expected ServiceAccount, got %q", m.linkEntries[m.linkCursor].label)
 	}
 	// k → Node
 	m, _ = m.Update(keyMsg('k'))
-	if m.overviewEntries[m.overviewCursor].label != "Node" {
-		t.Errorf("after k: expected Node back, got %q", m.overviewEntries[m.overviewCursor].label)
+	if m.linkEntries[m.linkCursor].label != "Node" {
+		t.Errorf("after k: expected Node back, got %q", m.linkEntries[m.linkCursor].label)
 	}
 }
 
-func TestDetailModel_OverviewEnter_EmitsDrillMsg(t *testing.T) {
+func TestDetailModel_LinksEnter_EmitsDrillMsg(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodOverviewDetail(), nil)
+	m.SetDetail(samplePodLinksDetail(), nil)
 	m = m.switchToTab(1)
 
-	// Cursor on Owner; Enter must emit OverviewDrillMsg with the Owner ref.
+	// Cursor on Owner; Enter must emit LinkDrillMsg with the Owner ref.
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter on drillable entry must return a Cmd")
 	}
-	drill, ok := cmd().(OverviewDrillMsg)
+	drill, ok := cmd().(LinkDrillMsg)
 	if !ok {
-		t.Fatalf("expected OverviewDrillMsg, got %T", cmd())
+		t.Fatalf("expected LinkDrillMsg, got %T", cmd())
 	}
 	if drill.Ref.Type != k8s.ResourceDeployments || drill.Ref.Name != "nginx" {
 		t.Errorf("expected drill to deployment/nginx, got %v", drill.Ref)
 	}
 }
 
-func TestDetailModel_OverviewEnter_NoOpOnInfoRow(t *testing.T) {
+// TestDetailModel_LinksTab_EmptyShowsPlaceholder verifies the "no links —
+// press Y" placeholder renders when a resource has no Links content (typical
+// for kinds without a custom Link builder yet).
+func TestDetailModel_LinksTab_EmptyShowsPlaceholder(t *testing.T) {
 	m := newTestDetail()
-	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodOverviewDetail(), nil)
-	m = m.switchToTab(1)
+	m.SetResourceType(k8s.ResourceConfigMaps) // no custom Link builder
+	m.SetDetail(k8s.ResourceDetail{Name: "x", Namespace: "default", Kind: "ConfigMap"}, nil)
+	m = m.switchToTab(0) // Links
 
-	// Move to first Image row (info-only, no ref).
-	// Order: Owner / Node / SA / (section Images) / "  app" img / Labels (none here) / Annotations (none here)
-	// After Owner→Node→SA, next selectable is the "  app" image row.
-	m, _ = m.Update(keyMsg('j'))
-	m, _ = m.Update(keyMsg('j'))
-	m, _ = m.Update(keyMsg('j'))
-	if m.overviewEntries[m.overviewCursor].label == "Owner" {
-		t.Fatal("setup: expected cursor to advance past Owner")
-	}
-	// Enter on a non-ref row must not emit drill.
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil {
-		// cmd may run as no-op; ensure no OverviewDrillMsg
-		if msg := cmd(); msg != nil {
-			if _, isDrill := msg.(OverviewDrillMsg); isDrill {
-				t.Error("Enter on info-only row must not emit OverviewDrillMsg")
-			}
-		}
+	joined := strings.Join(m.contentLines, "\n")
+	if !strings.Contains(joined, "no links") {
+		t.Errorf("empty Links must show placeholder, got:\n%s", joined)
 	}
 }
 
@@ -651,13 +643,16 @@ func TestDetailModel_SearchJKAreTypedNotNavigation(t *testing.T) {
 	}
 }
 
-// YAML-rendering tests were removed in the Overview migration — YAML now
+// YAML-rendering tests were removed in the Links migration — YAML now
 // lives in the `Y` popup, covered by yamlpopup_test.go. CopyableContent's
 // YAML special-case is gone too; users copy raw YAML from inside the popup.
 
 func TestDetailModel_CopyableContent_StripsANSI(t *testing.T) {
+	// Use Events tab — generic Links tab returns a placeholder for non-Pod,
+	// non-Deployment kinds; Events is a reliable source of styled content.
 	m := newTestDetail()
 	m.SetDetail(sampleDetail(), sampleEvents())
+	m = m.switchToTab(1) // Events (index 1 for default 2-tab layout)
 
 	plain := m.CopyableContent()
 	if plain == "" {
@@ -666,8 +661,8 @@ func TestDetailModel_CopyableContent_StripsANSI(t *testing.T) {
 	if strings.Contains(plain, "\x1b[") {
 		t.Errorf("expected no ANSI escapes in copyable content, got:\n%s", plain)
 	}
-	if !strings.Contains(plain, "nginx-7b4f6c8d4-abc12") {
-		t.Errorf("expected pod name in copyable content, got:\n%s", plain)
+	if !strings.Contains(plain, "Pod/nginx") {
+		t.Errorf("expected event object in copyable content, got:\n%s", plain)
 	}
 }
 
@@ -757,14 +752,14 @@ func TestDetailModel_FollowTail_ScrollUpDisablesOnLogsOnly(t *testing.T) {
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
 
-	// Overview tab (index 1): scrollUp must NOT touch followTail.
+	// Links tab (index 1): scrollUp must NOT touch followTail.
 	m = m.switchToTab(1)
-	if m.ActiveTabName() != "Overview" {
-		t.Fatalf("expected Overview active, got %s", m.ActiveTabName())
+	if m.ActiveTabName() != "Links" {
+		t.Fatalf("expected Links active, got %s", m.ActiveTabName())
 	}
 	m, _ = m.Update(keyMsg('k'))
 	if !m.followTail {
-		t.Error("scrolling up on Overview tab must not disable followTail")
+		t.Error("scrolling up on Links tab must not disable followTail")
 	}
 
 	// Logs tab (index 0): scrollUp disables.
@@ -829,7 +824,7 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 	}
 
 	// Leave Logs and return → state resets to follow.
-	m = m.switchToTab(1) // Overview
+	m = m.switchToTab(1) // Links
 	m = m.switchToTab(0) // Logs
 	if !m.followTail {
 		t.Error("re-entering Logs tab must reset followTail to true")

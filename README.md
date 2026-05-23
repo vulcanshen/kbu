@@ -21,7 +21,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Vim-style navigation** -- `j`/`k`, `u`/`d` page scroll, `gg`/`G`, `/` search
 - **3-panel lazygit-style layout** -- numbered sidebar, list, and detail panels with scroll indicator
 - **Drill-down navigation** -- Deployment / DaemonSet / StatefulSet / Job → Pods → Containers; CronJob → Jobs; HPA → target workload; PVC → mounting Pods; PDB → protected Pods
-- **Overview tab** (default for non-Pod, second tab for Pod/Deployment) -- structured "what does this resource point to" view. For Pods: Owner / Node / ServiceAccount / Image; for other kinds: the resource-specific fields + Labels + Annotations. Each ref row is **navigable** -- `j`/`k` move between rows, `Enter` opens the referenced resource (Owner workload, Node, SA, ...) in the YAML popup. Other kinds fall back to read-only structured fields when no custom Overview builder exists
+- **Links tab** (default for non-Pod, second tab for Pod/Deployment) -- structured "what does this resource point to" view. For Pods: Owner / Node / ServiceAccount / Image; for other kinds: the resource-specific fields + Labels + Annotations. Each ref row is **navigable** -- `j`/`k` move between rows, `Enter` opens the referenced resource (Owner workload, Node, SA, ...) in the YAML popup. Other kinds fall back to read-only structured fields when no custom Links builder exists
 - **YAML popup (`Y`)** -- raw `kubectl get -o yaml` of the selected resource in a large overlay with `j/k/u/d/gg/G` scroll, `/` search (`n`/`N` step through matches), and `e` to dispatch `kubectl edit` directly from the popup. YAML lives in the popup, not the detail panel, so vertical layout no longer wraps long YAML lines awkwardly
 - **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
 - **Aggregate logs for Deployments** -- selecting a Deployment streams logs from **every pod in the current ReplicaSet** into a single Logs tab (also the default tab for Deployment detail). Lines are prefixed `<pod-hash>│<container>│<text>` with each segment in its own stable color, so during a rollout you can spot at a glance which pod is throwing errors without drill-down. Pods churning during rollout: the stream snapshots at row-select; re-select the Deployment row to refresh. Falls back to Deployment selector when current-ReplicaSet lookup fails (e.g. missing RBAC on ReplicaSet)
@@ -129,9 +129,9 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 
 | Key | Action |
 |---|---|
-| `h` / `l` | Switch tab (Overview / Events / Logs) |
-| `j` / `k` (on Overview) | Move cursor between drillable refs |
-| `Enter` (on Overview) | Open the highlighted ref in the YAML popup |
+| `h` / `l` | Switch tab (Links / Events / Logs) |
+| `j` / `k` (on Links) | Move cursor between drillable refs |
+| `Enter` (on Links) | Open the highlighted ref in the YAML popup |
 | `=` / `-` | Expand / restore panel |
 | `G` | Jump to bottom (on Logs: also resumes follow-tail) |
 | `k` / `↑` / `u` / `gg` | Scroll up (on Logs: pauses follow-tail) |

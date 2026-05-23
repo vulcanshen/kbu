@@ -411,15 +411,15 @@ func detailPod(item ResourceItem) ResourceDetail {
 		d.Containers = append(d.Containers, containerDetail(c, statusMap, false))
 	}
 
-	d.PodOverview = buildPodOverview(p)
+	d.PodLinks = buildPodLinks(p)
 	return d
 }
 
-// buildPodOverview extracts the navigable references from a Pod for the
-// Overview tab: immediate owner, node, service account, and image strings.
+// buildPodLinks extracts the navigable references from a Pod for the
+// Links tab: immediate owner, node, service account, and image strings.
 // Cluster-scoped refs (Node) leave Namespace empty.
-func buildPodOverview(p *corev1.Pod) *PodOverviewData {
-	o := &PodOverviewData{}
+func buildPodLinks(p *corev1.Pod) *PodLinksData {
+	o := &PodLinksData{}
 	if len(p.OwnerReferences) > 0 {
 		ref := p.OwnerReferences[0]
 		if rt, ok := kindToResourceType(ref.Kind); ok {
@@ -523,7 +523,7 @@ func kindToResourceType(kind string) (ResourceType, bool) {
 }
 
 // FetchResourceByRef fetches a single resource by its kind + name + namespace
-// and returns a ResourceItem ready for YAML rendering. Used by the Overview
+// and returns a ResourceItem ready for YAML rendering. Used by the Links
 // tab's drill-to-popup flow.
 //
 // Returns the same ResourceItem shape the table would produce, with Raw set

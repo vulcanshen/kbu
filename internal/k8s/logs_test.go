@@ -137,9 +137,9 @@ func TestPodsForDeployment_NoPods_EmptyResult(t *testing.T) {
 	}
 }
 
-// ── Pod Overview parsing ──────────────────────────────────────────────────
+// ── Pod Links parsing ──────────────────────────────────────────────────
 
-func TestBuildPodOverview_ExtractsOwnerNodeServiceAccount(t *testing.T) {
+func TestBuildPodLinks_ExtractsOwnerNodeServiceAccount(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "nginx-7f9c4d-abc12",
@@ -155,7 +155,7 @@ func TestBuildPodOverview_ExtractsOwnerNodeServiceAccount(t *testing.T) {
 			InitContainers:     []corev1.Container{{Name: "wait-db", Image: "busybox:latest"}},
 		},
 	}
-	po := buildPodOverview(pod)
+	po := buildPodLinks(pod)
 	if po.Owner == nil || po.Owner.Name != "nginx-7f9c4d" {
 		t.Errorf("owner: expected nginx-7f9c4d, got %v", po.Owner)
 	}
@@ -179,18 +179,18 @@ func TestBuildPodOverview_ExtractsOwnerNodeServiceAccount(t *testing.T) {
 	}
 }
 
-func TestBuildPodOverview_SkipsDefaultServiceAccount(t *testing.T) {
+func TestBuildPodLinks_SkipsDefaultServiceAccount(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "default"},
 		Spec:       corev1.PodSpec{ServiceAccountName: "default"},
 	}
-	po := buildPodOverview(pod)
+	po := buildPodLinks(pod)
 	if po.ServiceAccount != nil {
 		t.Errorf("default SA should be elided, got %v", po.ServiceAccount)
 	}
 }
 
-func TestBuildPodOverview_VolumesMapToDrillRefs(t *testing.T) {
+func TestBuildPodLinks_VolumesMapToDrillRefs(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "default"},
 		Spec: corev1.PodSpec{
@@ -212,7 +212,7 @@ func TestBuildPodOverview_VolumesMapToDrillRefs(t *testing.T) {
 			},
 		},
 	}
-	po := buildPodOverview(pod)
+	po := buildPodLinks(pod)
 	if len(po.Volumes) != 4 {
 		t.Fatalf("expected 4 volume refs, got %d", len(po.Volumes))
 	}
@@ -234,7 +234,7 @@ func TestBuildPodOverview_VolumesMapToDrillRefs(t *testing.T) {
 	}
 }
 
-func TestBuildPodOverview_UnknownOwnerKindOmits(t *testing.T) {
+func TestBuildPodLinks_UnknownOwnerKindOmits(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "p",
@@ -244,7 +244,7 @@ func TestBuildPodOverview_UnknownOwnerKindOmits(t *testing.T) {
 			}},
 		},
 	}
-	po := buildPodOverview(pod)
+	po := buildPodLinks(pod)
 	if po.Owner != nil {
 		t.Errorf("unknown owner kind should be omitted (not drillable), got %v", po.Owner)
 	}
