@@ -25,7 +25,7 @@ const (
 
 const (
 	toastInfoDuration = 1 * time.Second
-	toastWarnDuration = 3 * time.Second
+	toastWarnDuration = 2 * time.Second
 
 	toastInfoGlyph = "󰵅 "
 	toastWarnGlyph = "󰀦 "
@@ -59,7 +59,7 @@ func (m *ToastModel) Show(message string) tea.Cmd {
 }
 
 // ShowWarn is the warning-level toast — something the user tried got
-// blocked or failed (cycle blocked, drill failed, ...). 3s duration so
+// blocked or failed (cycle blocked, drill failed, ...). 2s duration so
 // there's time to read the reason, peach border + warning glyph for at-a-
 // glance distinction from a casual info toast.
 func (m *ToastModel) ShowWarn(message string) tea.Cmd {
