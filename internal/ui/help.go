@@ -123,20 +123,28 @@ func (m HelpModel) RenderPopup() string {
 func (m HelpModel) renderFullPopup() string {
 	// Popup spans the full terminal width so its borders align with the
 	// main view's outer panel borders (Panel 1's left edge, Panel 2/3's
-	// right edge). Fixed width centered with margins looked off visually
-	// next to the panel grid.
-	const gutterW = 4
+	// right edge).
 	innerW := m.width - 2 // minus the two vertical borders
 	if innerW < 60 {
 		innerW = 60
 	}
-	colW := (innerW - gutterW) / 2
-	if colW < 30 {
-		colW = 30
+	// Split innerW into left col + gutter + right col. Odd-width terminals
+	// leave a remainder after integer division; absorb it into the gutter
+	// so the popup hits the right border exactly (otherwise a 1-col gap
+	// shows up on the right and the popup no longer aligns with panel 2's
+	// right border).
+	leftColW := (innerW - 4) / 2
+	rightColW := leftColW
+	gutterW := innerW - leftColW - rightColW
+	if leftColW < 30 {
+		leftColW = 30
+		rightColW = 30
+		gutterW = innerW - leftColW - rightColW
+		if gutterW < 2 {
+			gutterW = 2
+		}
 	}
-	// Re-derive innerW from the colW we settled on so left+gutter+right
-	// fits exactly (odd-width terminals would otherwise leave a stray col).
-	innerW = colW*2 + gutterW
+	colW := leftColW // tests + section sizing use the smaller side
 
 	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
@@ -162,7 +170,7 @@ func (m HelpModel) renderFullPopup() string {
 	var bodyLines []string
 	bodyLines = append(bodyLines, "") // top breathing
 	for i := range leftLines {
-		bodyLines = append(bodyLines, padRight(leftLines[i], colW)+gutter+padRight(rightLines[i], colW))
+		bodyLines = append(bodyLines, padRight(leftLines[i], leftColW)+gutter+padRight(rightLines[i], rightColW))
 	}
 	bodyLines = append(bodyLines, "") // bottom breathing
 
