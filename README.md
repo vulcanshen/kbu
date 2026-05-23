@@ -144,7 +144,7 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 | `c` / `C` | Switch context (`/` to filter inside the popup) |
 | `Alt+T` | Toggle KM8erm (spawn / show / hide; shell stays alive across hide) |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
-| `Y` | Open YAML popup (`j/k/u/d/gg/G` scroll, `/` search, `e` edit, `Esc` close) |
+| `Y` | Open YAML popup (`j/k/u/d/gg/G` scroll, `/` search, `y` copy, `e` edit, `Esc` close) |
 | `!` | App log |
 | `?` | Toggle help |
 | `q` | Quit km8 (asks for confirmation) |

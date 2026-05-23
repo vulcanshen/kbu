@@ -315,7 +315,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{key: "c / C", desc: "Switch context"},
 		{key: "Alt+T", desc: "Toggle KM8erm (spawn/show/hide)"},
 		{key: "y", desc: "Copy focused panel"},
-		{key: "Y", desc: "YAML popup (e:edit /:search)"},
+		{key: "Y", desc: "YAML popup (y:copy e:edit /:search)"},
 		{key: "!", desc: "App log"},
 		{key: "?", desc: "Toggle help"},
 		{key: "q / Esc", desc: "Quit / back"},

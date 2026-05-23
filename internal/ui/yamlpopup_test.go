@@ -225,6 +225,35 @@ func TestYamlPopup_EditEmitsStartEditMsg(t *testing.T) {
 	}
 }
 
+func TestYamlPopup_CopyEmitsClipboardCmd(t *testing.T) {
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+
+	_, cmd := m.Update(keyMsg('y'))
+	if cmd == nil {
+		t.Fatal("y must return a clipboard command")
+	}
+	msg := cmd()
+	switch msg.(type) {
+	case ClipboardCopiedMsg, ClipboardCopyFailedMsg:
+		// OK — copyToClipboardCmd resolves to one of these depending on
+		// whether the host terminal accepts the OSC 52 sequence.
+	default:
+		t.Errorf("expected clipboard msg, got %T", msg)
+	}
+}
+
+func TestYamlPopup_CopyNoOpWhenEmpty(t *testing.T) {
+	m := newTestYamlPopup()
+	m.Open("", k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.animator.Finalize()
+
+	_, cmd := m.Update(keyMsg('y'))
+	if cmd != nil {
+		t.Errorf("y on empty YAML must be a no-op, got cmd returning %T", cmd())
+	}
+}
+
 func TestYamlPopup_EditNoOpWithoutItem(t *testing.T) {
 	m := newTestYamlPopup()
 	// Open with empty item (drill-down container case)
