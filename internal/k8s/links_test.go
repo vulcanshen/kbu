@@ -489,6 +489,104 @@ func TestEnrichLinks_RoleBindings(t *testing.T) {
 	}
 }
 
+func TestEnrichLinks_PodOwner_ResolvesReplicaSetToDeployment(t *testing.T) {
+	// Pod is owned by a ReplicaSet (Kubernetes auto-created); the RS in
+	// turn is owned by the Deployment "harbor-core". buildPodLinks
+	// initially sets Owner to Deployments/<RS-name> (wrong name);
+	// EnrichLinks must rewrite Name to the actual Deployment name.
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "harbor-core-847f66dfbc",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{Kind: "Deployment", Name: "harbor-core"},
+			},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "harbor-core-847f66dfbc-xyz",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{Kind: "ReplicaSet", Name: "harbor-core-847f66dfbc"},
+			},
+		},
+	}
+	cs := fake.NewSimpleClientset(rs, pod)
+
+	detail := &ResourceDetail{
+		PodLinks: &PodLinksData{
+			Owner: &RefTarget{
+				Type:      ResourceDeployments,
+				Name:      "harbor-core-847f66dfbc", // wrong name set by buildPodLinks
+				Namespace: "default",
+			},
+		},
+	}
+	EnrichLinks(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
+
+	if detail.PodLinks.Owner.Name != "harbor-core" {
+		t.Errorf("Owner.Name should be resolved to 'harbor-core', got %q", detail.PodLinks.Owner.Name)
+	}
+	if detail.PodLinks.Owner.Type != ResourceDeployments {
+		t.Errorf("Owner.Type should stay Deployments, got %s", detail.PodLinks.Owner.Type)
+	}
+}
+
+func TestEnrichLinks_PodOwner_NonReplicaSetUnchanged(t *testing.T) {
+	// DaemonSet-owned pods carry the DS name directly — EnrichLinks must
+	// leave the Owner alone (already-correct).
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "node-exporter-abc",
+			Namespace: "monitoring",
+			OwnerReferences: []metav1.OwnerReference{
+				{Kind: "DaemonSet", Name: "node-exporter"},
+			},
+		},
+	}
+	cs := fake.NewSimpleClientset(pod)
+
+	detail := &ResourceDetail{
+		PodLinks: &PodLinksData{
+			Owner: &RefTarget{Type: ResourceDaemonSets, Name: "node-exporter", Namespace: "monitoring"},
+		},
+	}
+	EnrichLinks(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
+
+	if detail.PodLinks.Owner.Name != "node-exporter" {
+		t.Errorf("DaemonSet owner should be untouched, got %q", detail.PodLinks.Owner.Name)
+	}
+}
+
+func TestEnrichLinks_PodOwner_RSLookupFailureLeavesOwnerUnchanged(t *testing.T) {
+	// If the RS lookup fails (e.g., RBAC, deleted mid-rollout), leave
+	// the initial (wrong) Owner alone — the user will at least see a
+	// "not found" toast when they try to drill, rather than us erasing
+	// the link entirely.
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "p",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{Kind: "ReplicaSet", Name: "missing-rs"},
+			},
+		},
+	}
+	cs := fake.NewSimpleClientset(pod) // no RS object
+
+	detail := &ResourceDetail{
+		PodLinks: &PodLinksData{
+			Owner: &RefTarget{Type: ResourceDeployments, Name: "missing-rs", Namespace: "default"},
+		},
+	}
+	EnrichLinks(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
+
+	if detail.PodLinks.Owner.Name != "missing-rs" {
+		t.Errorf("on lookup failure, Owner should be unchanged; got %q", detail.PodLinks.Owner.Name)
+	}
+}
+
 func TestEnrichLinks_ClusterRoleBindings(t *testing.T) {
 	cr := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "view"}}
 	crb := &rbacv1.ClusterRoleBinding{
