@@ -317,29 +317,34 @@ func (m *YamlPopupModel) scrollToMatch() {
 	}
 }
 
+// Popup sizing constants — absolute cells, no percentage math. Both popups
+// (YAML + Help) leave one row/col of breathing room between their outer
+// border and the terminal edge. overlay.Composite centers the popup, so a
+// popup outer width of (m.width - 2*popupHMargin) ends up with exactly
+// popupHMargin cells of empty space on each side.
+const (
+	popupHMargin = 1
+	popupVMargin = 1
+)
+
 func (m YamlPopupModel) popupWidth() int {
 	if m.width <= 0 {
 		return 60
 	}
-	// Full terminal width so borders align with the main view's outer panel
-	// borders — same treatment as HelpModel. Wrap (introduced earlier) means
-	// long YAML lines reflow naturally to the wider available width.
-	return m.width
+	w := m.width - 2*popupHMargin
+	if w < 40 {
+		w = 40
+	}
+	return w
 }
 
 func (m YamlPopupModel) popupHeight() int {
 	if m.height <= 0 {
 		return 20
 	}
-	// 90% leaves ~5% margin top/bottom — halved from the previous 80%/10% to
-	// recover screen real estate that the popup was wasting as vertical
-	// padding.
-	h := m.height * 90 / 100
+	h := m.height - 2*popupVMargin
 	if h < 10 {
 		h = 10
-	}
-	if h > m.height-2 {
-		h = m.height - 2
 	}
 	return h
 }

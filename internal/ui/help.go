@@ -121,18 +121,23 @@ func (m HelpModel) RenderPopup() string {
 // Long descriptions wrap onto continuation lines indented under the desc
 // column so the popup fits a standard 80-col terminal.
 func (m HelpModel) renderFullPopup() string {
-	// Popup spans the full terminal width so its borders align with the
-	// main view's outer panel borders (Panel 1's left edge, Panel 2/3's
-	// right edge).
-	innerW := m.width - 2 // minus the two vertical borders
-	if innerW < 60 {
-		innerW = 60
+	// Popup layout — all absolute math, no percentage scaling:
+	//   margin │ border │ leftCol │ gutter │ rightCol │ border │ margin
+	//      1       1        N         G         N         1        1
+	// total = m.width  →  N = (m.width - 4 - G) / 2 (G + leftover absorbed)
+	//
+	// popupHMargin (1) sits between popup outer border and the terminal
+	// edge, so the popup's borders are inset 1 cell from each side of the
+	// screen.
+	popupOuterW := m.width - 2*popupHMargin
+	if popupOuterW < 60 {
+		popupOuterW = 60
 	}
+	innerW := popupOuterW - 2 // two vertical borders
 	// Split innerW into left col + gutter + right col. Odd-width terminals
 	// leave a remainder after integer division; absorb it into the gutter
-	// so the popup hits the right border exactly (otherwise a 1-col gap
-	// shows up on the right and the popup no longer aligns with panel 2's
-	// right border).
+	// so the popup hits its full outer width exactly (otherwise a 1-col
+	// gap shows up on one side).
 	leftColW := (innerW - 4) / 2
 	rightColW := leftColW
 	gutterW := innerW - leftColW - rightColW
