@@ -1238,6 +1238,12 @@ func EnrichLinks(ctx context.Context, cs kubernetes.Interface, rt ResourceType, 
 		enrichNetworkPolicyPods(ctx, cs, item, detail)
 	case ResourceRoles:
 		enrichRoleBindings(ctx, cs, item, detail)
+	case ResourceClusterRoles:
+		enrichClusterRoleBindings(ctx, cs, item, detail)
+	case ResourceStorageClasses:
+		enrichStorageClassPVCs(ctx, cs, item, detail)
+	case ResourceIngressClasses:
+		enrichIngressClassIngresses(ctx, cs, item, detail)
 	}
 }
 

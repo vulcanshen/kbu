@@ -12,6 +12,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -485,6 +486,80 @@ func TestEnrichLinks_RoleBindings(t *testing.T) {
 	}
 	if detail.Links[0].Entries[0].Ref.Name != "view-binding" {
 		t.Errorf("wrong binding: %s", detail.Links[0].Entries[0].Ref.Name)
+	}
+}
+
+func TestEnrichLinks_ClusterRoleBindings(t *testing.T) {
+	cr := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "view"}}
+	crb := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "viewers"},
+		RoleRef:    rbacv1.RoleRef{Kind: "ClusterRole", Name: "view"},
+	}
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-viewers", Namespace: "team-a"},
+		RoleRef:    rbacv1.RoleRef{Kind: "ClusterRole", Name: "view"},
+	}
+	unrelated := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "editors"},
+		RoleRef:    rbacv1.RoleRef{Kind: "ClusterRole", Name: "edit"},
+	}
+	cs := fake.NewSimpleClientset(cr, crb, rb, unrelated)
+
+	detail := &ResourceDetail{}
+	EnrichLinks(context.Background(), cs, ResourceClusterRoles, ResourceItem{Raw: cr}, detail)
+	if len(detail.Links) != 2 {
+		t.Fatalf("expected 2 sections (CRBs + RBs), got %d: %+v", len(detail.Links), detail.Links)
+	}
+	if detail.Links[0].Entries[0].Ref.Name != "viewers" {
+		t.Errorf("CRB ref wrong: %+v", detail.Links[0].Entries[0])
+	}
+	if detail.Links[1].Entries[0].Ref.Name != "team-viewers" || detail.Links[1].Entries[0].Ref.Namespace != "team-a" {
+		t.Errorf("RB ref wrong: %+v", detail.Links[1].Entries[0])
+	}
+}
+
+func TestEnrichLinks_StorageClassPVCs(t *testing.T) {
+	sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "ssd"}}
+	user := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "app"},
+		Spec:       corev1.PersistentVolumeClaimSpec{StorageClassName: ptrStr("ssd")},
+		Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
+	}
+	other := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "scratch", Namespace: "app"},
+		Spec:       corev1.PersistentVolumeClaimSpec{StorageClassName: ptrStr("hdd")},
+	}
+	cs := fake.NewSimpleClientset(sc, user, other)
+
+	detail := &ResourceDetail{}
+	EnrichLinks(context.Background(), cs, ResourceStorageClasses, ResourceItem{Raw: sc}, detail)
+	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
+		t.Fatalf("expected 1 PVC, got %+v", detail.Links)
+	}
+	if detail.Links[0].Entries[0].Ref.Name != "data" {
+		t.Errorf("wrong PVC: %s", detail.Links[0].Entries[0].Ref.Name)
+	}
+}
+
+func TestEnrichLinks_IngressClassIngresses(t *testing.T) {
+	ic := &networkingv1.IngressClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}}
+	user := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: "site", Namespace: "web"},
+		Spec:       networkingv1.IngressSpec{IngressClassName: ptrStr("nginx")},
+	}
+	other := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "web"},
+		Spec:       networkingv1.IngressSpec{IngressClassName: ptrStr("traefik")},
+	}
+	cs := fake.NewSimpleClientset(ic, user, other)
+
+	detail := &ResourceDetail{}
+	EnrichLinks(context.Background(), cs, ResourceIngressClasses, ResourceItem{Raw: ic}, detail)
+	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
+		t.Fatalf("expected 1 ingress, got %+v", detail.Links)
+	}
+	if detail.Links[0].Entries[0].Ref.Name != "site" {
+		t.Errorf("wrong Ingress: %s", detail.Links[0].Entries[0].Ref.Name)
 	}
 }
 

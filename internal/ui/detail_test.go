@@ -415,22 +415,6 @@ func TestDetailModel_LinksTab_EmptyShowsPlaceholder(t *testing.T) {
 	}
 }
 
-// TestDetailModel_LinksTab_UnsupportedPlaceholder verifies kinds that have no
-// Links builder yet show the "not yet supported" placeholder, not the
-// "no links to show" one — so users can tell apart "we haven't done this"
-// from "this instance genuinely has nothing to drill to".
-func TestDetailModel_LinksTab_UnsupportedPlaceholder(t *testing.T) {
-	m := newTestDetail()
-	m.SetResourceType(k8s.ResourceClusterRoles) // currently unsupported
-	m.SetDetail(k8s.ResourceDetail{Name: "view", Kind: "ClusterRole"}, nil)
-	m = m.switchToTab(0) // Links
-
-	joined := strings.Join(m.contentLines, "\n")
-	if !strings.Contains(joined, "not yet supported") {
-		t.Errorf("unsupported kind must show 'not yet supported' placeholder, got:\n%s", joined)
-	}
-}
-
 // TestDetailModel_NamespaceHidesLinksTab verifies the Links tab is dropped
 // entirely for Namespace — there are no meaningful refs to surface, so the
 // tab strip skips straight to Events.
