@@ -188,6 +188,19 @@ func TestContextPickerModel_CloseOnC(t *testing.T) {
 	}
 }
 
+func TestContextPickerModel_CloseOnUppercaseC(t *testing.T) {
+	m := newTestContextPicker()
+	m.Open([]string{"a", "b"}, "a")
+	m.animator.Finalize()
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	m.animator.Finalize()
+
+	if m.IsActive() {
+		t.Error("expected picker to be inactive after C (alias)")
+	}
+}
+
 func TestContextPickerModel_InactiveIgnoresInput(t *testing.T) {
 	m := newTestContextPicker()
 	// Not opened, should be inactive.

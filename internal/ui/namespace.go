@@ -89,7 +89,7 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		}
 	case "enter":
 		return m.selectCurrent(items)
-	case "esc", "n":
+	case "esc", "n", "N":
 		if m.searchQuery != "" {
 			m.searchQuery = ""
 			m.cursor = 0

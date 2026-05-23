@@ -179,6 +179,17 @@ func TestNamespacePickerModel_CloseOnN(t *testing.T) {
 	}
 }
 
+func TestNamespacePickerModel_CloseOnUppercaseN(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('N'))
+	m.animator.Finalize()
+	if m.IsActive() {
+		t.Error("N must also close the namespace picker (alias)")
+	}
+}
+
 func TestNamespacePickerModel_InactiveIgnoresKeys(t *testing.T) {
 	m := newTestNamespacePicker()
 	// Do NOT call Open.

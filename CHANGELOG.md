@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **`Y` opens a full-screen YAML popup** for the currently-selected resource. Supports `j` / `k` line scroll, `u` / `d` half-page scroll, `gg` / `G` jump to top / bottom, `/` search (`Enter` commits; `n` / `N` step through matches with a `▸` marker on the current line), and `e` to dispatch `kubectl edit` on the same resource directly from the popup (skips the confirm step that the table-level `e` uses — by the time you press `e` here, you've already inspected the YAML). `Esc` / `q` close. Solves the "YAML wall in narrow vertical Panel 3 is hard to read" problem without giving up on having YAML at all.
+- **Uppercase aliases for namespace / context pickers**: `N` and `C` open the same pickers as `n` and `c`. Transitional — lowercase will be deprecated later. Rationale: lowercase keys felt too easy to misfire ("any letter pops up a popup"), and `n` / `c` clash with vim mental models (`n` = next-search, `c` = change).
+
+### Internal
+- New `YamlPopupModel` in `internal/ui/yamlpopup.go` modelled on `HelpModel` / `AppLogModel` (PopupAnimator + content lines + scroll offset + search state). Captures edit target at `Open()` time so `e` knows what to dispatch even after the user has scrolled around.
+- New `DetailModel.YAMLContent()` accessor exposes the loaded YAML for popup rendering without leaking the internal `k8s.ResourceDetail` field.
+- `NamespacePickerModel` and `ContextPickerModel` now accept the uppercase form as a close-key alias.
+
 ## [v1.2.0] - 2026-05-22
 
 ### Added
