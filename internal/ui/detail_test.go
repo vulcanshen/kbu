@@ -258,6 +258,61 @@ func TestDetailModel_LogsTab_NonPodResource(t *testing.T) {
 	}
 }
 
+func TestDetailModel_Deployment_TabOrderLogsFirst(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourceDeployments)
+	if len(m.tabs) != 3 {
+		t.Fatalf("expected 3 tabs for Deployment, got %d (%v)", len(m.tabs), m.tabs)
+	}
+	wantOrder := []string{"Logs", "YAML", "Events"}
+	for i, want := range wantOrder {
+		if m.tabs[i] != want {
+			t.Errorf("tab %d: expected %q, got %q", i, want, m.tabs[i])
+		}
+	}
+	if m.activeTab != 0 {
+		t.Errorf("Deployment default activeTab must be 0 (Logs), got %d", m.activeTab)
+	}
+}
+
+func TestDetailModel_AppendLogLine_AggregatePrefix(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourceDeployments)
+	// Aggregate mode: pod name carries through to the prefix.
+	m.AppendLogLine("nginx-abc123-xyz45", "web", "hello from pod1")
+	m = m.switchToTab(0) // Logs is first for Deployment
+
+	if len(m.contentLines) == 0 {
+		t.Fatal("expected log lines rendered")
+	}
+	// Pod hash tag (last segment) should appear, container name should appear.
+	if !strings.Contains(m.contentLines[0], "xyz45") {
+		t.Errorf("expected pod-hash tag 'xyz45' in line, got %q", m.contentLines[0])
+	}
+	if !strings.Contains(m.contentLines[0], "web") {
+		t.Errorf("expected container name 'web' in line, got %q", m.contentLines[0])
+	}
+}
+
+func TestPodHashTag(t *testing.T) {
+	cases := []struct {
+		name string
+		want string
+	}{
+		{"nginx-abc123-xyz45", "xyz45"},
+		{"deploy-789abcdef0-q12pl", "q12pl"},
+		{"short", "short"},
+		{"no-dash-five", "five"}, // last segment "five" length 4 fits in 5
+		{"abcdefgh", "defgh"},    // no dash → last 5 chars
+	}
+	for _, c := range cases {
+		got := podHashTag(c.name)
+		if got != c.want {
+			t.Errorf("podHashTag(%q) = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestDetailModel_LogsTab_PodWaiting(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
@@ -280,7 +335,7 @@ func TestDetailModel_AppendLogLine(t *testing.T) {
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	// Append a log line.
-	m.AppendLogLine("nginx", "hello world")
+	m.AppendLogLine("", "nginx", "hello world")
 
 	if len(m.logLines) != 1 {
 		t.Fatalf("expected 1 logLine, got %d", len(m.logLines))
@@ -298,7 +353,7 @@ func TestDetailModel_AppendLogLine_WrapsLongText(t *testing.T) {
 	m.SetResourceType(k8s.ResourcePods)
 	longText := strings.Repeat("foo bar baz ", 20) // ~240 chars, far over 80
 
-	m.AppendLogLine("nginx", longText)
+	m.AppendLogLine("", "nginx", longText)
 	// Storage stores raw — exactly one entry, unwrapped.
 	if len(m.logLines) != 1 {
 		t.Fatalf("expected 1 raw log entry, got %d", len(m.logLines))
@@ -324,7 +379,7 @@ func TestDetailModel_Logs_ReflowOnResize(t *testing.T) {
 	m.SetDetail(sampleDetail(), nil)
 	m = m.switchToTab(1) // Logs
 	longText := strings.Repeat("foo bar baz ", 20)
-	m.AppendLogLine("nginx", longText)
+	m.AppendLogLine("", "nginx", longText)
 
 	narrowLines := len(m.contentLines)
 	if narrowLines < 2 {
@@ -345,7 +400,7 @@ func TestDetailModel_AppendLogLine_MaxLines(t *testing.T) {
 	m.maxLogLines = 10
 
 	for i := 0; i < 15; i++ {
-		m.AppendLogLine("test", fmt.Sprintf("line %d", i))
+		m.AppendLogLine("", "test", fmt.Sprintf("line %d", i))
 	}
 
 	if len(m.logLines) != 10 {
@@ -362,8 +417,8 @@ func TestDetailModel_LogsTab_WithLogLines(t *testing.T) {
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), sampleEvents())
 
-	m.AppendLogLine("nginx", "log entry 1")
-	m.AppendLogLine("sidecar", "log entry 2")
+	m.AppendLogLine("", "nginx", "log entry 1")
+	m.AppendLogLine("", "sidecar", "log entry 2")
 
 	// Switch to Logs tab.
 	m = m.switchToTab(1) // Logs tab for Pods is index 1
@@ -383,7 +438,7 @@ func TestDetailModel_ClearDetail_ClearsLogs(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), sampleEvents())
-	m.AppendLogLine("nginx", "some log")
+	m.AppendLogLine("", "nginx", "some log")
 
 	if len(m.logLines) == 0 {
 		t.Fatal("expected logLines to be non-empty before clear")
@@ -575,7 +630,7 @@ func TestDetailModel_FollowTail_AppendSnapsToBottom(t *testing.T) {
 
 	// Spam enough lines that scroll has somewhere to go.
 	for i := 0; i < 100; i++ {
-		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
 
 	if !m.followTail {
@@ -594,7 +649,7 @@ func TestDetailModel_FollowTail_AppendDoesNotMoveWhenPaused(t *testing.T) {
 
 	// Fill some lines, then user scrolls up — disables follow.
 	for i := 0; i < 50; i++ {
-		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
 	m, _ = m.Update(keyMsg('k'))
 	if m.followTail {
@@ -604,7 +659,7 @@ func TestDetailModel_FollowTail_AppendDoesNotMoveWhenPaused(t *testing.T) {
 
 	// New lines arrive — scroll offset must not change.
 	for i := 50; i < 60; i++ {
-		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
 	if m.scrollOffset != pausedAt {
 		t.Errorf("expected scroll to stay put while paused: was %d, now %d", pausedAt, m.scrollOffset)
@@ -628,7 +683,7 @@ func TestDetailModel_FollowTail_ScrollUpDisablesOnLogsOnly(t *testing.T) {
 	// Logs tab: scrollUp disables.
 	m = m.switchToTab(1)
 	for i := 0; i < 50; i++ {
-		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
 	m, _ = m.Update(keyMsg('k'))
 	if m.followTail {
@@ -642,7 +697,7 @@ func TestDetailModel_FollowTail_GReEnables(t *testing.T) {
 	m.SetDetail(sampleDetail(), nil)
 	m = m.switchToTab(1)
 	for i := 0; i < 50; i++ {
-		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
 	m, _ = m.Update(keyMsg('k')) // disable follow
 	if m.followTail {
@@ -678,7 +733,7 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 	m.SetDetail(sampleDetail(), nil)
 	m = m.switchToTab(1) // Logs
 	for i := 0; i < 50; i++ {
-		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
 	m, _ = m.Update(keyMsg('k')) // pause
 	if m.followTail {
@@ -705,7 +760,7 @@ func TestDetailModel_ActiveTabTitle_FollowMarker(t *testing.T) {
 
 	// Pause via scroll up.
 	for i := 0; i < 50; i++ {
-		m.AppendLogLine("nginx", fmt.Sprintf("line %d", i))
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
 	m, _ = m.Update(keyMsg('k'))
 	if got := m.ActiveTabTitle(); got != "Logs" {

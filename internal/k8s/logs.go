@@ -11,8 +11,18 @@ import (
 
 // LogLine represents a single log line from a container.
 type LogLine struct {
+	Pod       string
 	Container string
 	Text      string
+}
+
+// PodTarget identifies a pod whose containers should be streamed. Used by
+// LogStreamer.StartMulti to aggregate logs across multiple pods (e.g. all
+// pods of a Deployment's current ReplicaSet).
+type PodTarget struct {
+	Name       string
+	Namespace  string
+	Containers []string
 }
 
 // LogStreamer streams logs from one or more containers in a pod.
@@ -32,10 +42,17 @@ func NewLogStreamer(clientset kubernetes.Interface) *LogStreamer {
 	}
 }
 
-// Start cancels any existing stream and starts streaming logs from the
-// specified containers in the given pod. Each container gets its own
-// goroutine that reads log lines and sends them to the shared channel.
+// Start streams the named containers from a single pod. Thin wrapper around
+// StartMulti — kept for callers that don't need aggregation.
 func (ls *LogStreamer) Start(podName, namespace string, containers []string) {
+	ls.StartMulti([]PodTarget{{Name: podName, Namespace: namespace, Containers: containers}})
+}
+
+// StartMulti cancels any existing stream and starts streaming logs from
+// every (pod, container) pair in `targets`. All lines flow through the
+// shared Lines() channel; each LogLine carries Pod / Container / Text so
+// the consumer can multiplex by either dimension.
+func (ls *LogStreamer) StartMulti(targets []PodTarget) {
 	ls.Stop()
 
 	ls.mu.Lock()
@@ -55,12 +72,14 @@ func (ls *LogStreamer) Start(podName, namespace string, containers []string) {
 drained:
 
 	var wg sync.WaitGroup
-	for _, c := range containers {
-		wg.Add(1)
-		go func(container string) {
-			defer wg.Done()
-			ls.streamContainer(ctx, podName, namespace, container)
-		}(c)
+	for _, t := range targets {
+		for _, c := range t.Containers {
+			wg.Add(1)
+			go func(podName, namespace, container string) {
+				defer wg.Done()
+				ls.streamContainer(ctx, podName, namespace, container)
+			}(t.Name, t.Namespace, c)
+		}
 	}
 
 	// Close-sentinel goroutine: when all container goroutines finish
@@ -99,7 +118,7 @@ func (ls *LogStreamer) streamContainer(ctx context.Context, podName, namespace, 
 	if err != nil {
 		// Send an error line so the user sees something.
 		select {
-		case ls.lines <- LogLine{Container: container, Text: "[error: " + err.Error() + "]"}:
+		case ls.lines <- LogLine{Pod: podName, Container: container, Text: "[error: " + err.Error() + "]"}:
 		case <-ctx.Done():
 		}
 		return
@@ -116,14 +135,14 @@ func (ls *LogStreamer) streamContainer(ctx context.Context, podName, namespace, 
 		select {
 		case <-ctx.Done():
 			return
-		case ls.lines <- LogLine{Container: container, Text: scanner.Text()}:
+		case ls.lines <- LogLine{Pod: podName, Container: container, Text: scanner.Text()}:
 		}
 	}
 
 	// If the scanner ended due to an error (not EOF / context cancel), report it.
 	if err := scanner.Err(); err != nil && ctx.Err() == nil {
 		select {
-		case ls.lines <- LogLine{Container: container, Text: "[stream error: " + err.Error() + "]"}:
+		case ls.lines <- LogLine{Pod: podName, Container: container, Text: "[stream error: " + err.Error() + "]"}:
 		case <-ctx.Done():
 		}
 	}
@@ -132,7 +151,7 @@ func (ls *LogStreamer) streamContainer(ctx context.Context, podName, namespace, 
 	// send a marker so the user knows the stream ended.
 	if ctx.Err() == nil {
 		select {
-		case ls.lines <- LogLine{Container: container, Text: "[stream ended]"}:
+		case ls.lines <- LogLine{Pod: podName, Container: container, Text: "[stream ended]"}:
 		case <-ctx.Done():
 		}
 	}

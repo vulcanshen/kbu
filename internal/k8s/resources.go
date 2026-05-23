@@ -479,6 +479,117 @@ func fetchDeployments(ctx context.Context, cs kubernetes.Interface, ns string) (
 	return items, nil
 }
 
+// PodsForWorkload dispatches to the right kind-specific resolver. Returns an
+// error when item.Raw isn't a supported workload type (Deployment for now;
+// StatefulSet / DaemonSet / Job to follow once their aggregate-log story is
+// scoped). Keeps the ui package free of apps/v1 imports.
+func PodsForWorkload(ctx context.Context, cs kubernetes.Interface, item ResourceItem, currentOnly bool) ([]PodTarget, error) {
+	switch raw := item.Raw.(type) {
+	case *appsv1.Deployment:
+		return PodsForDeployment(ctx, cs, raw, currentOnly)
+	}
+	return nil, fmt.Errorf("aggregate logs not supported for %T", item.Raw)
+}
+
+// PodsForDeployment resolves a Deployment to the list of pod targets whose
+// containers should be streamed for aggregate logs.
+//
+// When currentOnly is true, only pods belonging to the Deployment's *current*
+// ReplicaSet (matched via the `deployment.kubernetes.io/revision` annotation)
+// are returned — i.e. the live generation, excluding rollout leftovers. When
+// false, all pods matching the Deployment's selector are returned (useful for
+// observing both old and new pods during a rollout).
+//
+// Falls back to selector-only matching if the current-RS lookup fails (RBAC
+// missing on ReplicaSet, etc.). Returns an empty slice when no pods match —
+// callers should treat that as "no pods running" rather than an error.
+func PodsForDeployment(ctx context.Context, cs kubernetes.Interface, dep *appsv1.Deployment, currentOnly bool) ([]PodTarget, error) {
+	if dep == nil || dep.Spec.Selector == nil {
+		return nil, fmt.Errorf("deployment has no selector")
+	}
+	sel, err := metav1.LabelSelectorAsSelector(dep.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("invalid deployment selector: %w", err)
+	}
+	selector := sel.String()
+
+	if currentOnly {
+		if rsSelector, ok := currentRSSelector(ctx, cs, dep); ok {
+			selector = rsSelector
+		}
+	}
+	return podTargetsFromSelector(ctx, cs, dep.Namespace, selector)
+}
+
+// currentRSSelector returns the label selector of the Deployment's current
+// ReplicaSet (revision matches the Deployment's revision annotation). ok=false
+// when the RS can't be resolved (missing RBAC, deployment never rolled out,
+// etc.) — caller should fall back to the Deployment's own selector.
+func currentRSSelector(ctx context.Context, cs kubernetes.Interface, dep *appsv1.Deployment) (string, bool) {
+	rsList, err := cs.AppsV1().ReplicaSets(dep.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return "", false
+	}
+	currentRev := dep.Annotations["deployment.kubernetes.io/revision"]
+	if currentRev == "" {
+		return "", false
+	}
+	for i := range rsList.Items {
+		rs := &rsList.Items[i]
+		if !rsOwnedByDeployment(rs, dep) {
+			continue
+		}
+		if rs.Annotations["deployment.kubernetes.io/revision"] != currentRev {
+			continue
+		}
+		if rs.Spec.Selector == nil {
+			return "", false
+		}
+		rsSel, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
+		if err != nil {
+			return "", false
+		}
+		return rsSel.String(), true
+	}
+	return "", false
+}
+
+func rsOwnedByDeployment(rs *appsv1.ReplicaSet, dep *appsv1.Deployment) bool {
+	for _, ref := range rs.OwnerReferences {
+		if ref.UID == dep.UID && ref.Kind == "Deployment" {
+			return true
+		}
+	}
+	return false
+}
+
+func podTargetsFromSelector(ctx context.Context, cs kubernetes.Interface, ns, selector string) ([]PodTarget, error) {
+	list, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, fmt.Errorf("listing pods for selector %q: %w", selector, err)
+	}
+	out := make([]PodTarget, 0, len(list.Items))
+	for i := range list.Items {
+		p := &list.Items[i]
+		var containers []string
+		for _, c := range p.Spec.InitContainers {
+			containers = append(containers, c.Name)
+		}
+		for _, c := range p.Spec.Containers {
+			containers = append(containers, c.Name)
+		}
+		if len(containers) == 0 {
+			continue
+		}
+		out = append(out, PodTarget{
+			Name:       p.Name,
+			Namespace:  p.Namespace,
+			Containers: containers,
+		})
+	}
+	return out, nil
+}
+
 func detailDeployment(item ResourceItem) ResourceDetail {
 	dep, _ := item.Raw.(*appsv1.Deployment)
 	d := baseDetail(item, "Deployment", dep.ObjectMeta)
