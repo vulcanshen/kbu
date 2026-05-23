@@ -687,7 +687,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		for _, existing := range m.detail.DrillChain() {
 			if existing.Type == msg.Ref.Type && existing.Name == msg.Ref.Name && existing.Namespace == msg.Ref.Namespace {
-				return m, m.toast.Show(fmt.Sprintf("cycle blocked: %s/%s already in chain", msg.Ref.Type, msg.Ref.Name))
+				return m, m.toast.ShowWarn(fmt.Sprintf("cycle blocked: %s/%s already in chain", msg.Ref.Type, msg.Ref.Name))
 			}
 		}
 		ref := msg.Ref
@@ -715,7 +715,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.appLog.Warn(fmt.Sprintf("drill push %s/%s: %s", msg.ref.Type, msg.ref.Name, msg.err.Error()))
-			return m, m.toast.Show(fmt.Sprintf("drill failed: %s", msg.err.Error()))
+			return m, m.toast.ShowWarn(fmt.Sprintf("drill failed: %s", msg.err.Error()))
 		}
 		m.detail.PushDrillFrame(msg.ref, msg.item, msg.detail)
 		return m, nil
@@ -734,7 +734,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resourceFetchedForDrillMsg:
 		if msg.err != nil {
 			m.appLog.Warn(fmt.Sprintf("drill %s/%s: %s", msg.ref.Type, msg.ref.Name, msg.err.Error()))
-			return m, m.toast.Show("Drill failed — see App Log (!)")
+			return m, m.toast.ShowWarn("Drill failed — see App Log (!)")
 		}
 		if msg.yaml == "" {
 			m.appLog.Warn(fmt.Sprintf("drill %s/%s: no YAML", msg.ref.Type, msg.ref.Name))
