@@ -510,26 +510,26 @@ func TestDetailModel_LinksH_PopsFrame(t *testing.T) {
 	}
 }
 
-func TestDetailModel_LinksI_EmitsBreadcrumbMsgAtDepthGT1(t *testing.T) {
+func TestDetailModel_LinksB_EmitsBreadcrumbMsgAtDepthGT1(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodLinksDetail(), nil)
 	m = m.switchToTab(1)
 
-	// At depth 1, i is a no-op (no chain to display).
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	// At depth 1, b is a no-op (no chain to display).
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
 	if cmd != nil {
-		t.Errorf("i at depth 1 should not emit a Cmd, got %T", cmd())
+		t.Errorf("b at depth 1 should not emit a Cmd, got %T", cmd())
 	}
 
-	// At depth 2, i emits LinkBreadcrumbMsg.
+	// At depth 2, b emits LinkBreadcrumbMsg.
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
 	)
-	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
 	if cmd == nil {
-		t.Fatal("i at depth >1 must emit LinkBreadcrumbMsg")
+		t.Fatal("b at depth >1 must emit LinkBreadcrumbMsg")
 	}
 	if _, ok := cmd().(LinkBreadcrumbMsg); !ok {
 		t.Errorf("expected LinkBreadcrumbMsg, got %T", cmd())
