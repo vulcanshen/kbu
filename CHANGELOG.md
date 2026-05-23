@@ -4,38 +4,246 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [v1.3.0] - 2026-05-24
+
+The big one. km8 becomes a graph navigator — the Links tab lets you
+chase ownership / consumer / ref chains by repeatedly drilling
+(Deployment → Pods → ConfigMap → consumer Pods → ...) without ever
+leaving panel 3. 25 of 26 resource kinds carry Links data; every drill
+respects a cycle pre-check; a breadcrumb popup lets you jump back to
+any ancestor level in one step. Alongside that: a persistent embedded
+shell (KM8erm), aggregate Deployment logs, a full-screen `Y` YAML
+popup, and a layout refactor that ditched percentage-math heuristics
+for absolute stacking.
 
 ### Added
-- **Links tab + Lens-style navigable references**: every detail panel now has a Links tab as its default (post-YAML-migration tab order; YAML lives in the `Y` popup). For Pods, Links lists Owner / Node / ServiceAccount / Image as a structured view; `j`/`k` move the cursor between drillable refs and `Enter` opens the referenced resource (`Deployment/nginx`, `Node/worker-3`, `ServiceAccount/nginx-sa`, ...) in the YAML popup. Other resource kinds get a generic Links fallback (Name + structured fields + Labels + Annotations) so the panel never renders empty. This is km8 finally delivering on the CLAUDE.md tagline "Lens IDE terminal alternative" — graph navigation in a TUI.
-- New `k8s.PodLinksData` and `k8s.RefTarget` carry the navigable refs through the existing `ResourceDetail` so the ui package never needs to parse `*corev1.Pod` directly.
-- New `k8s.FetchResourceByRef(ctx, cs, ref)` fetches a single resource by km8 type + name + namespace, used by Links drill-down. Supports Pods, Deployments, DaemonSets, StatefulSets, Jobs, CronJobs, Nodes, ServiceAccounts, ConfigMaps, Secrets, PVCs, PVs, Services.
+
+- **Links tab — Lens-style graph navigation.** Every detail panel
+  (except Namespaces, which has no meaningful refs) carries a Links
+  tab listing the resource's navigable references. `Enter` / `l`
+  drills into a ref — the panel re-renders showing *that* resource's
+  Links, building a navigation chain (Deployment → Pod → ConfigMap →
+  consumer Pods, ...). `h` / `Esc` pops one level. `b` opens a
+  breadcrumb popup listing the full chain so you can jump back to any
+  ancestor in one step (`j` / `k` to pick, `Enter` to commit). `Y` on
+  the cursor-pointed entry opens its YAML popup. The tab label
+  surfaces depth as `Links ↳N` and the panel border carries a
+  `[b]readcrumbs` hint at the top-right whenever you're deeper than
+  the root. Cycle detection (`kind+ns+name`) blocks revisiting an
+  ancestor; fetch failures show a peach `ShowWarn` toast and don't
+  push a frame. Stale-drop guards (source item UID) keep async fetch
+  results from clobbering the panel when you've moved on to a
+  different row.
+- **Links coverage for 25 of 26 resource kinds.** Pods / Services /
+  Deployments / StatefulSets / DaemonSets / Jobs / CronJobs / Ingresses
+  / HPAs / PVCs each surface their kind-specific refs (owners,
+  selected pods, scaleTargetRef, claimRef, ...). ConfigMaps / Secrets
+  / ServiceAccounts / PVs surface *reverse* refs (which pods mount me
+  / use me as their SA / are bound to me). Nodes /
+  PodDisruptionBudgets / NetworkPolicies / EndpointSlices / Roles /
+  RoleBindings / ClusterRoles / ClusterRoleBindings / StorageClasses /
+  IngressClasses all wired. Namespace hides the Links tab entirely
+  (no concrete drill target).
+- **Aggregate Logs for Deployments.** Selecting a Deployment row
+  streams logs from every pod in its current ReplicaSet into one Logs
+  tab (also Deployment's default tab — "which pod is misbehaving
+  during a rollout" is the question that opens 90% of Deployment
+  details). Lines are prefixed `<pod-hash>│<container>│<text>` with
+  three independent FNV-derived colors from the 8-entry Catppuccin
+  palette so any pod / container combination stays visually distinct.
+  Cross-stream timestamp sorting deliberately not attempted (clock
+  skew + jitter would make any ordering misleading). Falls back to
+  the Deployment's full selector when the current-ReplicaSet lookup
+  fails (RBAC denies RS list, etc.).
+- **Persistent KM8erm (`Alt+t`).** The embedded shell survives
+  visibility toggling. First `Alt+t` spawns it; subsequent presses
+  hide / show while cwd, history, env vars, and background jobs all
+  persist. Status bar carries a chip in the `ns:` row showing state —
+  green `attached` while visible, peach `km8erm` while hidden. Shell
+  exits cleanly on km8 quit. `Alt+t` only applies to the Shell-kind
+  PTY; `kubectl edit` and `kubectl exec` popups treat it as a regular
+  key (their lifecycle is bound to the subprocess). `e` / `s` while
+  any PTY is alive refuse with a `ShowWarn` toast instead of
+  clobbering the in-flight subprocess.
+- **`Y` YAML popup.** Full-screen popup of the currently-selected
+  resource's YAML with `j` / `k` line scroll, `u` / `d` half-page,
+  `gg` / `G` top / bottom, `/` search (`Enter` commits; `n` / `N`
+  step through matches with full-row highlight; search-box border
+  flips cyan → amber when the filter locks), `e` to dispatch
+  `kubectl edit` directly from the popup (skips the table-level
+  confirm), and `y` to OSC-52-copy the full YAML to your clipboard.
+  Solves the "YAML wall in narrow Panel 3 is hard to read" friction
+  without dropping YAML access. On the Links tab, `Y` follows the
+  cursor — opens the YAML of the link entry you're pointing at, so
+  previewing a drill target's YAML doesn't require drilling into it
+  first.
+- **App Log `y` to copy.** Press `y` inside the App Log popup (`!`)
+  to OSC-52-copy the full log (newest-first, matching display order).
+  Makes "paste the error into Slack / GitHub issue" one key away.
+- **Toast levels — `Show` / `ShowWarn`.** Info-level (`Show`) stays
+  1s sky-blue (Copied!, PTY hints); warning-level (`ShowWarn`) is 2s
+  peach with a warning glyph (`󰀦`) for cycle-blocked / drill-failed
+  messages. Longer duration means you actually get to read what
+  blocked. `ShowError` reserved for when the first error caller
+  appears.
+- **Per-popup distinct icons.** Each popup (toast, confirm, help, app
+  log, context picker, namespace picker, YAML popup, breadcrumb,
+  PTY view) gets its own Nerd Font glyph in the title.
+- **`N` / `C` uppercase aliases for namespace / context pickers.**
+  Lowercase still works but feels too easy to misfire (`n` is
+  vim-search-next muscle memory). Lowercase will be deprecated later.
+- **Sidebar category-name search.** Typing `/` followed by a category
+  name (`cluster`) expands matching categories and shows all their
+  children, not only items whose own label matches.
+- **Detail panel refetch spinner.** Panel 3 border shows an animated
+  braille spinner while `fetchResourceDetail` is in flight.
 
 ### Changed
-- **Detail tab order: YAML out, Links in.** YAML moves entirely to the `Y` popup (introduced earlier in this branch). New defaults:
+
+- **Detail tab order: YAML moved out, Links is the default tab.**
+  YAML lives in the `Y` popup now. New defaults:
   - Pod: `Logs` / `Links` / `Events`
   - Deployment: `Logs` / `Links` / `Events`
-  - Events resource: `Links` alone
+  - Events: `Links` alone
   - everything else: `Links` / `Events`
-  Existing users will notice that pressing `1`/`2`/`3` or `h`/`l` no longer cycles to a YAML tab — use `Y` instead.
 
-### Added
-- **Aggregate logs for Deployments**: selecting a Deployment row now streams logs from every pod in its current ReplicaSet into a unified Logs tab (also the default tab for Deployment detail, since "which pod is misbehaving during a rollout" is the most common reason to open a Deployment). Lines are prefixed `<pod-hash>│<container>│<text>` — three independent colors derived from FNV hash + the existing 8-entry Catppuccin palette. Pod-hash is the trailing segment of the pod name (last 5 chars of the random suffix). Cross-stream timestamp sorting is intentionally not attempted — clock skew + jitter would make any ordering misleading; lines arrive in the order kubectl's API returns them. Tab order for Deployment is `Logs` → `YAML` → `Events` (was `YAML` → `Events`). Falls back to the Deployment selector when the current-ReplicaSet lookup fails (e.g. RBAC denies ReplicaSet list).
-- **Persistent KM8erm**: `Alt+T` is now the single toggle for the embedded shell — spawn / show / hide. The shell never dies on hide; subsequent `Alt+T` presses cycle visibility while cwd, history, env vars, and background jobs are all preserved. The status bar carries a chip showing the state (right after `ns:`) — green `attached` while the popup is visible, amber `km8erm` while the shell is hidden in the background. The shell is killed cleanly when km8 quits (`q` confirm or `Ctrl+C`). `Alt+T` only applies to KM8erm (Shell-kind PTY); `kubectl edit` and `kubectl exec` popups treat it as a normal keypress because their lifecycle is bounded by the subprocess they wrap. **`T` (uppercase) is no longer bound** — Alt+T replaces it.
-- Pressing `e` (edit) or `s` (shell exec) while a PTY is alive (visible or hidden) now refuses with a toast / app log warning instead of clobbering the in-flight subprocess — close the current PTY first (`exit` in the shell, or `Alt+T` then `exit`).
-- **`Y` opens a full-screen YAML popup** for the currently-selected resource. Supports `j` / `k` line scroll, `u` / `d` half-page scroll, `gg` / `G` jump to top / bottom, `/` search (`Enter` commits; `n` / `N` step through matches with a full-row highlight on the current match like the panel-view selected row), and `e` to dispatch `kubectl edit` on the same resource directly from the popup (skips the confirm step that the table-level `e` uses — by the time you press `e` here, you've already inspected the YAML). `Esc` / `q` close. The search box border shifts color from cyan (actively editing the query) to amber (filter committed, navigating matches) so the locked state is visible at a glance. Solves the "YAML wall in narrow vertical Panel 3 is hard to read" problem without giving up on having YAML at all.
-- **Uppercase aliases for namespace / context pickers**: `N` and `C` open the same pickers as `n` and `c`. Transitional — lowercase will be deprecated later. Rationale: lowercase keys felt too easy to misfire ("any letter pops up a popup"), and `n` / `c` clash with vim mental models (`n` = next-search, `c` = change).
+  Existing users who pressed `1`/`2`/`3` to cycle to a YAML tab — use
+  `Y` instead.
+- **`h` / `l` no longer switches detail tabs from inside Panel 3.**
+  On the Links tab those keys belong to the drill chain (push / pop),
+  and dual-purposing them was confusing. To switch detail tabs while
+  reading panel 3, move focus to panel 2 first. From Panel 2 `h` /
+  `l` still cycle tabs as before.
+- **Tab label format.** Drilled-into Links tab shows `Links ↳N` (was
+  `Links(N)`); the down-arrow reads as "you've gone N levels deep" at
+  a glance.
+- **Panel layout uses absolute stacking math.** Replaced percentage
+  heuristics (`*N/100`) with named constants (`panelSidebarWidth =
+  24`, `panelDetailHeight = 14`, ...) and pure subtraction. Side
+  benefit: predictable behavior on any terminal width. Panel 1
+  narrowed 28 → 24. Panel 2 ↔ Panel 3 vertical space dropped to 0
+  (borders themselves act as the separator). Sidebar ↔ Table
+  horizontal space also dropped to 0.
+- **Status line is fixed 1 row.** Removed the dynamic two-row mode.
+  Hints are condensed (`?`, `q`, panel-specific keys, `Y`, `M-t`) —
+  no more vim-convention reminders, no overflow.
+- **YAML popup spans full terminal width.** Was sized to a percentage
+  of the screen; now matches the panel-border alignment. Same for
+  the help popup.
+- **Help popup is two-column.** Counts wrap rows per group to balance
+  the columns; padding distributes across inter-section gaps so the
+  columns terminate at the same height.
+
+### Fixed
+
+- **Panic on quit when KM8erm was hidden.** `Stop()` nil'd `p.cmd`
+  while `readLoop` was still doing `cmd.Wait()`; the loop now
+  captures local pointer copies before the wait so the nil
+  reassignment can't race the in-flight wait.
+- **Pod STATUS column lost its color when truncated.** A
+  `CrashLoopBackOff` clipped to `CrashL…` no longer matched the color
+  lookup switch — color logic now reads the pre-truncation value
+  while the renderer keeps the clipped string.
+- **Pod owner drill resolves past the ReplicaSet layer.** A Pod's
+  `OwnerReferences[0]` is the auto-created ReplicaSet, but
+  `kindToResourceType` mapped it to `Deployments`. The Name was the
+  RS's (`<deployment>-<hash>`), so drilling into Owner failed with
+  `deployments.apps "..." not found`. `EnrichLinks` now looks up the
+  RS to find its owning Deployment and rewrites `PodLinks.Owner` in
+  place. Also fixes cycle detection for the Deployment → Pod → Owner
+  round trip.
+- **Stale `ResourceDetailMsg` drops by UID.** Rapid row switching
+  used to let a slow fetch overwrite the current row's detail after
+  the user had moved on. `ResourceDetailMsg` now carries the source
+  item UID; the handler ignores mismatches.
+- **Help popup right border on odd-width terminals.** Off-by-one
+  from integer-truncated column split — fixed by letting the middle
+  gutter absorb the leftover column.
+- **KM8erm hidden status-bar marker uses peach (`#fab387`).** The
+  previous yellow was identical to the `ns:` text; the new color
+  matches the panel-border palette and is unambiguous.
+- **`Alt+t` hint everywhere is lowercase.** The keymap is
+  case-sensitive; help / status line / KM8erm border hints now match
+  the actual key.
+- **Long Links values wrap consistently for cursor and non-cursor
+  rows.** Cursor row used `lipgloss.Width()` (which wraps); non-
+  cursor rows had no width constraint and got `ansi`-truncated by
+  the outer panel — and the drill arrow disappeared from the
+  truncated rows, hiding the fact that the row was drillable. Both
+  branches now share an explicit `wrapPlain` path; the drill arrow
+  `→` is split back off the last wrap chunk so its color stays in
+  `drillStyle`.
+- **Breadcrumb cursor row aligns with non-cursor rows.** The
+  cursor's highlight wrapped both the prefix's leading space *and*
+  an outer wrap-space, doubling it up; `2.` was shifted right by one
+  cell. Now both render with a single leading space inside the same
+  content frame.
+- **Various popup margin and padding tightening.** Top/bottom
+  padding rows dropped from the YAML popup, breadcrumb popup, and
+  overview cursor — the borders alone provide enough visual
+  separation.
 
 ### Internal
-- New `k8s.PodTarget` + `k8s.PodsForDeployment` / `k8s.PodsForWorkload` helpers resolve a workload to the pod set whose containers should be streamed. `currentOnly=true` filters by the deployment's `deployment.kubernetes.io/revision` annotation matched against owned ReplicaSets; `false` returns all selector-matching pods for rollout-comparison cases.
-- `k8s.LogStreamer.StartMulti([]PodTarget)` is the new entry point for aggregate streams; `Start(podName, namespace, containers)` remains as a single-pod wrapper. `LogLine` gains a `Pod` field so the consumer can multiplex per pod, not just per container.
-- `internal/ui` follows: `LogLineMsg` and `DetailModel.AppendLogLine` both gain a `pod` parameter (empty for single-pod streams). `detail.go` gains `podLogColor`, `podHashTag`, and `fnvPaletteColor` helpers; `buildLogLines` branches between two-segment (`<container>│<text>`) and three-segment (`<pod-hash>│<container>│<text>`) prefixes based on whether the source pod is set.
-- `aggregateLogsReadyMsg` carries `resource` and `itemUID` so AppModel can ignore stale results when the user navigates to a different row while the pod-list call is in flight.
-- New `YamlPopupModel` in `internal/ui/yamlpopup.go` modelled on `HelpModel` / `AppLogModel` (PopupAnimator + content lines + scroll offset + search state). Captures edit target at `Open()` time so `e` knows what to dispatch even after the user has scrolled around.
-- New `DetailModel.YAMLContent()` accessor exposes the loaded YAML for popup rendering without leaking the internal `k8s.ResourceDetail` field.
-- `NamespacePickerModel` and `ContextPickerModel` now accept the uppercase form as a close-key alias.
-- `PtyView` gains `hidden bool` + `kind PtyKind` (Shell / Edit / Exec). `IsActive()` now means "alive AND visible"; new `IsAlive()` reports the underlying subprocess state. `Hide()` is a no-op for Edit / Exec kinds (transient — never hide). `Show(w,h)` re-syncs PTY size before un-hiding so a window resize while hidden doesn't leave the shell rendering at stale dimensions. `Start()` takes a `PtyKind` argument.
-- `StatusBarModel.ViewFull(unreadErrors, success, *PtyMarker)` is the new render entry point; `ViewWithBadge` keeps working as a thin wrapper for callers that don't pass a marker.
+
+- New `k8s.LinkSection` / `k8s.LinkRow` generic Links payload on
+  `ResourceDetail`; Pod and Service keep their typed `PodLinks` /
+  `ServiceLinks` for richer per-kind structure. Per-kind builders
+  live in `internal/k8s/links.go`; `EnrichLinks(ctx, cs, rt, item,
+  *detail)` is the extension point AppModel calls after the
+  synchronous `Detailer` returns — the place to put API-needing
+  resolution (RS-skip, selector→pods, reverse refs).
+- `k8s.FetchResourceByRef(ctx, cs, ref)` fetches any supported kind
+  by `(Type, Name, Namespace)`, used by both the YAML popup drill
+  (`Y`) and the chain drill (`Enter` / `l`). Supports 21 kinds.
+- `DetailModel.drillStack []drillFrame` carries the Links navigation
+  chain (level 2+); the root is implicit in `m.detail`. `Depth()`,
+  `RootRef()`, `DrillChain()`, `PushDrillFrame`, `PopDrillFrame`,
+  `JumpToDrillLevel`, `ResetDrillStack`, `BorderTopRightHint`,
+  `CurrentLevelYAML` give AppModel + the breadcrumb popup the API
+  surface they need.
+- New `LinkPushMsg` / `linkDrillFetchedMsg` / `LinkBreadcrumbMsg` /
+  `LinkJumpMsg` messages. The fetched message carries `sourceUID`
+  for the same stale-drop guard `ResourceDetailMsg` uses.
+- New `BreadcrumbPopupModel` (PopupAnimator-based, follows the
+  ConfirmModel pattern): `j` / `k` move cursor, `Enter` jumps back
+  to that level, `Esc` / `q` / `b` close. Long resource names wrap
+  with continuation indented under the label start; the cursor
+  highlight spans every wrapped line as one block.
+- New `ToastModel` levels — `toastLevel` enum + per-level duration
+  / glyph / color helpers.
+- `k8s.PodTarget` + `k8s.PodsForDeployment` /
+  `k8s.PodsForWorkload`. `LogStreamer.StartMulti([]PodTarget)` is
+  the aggregate entry point; the single-pod `Start` is a thin
+  wrapper. `LogLine.Pod` is populated only in aggregate mode, so
+  single-pod streams stay free of the `<pod-hash>│` prefix.
+- `YamlPopupModel` in `internal/ui/yamlpopup.go` mirrors
+  `HelpModel` / `AppLogModel` structure. Captures edit target at
+  `Open()` so `e` knows what to dispatch even after scroll.
+- `PtyView` gains `hidden bool` + `kind PtyKind` (Shell / Edit /
+  Exec). `IsActive()` means "alive AND visible"; `IsAlive()`
+  reports the subprocess state. `Hide()` is a no-op for Edit / Exec
+  (transient by design). `Show(w,h)` re-syncs PTY size on un-hide.
+- Panel layout constants in one block at the top of `app.go`:
+  `panelSidebarWidth`, `panelDetailHeight`, `panelHMargin`,
+  `panelHSpace`, `panelVSpace`. `panelSizes()` is pure subtraction.
+- `aggregateLogsReadyMsg` / `resourceFetchedForDrillMsg` /
+  `linkDrillFetchedMsg` all carry the source item UID for
+  stale-drop. AppModel's `currentItemUID()` helper centralizes the
+  lookup.
+
+### Known trade-offs
+
+- **Cluster-wide Links enrichers** (ClusterRole bindings,
+  StorageClass PVCs, IngressClass Ingresses) issue cluster-wide List
+  calls. On large clusters this can push the Links tab populate time
+  into multiple seconds. OrbStack-scale clusters are unaffected. If
+  it matters in your environment, file an issue — the simplest fix
+  is making these specific enrichers opt-in via config.
+- **Bare ReplicaSets** (RS without a parent Deployment, rare in
+  practice) still hit `not found` on Owner drill —
+  `enrichPodOwner` has no Deployment to resolve to. Would need
+  ReplicaSet as a first-class km8 resource to fix; not in scope
+  here.
 
 ## [v1.2.0] - 2026-05-22
 
