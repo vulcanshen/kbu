@@ -127,9 +127,14 @@ func ownerDisplay(ref k8s.RefTarget) string {
 }
 
 // renderOverviewEntries turns the entry list into display lines, applying
-// styles and adding a cursor marker on `cursor`. selectableIdxs returns the
-// indices into entries that the cursor can land on, in display order.
-func renderOverviewEntries(entries []overviewEntry, cursor int, width int, t *theme.Theme) (lines []string, selectableIdxs []int) {
+// styles and adding a cursor marker on `cursor`. Returns:
+//   - lines:           rendered display lines
+//   - selectableIdxs:  indices into `entries` that the cursor can land on
+//   - cursorLine:      display-line index of the cursor row (-1 if none) —
+//     used by the caller to auto-scroll the viewport so
+//     the cursor stays visible
+func renderOverviewEntries(entries []overviewEntry, cursor int, width int, t *theme.Theme) (lines []string, selectableIdxs []int, cursorLine int) {
+	cursorLine = -1
 	labelStyle := t.DetailLabelStyle()
 	valueStyle := t.DetailValueStyle()
 	sectionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Sidebar.CategoryFg)).Bold(true)
@@ -155,6 +160,7 @@ func renderOverviewEntries(entries []overviewEntry, cursor int, width int, t *th
 		cursorMarker := "  "
 		if isCursor {
 			cursorMarker = cursorStyle.Render("▸ ")
+			cursorLine = len(lines)
 		}
 		labelText := e.label
 		if len(labelText) < labelW {
@@ -169,7 +175,7 @@ func renderOverviewEntries(entries []overviewEntry, cursor int, width int, t *th
 		_ = width
 		lines = append(lines, row)
 	}
-	return lines, selectableIdxs
+	return lines, selectableIdxs, cursorLine
 }
 
 // nextSelectableCursor returns the next/prev cursor index that lands on a

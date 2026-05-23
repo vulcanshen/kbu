@@ -27,11 +27,19 @@ type PodTarget struct {
 
 // LogStreamer streams logs from one or more containers in a pod.
 // It integrates with Bubble Tea through a channel-based message pattern.
+//
+// aggregate distinguishes single-pod streams (Start: Pod identity is
+// implicit — the user is on the Pod's detail panel) from multi-pod
+// aggregate streams (StartMulti: pods come from a workload's selector and
+// every line needs a Pod tag so the consumer can colour-code by source).
+// When aggregate=false, emitted LogLine.Pod is left empty so the renderer
+// skips the `<pod-hash>@` prefix segment.
 type LogStreamer struct {
 	clientset kubernetes.Interface
 	mu        sync.Mutex
 	cancel    context.CancelFunc
 	lines     chan LogLine
+	aggregate bool
 }
 
 // NewLogStreamer creates a new LogStreamer for the given clientset.
@@ -42,10 +50,11 @@ func NewLogStreamer(clientset kubernetes.Interface) *LogStreamer {
 	}
 }
 
-// Start streams the named containers from a single pod. Thin wrapper around
-// StartMulti — kept for callers that don't need aggregation.
+// Start streams the named containers from a single pod. LogLine.Pod is left
+// empty on emitted lines so the renderer drops the `<pod-hash>@` prefix
+// segment (pod identity is implicit when the user is on Pod detail).
 func (ls *LogStreamer) Start(podName, namespace string, containers []string) {
-	ls.StartMulti([]PodTarget{{Name: podName, Namespace: namespace, Containers: containers}})
+	ls.start(false, []PodTarget{{Name: podName, Namespace: namespace, Containers: containers}})
 }
 
 // StartMulti cancels any existing stream and starts streaming logs from
@@ -53,11 +62,16 @@ func (ls *LogStreamer) Start(podName, namespace string, containers []string) {
 // shared Lines() channel; each LogLine carries Pod / Container / Text so
 // the consumer can multiplex by either dimension.
 func (ls *LogStreamer) StartMulti(targets []PodTarget) {
+	ls.start(true, targets)
+}
+
+func (ls *LogStreamer) start(aggregate bool, targets []PodTarget) {
 	ls.Stop()
 
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 
+	ls.aggregate = aggregate
 	ctx, cancel := context.WithCancel(context.Background())
 	ls.cancel = cancel
 
@@ -105,6 +119,15 @@ func (ls *LogStreamer) Lines() <-chan LogLine {
 	return ls.lines
 }
 
+// podTag returns the Pod field value to emit on each LogLine — empty in
+// single-pod mode (implicit identity), populated in aggregate mode.
+func (ls *LogStreamer) podTag(podName string) string {
+	if ls.aggregate {
+		return podName
+	}
+	return ""
+}
+
 func (ls *LogStreamer) streamContainer(ctx context.Context, podName, namespace, container string) {
 	tailLines := int64(100)
 	opts := &corev1.PodLogOptions{
@@ -118,7 +141,7 @@ func (ls *LogStreamer) streamContainer(ctx context.Context, podName, namespace, 
 	if err != nil {
 		// Send an error line so the user sees something.
 		select {
-		case ls.lines <- LogLine{Pod: podName, Container: container, Text: "[error: " + err.Error() + "]"}:
+		case ls.lines <- LogLine{Pod: ls.podTag(podName), Container: container, Text: "[error: " + err.Error() + "]"}:
 		case <-ctx.Done():
 		}
 		return
@@ -135,14 +158,14 @@ func (ls *LogStreamer) streamContainer(ctx context.Context, podName, namespace, 
 		select {
 		case <-ctx.Done():
 			return
-		case ls.lines <- LogLine{Pod: podName, Container: container, Text: scanner.Text()}:
+		case ls.lines <- LogLine{Pod: ls.podTag(podName), Container: container, Text: scanner.Text()}:
 		}
 	}
 
 	// If the scanner ended due to an error (not EOF / context cancel), report it.
 	if err := scanner.Err(); err != nil && ctx.Err() == nil {
 		select {
-		case ls.lines <- LogLine{Pod: podName, Container: container, Text: "[stream error: " + err.Error() + "]"}:
+		case ls.lines <- LogLine{Pod: ls.podTag(podName), Container: container, Text: "[stream error: " + err.Error() + "]"}:
 		case <-ctx.Done():
 		}
 	}
@@ -151,7 +174,7 @@ func (ls *LogStreamer) streamContainer(ctx context.Context, podName, namespace, 
 	// send a marker so the user knows the stream ended.
 	if ctx.Err() == nil {
 		select {
-		case ls.lines <- LogLine{Pod: podName, Container: container, Text: "[stream ended]"}:
+		case ls.lines <- LogLine{Pod: ls.podTag(podName), Container: container, Text: "[stream ended]"}:
 		case <-ctx.Done():
 		}
 	}

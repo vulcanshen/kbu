@@ -61,8 +61,9 @@ type DetailModel struct {
 	// Overview tab state: entries are the logical rows (drillable + info +
 	// section headers); overviewCursor is the index of the currently-selected
 	// entry. Cursor only lands on selectable entries (sections skipped).
-	overviewEntries []overviewEntry
-	overviewCursor  int
+	overviewEntries    []overviewEntry
+	overviewCursor     int
+	overviewCursorLine int // display-line index of cursor row; -1 when none
 }
 
 type detailSpinnerTickMsg struct{}
@@ -247,9 +248,10 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 }
 
 // handleOverviewKey intercepts the keys with Overview-tab-specific semantics:
-// j/k move the cursor between drillable entries, Enter emits OverviewDrillMsg.
-// Returns handled=false to let the caller fall back to the generic per-line
-// scroll handlers for everything else.
+// j/k move the cursor between drillable entries (auto-scrolling the viewport
+// to keep it visible), Enter emits OverviewDrillMsg. Returns handled=false to
+// let the caller fall back to the generic per-line scroll handlers for
+// everything else.
 func (m DetailModel) handleOverviewKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyRunes:
@@ -260,19 +262,23 @@ func (m DetailModel) handleOverviewKey(msg tea.KeyMsg) (DetailModel, bool, tea.C
 		case 'j':
 			m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, +1)
 			m.buildContentLines()
+			m = m.scrollOverviewCursorIntoView()
 			return m, true, nil
 		case 'k':
 			m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, -1)
 			m.buildContentLines()
+			m = m.scrollOverviewCursorIntoView()
 			return m, true, nil
 		}
 	case tea.KeyDown:
 		m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, +1)
 		m.buildContentLines()
+		m = m.scrollOverviewCursorIntoView()
 		return m, true, nil
 	case tea.KeyUp:
 		m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, -1)
 		m.buildContentLines()
+		m = m.scrollOverviewCursorIntoView()
 		return m, true, nil
 	case tea.KeyEnter:
 		ref := m.SelectedOverviewRef()
@@ -285,6 +291,29 @@ func (m DetailModel) handleOverviewKey(msg tea.KeyMsg) (DetailModel, bool, tea.C
 		}
 	}
 	return m, false, nil
+}
+
+// scrollOverviewCursorIntoView nudges scrollOffset so the cursor row is
+// inside the visible viewport. Mirrors the standard "follow cursor" behavior
+// of any selectable list — without it, j/k can move the cursor past the
+// bottom of the panel and the user has to manually scroll to see it.
+func (m DetailModel) scrollOverviewCursorIntoView() DetailModel {
+	if m.overviewCursorLine < 0 {
+		return m
+	}
+	h := m.contentHeight()
+	if h <= 0 {
+		return m
+	}
+	if m.overviewCursorLine < m.scrollOffset {
+		m.scrollOffset = m.overviewCursorLine
+	} else if m.overviewCursorLine >= m.scrollOffset+h {
+		m.scrollOffset = m.overviewCursorLine - h + 1
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+	return m
 }
 
 func (m DetailModel) handleSearchKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
@@ -620,8 +649,9 @@ func (m *DetailModel) buildContentLines() {
 	switch m.ActiveTabName() {
 	case "Overview":
 		m.rebuildOverviewEntries()
-		lines, _ := renderOverviewEntries(m.overviewEntries, m.overviewCursor, m.width, m.theme)
+		lines, _, cursorLine := renderOverviewEntries(m.overviewEntries, m.overviewCursor, m.width, m.theme)
 		m.contentLines = lines
+		m.overviewCursorLine = cursorLine
 	case "Logs":
 		m.contentLines = m.buildLogLines()
 	case "Events":
@@ -832,18 +862,18 @@ func (m DetailModel) buildLogLines() []string {
 		// Build plain + styled prefixes side by side. Plain is for wrap-width
 		// math (avoid counting ANSI escapes); styled is what we actually emit.
 		//
-		// Aggregate prefix uses `<pod>@<container> │ <text>` — `@` ties the
-		// pod-hash to its container visually (like an email/network address)
-		// while `│` separates the prefix block from the log line itself.
-		// Distinct separators make the three segments unambiguous even when
-		// pod-hash and container name colors are similar.
+		// Aggregate prefix uses `<container>@<pod-hash> │ <text>` —
+		// container-first because that's what users care about during
+		// debugging ("which container is this from?"); the `@<pod-hash>`
+		// disambiguates between pods running the same container. `│`
+		// separates the prefix block from the log line itself.
 		var plainPrefix, styledPrefix string
 		if ll.pod != "" {
 			tag := podHashTag(ll.pod)
 			podStyle := lipgloss.NewStyle().Foreground(podLogColor(ll.pod)).Bold(true)
 			ctrStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
-			plainPrefix = "  " + tag + "@" + ll.container + " │ "
-			styledPrefix = "  " + podStyle.Render(tag) + dimStyle.Render("@") + ctrStyle.Render(ll.container) + " │ "
+			plainPrefix = "  " + ll.container + "@" + tag + " │ "
+			styledPrefix = "  " + ctrStyle.Render(ll.container) + dimStyle.Render("@") + podStyle.Render(tag) + " │ "
 		} else {
 			ctrStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
 			plainPrefix = "  " + ll.container + " │ "

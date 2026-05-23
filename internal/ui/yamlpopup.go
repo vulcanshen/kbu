@@ -280,9 +280,11 @@ func (m YamlPopupModel) popupHeight() int {
 }
 
 // contentHeight is how many YAML lines fit in the body, accounting for the
-// optional search box at the top.
+// optional search box at the top. Just borders (2) — no inner padding rows,
+// per UX feedback the previous 1-row blank top + 1-row blank bottom was
+// wasted space.
 func (m YamlPopupModel) contentHeight() int {
-	h := m.popupHeight() - 4 // borders + leading/trailing blank
+	h := m.popupHeight() - 2 // top + bottom border
 	if m.searching || m.searchQuery != "" {
 		h -= 3 // search box is 3 lines
 	}
@@ -359,7 +361,6 @@ func (m YamlPopupModel) renderFullPopup() string {
 	rightBorder := bStyle.Render("│")
 
 	var lines []string
-	lines = append(lines, "")
 	if m.searching || m.searchQuery != "" {
 		// renderSearchBox auto-picks amber when !active && query != "" (locked
 		// filter), so the call site doesn't need to branch on the two states.
@@ -404,7 +405,6 @@ func (m YamlPopupModel) renderFullPopup() string {
 		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 		lines = append(lines, dim.Render("  (no YAML — resource may still be loading)"))
 	}
-	lines = append(lines, "")
 
 	for len(lines) < panelH-2 {
 		lines = append(lines, "")

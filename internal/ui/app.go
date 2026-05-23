@@ -1276,16 +1276,23 @@ func buildShellTerminalCmd() *exec.Cmd {
 
 // terminalTitle returns the popup title for the internal terminal — the
 // host's short name prefixed with a terminal glyph, mirroring how an ssh
-// prompt identifies the connection. `.local` mDNS suffix is stripped so
-// common macOS hostnames don't trail it. The "KM8erm" prefix (vs the
-// generic "Terminal") avoids the latter being filtered as keyword garbage
-// in screenshots / shared snippets.
+// prompt identifies the connection.
+//
+// Any mDNS-style suffix is stripped (`.local`, `.home`, `.lan`, `.internal`,
+// custom router-assigned ones, …) by taking the first segment before the
+// first dot — that covers every common laptop-mDNS pattern without needing
+// to maintain a hardcoded list. Trade-off: a hostname like
+// `srv.prod.example.com` becomes `srv`, but production servers running km8
+// are rare; developer laptops are the normal case and they're the ones
+// with cluttered mDNS suffixes.
 func terminalTitle() string {
 	h, err := os.Hostname()
 	if err != nil || h == "" {
 		return "KM8erm"
 	}
-	h = strings.TrimSuffix(h, ".local")
+	if i := strings.IndexByte(h, '.'); i > 0 {
+		h = h[:i]
+	}
 	return "KM8erm: " + h
 }
 
