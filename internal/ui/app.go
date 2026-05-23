@@ -421,24 +421,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cyclePanelReverse()
 			return m, nil
 		case "h":
-			// On Links tab at depth>1, h pops the drill chain — let it
-			// fall through to DetailModel by skipping the tab-switch
-			// intercept. Otherwise h switches tabs as before.
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Links" && m.detail.Depth() > 1 {
-				break
-			}
-			if m.activePanel == TablePanel || m.activePanel == DetailPanel {
+			// Tab switching via h/l is now scoped to the Table panel —
+			// on the Detail panel, h/l belong to the Links drill chain
+			// (handleLinkKey). To switch detail tabs while looking at
+			// panel 3, the user moves focus to panel 2 first.
+			if m.activePanel == TablePanel {
 				m.detail = m.detail.PrevTab()
 				return m, nil
 			}
 		case "l":
-			// On Links tab with cursor on a drillable entry, l pushes
-			// the chain — fall through to DetailModel. Otherwise l
-			// switches tabs.
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Links" && m.detail.SelectedLinkRef() != nil {
-				break
-			}
-			if m.activePanel == TablePanel || m.activePanel == DetailPanel {
+			if m.activePanel == TablePanel {
 				m.detail = m.detail.NextTab()
 				return m, nil
 			}
