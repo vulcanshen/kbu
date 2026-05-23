@@ -106,7 +106,7 @@ func TestPtyKeyBytes_SpecialKeys(t *testing.T) {
 func TestPtyView_StartEcho_Exits(t *testing.T) {
 	v := NewPtyView()
 	cmd := exec.Command("echo", "hello world")
-	startCmd := v.Start(cmd, "echo test", 80, 24)
+	startCmd := v.Start(cmd, "echo test", 80, 24, PtyKindExec)
 	if startCmd == nil {
 		t.Fatal("Start must return a tick command")
 	}
@@ -402,5 +402,115 @@ func TestPtyView_ScrollToEnd_BufferFitsViewport_NoMove(t *testing.T) {
 	p.scrollToEnd(-1)
 	if p.scrollOffset != 0 {
 		t.Errorf("Home on short buffer: expected offset=0, got %d", p.scrollOffset)
+	}
+}
+
+// ── persistent-PTY hide/show semantics ────────────────────────────────────
+
+// hookedPtyView builds a PtyView that simulates the post-Start state without
+// actually allocating a PTY (which requires OS support and a real subprocess).
+// We set active=true, plug in a vt10x term, but leave ptmx nil so the Update
+// key-forward path no-ops cleanly.
+func hookedPtyView(kind PtyKind) *PtyView {
+	p := NewPtyView()
+	p.active = true
+	p.kind = kind
+	p.term = vt10x.New(vt10x.WithSize(80, 24))
+	p.mu = &sync.Mutex{}
+	p.pendingLine = &strings.Builder{}
+	return p
+}
+
+func TestPtyView_HiddenStateInvisibleButAlive(t *testing.T) {
+	p := hookedPtyView(PtyKindShell)
+	if !p.IsActive() {
+		t.Fatal("post-Start: IsActive must be true")
+	}
+	if !p.IsAlive() {
+		t.Fatal("post-Start: IsAlive must be true")
+	}
+
+	p.Hide()
+
+	if p.IsActive() {
+		t.Error("after Hide: IsActive must be false (popup not drawn)")
+	}
+	if !p.IsAlive() {
+		t.Error("after Hide: IsAlive must remain true (subprocess kept running)")
+	}
+	if !p.IsHidden() {
+		t.Error("after Hide: IsHidden must be true")
+	}
+	if got := p.RenderPopup(); got != "" {
+		t.Errorf("Hidden popup must render empty, got %d chars", len(got))
+	}
+}
+
+func TestPtyView_Hide_OnlyAffectsShellKind(t *testing.T) {
+	for _, kind := range []PtyKind{PtyKindEdit, PtyKindExec} {
+		p := hookedPtyView(kind)
+		p.Hide()
+		if p.IsHidden() {
+			t.Errorf("kind %d: Hide() must be a no-op for non-Shell kinds", kind)
+		}
+		if !p.IsActive() {
+			t.Errorf("kind %d: IsActive must remain true", kind)
+		}
+	}
+}
+
+func TestPtyView_Show_RestoresVisibility(t *testing.T) {
+	p := hookedPtyView(PtyKindShell)
+	p.Hide()
+	if !p.IsHidden() {
+		t.Fatal("setup: should be hidden after Hide")
+	}
+
+	p.Show(120, 40)
+
+	if p.IsHidden() {
+		t.Error("after Show: IsHidden must be false")
+	}
+	if !p.IsActive() {
+		t.Error("after Show: IsActive must be true")
+	}
+}
+
+func TestPtyView_AltT_HidesShellKind(t *testing.T) {
+	p := hookedPtyView(PtyKindShell)
+
+	// Bubble Tea encodes Alt+T as KeyMsg{Type: KeyRunes, Alt: true, Runes: []rune{'t'}}
+	keyAltT := tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune{'t'}}
+	if got := keyAltT.String(); got != "alt+t" {
+		t.Logf("note: tea encodes alt+t as %q (test still valid if our handler matches)", got)
+	}
+	p2, _ := p.Update(keyAltT)
+	if !p2.IsHidden() {
+		t.Error("Alt+T on Shell-kind PtyView must hide popup")
+	}
+}
+
+func TestPtyView_AltT_DoesNotHideEditKind(t *testing.T) {
+	p := hookedPtyView(PtyKindEdit)
+	keyAltT := tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune{'t'}}
+	p2, _ := p.Update(keyAltT)
+	if p2.IsHidden() {
+		t.Error("Alt+T on Edit-kind PtyView must NOT hide popup (transient — should forward)")
+	}
+}
+
+func TestPtyView_BottomBorderShowsAltTHintForShell(t *testing.T) {
+	p := hookedPtyView(PtyKindShell)
+	out := p.RenderPopup()
+	if !strings.Contains(out, "Alt+T") {
+		t.Errorf("Shell-kind popup bottom border must surface Alt+T hint")
+	}
+}
+
+func TestPtyView_BottomBorderOmitsAltTHintForEdit(t *testing.T) {
+	p := hookedPtyView(PtyKindEdit)
+	out := p.RenderPopup()
+	if strings.Contains(out, "Alt+T") {
+		t.Errorf("Edit-kind popup must not advertise Alt+T (no hide semantics)")
 	}
 }

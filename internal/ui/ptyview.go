@@ -26,11 +26,29 @@ type PtyExitMsg struct {
 	ExitCode int
 }
 
-// PtyView renders an embedded PTY in a popup overlay. Used for `kubectl edit`
-// and `kubectl exec` so subprocess output stays inside km8 instead of leaking
-// into the host terminal scrollback after quit.
+// PtyKind discriminates the three kinds of PTY popup. Only PtyKindShell
+// supports hide-without-kill (Alt+T toggle); Edit and Exec are transient and
+// always end when the subprocess exits.
+type PtyKind int
+
+const (
+	PtyKindShell PtyKind = iota // KM8erm (T key)
+	PtyKindEdit                 // `kubectl edit`
+	PtyKindExec                 // `kubectl exec -it -- /bin/sh`
+)
+
+// PtyView renders an embedded PTY in a popup overlay. Used for `kubectl edit`,
+// `kubectl exec`, and the KM8erm internal shell so subprocess output stays
+// inside km8 instead of leaking into the host terminal scrollback after quit.
+//
+// The Shell-kind variant is *persistent*: pressing Alt+T inside the popup
+// hides it without killing the subprocess. The shell keeps running in the
+// background (readLoop continues, scrollback continues accumulating) and the
+// next `T` press from outside re-attaches.
 type PtyView struct {
 	active       bool
+	hidden       bool // alive but not currently rendered; only meaningful for PtyKindShell
+	kind         PtyKind
 	title        string
 	hostW, hostH int
 
@@ -59,12 +77,52 @@ func NewPtyView() *PtyView {
 	return &PtyView{}
 }
 
-func (p *PtyView) IsActive() bool { return p.active }
+// IsActive reports whether the popup should be drawn AND receive input
+// (alive and not hidden). Use this for view-overlay + key-routing checks.
+func (p *PtyView) IsActive() bool { return p.active && !p.hidden }
+
+// IsAlive reports whether the subprocess is running, regardless of whether
+// the popup is currently visible. Use this for status-bar marker rendering
+// and to refuse new PTY launches while one is in flight.
+func (p *PtyView) IsAlive() bool { return p.active }
+
+// IsHidden reports whether a subprocess is alive but the popup is hidden.
+// Equivalent to IsAlive() && !IsActive().
+func (p *PtyView) IsHidden() bool { return p.active && p.hidden }
+
+// Kind returns the kind of PTY currently running (shell / edit / exec).
+// Meaningless when IsAlive() is false.
+func (p *PtyView) Kind() PtyKind { return p.kind }
+
+// Title returns the title set at Start time. Used by the status-bar marker.
+func (p *PtyView) Title() string { return p.title }
+
+// Hide marks the popup as hidden without killing the subprocess. Only takes
+// effect for PtyKindShell; transient PTYs (edit / exec) ignore the call.
+func (p *PtyView) Hide() {
+	if !p.active || p.kind != PtyKindShell {
+		return
+	}
+	p.hidden = true
+}
+
+// Show un-hides the popup and refreshes the PTY size to the current host
+// dimensions (it may have changed while hidden). No-op if not alive.
+func (p *PtyView) Show(hostW, hostH int) {
+	if !p.active {
+		return
+	}
+	p.hidden = false
+	p.SetSize(hostW, hostH)
+}
 
 // Start launches cmd in a PTY sized to fit a popup inside hostW × hostH.
-// Returns a tick Cmd that drives the render loop and exit detection.
-func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int) tea.Cmd {
+// Returns a tick Cmd that drives the render loop and exit detection. The
+// `kind` parameter controls whether the popup supports persistent-hide.
+func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int, kind PtyKind) tea.Cmd {
 	p.active = true
+	p.hidden = false
+	p.kind = kind
 	p.title = title
 	p.cmd = cmd
 	p.hostW = hostW
@@ -192,6 +250,7 @@ func (p *PtyView) Stop() {
 		_ = p.ptmx.Close()
 	}
 	p.active = false
+	p.hidden = false
 	p.cmd = nil
 	p.ptmx = nil
 	p.term = nil
@@ -216,6 +275,19 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 		return p, p.tick()
 
 	case tea.KeyMsg:
+		// Alt+T hides KM8erm popup without killing the shell — persistent PTY.
+		// Always intercepted for PtyKindShell regardless of alt-screen mode;
+		// users running vim *inside* KM8erm still need an escape hatch to
+		// peek at km8 panels without losing their shell session.
+		// Edit/Exec popups pass it through (transient — no hide concept).
+		if p.kind == PtyKindShell {
+			switch msg.String() {
+			case "alt+t", "alt+T":
+				p.hidden = true
+				return p, nil
+			}
+		}
+
 		// Scrollback navigation keys (PgUp/PgDn/Home/End) intercept ONLY
 		// when the PTY isn't in alt-screen mode — i.e. plain shell output.
 		// Full-screen apps (vim / nvim / less / htop / kubectl edit's
@@ -350,9 +422,11 @@ func (p *PtyView) ptyDims() (cols, rows int) {
 func (p *PtyView) View() string { return "" }
 
 // RenderPopup builds the title bar + bordered PTY grid as a single string
-// ready for overlay.Composite over the main view.
+// ready for overlay.Composite over the main view. Returns empty when the
+// popup should not be drawn — either no subprocess alive, or the subprocess
+// is alive but hidden (Alt+T from a Shell-kind PtyView).
 func (p *PtyView) RenderPopup() string {
-	if !p.active || p.term == nil {
+	if !p.IsActive() || p.term == nil {
 		return ""
 	}
 	cols, rows := p.term.Size()
@@ -441,7 +515,7 @@ func (p *PtyView) RenderPopup() string {
 	}
 	trailDashes := strings.Repeat("─", trailLen)
 	top := borderStyle.Render("╭"+leadDashes) + titleStyle.Render(title) + borderStyle.Render(trailDashes+"╮")
-	bottom := borderStyle.Render("╰" + strings.Repeat("─", cols) + "╯")
+	bottom := p.renderBottomBorder(cols, borderStyle, titleStyle)
 	vbar := borderStyle.Render("│")
 
 	var out strings.Builder
@@ -455,6 +529,33 @@ func (p *PtyView) RenderPopup() string {
 	}
 	out.WriteString(bottom)
 	return out.String()
+}
+
+// renderBottomBorder builds the closing border with a key-hint embedded in
+// the dashes — Alt+T for Shell-kind (persistent), plus scrollback navigation
+// when the PTY isn't in alt-screen mode. Edit/Exec popups still get the
+// scrollback hint; Shell gets both. If the available width is too narrow to
+// fit any hint, falls back to plain dashes.
+func (p *PtyView) renderBottomBorder(cols int, borderStyle, hintStyle lipgloss.Style) string {
+	hint := ""
+	altScreen := p.term != nil && p.term.Mode()&vt10x.ModeAltScreen != 0
+	switch {
+	case p.kind == PtyKindShell && !altScreen:
+		hint = " Alt+T:hide  PgUp/Home:scroll "
+	case p.kind == PtyKindShell && altScreen:
+		hint = " Alt+T:hide "
+	case !altScreen:
+		hint = " PgUp/Home:scroll "
+	}
+	if hint == "" || lipgloss.Width(hint)+4 > cols {
+		return borderStyle.Render("╰" + strings.Repeat("─", cols) + "╯")
+	}
+	hintW := lipgloss.Width(hint)
+	trail := cols - hintW - 1
+	if trail < 0 {
+		trail = 0
+	}
+	return borderStyle.Render("╰─") + hintStyle.Render(hint) + borderStyle.Render(strings.Repeat("─", trail)+"╯")
 }
 
 // vt10x attr bit positions (package-private constants in state.go; values

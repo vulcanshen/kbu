@@ -148,6 +148,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(quitConfirmedMsg); ok {
 		m.watcher.Stop()
 		m.logStreamer.Stop()
+		// Kill any persistent PTY (hidden KM8erm shell, mid-edit, mid-exec)
+		// so we don't orphan the subprocess after km8 exits.
+		if m.ptyView != nil && m.ptyView.IsAlive() {
+			m.ptyView.Stop()
+		}
 		return m, tea.Quit
 	}
 
@@ -205,7 +210,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// through to the normal handlers — they update underlying state silently
 	// behind the PTY popup so that when the subprocess exits, the table /
 	// detail panels are already current.
-	if m.ptyView.IsActive() {
+	//
+	// When the popup is *hidden* (alive KM8erm shell after Alt+T), ticks still
+	// route into PtyView so exit detection keeps polling, but key input falls
+	// through to the top-level handlers so the user can navigate km8 panels
+	// without typing characters into the backgrounded shell.
+	if m.ptyView.IsAlive() {
 		switch msg := msg.(type) {
 		case tea.WindowSizeMsg:
 			m.width = msg.Width
@@ -213,13 +223,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ready = true
 			m.layout()
 			m.ptyView.SetSize(m.width, m.height)
-			return m, nil
-		case tea.KeyMsg, ptyTickMsg:
+			if m.ptyView.IsActive() {
+				return m, nil
+			}
+			// Hidden: also let the underlying panels see the new size.
+			// Fall through.
+		case ptyTickMsg:
 			var cmd tea.Cmd
 			m.ptyView, cmd = m.ptyView.Update(msg)
 			return m, cmd
+		case tea.KeyMsg:
+			if m.ptyView.IsActive() {
+				var cmd tea.Cmd
+				m.ptyView, cmd = m.ptyView.Update(msg)
+				return m, cmd
+			}
+			// Hidden: fall through to top-level key routing (T re-shows,
+			// q quits, n/c open pickers, etc.)
 		}
-		// fall through
 	}
 
 	if m.confirm.IsActive() {
@@ -329,8 +350,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "V":
 			return m, m.splash.Show()
 		case "T":
+			// Reattach the existing KM8erm shell if one is hidden in the
+			// background; otherwise spawn a fresh shell. T from outside is
+			// always "show", never "hide" — Alt+T inside the popup is the
+			// hide path. See PROGRESS.md [2] for the full mental model.
+			if m.ptyView.IsAlive() {
+				m.ptyView.Show(m.width, m.height)
+				return m, nil
+			}
 			cmd := buildShellTerminalCmd()
-			return m, m.ptyView.Start(cmd, terminalTitle(), m.width, m.height)
+			return m, m.ptyView.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell)
 		case "?":
 			m.help.SetSize(m.width, m.height)
 			return m, m.help.Toggle()
@@ -650,11 +679,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case startShellExecMsg:
+		if m.ptyView.IsAlive() {
+			m.appLog.Warn("close active PTY before opening shell")
+			return m, m.toast.Show("Close PTY (Alt+T to show, exit to close)")
+		}
 		cmd := buildKubectlExecCmd(msg.podName, msg.namespace, msg.container, msg.contextName)
 		title := fmt.Sprintf("Shell: pod/%s → %s", msg.podName, msg.container)
-		return m, m.ptyView.Start(cmd, title, m.width, m.height)
+		return m, m.ptyView.Start(cmd, title, m.width, m.height, PtyKindExec)
 
 	case startEditMsg:
+		if m.ptyView.IsAlive() {
+			m.appLog.Warn("close active PTY before editing")
+			return m, m.toast.Show("Close PTY (Alt+T to show, exit to close)")
+		}
 		m.editing = true
 		title := fmt.Sprintf("Edit: %s/%s", msg.resource.KubectlName(), msg.item.Name)
 		if msg.item.Namespace != "" {
@@ -663,7 +700,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := buildKubectlEditCmd(msg.resource, msg.item, msg.contextName, m.cfgEditor)
 		config.WriteAuditEntry("edit", msg.resource.KubectlName()+"/"+msg.item.Name, msg.item.Namespace, "started") //nolint
 		m.appLog.Info("edit: " + msg.resource.KubectlName() + "/" + msg.item.Name)
-		return m, m.ptyView.Start(cmd, title, m.width, m.height)
+		return m, m.ptyView.Start(cmd, title, m.width, m.height, PtyKindEdit)
 
 	case DeleteDoneMsg:
 		out := strings.TrimSpace(msg.Output)
@@ -736,7 +773,19 @@ func (m AppModel) View() string {
 		return m.splash.Render(m.width, m.height)
 	}
 
-	statusBar := m.statusBar.ViewWithBadge(m.appLog.UnreadErrorCount(), m.successNotice)
+	var ptyMarker *PtyMarker
+	if m.ptyView != nil && m.ptyView.IsAlive() && m.ptyView.Kind() == PtyKindShell {
+		// KM8erm marker: green "attached" when popup is visible (border
+		// already shows "KM8erm: hostname" — avoid duplicating the name)
+		// vs amber "km8erm" when hidden in the background so the user knows
+		// the session is still there.
+		if m.ptyView.IsActive() {
+			ptyMarker = &PtyMarker{Visible: true, Label: " attached"}
+		} else {
+			ptyMarker = &PtyMarker{Visible: false, Label: " km8erm"}
+		}
+	}
+	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker)
 	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage(), "")
 
 	var mainView string

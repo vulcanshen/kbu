@@ -24,7 +24,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **YAML detail view with syntax highlighting** -- `[YAML]` tab shows the resource serialized exactly like `kubectl get -o yaml`; container drill-down shows the extracted `spec`/`status` for that container. Press `Y` (anywhere) to open the full YAML in a large popup with `j/k/u/d/gg/G` scroll, `/` search (`n`/`N` step through matches), and `e` to dispatch `kubectl edit` directly from the popup
 - **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
 - **Edit & shell exec via embedded PTY** -- `e` runs `kubectl edit` and `s` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
-- **KM8erm internal terminal** -- `T` opens an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do
+- **KM8erm internal terminal** -- `T` opens an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do. The shell is **persistent**: press `Alt+T` inside the popup to hide it without killing the shell, then `T` again to reattach (cwd, history, env, background jobs all preserved). A green `▌ attached` / amber `▌ km8erm` marker in the status bar shows which state you're in
 - **PTY scrollback** -- 10k-line history for all PTY popups (KM8erm, shell exec, edit). `PgUp` / `PgDn` page, `Home` / `End` jump to top / live. Disabled in alt-screen apps (vim, less, htop) so they keep their own paging
 - **Colored Pod status** -- `Running` green, `Pending` yellow, `CrashLoopBackOff` / `ImagePullBackOff` / `OOMKilled` red, `Terminating` gray. STATUS column shows the kubectl-equivalent reason, not raw `Pod.Status.Phase`
 - **Per-container colored log labels** -- multi-container pods are visually distinguishable line-by-line; stable color per container name
@@ -138,7 +138,7 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 |---|---|
 | `n` / `N` | Switch namespace (`/` to filter inside the popup) |
 | `c` / `C` | Switch context (`/` to filter inside the popup) |
-| `T` | Open KM8erm (embedded shell — login shell, full env, host cwd) |
+| `T` | Show / reattach KM8erm (persistent embedded shell). Inside the popup, `Alt+T` hides it without killing the shell |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
 | `Y` | Open YAML popup (`j/k/u/d/gg/G` scroll, `/` search, `e` edit, `Esc` close) |
 | `!` | App log |
