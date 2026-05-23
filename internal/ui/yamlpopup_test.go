@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -303,6 +304,31 @@ func TestYamlPopup_CurrentMatchRowHighlighted(t *testing.T) {
 	view := m.RenderPopup()
 	if !strings.Contains(view, "nginx:1.27.1") {
 		t.Error("rendered popup must contain the matched image string on the highlighted line")
+	}
+}
+
+func TestYamlPopup_BottomBarFitsInAvailableWidth(t *testing.T) {
+	// Regression: hint + indicator used to overflow the popup border when the
+	// match counter was active and the popup was narrow. Progressive fallback
+	// must always keep `hint + indicator` within `available` columns.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+
+	// Commit a search so the indicator gets the verbose " 5/7  78-95/119 " form.
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "image" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	cases := []int{20, 30, 40, 60, 100}
+	for _, available := range cases {
+		hint, indicator := m.bottomBarStrings(m.contentHeight(), available)
+		w := lipgloss.Width(hint) + lipgloss.Width(indicator)
+		if w > available {
+			t.Errorf("bottomBarStrings overflowed at available=%d: hint=%q indicator=%q (w=%d)",
+				available, hint, indicator, w)
+		}
 	}
 }
 
