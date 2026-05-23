@@ -1,0 +1,199 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/vulcanshen/km8/internal/k8s"
+	"github.com/vulcanshen/km8/internal/theme"
+)
+
+// linkEntry is one row of the Links tab. Two flavours:
+//   - section: header row (just a label, not selectable)
+//   - drill:   label + value with a ref (Enter fetches & opens YamlPopup)
+//
+// There's no "info-only selectable row" by design — Links is strictly a
+// navigation hub. Pure-info content (labels, annotations, container image
+// strings, status fields) lives in the `Y` YAML popup. Cursor only lands on
+// rows that have somewhere to go.
+type linkEntry struct {
+	label   string
+	value   string
+	ref     *k8s.RefTarget
+	section bool
+}
+
+func (e linkEntry) isSelectable() bool { return !e.section && e.ref != nil }
+
+// buildPodLinkEntries renders the Pod-specific Links list using the parsed
+// PodLinksData stashed in ResourceDetail. Returns an empty slice when no
+// PodLinks are present (e.g. detail still loading) — the renderer will then
+// show a placeholder hint.
+//
+// Strict refs only: Owner, Node, ServiceAccount, and Volumes whose source is
+// another K8s resource (ConfigMap / Secret / PVC). Volumes with non-K8s
+// sources (emptyDir / hostPath / projected / downwardAPI) and container
+// images are intentionally excluded — they're not navigable, so they belong
+// in the YAML popup, not here.
+func buildPodLinkEntries(detail k8s.ResourceDetail) []linkEntry {
+	if detail.PodLinks == nil {
+		return nil
+	}
+	po := detail.PodLinks
+	var entries []linkEntry
+
+	if po.Owner != nil {
+		entries = append(entries, linkEntry{
+			label: "Owner",
+			value: ownerDisplay(*po.Owner),
+			ref:   po.Owner,
+		})
+	}
+	if po.Node != nil {
+		entries = append(entries, linkEntry{
+			label: "Node",
+			value: po.Node.Name,
+			ref:   po.Node,
+		})
+	}
+	if po.ServiceAccount != nil {
+		entries = append(entries, linkEntry{
+			label: "ServiceAccount",
+			value: po.ServiceAccount.Name,
+			ref:   po.ServiceAccount,
+		})
+	}
+
+	// Only drillable volumes — others would be unreachable cursor positions.
+	var drillVols []k8s.VolumeRef
+	for _, v := range po.Volumes {
+		if v.Ref != nil {
+			drillVols = append(drillVols, v)
+		}
+	}
+	if len(drillVols) > 0 {
+		entries = append(entries, linkEntry{section: true, label: "Volumes"})
+		for _, v := range drillVols {
+			entries = append(entries, linkEntry{
+				label: "  " + v.Name,
+				value: v.Kind + "/" + v.Ref.Name,
+				ref:   v.Ref,
+			})
+		}
+	}
+
+	return entries
+}
+
+// buildGenericLinkEntries is the fallback for resource kinds without a
+// custom Links builder. Returns nil for now — kinds with refs worth
+// surfacing (Service, Deployment, Ingress, HPA, PVC, ...) get their own
+// builders incrementally. The renderer shows a "no links — press Y" hint
+// when this returns empty.
+func buildGenericLinkEntries(detail k8s.ResourceDetail) []linkEntry {
+	_ = detail
+	return nil
+}
+
+func ownerDisplay(ref k8s.RefTarget) string {
+	// Short kind label + name. Use the registry display name when available,
+	// otherwise fall back to the raw type string.
+	kind := string(ref.Type)
+	if def := k8s.DefaultRegistry.Get(ref.Type); def != nil {
+		kind = strings.TrimSuffix(def.DisplayName, "s")
+	}
+	return fmt.Sprintf("%s/%s", kind, ref.Name)
+}
+
+// renderLinkEntries turns the entry list into display lines, applying
+// styles and adding a cursor highlight on `cursor`. Returns:
+//   - lines:           rendered display lines
+//   - selectableIdxs:  indices into `entries` that the cursor can land on
+//   - cursorLine:      display-line index of the cursor row (-1 if none) —
+//     used by the caller to auto-scroll the viewport so
+//     the cursor stays visible
+//
+// When entries is empty, returns a single placeholder line pointing users at
+// the Y popup, so the tab never renders as a blank panel.
+func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Theme) (lines []string, selectableIdxs []int, cursorLine int) {
+	cursorLine = -1
+	labelStyle := t.DetailLabelStyle()
+	valueStyle := t.DetailValueStyle()
+	sectionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Sidebar.CategoryFg)).Bold(true)
+	drillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Sidebar.CategoryFg)).Bold(true)
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	cursorRowStyle := t.TableSelectedRowStyle()
+
+	const labelW = 18
+	const indent = "  "
+
+	if len(entries) == 0 {
+		lines = append(lines, indent+dimStyle.Render("(no links for this resource — press Y for full YAML)"))
+		return lines, nil, -1
+	}
+
+	for i, e := range entries {
+		if e.isSelectable() {
+			selectableIdxs = append(selectableIdxs, i)
+		}
+	}
+
+	rowWidth := width
+	if rowWidth < 20 {
+		rowWidth = 20
+	}
+
+	for i, e := range entries {
+		if e.section {
+			lines = append(lines, indent+sectionStyle.Render(e.label))
+			continue
+		}
+		isCursor := cursor >= 0 && cursor < len(entries) && cursor == i
+		labelText := e.label
+		if len(labelText) < labelW {
+			labelText = labelText + strings.Repeat(" ", labelW-len(labelText))
+		}
+		if isCursor {
+			cursorLine = len(lines)
+			plain := "  " + labelText + " " + e.value
+			if e.ref != nil {
+				plain += " →"
+			}
+			lines = append(lines, cursorRowStyle.Width(rowWidth).Render(plain))
+			continue
+		}
+		row := "  " + labelStyle.Render(labelText) + " " + valueStyle.Render(e.value)
+		if e.ref != nil {
+			row += " " + drillStyle.Render("→")
+		}
+		lines = append(lines, row)
+	}
+	return lines, selectableIdxs, cursorLine
+}
+
+// nextSelectableCursor returns the next/prev cursor index that lands on a
+// selectable entry (skipping section headers + non-drillable rows).
+// dir=+1 → next, -1 → prev. Clamps at the ends of the list.
+func nextSelectableCursor(entries []linkEntry, cursor, dir int) int {
+	if len(entries) == 0 {
+		return -1
+	}
+	for i := cursor + dir; i >= 0 && i < len(entries); i += dir {
+		if entries[i].isSelectable() {
+			return i
+		}
+	}
+	return cursor
+}
+
+// firstSelectableCursor returns the first selectable entry index, or -1 if
+// the list has no selectable entries.
+func firstSelectableCursor(entries []linkEntry) int {
+	for i, e := range entries {
+		if e.isSelectable() {
+			return i
+		}
+	}
+	return -1
+}

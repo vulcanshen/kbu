@@ -67,8 +67,8 @@ type ResourceItem struct {
 // available. Structured fields are still used for synthetic detail views
 // (e.g. container drill-down) that have no native YAML.
 //
-// PodOverview is populated only for Pod details and carries the per-kind
-// navigable references the Overview tab needs (owner, node, SA, ...) so the
+// PodLinks is populated only for Pod details and carries the per-kind
+// navigable references the Links tab needs (owner, node, SA, ...) so the
 // ui package can render drillable rows without re-parsing the Pod object.
 type ResourceDetail struct {
 	Name        string
@@ -81,10 +81,10 @@ type ResourceDetail struct {
 	Fields      []DetailField
 	Containers  []ContainerInfo
 	YAML        string
-	PodOverview *PodOverviewData
+	PodLinks    *PodLinksData
 }
 
-// RefTarget identifies another Kubernetes resource that the Overview tab can
+// RefTarget identifies another Kubernetes resource that the Links tab can
 // drill into. Type is the km8 ResourceType (Pod, Secret, ConfigMap, Node, ...);
 // Namespace is empty for cluster-scoped kinds.
 type RefTarget struct {
@@ -93,7 +93,7 @@ type RefTarget struct {
 	Namespace string
 }
 
-// PodOverviewData is the structured "Overview" content for a Pod.
+// PodLinksData is the structured "Links" content for a Pod.
 //
 // Owner is the immediate K8s owner reference (ReplicaSet / DaemonSet /
 // StatefulSet / Job). Drilling further (RS → Deployment) is left to follow-up
@@ -105,7 +105,7 @@ type RefTarget struct {
 //
 // Images carries the rendered image strings (e.g. "nginx:1.27.1") for
 // informational display — there's no K8s resource to drill into for an image.
-type PodOverviewData struct {
+type PodLinksData struct {
 	Owner          *RefTarget
 	Node           *RefTarget // cluster-scoped
 	ServiceAccount *RefTarget

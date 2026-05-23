@@ -58,12 +58,12 @@ type DetailModel struct {
 	refetching   bool // true while fetchResourceDetail is in-flight; drives spinner
 	spinnerFrame int
 
-	// Overview tab state: entries are the logical rows (drillable + info +
-	// section headers); overviewCursor is the index of the currently-selected
+	// Links tab state: entries are the logical rows (drillable + info +
+	// section headers); linkCursor is the index of the currently-selected
 	// entry. Cursor only lands on selectable entries (sections skipped).
-	overviewEntries    []overviewEntry
-	overviewCursor     int
-	overviewCursorLine int // display-line index of cursor row; -1 when none
+	linkEntries    []linkEntry
+	linkCursor     int
+	linkCursorLine int // display-line index of cursor row; -1 when none
 }
 
 type detailSpinnerTickMsg struct{}
@@ -118,16 +118,16 @@ func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
 // open the YAML popup.
 func (m DetailModel) YAMLContent() string { return m.detail.YAML }
 
-// NewDetailModel creates a new detail model with no data and the Overview tab
+// NewDetailModel creates a new detail model with no data and the Links tab
 // active. SetResourceType refines the tab list (and reorders for Pod/Deploy).
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{
-		activeTab:      DetailTabInfo,
-		tabs:           []string{"Overview", "Events"},
-		theme:          t,
-		maxLogLines:    1000,
-		followTail:     true,
-		overviewCursor: -1,
+		activeTab:   DetailTabInfo,
+		tabs:        []string{"Links", "Events"},
+		theme:       t,
+		maxLogLines: 1000,
+		followTail:  true,
+		linkCursor:  -1,
 	}
 }
 
@@ -170,11 +170,11 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	}
 
-	// Overview tab uses j/k for cursor navigation (not line scroll) and Enter
+	// Links tab uses j/k for cursor navigation (not line scroll) and Enter
 	// to drill into the highlighted ref. Other tabs scroll by line — fall
 	// through to the standard logic.
-	if m.ActiveTabName() == "Overview" {
-		if newModel, handled, cmd := m.handleOverviewKey(msg); handled {
+	if m.ActiveTabName() == "Links" {
+		if newModel, handled, cmd := m.handleLinkKey(msg); handled {
 			return newModel, cmd
 		}
 	}
@@ -247,12 +247,12 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 	return m, nil
 }
 
-// handleOverviewKey intercepts the keys with Overview-tab-specific semantics:
+// handleLinkKey intercepts the keys with Links-tab-specific semantics:
 // j/k move the cursor between drillable entries (auto-scrolling the viewport
-// to keep it visible), Enter emits OverviewDrillMsg. Returns handled=false to
+// to keep it visible), Enter emits LinkDrillMsg. Returns handled=false to
 // let the caller fall back to the generic per-line scroll handlers for
 // everything else.
-func (m DetailModel) handleOverviewKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) {
+func (m DetailModel) handleLinkKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyRunes:
 		if len(msg.Runes) != 1 {
@@ -260,55 +260,55 @@ func (m DetailModel) handleOverviewKey(msg tea.KeyMsg) (DetailModel, bool, tea.C
 		}
 		switch msg.Runes[0] {
 		case 'j':
-			m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, +1)
+			m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, +1)
 			m.buildContentLines()
-			m = m.scrollOverviewCursorIntoView()
+			m = m.scrollLinkCursorIntoView()
 			return m, true, nil
 		case 'k':
-			m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, -1)
+			m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, -1)
 			m.buildContentLines()
-			m = m.scrollOverviewCursorIntoView()
+			m = m.scrollLinkCursorIntoView()
 			return m, true, nil
 		}
 	case tea.KeyDown:
-		m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, +1)
+		m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, +1)
 		m.buildContentLines()
-		m = m.scrollOverviewCursorIntoView()
+		m = m.scrollLinkCursorIntoView()
 		return m, true, nil
 	case tea.KeyUp:
-		m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, -1)
+		m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, -1)
 		m.buildContentLines()
-		m = m.scrollOverviewCursorIntoView()
+		m = m.scrollLinkCursorIntoView()
 		return m, true, nil
 	case tea.KeyEnter:
-		ref := m.SelectedOverviewRef()
+		ref := m.SelectedLinkRef()
 		if ref == nil {
 			return m, true, nil
 		}
 		target := *ref
 		return m, true, func() tea.Msg {
-			return OverviewDrillMsg{Ref: target}
+			return LinkDrillMsg{Ref: target}
 		}
 	}
 	return m, false, nil
 }
 
-// scrollOverviewCursorIntoView nudges scrollOffset so the cursor row is
+// scrollLinkCursorIntoView nudges scrollOffset so the cursor row is
 // inside the visible viewport. Mirrors the standard "follow cursor" behavior
 // of any selectable list — without it, j/k can move the cursor past the
 // bottom of the panel and the user has to manually scroll to see it.
-func (m DetailModel) scrollOverviewCursorIntoView() DetailModel {
-	if m.overviewCursorLine < 0 {
+func (m DetailModel) scrollLinkCursorIntoView() DetailModel {
+	if m.linkCursorLine < 0 {
 		return m
 	}
 	h := m.contentHeight()
 	if h <= 0 {
 		return m
 	}
-	if m.overviewCursorLine < m.scrollOffset {
-		m.scrollOffset = m.overviewCursorLine
-	} else if m.overviewCursorLine >= m.scrollOffset+h {
-		m.scrollOffset = m.overviewCursorLine - h + 1
+	if m.linkCursorLine < m.scrollOffset {
+		m.scrollOffset = m.linkCursorLine
+	} else if m.linkCursorLine >= m.scrollOffset+h {
+		m.scrollOffset = m.linkCursorLine - h + 1
 	}
 	if m.scrollOffset < 0 {
 		m.scrollOffset = 0
@@ -582,27 +582,27 @@ func (m *DetailModel) ClearDetail() {
 
 // SetResourceType sets the current resource type and adjusts available tabs.
 //
-// Tab order convention (post-[4] Overview migration; YAML moved to Y popup):
-//   - Pods / Deployments: Logs → Overview → Events
-//   - Events:             Overview alone
-//   - everything else:    Overview → Events
+// Tab order convention (post-[4] Links migration; YAML moved to Y popup):
+//   - Pods / Deployments: Logs → Links → Events
+//   - Events:             Links alone
+//   - everything else:    Links → Events
 //
-// Pod gets the structured Owner/Node/SA/Image Overview; other kinds use the
+// Pod gets the structured Owner/Node/SA/Image Links; other kinds use the
 // generic labels + annotations + structured-fields fallback so the panel
 // never renders empty.
 func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
 	switch {
 	case rt == k8s.ResourcePods, rt == k8s.ResourceDeployments:
-		m.tabs = []string{"Logs", "Overview", "Events"}
+		m.tabs = []string{"Logs", "Links", "Events"}
 	case rt == k8s.ResourceEvents:
-		m.tabs = []string{"Overview"}
+		m.tabs = []string{"Links"}
 	default:
-		m.tabs = []string{"Overview", "Events"}
+		m.tabs = []string{"Links", "Events"}
 	}
 	m.activeTab = 0
 	m.scrollOffset = 0
-	m.overviewCursor = -1
+	m.linkCursor = -1
 	m.buildContentLines()
 }
 
@@ -647,11 +647,11 @@ func (m *DetailModel) AppendLogLine(pod, container, text string) {
 // buildContentLines rebuilds the pre-rendered content lines for the current tab.
 func (m *DetailModel) buildContentLines() {
 	switch m.ActiveTabName() {
-	case "Overview":
-		m.rebuildOverviewEntries()
-		lines, _, cursorLine := renderOverviewEntries(m.overviewEntries, m.overviewCursor, m.width, m.theme)
+	case "Links":
+		m.rebuildLinkEntries()
+		lines, _, cursorLine := renderLinkEntries(m.linkEntries, m.linkCursor, m.width, m.theme)
 		m.contentLines = lines
-		m.overviewCursorLine = cursorLine
+		m.linkCursorLine = cursorLine
 	case "Logs":
 		m.contentLines = m.buildLogLines()
 	case "Events":
@@ -659,36 +659,36 @@ func (m *DetailModel) buildContentLines() {
 	}
 }
 
-// rebuildOverviewEntries refreshes m.overviewEntries based on the current
+// rebuildLinkEntries refreshes m.linkEntries based on the current
 // resource type + detail data, and re-clamps the cursor to the first
 // selectable entry when out of bounds.
-func (m *DetailModel) rebuildOverviewEntries() {
+func (m *DetailModel) rebuildLinkEntries() {
 	if !m.hasData {
-		m.overviewEntries = nil
-		m.overviewCursor = -1
+		m.linkEntries = nil
+		m.linkCursor = -1
 		return
 	}
 	if m.resourceType == k8s.ResourcePods {
-		m.overviewEntries = buildPodOverviewEntries(m.detail)
+		m.linkEntries = buildPodLinkEntries(m.detail)
 	} else {
-		m.overviewEntries = buildGenericOverviewEntries(m.detail)
+		m.linkEntries = buildGenericLinkEntries(m.detail)
 	}
-	if m.overviewCursor < 0 || m.overviewCursor >= len(m.overviewEntries) ||
-		(m.overviewCursor < len(m.overviewEntries) && !m.overviewEntries[m.overviewCursor].isSelectable()) {
-		m.overviewCursor = firstSelectableCursor(m.overviewEntries)
+	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) ||
+		(m.linkCursor < len(m.linkEntries) && !m.linkEntries[m.linkCursor].isSelectable()) {
+		m.linkCursor = firstSelectableCursor(m.linkEntries)
 	}
 }
 
-// SelectedOverviewRef returns the drill ref under the Overview cursor, or
+// SelectedLinkRef returns the drill ref under the Links cursor, or
 // nil if the cursor is on an info-only row (or the tab has no entries).
-func (m DetailModel) SelectedOverviewRef() *k8s.RefTarget {
-	if m.ActiveTabName() != "Overview" {
+func (m DetailModel) SelectedLinkRef() *k8s.RefTarget {
+	if m.ActiveTabName() != "Links" {
 		return nil
 	}
-	if m.overviewCursor < 0 || m.overviewCursor >= len(m.overviewEntries) {
+	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) {
 		return nil
 	}
-	return m.overviewEntries[m.overviewCursor].ref
+	return m.linkEntries[m.linkCursor].ref
 }
 
 func (m DetailModel) buildEventLines() []string {
