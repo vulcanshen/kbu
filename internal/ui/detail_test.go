@@ -397,18 +397,54 @@ func TestDetailModel_LinksEnter_EmitsDrillMsg(t *testing.T) {
 	}
 }
 
-// TestDetailModel_LinksTab_EmptyShowsPlaceholder verifies the "no links —
-// press Y" placeholder renders when a resource has no Links content (typical
-// for kinds without a custom Link builder yet).
+// TestDetailModel_LinksTab_EmptyShowsPlaceholder verifies the "no links to
+// show" placeholder renders for a supported kind whose specific instance
+// happens to have no link refs (e.g. ConfigMap with no consumer Pods).
 func TestDetailModel_LinksTab_EmptyShowsPlaceholder(t *testing.T) {
 	m := newTestDetail()
-	m.SetResourceType(k8s.ResourceConfigMaps) // no custom Link builder
+	m.SetResourceType(k8s.ResourceConfigMaps) // supported, but instance has no consumers
 	m.SetDetail(k8s.ResourceDetail{Name: "x", Namespace: "default", Kind: "ConfigMap"}, nil)
 	m = m.switchToTab(0) // Links
 
 	joined := strings.Join(m.contentLines, "\n")
-	if !strings.Contains(joined, "no links") {
-		t.Errorf("empty Links must show placeholder, got:\n%s", joined)
+	if !strings.Contains(joined, "no links to show") {
+		t.Errorf("supported-but-empty Links must show 'no links to show' placeholder, got:\n%s", joined)
+	}
+	if strings.Contains(joined, "not yet supported") {
+		t.Errorf("supported kind must not show 'not yet supported' placeholder")
+	}
+}
+
+// TestDetailModel_LinksTab_UnsupportedPlaceholder verifies kinds that have no
+// Links builder yet show the "not yet supported" placeholder, not the
+// "no links to show" one — so users can tell apart "we haven't done this"
+// from "this instance genuinely has nothing to drill to".
+func TestDetailModel_LinksTab_UnsupportedPlaceholder(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourceClusterRoles) // currently unsupported
+	m.SetDetail(k8s.ResourceDetail{Name: "view", Kind: "ClusterRole"}, nil)
+	m = m.switchToTab(0) // Links
+
+	joined := strings.Join(m.contentLines, "\n")
+	if !strings.Contains(joined, "not yet supported") {
+		t.Errorf("unsupported kind must show 'not yet supported' placeholder, got:\n%s", joined)
+	}
+}
+
+// TestDetailModel_NamespaceHidesLinksTab verifies the Links tab is dropped
+// entirely for Namespace — there are no meaningful refs to surface, so the
+// tab strip skips straight to Events.
+func TestDetailModel_NamespaceHidesLinksTab(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourceNamespaces)
+
+	for _, tab := range m.tabs {
+		if tab == "Links" {
+			t.Fatalf("Namespace should not show Links tab, got: %v", m.tabs)
+		}
+	}
+	if len(m.tabs) == 0 || m.tabs[0] != "Events" {
+		t.Errorf("Namespace tabs should start with Events, got: %v", m.tabs)
 	}
 }
 

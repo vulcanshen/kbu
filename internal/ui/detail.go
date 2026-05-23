@@ -585,6 +585,7 @@ func (m *DetailModel) ClearDetail() {
 // Tab order convention (post-[4] Links migration; YAML moved to Y popup):
 //   - Pods / Deployments: Logs → Links → Events
 //   - Events:             Links alone
+//   - !linksApplicable:   Events only (Namespace — Links tab dropped)
 //   - everything else:    Links → Events
 //
 // Pod gets the structured Owner/Node/SA/Image Links; other kinds use the
@@ -597,6 +598,8 @@ func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 		m.tabs = []string{"Logs", "Links", "Events"}
 	case rt == k8s.ResourceEvents:
 		m.tabs = []string{"Links"}
+	case !linksApplicable(rt):
+		m.tabs = []string{"Events"}
 	default:
 		m.tabs = []string{"Links", "Events"}
 	}
@@ -649,7 +652,11 @@ func (m *DetailModel) buildContentLines() {
 	switch m.ActiveTabName() {
 	case "Links":
 		m.rebuildLinkEntries()
-		lines, _, cursorLine := renderLinkEntries(m.linkEntries, m.linkCursor, m.width, m.theme)
+		placeholder := linksPlaceholderEmpty
+		if !linksImplemented(m.resourceType) {
+			placeholder = linksPlaceholderUnsupported
+		}
+		lines, _, cursorLine := renderLinkEntries(m.linkEntries, m.linkCursor, m.width, m.theme, placeholder)
 		m.contentLines = lines
 		m.linkCursorLine = cursorLine
 	case "Logs":
