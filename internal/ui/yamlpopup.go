@@ -430,18 +430,7 @@ func (m YamlPopupModel) renderFullPopup() string {
 		b.WriteString("\n")
 	}
 
-	hint := " e:edit /:search j/k u/d gg/G Esc:close "
-	indicator := ""
-	if total := len(m.contentLines); total > 0 {
-		shownEnd := m.scrollOffset + contentH
-		if shownEnd > total {
-			shownEnd = total
-		}
-		indicator = fmt.Sprintf(" %d-%d / %d ", m.scrollOffset+1, shownEnd, total)
-		if len(m.matchLines) > 0 && !m.searching {
-			indicator = fmt.Sprintf(" %d/%d match %s", m.matchCursor+1, len(m.matchLines), indicator)
-		}
-	}
+	hint, indicator := m.bottomBarStrings(contentH, innerW-1)
 	bottomDashes := innerW - lipgloss.Width(hint) - lipgloss.Width(indicator) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
@@ -451,4 +440,51 @@ func (m YamlPopupModel) renderFullPopup() string {
 	b.WriteString(bStyle.Render(strings.Repeat("─", bottomDashes) + indicator + "╯"))
 
 	return b.String()
+}
+
+// bottomBarStrings produces the bottom-border hint + indicator pair that fits
+// in `available` columns. Vim conventions (j/k u/d gg/G n/N) are intentionally
+// omitted — they apply everywhere in km8 and don't need to live in the local
+// hint. Falls back to a short hint and finally drops the indicator if the
+// popup width is too tight.
+func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicator string) {
+	const hintFull = " e:edit  /:search  Esc:close "
+	const hintShort = " e  /  Esc "
+	hint = hintFull
+
+	total := len(m.contentLines)
+	if total > 0 {
+		shownEnd := m.scrollOffset + contentH
+		if shownEnd > total {
+			shownEnd = total
+		}
+		indicator = fmt.Sprintf(" %d-%d/%d ", m.scrollOffset+1, shownEnd, total)
+		if len(m.matchLines) > 0 && !m.searching {
+			indicator = fmt.Sprintf(" %d/%d %s", m.matchCursor+1, len(m.matchLines), strings.TrimLeft(indicator, " "))
+		}
+	}
+
+	fits := func() bool {
+		return lipgloss.Width(hint)+lipgloss.Width(indicator) <= available
+	}
+	if fits() {
+		return
+	}
+	hint = hintShort
+	if fits() {
+		return
+	}
+	// Drop the verbose part of the indicator (match counter) but keep range.
+	if total > 0 {
+		shownEnd := m.scrollOffset + contentH
+		if shownEnd > total {
+			shownEnd = total
+		}
+		indicator = fmt.Sprintf(" %d-%d/%d ", m.scrollOffset+1, shownEnd, total)
+	}
+	if fits() {
+		return
+	}
+	indicator = ""
+	return
 }
