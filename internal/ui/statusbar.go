@@ -72,12 +72,17 @@ func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *Pt
 
 	left := fmt.Sprintf(" %s  %s  %s", ctx, cluster, ns)
 	if pty != nil {
-		color := m.theme.Status.Pending // amber when hidden
+		// Hidden KM8erm: Catppuccin peach (#fab387). Status.Pending defaults
+		// to yellow — same hue as ns: in the status bar, so the marker
+		// blended in. Peach reads as a distinct "warm reminder" without
+		// stealing attention the way an error/red would.
+		// Attached (popup visible): green via Status.Running, kept for the
+		// rare cases ViewFull is called with Visible=true (current call
+		// site only sets pty when hidden).
+		color := "#fab387"
 		if pty.Visible {
-			color = m.theme.Status.Running // green when attached
+			color = m.theme.Status.Running
 		}
-		// Colored text, no background — lighter visual weight than the
-		// error / success badges so it doesn't compete for attention.
 		ptyChip := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true).Render(pty.Label)
 		left = left + "  " + ptyChip
 	}
