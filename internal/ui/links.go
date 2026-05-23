@@ -205,20 +205,81 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 		if len(labelText) < labelW {
 			labelText = labelText + strings.Repeat(" ", labelW-len(labelText))
 		}
-		if isCursor {
-			cursorLine = len(lines)
-			plain := "  " + labelText + " " + e.value
-			if e.ref != nil {
-				plain += " →"
+
+		// Wrap value to fit (rowWidth - labelPrefixW), with continuation
+		// lines indented under the value column. Same behavior for
+		// cursor and non-cursor rows — the previous lipgloss.Width()
+		// cursor-only wrap left non-cursor rows truncated by the outer
+		// panel.
+		//
+		// Strategy: wrap (value + arrow) together so the arrow lands on
+		// the right chunk, then split the arrow back off the last
+		// chunk to render it in drillStyle. Keeps the arrow color
+		// consistent with the original non-wrap rendering.
+		labelPrefix := "  " + labelText + " "
+		labelPrefixW := lipgloss.Width(labelPrefix)
+		hasArrow := e.ref != nil
+		valueAndArrow := e.value
+		if hasArrow {
+			valueAndArrow += " →"
+		}
+		valueBudget := rowWidth - labelPrefixW
+		if valueBudget < 10 {
+			valueBudget = 10
+		}
+		chunks := wrapPlain(valueAndArrow, valueBudget)
+		arrowChunkIdx := -1
+		if hasArrow && len(chunks) > 0 {
+			last := len(chunks) - 1
+			if strings.HasSuffix(chunks[last], " →") {
+				chunks[last] = strings.TrimSuffix(chunks[last], " →")
+				if chunks[last] == "" && last > 0 {
+					// Arrow ended up alone on a continuation line; drop
+					// the empty chunk and attach the arrow to the
+					// previous line instead.
+					chunks = chunks[:last]
+					arrowChunkIdx = len(chunks) - 1
+				} else {
+					arrowChunkIdx = last
+				}
 			}
-			lines = append(lines, cursorRowStyle.Width(rowWidth).Render(plain))
-			continue
 		}
-		row := "  " + labelStyle.Render(labelText) + " " + valueStyle.Render(e.value)
-		if e.ref != nil {
-			row += " " + drillStyle.Render("→")
+		contIndent := strings.Repeat(" ", labelPrefixW)
+
+		for ci, chunk := range chunks {
+			withArrow := ci == arrowChunkIdx
+			if isCursor {
+				if ci == 0 {
+					cursorLine = len(lines)
+				}
+				var plain string
+				if ci == 0 {
+					plain = labelPrefix + chunk
+				} else {
+					plain = contIndent + chunk
+				}
+				if withArrow {
+					plain += " →"
+				}
+				// Pad so the cursor background spans the full row
+				// width on every wrapped line.
+				if w := lipgloss.Width(plain); w < rowWidth {
+					plain = plain + strings.Repeat(" ", rowWidth-w)
+				}
+				lines = append(lines, cursorRowStyle.Render(plain))
+				continue
+			}
+			var row string
+			if ci == 0 {
+				row = "  " + labelStyle.Render(labelText) + " " + valueStyle.Render(chunk)
+			} else {
+				row = contIndent + valueStyle.Render(chunk)
+			}
+			if withArrow {
+				row += " " + drillStyle.Render("→")
+			}
+			lines = append(lines, row)
 		}
-		lines = append(lines, row)
 	}
 	return lines, selectableIdxs, cursorLine
 }
