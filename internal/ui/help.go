@@ -114,36 +114,39 @@ func (m HelpModel) RenderPopup() string {
 	return m.animator.RenderFrame(m.renderFullPopup())
 }
 
-// renderFullPopup builds the complete popup without animation.
+// renderFullPopup builds the complete popup. Two-column layout — sections
+// are packed left-to-right to keep total height short on modern keybinding
+// lists (~30 entries) without making the popup tall enough to need scroll.
 func (m HelpModel) renderFullPopup() string {
-	content := m.helpContent()
+	const colW = 42
+	const gutterW = 2
+	innerW := colW*2 + gutterW
 
-	boxWidth := 52
 	bc := lipgloss.Color("#74c7ec")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
-	sectionStyle := lipgloss.NewStyle().Bold(true)
-	keyStyle := m.theme.DetailLabelStyle()
-	descStyle := m.theme.DetailValueStyle()
 
-	var lines []string
-	for _, entry := range content {
-		if entry.isSection {
-			lines = append(lines, sectionStyle.Render(" "+entry.text))
-		} else if entry.key == "" {
-			continue
-		} else {
-			key := keyStyle.Width(14).Render(entry.key)
-			desc := descStyle.Render(entry.desc)
-			lines = append(lines, "  "+key+desc)
-		}
+	groups := m.groupedContent()
+	leftGroups, rightGroups := splitGroupsForColumns(groups)
+	leftLines := m.renderColumn(leftGroups)
+	rightLines := m.renderColumn(rightGroups)
+	for len(leftLines) < len(rightLines) {
+		leftLines = append(leftLines, "")
 	}
-	body := strings.Join(lines, "\n")
-	panelH := len(lines) + 4
+	for len(rightLines) < len(leftLines) {
+		rightLines = append(rightLines, "")
+	}
 
-	title := " Keybindings"
-	innerW := boxWidth - 2
-	dashesAfter := innerW - 1 - len(title)
+	gutter := strings.Repeat(" ", gutterW)
+	var bodyLines []string
+	bodyLines = append(bodyLines, "") // top breathing
+	for i := range leftLines {
+		bodyLines = append(bodyLines, padRight(leftLines[i], colW)+gutter+padRight(rightLines[i], colW))
+	}
+	bodyLines = append(bodyLines, "") // bottom breathing
+
+	title := " Keybindings"
+	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -156,12 +159,7 @@ func (m HelpModel) renderFullPopup() string {
 
 	leftBorder := bStyle.Render("│")
 	rightBorder := bStyle.Render("│")
-	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
-	bodyLines = append(bodyLines, "")
-	for len(bodyLines) < panelH-2 {
-		bodyLines = append(bodyLines, "")
-	}
-	for _, line := range bodyLines[:panelH-2] {
+	for _, line := range bodyLines {
 		lw := lipgloss.Width(line)
 		pad := ""
 		if lw < innerW {
@@ -175,13 +173,97 @@ func (m HelpModel) renderFullPopup() string {
 		b.WriteString("\n")
 	}
 	hint := " Esc/?:close j/k:scroll "
-	bottomDashes := innerW - len(hint) - 1
+	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
 	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 
 	return b.String()
+}
+
+// helpGroup is one section + its entries — the atomic unit balanced across
+// the two columns. Sections never split across columns; the gutter alone is
+// already a strong-enough visual separator without splitting a coherent
+// section across it.
+type helpGroup struct {
+	title   string
+	entries []helpEntry
+}
+
+func (m HelpModel) groupedContent() []helpGroup {
+	var groups []helpGroup
+	var cur helpGroup
+	flush := func() {
+		if cur.title != "" || len(cur.entries) > 0 {
+			groups = append(groups, cur)
+		}
+	}
+	for _, e := range m.helpContent() {
+		if e.isSection {
+			flush()
+			cur = helpGroup{title: e.text}
+			continue
+		}
+		if e.key == "" {
+			continue
+		}
+		cur.entries = append(cur.entries, e)
+	}
+	flush()
+	return groups
+}
+
+// splitGroupsForColumns greedily packs groups into the left column until the
+// running line-count exceeds half of the total, then dumps the rest into the
+// right column. Keeps each section intact.
+func splitGroupsForColumns(groups []helpGroup) (left, right []helpGroup) {
+	total := 0
+	for _, g := range groups {
+		total += 1 + len(g.entries) // section header + entries
+	}
+	target := total / 2
+	running := 0
+	for _, g := range groups {
+		if running >= target && len(left) > 0 {
+			right = append(right, g)
+			continue
+		}
+		left = append(left, g)
+		running += 1 + len(g.entries)
+	}
+	return left, right
+}
+
+func (m HelpModel) renderColumn(groups []helpGroup) []string {
+	sectionStyle := lipgloss.NewStyle().Bold(true)
+	keyStyle := m.theme.DetailLabelStyle()
+	descStyle := m.theme.DetailValueStyle()
+
+	var lines []string
+	for i, g := range groups {
+		if i > 0 {
+			lines = append(lines, "") // single blank between sections
+		}
+		if g.title != "" {
+			lines = append(lines, sectionStyle.Render(" "+g.title))
+		}
+		for _, e := range g.entries {
+			key := keyStyle.Width(14).Render(e.key)
+			lines = append(lines, "  "+key+descStyle.Render(e.desc))
+		}
+	}
+	return lines
+}
+
+// padRight extends a styled string with trailing spaces so its visual width
+// equals width. ANSI escapes are ignored via lipgloss.Width.
+func padRight(s string, width int) string {
+	w := lipgloss.Width(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
 }
 
 type helpEntry struct {
