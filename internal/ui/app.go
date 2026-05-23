@@ -598,6 +598,34 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case OverviewDrillMsg:
+		// User pressed Enter on an Overview ref. Fetch the target resource
+		// off the Update path so the API call doesn't freeze the UI; the
+		// fetched item lands as resourceFetchedForDrillMsg and opens YamlPopup.
+		ref := msg.Ref
+		client := m.k8sClient
+		cmd := func() tea.Msg {
+			item, err := k8s.FetchResourceByRef(context.Background(), client.Clientset(), ref)
+			if err != nil {
+				return resourceFetchedForDrillMsg{ref: ref, err: err}
+			}
+			yaml := k8s.MarshalItemYAML(item)
+			return resourceFetchedForDrillMsg{ref: ref, item: item, yaml: yaml}
+		}
+		return m, cmd
+
+	case resourceFetchedForDrillMsg:
+		if msg.err != nil {
+			m.appLog.Warn(fmt.Sprintf("drill %s/%s: %s", msg.ref.Type, msg.ref.Name, msg.err.Error()))
+			return m, m.toast.Show("Drill failed — see App Log (!)")
+		}
+		if msg.yaml == "" {
+			m.appLog.Warn(fmt.Sprintf("drill %s/%s: no YAML", msg.ref.Type, msg.ref.Name))
+			return m, nil
+		}
+		m.yamlPopup.SetSize(m.width, m.height)
+		return m, m.yamlPopup.Open(msg.yaml, msg.ref.Type, msg.item, m.k8sClient.ContextName())
+
 	case aggregateLogsReadyMsg:
 		// Stale result guard: user may have navigated to a different row
 		// while the pod-list call was in flight.

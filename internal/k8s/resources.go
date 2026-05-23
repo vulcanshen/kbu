@@ -411,7 +411,176 @@ func detailPod(item ResourceItem) ResourceDetail {
 		d.Containers = append(d.Containers, containerDetail(c, statusMap, false))
 	}
 
+	d.PodOverview = buildPodOverview(p)
 	return d
+}
+
+// buildPodOverview extracts the navigable references from a Pod for the
+// Overview tab: immediate owner, node, service account, and image strings.
+// Cluster-scoped refs (Node) leave Namespace empty.
+func buildPodOverview(p *corev1.Pod) *PodOverviewData {
+	o := &PodOverviewData{}
+	if len(p.OwnerReferences) > 0 {
+		ref := p.OwnerReferences[0]
+		if rt, ok := kindToResourceType(ref.Kind); ok {
+			o.Owner = &RefTarget{Type: rt, Name: ref.Name, Namespace: p.Namespace}
+		}
+	}
+	if p.Spec.NodeName != "" {
+		o.Node = &RefTarget{Type: ResourceNodes, Name: p.Spec.NodeName}
+	}
+	if p.Spec.ServiceAccountName != "" && p.Spec.ServiceAccountName != "default" {
+		// Skip "default" — every namespace has one and drilling almost never
+		// reveals anything useful. Users with a custom SA see the chip; users
+		// on the default SA aren't distracted by a useless drill target.
+		o.ServiceAccount = &RefTarget{
+			Type:      ResourceServiceAccounts,
+			Name:      p.Spec.ServiceAccountName,
+			Namespace: p.Namespace,
+		}
+	}
+	for _, c := range p.Spec.InitContainers {
+		o.InitImages = append(o.InitImages, c.Image)
+	}
+	for _, c := range p.Spec.Containers {
+		o.Images = append(o.Images, c.Image)
+	}
+	return o
+}
+
+// kindToResourceType maps a K8s "Kind" string (as it appears in
+// OwnerReferences / TypeMeta) to the corresponding km8 ResourceType. Returns
+// ok=false for kinds km8 doesn't recognize so the caller can fall back to a
+// non-drillable display.
+func kindToResourceType(kind string) (ResourceType, bool) {
+	switch kind {
+	case "Pod":
+		return ResourcePods, true
+	case "ReplicaSet":
+		// km8 doesn't have ReplicaSet as a first-class resource yet — fall
+		// back to Deployment which is what users really want to inspect.
+		// (The RS is an implementation detail of Deployment rollouts.)
+		return ResourceDeployments, true
+	case "Deployment":
+		return ResourceDeployments, true
+	case "DaemonSet":
+		return ResourceDaemonSets, true
+	case "StatefulSet":
+		return ResourceStatefulSets, true
+	case "Job":
+		return ResourceJobs, true
+	case "CronJob":
+		return ResourceCronJobs, true
+	case "Node":
+		return ResourceNodes, true
+	case "ServiceAccount":
+		return ResourceServiceAccounts, true
+	case "ConfigMap":
+		return ResourceConfigMaps, true
+	case "Secret":
+		return ResourceSecrets, true
+	case "PersistentVolumeClaim":
+		return ResourcePersistentVolumeClaims, true
+	case "PersistentVolume":
+		return ResourcePersistentVolumes, true
+	case "Service":
+		return ResourceServices, true
+	}
+	return "", false
+}
+
+// FetchResourceByRef fetches a single resource by its kind + name + namespace
+// and returns a ResourceItem ready for YAML rendering. Used by the Overview
+// tab's drill-to-popup flow.
+//
+// Returns the same ResourceItem shape the table would produce, with Raw set
+// to the typed object so MarshalItemYAML can serialize it correctly. Unknown
+// resource types return an error rather than guessing.
+func FetchResourceByRef(ctx context.Context, cs kubernetes.Interface, ref RefTarget) (ResourceItem, error) {
+	if ref.Name == "" {
+		return ResourceItem{}, fmt.Errorf("empty ref name")
+	}
+	switch ref.Type {
+	case ResourcePods:
+		p, err := cs.CoreV1().Pods(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: p.Name, Namespace: p.Namespace, UID: string(p.UID), Raw: p}, nil
+	case ResourceDeployments:
+		obj, err := cs.AppsV1().Deployments(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceDaemonSets:
+		obj, err := cs.AppsV1().DaemonSets(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceStatefulSets:
+		obj, err := cs.AppsV1().StatefulSets(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceJobs:
+		obj, err := cs.BatchV1().Jobs(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceCronJobs:
+		obj, err := cs.BatchV1().CronJobs(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceNodes:
+		obj, err := cs.CoreV1().Nodes().Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceServiceAccounts:
+		obj, err := cs.CoreV1().ServiceAccounts(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceConfigMaps:
+		obj, err := cs.CoreV1().ConfigMaps(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceSecrets:
+		obj, err := cs.CoreV1().Secrets(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourcePersistentVolumeClaims:
+		obj, err := cs.CoreV1().PersistentVolumeClaims(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourcePersistentVolumes:
+		obj, err := cs.CoreV1().PersistentVolumes().Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceServices:
+		obj, err := cs.CoreV1().Services(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	}
+	return ResourceItem{}, fmt.Errorf("FetchResourceByRef: unsupported ref type %q", ref.Type)
 }
 
 func containerDetail(c corev1.Container, statusMap map[string]corev1.ContainerStatus, isInit bool) ContainerInfo {
