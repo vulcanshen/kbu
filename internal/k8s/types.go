@@ -71,17 +71,18 @@ type ResourceItem struct {
 // navigable references the Links tab needs (owner, node, SA, ...) so the
 // ui package can render drillable rows without re-parsing the Pod object.
 type ResourceDetail struct {
-	Name        string
-	Namespace   string
-	Kind        string
-	UID         string
-	CreatedAt   string
-	Labels      map[string]string
-	Annotations map[string]string
-	Fields      []DetailField
-	Containers  []ContainerInfo
-	YAML        string
-	PodLinks    *PodLinksData
+	Name         string
+	Namespace    string
+	Kind         string
+	UID          string
+	CreatedAt    string
+	Labels       map[string]string
+	Annotations  map[string]string
+	Fields       []DetailField
+	Containers   []ContainerInfo
+	YAML         string
+	PodLinks     *PodLinksData
+	ServiceLinks *ServiceLinksData
 }
 
 // RefTarget identifies another Kubernetes resource that the Links tab can
@@ -120,6 +121,18 @@ type VolumeRef struct {
 	Name string // volume name in spec.volumes
 	Kind string // "configMap" / "secret" / "persistentVolumeClaim" / "emptyDir" / "hostPath" / "projected" / "downwardAPI" / "other"
 	Ref  *RefTarget
+}
+
+// ServiceLinksData is the navigable-refs payload for a Service detail.
+// Pods is the workload selected by the Service's label selector — each one
+// is a drillable RefTarget so the user can answer "which pods does this
+// Service route to?" in one keystroke.
+//
+// Populated by EnrichLinks at fetch time (it issues a CoreV1().Pods().List
+// against the selector); the synchronous detailService can't do this
+// because it has no clientset.
+type ServiceLinksData struct {
+	Pods []RefTarget
 }
 
 // DetailField is a key-value pair for resource-specific detail.

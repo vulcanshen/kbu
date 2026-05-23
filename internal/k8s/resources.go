@@ -1123,6 +1123,44 @@ func servicePorts(svc *corev1.Service) string {
 	return strings.Join(ports, ",")
 }
 
+// EnrichLinks fills in kind-specific Links data that requires an API call
+// (selector → pod resolution, owner chains, endpoint slices, ...). The
+// synchronous Detailer can't do this because it has no clientset; the
+// caller (ui.fetchResourceDetail) invokes EnrichLinks after the detailer
+// returns. Quiet on error — the Links tab simply shows fewer entries.
+func EnrichLinks(ctx context.Context, cs kubernetes.Interface, rt ResourceType, item ResourceItem, detail *ResourceDetail) {
+	switch rt {
+	case ResourceServices:
+		if svc, ok := item.Raw.(*corev1.Service); ok {
+			detail.ServiceLinks = serviceLinksFor(ctx, cs, svc)
+		}
+	}
+}
+
+// serviceLinksFor resolves a Service's label selector to the list of Pods
+// it routes to. Each Pod becomes a drillable RefTarget. Empty selector
+// (ExternalName / headless without selector) returns an empty slice.
+func serviceLinksFor(ctx context.Context, cs kubernetes.Interface, svc *corev1.Service) *ServiceLinksData {
+	out := &ServiceLinksData{}
+	if len(svc.Spec.Selector) == 0 {
+		return out
+	}
+	sel := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: svc.Spec.Selector})
+	list, err := cs.CoreV1().Pods(svc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: sel})
+	if err != nil {
+		return out
+	}
+	for i := range list.Items {
+		p := &list.Items[i]
+		out.Pods = append(out.Pods, RefTarget{
+			Type:      ResourcePods,
+			Name:      p.Name,
+			Namespace: p.Namespace,
+		})
+	}
+	return out
+}
+
 func detailService(item ResourceItem) ResourceDetail {
 	svc, _ := item.Raw.(*corev1.Service)
 	d := baseDetail(item, "Service", svc.ObjectMeta)

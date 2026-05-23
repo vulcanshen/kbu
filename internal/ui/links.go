@@ -86,11 +86,34 @@ func buildPodLinkEntries(detail k8s.ResourceDetail) []linkEntry {
 	return entries
 }
 
+// buildServiceLinkEntries renders Service Links: the set of Pods selected
+// by the Service's label selector. Each pod is drillable to its YAML.
+// Empty when the Service has no selector (ExternalName, headless without
+// selector) — the placeholder line takes over.
+func buildServiceLinkEntries(detail k8s.ResourceDetail) []linkEntry {
+	sl := detail.ServiceLinks
+	if sl == nil || len(sl.Pods) == 0 {
+		return nil
+	}
+	entries := []linkEntry{
+		{section: true, label: fmt.Sprintf("Pods (%d)", len(sl.Pods))},
+	}
+	for i := range sl.Pods {
+		p := &sl.Pods[i]
+		entries = append(entries, linkEntry{
+			label: "  " + p.Name,
+			value: "pod",
+			ref:   p,
+		})
+	}
+	return entries
+}
+
 // buildGenericLinkEntries is the fallback for resource kinds without a
 // custom Links builder. Returns nil for now — kinds with refs worth
-// surfacing (Service, Deployment, Ingress, HPA, PVC, ...) get their own
-// builders incrementally. The renderer shows a "no links — press Y" hint
-// when this returns empty.
+// surfacing (Deployment, Ingress, HPA, PVC, ...) get their own builders
+// incrementally. The renderer shows a "no links — press Y" hint when
+// this returns empty.
 func buildGenericLinkEntries(detail k8s.ResourceDetail) []linkEntry {
 	_ = detail
 	return nil

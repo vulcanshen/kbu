@@ -668,9 +668,12 @@ func (m *DetailModel) rebuildLinkEntries() {
 		m.linkCursor = -1
 		return
 	}
-	if m.resourceType == k8s.ResourcePods {
+	switch m.resourceType {
+	case k8s.ResourcePods:
 		m.linkEntries = buildPodLinkEntries(m.detail)
-	} else {
+	case k8s.ResourceServices:
+		m.linkEntries = buildServiceLinkEntries(m.detail)
+	default:
 		m.linkEntries = buildGenericLinkEntries(m.detail)
 	}
 	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) ||

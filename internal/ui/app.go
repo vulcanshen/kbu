@@ -40,7 +40,7 @@ const (
 	panelSidebarWidth = 24 // panel 1 (sidebar) — fixed absolute width
 	panelDetailHeight = 14 // panel 3 (detail)  — fixed absolute height
 	panelHMargin      = 1  // cells between terminal left/right edge and panels
-	panelHSpace       = 1  // cells between sidebar and right side
+	panelHSpace       = 0  // cells between sidebar and right side (0 = flush borders)
 	panelVSpace       = 0  // rows between table and detail (0 = flush borders)
 )
 
@@ -1623,9 +1623,14 @@ func fetchResourceDetail(client *k8s.Client, rt k8s.ResourceType, item k8s.Resou
 				config.WriteCrashLog(r)
 			}
 		}()
+		ctx := context.Background()
 		detail := k8s.GetResourceDetail(rt, item)
 		detail.YAML = k8s.MarshalItemYAML(item)
-		events, _ := k8s.FetchResourceEvents(context.Background(), client.Clientset(), item.Name, item.Namespace)
+		// Kind-specific Links data that needs an API call (Service →
+		// selector→pods, future: Ingress → backend services, HPA → target).
+		// EnrichLinks is a no-op for kinds without extra resolution.
+		k8s.EnrichLinks(ctx, client.Clientset(), rt, item, &detail)
+		events, _ := k8s.FetchResourceEvents(ctx, client.Clientset(), item.Name, item.Namespace)
 		return ResourceDetailMsg{Detail: detail, Events: events}
 	}
 }
