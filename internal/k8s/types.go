@@ -67,9 +67,9 @@ type ResourceItem struct {
 // available. Structured fields are still used for synthetic detail views
 // (e.g. container drill-down) that have no native YAML.
 //
-// PodLinks is populated only for Pod details and carries the per-kind
-// navigable references the Links tab needs (owner, node, SA, ...) so the
-// ui package can render drillable rows without re-parsing the Pod object.
+// PodLinks / ServiceLinks are legacy typed payloads for the two kinds with
+// rich domain-specific structure. Every other kind populates the generic
+// Links slice instead — the UI dispatcher reads from the right field.
 type ResourceDetail struct {
 	Name         string
 	Namespace    string
@@ -83,6 +83,23 @@ type ResourceDetail struct {
 	YAML         string
 	PodLinks     *PodLinksData
 	ServiceLinks *ServiceLinksData
+	Links        []LinkSection
+}
+
+// LinkSection is one labeled group of link rows on the Links tab. Title is
+// the header label (empty title renders no header row). Entries with a
+// non-nil Ref are drillable; entries with Ref==nil are informational text.
+type LinkSection struct {
+	Title   string
+	Entries []LinkRow
+}
+
+// LinkRow is one row inside a LinkSection. Display format is
+// "Label  Value [→]" — the arrow appears when Ref is non-nil.
+type LinkRow struct {
+	Label string
+	Value string
+	Ref   *RefTarget
 }
 
 // RefTarget identifies another Kubernetes resource that the Links tab can

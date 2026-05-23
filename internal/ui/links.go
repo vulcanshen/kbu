@@ -109,14 +109,29 @@ func buildServiceLinkEntries(detail k8s.ResourceDetail) []linkEntry {
 	return entries
 }
 
-// buildGenericLinkEntries is the fallback for resource kinds without a
-// custom Links builder. Returns nil for now — kinds with refs worth
-// surfacing (Deployment, Ingress, HPA, PVC, ...) get their own builders
-// incrementally. The renderer shows a "no links — press Y" hint when
-// this returns empty.
+// buildGenericLinkEntries converts the generic detail.Links payload
+// (populated by per-kind detailXxx + EnrichLinks in the k8s layer) into
+// linkEntry rows. Empty input returns nil so the renderer falls back to
+// the "no links — press Y" placeholder.
 func buildGenericLinkEntries(detail k8s.ResourceDetail) []linkEntry {
-	_ = detail
-	return nil
+	if len(detail.Links) == 0 {
+		return nil
+	}
+	var entries []linkEntry
+	for _, sec := range detail.Links {
+		if sec.Title != "" {
+			entries = append(entries, linkEntry{section: true, label: sec.Title})
+		}
+		for i := range sec.Entries {
+			row := sec.Entries[i]
+			entries = append(entries, linkEntry{
+				label: row.Label,
+				value: row.Value,
+				ref:   row.Ref,
+			})
+		}
+	}
+	return entries
 }
 
 func ownerDisplay(ref k8s.RefTarget) string {

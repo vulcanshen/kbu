@@ -612,6 +612,30 @@ func FetchResourceByRef(ctx context.Context, cs kubernetes.Interface, ref RefTar
 			return ResourceItem{}, err
 		}
 		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceIngresses:
+		obj, err := cs.NetworkingV1().Ingresses(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceIngressClasses:
+		obj, err := cs.NetworkingV1().IngressClasses().Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceStorageClasses:
+		obj, err := cs.StorageV1().StorageClasses().Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceHorizontalPodAutoscalers:
+		obj, err := cs.AutoscalingV2().HorizontalPodAutoscalers(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
 	}
 	return ResourceItem{}, fmt.Errorf("FetchResourceByRef: unsupported ref type %q", ref.Type)
 }
@@ -821,6 +845,7 @@ func detailDeployment(item ResourceItem) ResourceDetail {
 			DetailField{Label: "Max Surge", Value: maxSurge},
 		)
 	}
+	d.Links = buildWorkloadStaticLinks(dep.OwnerReferences, dep.Spec.Template.Spec.ServiceAccountName, dep.Namespace)
 	return d
 }
 
@@ -864,6 +889,7 @@ func detailDaemonSet(item ResourceItem) ResourceDetail {
 		{Label: "Available", Value: fmt.Sprintf("%d", ds.Status.NumberAvailable)},
 		{Label: "Update Strategy", Value: string(ds.Spec.UpdateStrategy.Type)},
 	}
+	d.Links = buildWorkloadStaticLinks(ds.OwnerReferences, ds.Spec.Template.Spec.ServiceAccountName, ds.Namespace)
 	return d
 }
 
@@ -911,6 +937,16 @@ func detailStatefulSet(item ResourceItem) ResourceDetail {
 		{Label: "Update Strategy", Value: string(ss.Spec.UpdateStrategy.Type)},
 		{Label: "Pod Management Policy", Value: string(ss.Spec.PodManagementPolicy)},
 		{Label: "Service Name", Value: ss.Spec.ServiceName},
+	}
+	d.Links = buildWorkloadStaticLinks(ss.OwnerReferences, ss.Spec.Template.Spec.ServiceAccountName, ss.Namespace)
+	if ss.Spec.ServiceName != "" {
+		d.Links = append(d.Links, LinkSection{
+			Entries: []LinkRow{{
+				Label: "Service",
+				Value: ss.Spec.ServiceName,
+				Ref:   &RefTarget{Type: ResourceServices, Name: ss.Spec.ServiceName, Namespace: ss.Namespace},
+			}},
+		})
 	}
 	return d
 }
@@ -994,6 +1030,7 @@ func detailJob(item ResourceItem) ResourceDetail {
 	if j.Spec.BackoffLimit != nil {
 		d.Fields = append(d.Fields, DetailField{Label: "Backoff Limit", Value: fmt.Sprintf("%d", *j.Spec.BackoffLimit)})
 	}
+	d.Links = buildWorkloadStaticLinks(j.OwnerReferences, j.Spec.Template.Spec.ServiceAccountName, j.Namespace)
 	return d
 }
 
@@ -1058,6 +1095,7 @@ func detailCronJob(item ResourceItem) ResourceDetail {
 	if cj.Spec.FailedJobsHistoryLimit != nil {
 		d.Fields = append(d.Fields, DetailField{Label: "Failed History Limit", Value: fmt.Sprintf("%d", *cj.Spec.FailedJobsHistoryLimit)})
 	}
+	d.Links = buildCronJobLinks(cj)
 	return d
 }
 
@@ -1134,6 +1172,14 @@ func EnrichLinks(ctx context.Context, cs kubernetes.Interface, rt ResourceType, 
 		if svc, ok := item.Raw.(*corev1.Service); ok {
 			detail.ServiceLinks = serviceLinksFor(ctx, cs, svc)
 		}
+	case ResourceDeployments, ResourceStatefulSets, ResourceDaemonSets, ResourceJobs:
+		enrichWorkloadPods(ctx, cs, item, detail)
+	case ResourcePersistentVolumeClaims:
+		enrichPVCConsumers(ctx, cs, item, detail)
+	case ResourceConfigMaps:
+		enrichConfigMapConsumers(ctx, cs, item, detail)
+	case ResourceSecrets:
+		enrichSecretConsumers(ctx, cs, item, detail)
 	}
 }
 
@@ -1278,6 +1324,7 @@ func detailIngress(item ResourceItem) ResourceDetail {
 			}
 		}
 	}
+	d.Links = buildIngressLinks(ing)
 	return d
 }
 
@@ -1733,6 +1780,7 @@ func detailPersistentVolumeClaim(item ResourceItem) ResourceDetail {
 		{Label: "AccessModes", Value: shortAccessModes(pvc.Status.AccessModes)},
 		{Label: "StorageClass", Value: sc},
 	}
+	d.Links = buildPVCLinks(pvc)
 	return d
 }
 
@@ -1910,6 +1958,7 @@ func detailHorizontalPodAutoscaler(item ResourceItem) ResourceDetail {
 		{Label: "Targets", Value: hpaTargetSummary(hpa)},
 		{Label: "Metrics", Value: fmt.Sprintf("%d", len(hpa.Spec.Metrics))},
 	}
+	d.Links = buildHPALinks(hpa)
 	return d
 }
 
