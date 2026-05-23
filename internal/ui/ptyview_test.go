@@ -502,7 +502,7 @@ func TestPtyView_AltT_DoesNotHideEditKind(t *testing.T) {
 func TestPtyView_BottomBorderShowsAltTHintForShell(t *testing.T) {
 	p := hookedPtyView(PtyKindShell)
 	out := p.RenderPopup()
-	if !strings.Contains(out, "Alt+T") {
+	if !strings.Contains(out, "Alt+t") {
 		t.Errorf("Shell-kind popup bottom border must surface Alt+T hint")
 	}
 }
@@ -510,7 +510,7 @@ func TestPtyView_BottomBorderShowsAltTHintForShell(t *testing.T) {
 func TestPtyView_BottomBorderOmitsAltTHintForEdit(t *testing.T) {
 	p := hookedPtyView(PtyKindEdit)
 	out := p.RenderPopup()
-	if strings.Contains(out, "Alt+T") {
+	if strings.Contains(out, "Alt+t") {
 		t.Errorf("Edit-kind popup must not advertise Alt+T (no hide semantics)")
 	}
 }

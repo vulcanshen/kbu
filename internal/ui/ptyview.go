@@ -560,9 +560,9 @@ func (p *PtyView) renderBottomBorder(cols int, borderStyle, hintStyle lipgloss.S
 	altScreen := p.term != nil && p.term.Mode()&vt10x.ModeAltScreen != 0
 	switch {
 	case p.kind == PtyKindShell && !altScreen:
-		hint = " Alt+T:hide  PgUp/Home:scroll "
+		hint = " Alt+t:hide  PgUp/Home:scroll "
 	case p.kind == PtyKindShell && altScreen:
-		hint = " Alt+T:hide "
+		hint = " Alt+t:hide "
 	case !altScreen:
 		hint = " PgUp/Home:scroll "
 	}
