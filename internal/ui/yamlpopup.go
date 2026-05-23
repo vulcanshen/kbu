@@ -321,17 +321,10 @@ func (m YamlPopupModel) popupWidth() int {
 	if m.width <= 0 {
 		return 60
 	}
-	// 85% leaves a small margin so the popup doesn't kiss the terminal
-	// edges; bumped from 70% — wrap (instead of truncate) means tight
-	// horizontal real estate matters less.
-	w := m.width * 85 / 100
-	if w < 40 {
-		w = 40
-	}
-	if w > m.width-4 {
-		w = m.width - 4
-	}
-	return w
+	// Full terminal width so borders align with the main view's outer panel
+	// borders — same treatment as HelpModel. Wrap (introduced earlier) means
+	// long YAML lines reflow naturally to the wider available width.
+	return m.width
 }
 
 func (m YamlPopupModel) popupHeight() int {
