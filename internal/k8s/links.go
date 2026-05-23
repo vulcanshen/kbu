@@ -8,7 +8,10 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -421,4 +424,346 @@ func containerUsesSecret(cs []corev1.Container, name string) bool {
 		}
 	}
 	return false
+}
+
+// ---------------------------------------------------------------------------
+// Static builders (no API call)
+// ---------------------------------------------------------------------------
+
+// buildEventLinks: drill to the involved object when km8 recognizes the kind.
+// Empty when the object's kind isn't in kindToResourceType (e.g. CRDs).
+func buildEventLinks(e *corev1.Event) []LinkSection {
+	if e.InvolvedObject.Name == "" {
+		return nil
+	}
+	rt, ok := kindToResourceType(e.InvolvedObject.Kind)
+	if !ok {
+		return nil
+	}
+	return []LinkSection{{
+		Entries: []LinkRow{{
+			Label: "Object",
+			Value: fmt.Sprintf("%s/%s", e.InvolvedObject.Kind, e.InvolvedObject.Name),
+			Ref:   &RefTarget{Type: rt, Name: e.InvolvedObject.Name, Namespace: e.InvolvedObject.Namespace},
+		}},
+	}}
+}
+
+// buildPVLinks: ClaimRef (PVC) + StorageClass. ClaimRef carries its own
+// namespace; StorageClass is cluster-scoped.
+func buildPVLinks(pv *corev1.PersistentVolume) []LinkSection {
+	var entries []LinkRow
+	if pv.Spec.ClaimRef != nil && pv.Spec.ClaimRef.Name != "" {
+		entries = append(entries, LinkRow{
+			Label: "Claim",
+			Value: fmt.Sprintf("%s/%s", pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name),
+			Ref: &RefTarget{
+				Type:      ResourcePersistentVolumeClaims,
+				Name:      pv.Spec.ClaimRef.Name,
+				Namespace: pv.Spec.ClaimRef.Namespace,
+			},
+		})
+	}
+	if pv.Spec.StorageClassName != "" {
+		entries = append(entries, LinkRow{
+			Label: "StorageClass",
+			Value: pv.Spec.StorageClassName,
+			Ref:   &RefTarget{Type: ResourceStorageClasses, Name: pv.Spec.StorageClassName},
+		})
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	return []LinkSection{{Entries: entries}}
+}
+
+// buildEndpointSliceLinks: owning Service (via the well-known label) plus
+// the per-endpoint Pod targets (deduped).
+func buildEndpointSliceLinks(es *discoveryv1.EndpointSlice) []LinkSection {
+	var sections []LinkSection
+	if svc := es.Labels["kubernetes.io/service-name"]; svc != "" {
+		sections = append(sections, LinkSection{
+			Entries: []LinkRow{{
+				Label: "Service",
+				Value: svc,
+				Ref:   &RefTarget{Type: ResourceServices, Name: svc, Namespace: es.Namespace},
+			}},
+		})
+	}
+	seen := make(map[string]bool)
+	var podEntries []LinkRow
+	for _, ep := range es.Endpoints {
+		if ep.TargetRef == nil || ep.TargetRef.Kind != "Pod" || ep.TargetRef.Name == "" {
+			continue
+		}
+		key := ep.TargetRef.Namespace + "/" + ep.TargetRef.Name
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		podEntries = append(podEntries, LinkRow{
+			Label: "  " + ep.TargetRef.Name,
+			Value: "pod",
+			Ref:   &RefTarget{Type: ResourcePods, Name: ep.TargetRef.Name, Namespace: ep.TargetRef.Namespace},
+		})
+	}
+	if len(podEntries) > 0 {
+		sections = append(sections, LinkSection{
+			Title:   fmt.Sprintf("Endpoints (%d)", len(podEntries)),
+			Entries: podEntries,
+		})
+	}
+	return sections
+}
+
+// buildClusterRoleBindingLinks / buildRoleBindingLinks: RoleRef + Subjects.
+// Subjects with Kind=ServiceAccount become drillable; Users/Groups remain
+// info-only since they're not km8 resources.
+func buildClusterRoleBindingLinks(crb *rbacv1.ClusterRoleBinding) []LinkSection {
+	sections := roleRefSection(crb.RoleRef, "")
+	sections = appendSubjects(sections, crb.Subjects)
+	return sections
+}
+
+func buildRoleBindingLinks(rb *rbacv1.RoleBinding) []LinkSection {
+	// Role RoleRefs resolve to the RoleBinding's own namespace; ClusterRole
+	// RoleRefs are cluster-scoped.
+	sections := roleRefSection(rb.RoleRef, rb.Namespace)
+	sections = appendSubjects(sections, rb.Subjects)
+	return sections
+}
+
+func roleRefSection(ref rbacv1.RoleRef, bindingNS string) []LinkSection {
+	if ref.Name == "" {
+		return nil
+	}
+	var rt ResourceType
+	ns := ""
+	switch ref.Kind {
+	case "ClusterRole":
+		rt = ResourceClusterRoles
+	case "Role":
+		rt = ResourceRoles
+		ns = bindingNS
+	default:
+		return nil
+	}
+	return []LinkSection{{
+		Entries: []LinkRow{{
+			Label: "RoleRef",
+			Value: fmt.Sprintf("%s/%s", ref.Kind, ref.Name),
+			Ref:   &RefTarget{Type: rt, Name: ref.Name, Namespace: ns},
+		}},
+	}}
+}
+
+func appendSubjects(sections []LinkSection, subjects []rbacv1.Subject) []LinkSection {
+	if len(subjects) == 0 {
+		return sections
+	}
+	entries := make([]LinkRow, 0, len(subjects))
+	for _, s := range subjects {
+		entries = append(entries, subjectToLinkRow(s))
+	}
+	return append(sections, LinkSection{
+		Title:   fmt.Sprintf("Subjects (%d)", len(entries)),
+		Entries: entries,
+	})
+}
+
+func subjectToLinkRow(s rbacv1.Subject) LinkRow {
+	value := s.Kind
+	if s.Namespace != "" {
+		value = fmt.Sprintf("%s @ %s", s.Kind, s.Namespace)
+	}
+	var ref *RefTarget
+	if s.Kind == "ServiceAccount" && s.Namespace != "" && s.Name != "" {
+		ref = &RefTarget{Type: ResourceServiceAccounts, Name: s.Name, Namespace: s.Namespace}
+	}
+	return LinkRow{Label: "  " + s.Name, Value: value, Ref: ref}
+}
+
+// buildServiceAccountStaticLinks: the secrets explicitly attached to the SA
+// + imagePullSecrets. Pods using this SA come from enrichServiceAccountConsumers.
+func buildServiceAccountStaticLinks(sa *corev1.ServiceAccount) []LinkSection {
+	var sections []LinkSection
+	if len(sa.Secrets) > 0 {
+		entries := make([]LinkRow, 0, len(sa.Secrets))
+		for _, ref := range sa.Secrets {
+			entries = append(entries, LinkRow{
+				Label: "  " + ref.Name,
+				Value: "Secret",
+				Ref:   &RefTarget{Type: ResourceSecrets, Name: ref.Name, Namespace: sa.Namespace},
+			})
+		}
+		sections = append(sections, LinkSection{
+			Title:   fmt.Sprintf("Secrets (%d)", len(entries)),
+			Entries: entries,
+		})
+	}
+	if len(sa.ImagePullSecrets) > 0 {
+		entries := make([]LinkRow, 0, len(sa.ImagePullSecrets))
+		for _, ref := range sa.ImagePullSecrets {
+			entries = append(entries, LinkRow{
+				Label: "  " + ref.Name,
+				Value: "Secret",
+				Ref:   &RefTarget{Type: ResourceSecrets, Name: ref.Name, Namespace: sa.Namespace},
+			})
+		}
+		sections = append(sections, LinkSection{
+			Title:   fmt.Sprintf("ImagePullSecrets (%d)", len(entries)),
+			Entries: entries,
+		})
+	}
+	return sections
+}
+
+// ---------------------------------------------------------------------------
+// Enrichers (one API call)
+// ---------------------------------------------------------------------------
+
+// enrichNodePods lists pods on this node. The real API server honors the
+// spec.nodeName fieldSelector and filters server-side; we re-check on the
+// client too so fake/testing clientsets (which ignore field selectors) and
+// hypothetical buggy proxies still produce the correct list.
+func enrichNodePods(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	node, ok := item.Raw.(*corev1.Node)
+	if !ok {
+		return
+	}
+	list, err := cs.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		FieldSelector: "spec.nodeName=" + node.Name,
+	})
+	if err != nil {
+		return
+	}
+	var entries []LinkRow
+	for i := range list.Items {
+		p := &list.Items[i]
+		if p.Spec.NodeName != node.Name {
+			continue
+		}
+		entries = append(entries, LinkRow{
+			Label: "  " + p.Namespace + "/" + p.Name,
+			Value: string(p.Status.Phase),
+			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
+		})
+	}
+	if len(entries) == 0 {
+		return
+	}
+	detail.Links = append(detail.Links, LinkSection{
+		Title:   fmt.Sprintf("Pods (%d)", len(entries)),
+		Entries: entries,
+	})
+}
+
+// enrichServiceAccountConsumers: pods in the SA's namespace whose
+// spec.serviceAccountName matches. SA defaulting (empty name → "default")
+// is handled here so the default SA doesn't pick up every pod that omitted
+// the field.
+func enrichServiceAccountConsumers(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	sa, ok := item.Raw.(*corev1.ServiceAccount)
+	if !ok {
+		return
+	}
+	list, err := cs.CoreV1().Pods(sa.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	var entries []LinkRow
+	for i := range list.Items {
+		p := &list.Items[i]
+		podSA := p.Spec.ServiceAccountName
+		if podSA == "" {
+			podSA = "default"
+		}
+		if podSA != sa.Name {
+			continue
+		}
+		entries = append(entries, LinkRow{
+			Label: "  " + p.Name,
+			Value: string(p.Status.Phase),
+			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
+		})
+	}
+	if len(entries) == 0 {
+		return
+	}
+	detail.Links = append(detail.Links, LinkSection{
+		Title:   fmt.Sprintf("Used by Pods (%d)", len(entries)),
+		Entries: entries,
+	})
+}
+
+// enrichPDBPods: pods matched by the PDB's selector — the ones it protects.
+func enrichPDBPods(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	pdb, ok := item.Raw.(*policyv1.PodDisruptionBudget)
+	if !ok || pdb.Spec.Selector == nil {
+		return
+	}
+	appendSelectorPodSection(ctx, cs, pdb.Namespace, formatSelector(pdb.Spec.Selector), "Selected Pods", detail)
+}
+
+// enrichNetworkPolicyPods: pods matched by spec.podSelector — the targets
+// the policy applies to. Empty selector matches all pods in namespace.
+func enrichNetworkPolicyPods(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	np, ok := item.Raw.(*networkingv1.NetworkPolicy)
+	if !ok {
+		return
+	}
+	appendSelectorPodSection(ctx, cs, np.Namespace, formatSelector(&np.Spec.PodSelector), "Selected Pods", detail)
+}
+
+// enrichRoleBindings: RoleBindings in the Role's namespace that reference it.
+func enrichRoleBindings(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	role, ok := item.Raw.(*rbacv1.Role)
+	if !ok {
+		return
+	}
+	list, err := cs.RbacV1().RoleBindings(role.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	var entries []LinkRow
+	for i := range list.Items {
+		rb := &list.Items[i]
+		if rb.RoleRef.Kind != "Role" || rb.RoleRef.Name != role.Name {
+			continue
+		}
+		entries = append(entries, LinkRow{
+			Label: "  " + rb.Name,
+			Value: "RoleBinding",
+			Ref:   &RefTarget{Type: ResourceRoleBindings, Name: rb.Name, Namespace: rb.Namespace},
+		})
+	}
+	if len(entries) == 0 {
+		return
+	}
+	detail.Links = append(detail.Links, LinkSection{
+		Title:   fmt.Sprintf("Bound by (%d)", len(entries)),
+		Entries: entries,
+	})
+}
+
+// appendSelectorPodSection lists pods matching `selector` in `ns` and adds
+// a section titled `title` to detail.Links. No-op when the list is empty.
+func appendSelectorPodSection(ctx context.Context, cs kubernetes.Interface, ns, selector, title string, detail *ResourceDetail) {
+	list, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil || len(list.Items) == 0 {
+		return
+	}
+	entries := make([]LinkRow, 0, len(list.Items))
+	for i := range list.Items {
+		p := &list.Items[i]
+		entries = append(entries, LinkRow{
+			Label: "  " + p.Name,
+			Value: string(p.Status.Phase),
+			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
+		})
+	}
+	detail.Links = append(detail.Links, LinkSection{
+		Title:   fmt.Sprintf("%s (%d)", title, len(entries)),
+		Entries: entries,
+	})
 }

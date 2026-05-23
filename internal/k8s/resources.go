@@ -636,6 +636,54 @@ func FetchResourceByRef(ctx context.Context, cs kubernetes.Interface, ref RefTar
 			return ResourceItem{}, err
 		}
 		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceClusterRoles:
+		obj, err := cs.RbacV1().ClusterRoles().Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceClusterRoleBindings:
+		obj, err := cs.RbacV1().ClusterRoleBindings().Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceRoles:
+		obj, err := cs.RbacV1().Roles(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceRoleBindings:
+		obj, err := cs.RbacV1().RoleBindings(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceNetworkPolicies:
+		obj, err := cs.NetworkingV1().NetworkPolicies(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceEndpointSlices:
+		obj, err := cs.DiscoveryV1().EndpointSlices(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourcePodDisruptionBudgets:
+		obj, err := cs.PolicyV1().PodDisruptionBudgets(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
+	case ResourceEvents:
+		obj, err := cs.CoreV1().Events(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ResourceItem{}, err
+		}
+		return ResourceItem{Name: obj.Name, Namespace: obj.Namespace, UID: string(obj.UID), Raw: obj}, nil
 	}
 	return ResourceItem{}, fmt.Errorf("FetchResourceByRef: unsupported ref type %q", ref.Type)
 }
@@ -1180,6 +1228,16 @@ func EnrichLinks(ctx context.Context, cs kubernetes.Interface, rt ResourceType, 
 		enrichConfigMapConsumers(ctx, cs, item, detail)
 	case ResourceSecrets:
 		enrichSecretConsumers(ctx, cs, item, detail)
+	case ResourceNodes:
+		enrichNodePods(ctx, cs, item, detail)
+	case ResourceServiceAccounts:
+		enrichServiceAccountConsumers(ctx, cs, item, detail)
+	case ResourcePodDisruptionBudgets:
+		enrichPDBPods(ctx, cs, item, detail)
+	case ResourceNetworkPolicies:
+		enrichNetworkPolicyPods(ctx, cs, item, detail)
+	case ResourceRoles:
+		enrichRoleBindings(ctx, cs, item, detail)
 	}
 }
 
@@ -1472,6 +1530,7 @@ func detailEvent(item ResourceItem) ResourceDetail {
 		{Label: "First Seen", Value: formatAge(e.FirstTimestamp.Time)},
 		{Label: "Last Seen", Value: formatAge(eventTime(*e))},
 	}
+	d.Links = buildEventLinks(e)
 	return d
 }
 
@@ -1549,6 +1608,7 @@ func detailClusterRoleBinding(item ResourceItem) ResourceDetail {
 			Value: formatSubject(s),
 		})
 	}
+	d.Links = buildClusterRoleBindingLinks(crb)
 	return d
 }
 
@@ -1628,6 +1688,7 @@ func detailRoleBinding(item ResourceItem) ResourceDetail {
 			Value: formatSubject(s),
 		})
 	}
+	d.Links = buildRoleBindingLinks(rb)
 	return d
 }
 
@@ -1719,6 +1780,7 @@ func detailPersistentVolume(item ResourceItem) ResourceDetail {
 	if pv.Status.Reason != "" {
 		d.Fields = append(d.Fields, DetailField{Label: "Reason", Value: pv.Status.Reason})
 	}
+	d.Links = buildPVLinks(pv)
 	return d
 }
 
@@ -2193,6 +2255,7 @@ func detailEndpointSlice(item ResourceItem) ResourceDetail {
 		{Label: "Endpoints", Value: fmt.Sprintf("%d", len(es.Endpoints))},
 		{Label: "Addresses", Value: strings.Join(endpoints, ",")},
 	}
+	d.Links = buildEndpointSliceLinks(es)
 	return d
 }
 
@@ -2370,6 +2433,7 @@ func detailServiceAccount(item ResourceItem) ResourceDetail {
 		{Label: "ImagePullSecrets", Value: fmt.Sprintf("%d", len(sa.ImagePullSecrets))},
 		{Label: "AutomountToken", Value: automount},
 	}
+	d.Links = buildServiceAccountStaticLinks(sa)
 	return d
 }
 
