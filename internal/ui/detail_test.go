@@ -486,8 +486,35 @@ func TestDetailModel_TabTitle_ShowsLevelWhenDrilled(t *testing.T) {
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
 	)
-	if got := m.ActiveTabTitle(); got != "Links(2)" {
-		t.Errorf("at depth 2, ActiveTabTitle should be 'Links(2)', got %q", got)
+	if got := m.ActiveTabTitle(); got != "Links ↳2" {
+		t.Errorf("at depth 2, ActiveTabTitle should be 'Links ↳2', got %q", got)
+	}
+}
+
+func TestDetailModel_BorderTopRightHint(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m = m.switchToTab(1) // Links
+
+	// Depth 1: no hint (b doesn't do anything useful).
+	if got := m.BorderTopRightHint(); got != "" {
+		t.Errorf("depth 1 should have no hint, got %q", got)
+	}
+
+	// Depth 2 on Links tab: hint surfaces b.
+	m.PushDrillFrame(
+		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
+		k8s.ResourceItem{}, k8s.ResourceDetail{},
+	)
+	if got := m.BorderTopRightHint(); got != "[b]readcrumbs" {
+		t.Errorf("depth 2 Links should show '[b]readcrumbs', got %q", got)
+	}
+
+	// Same depth but Events tab: no hint (b only works on Links).
+	m = m.switchToTab(2)
+	if got := m.BorderTopRightHint(); got != "" {
+		t.Errorf("Events tab should not show hint, got %q", got)
 	}
 }
 

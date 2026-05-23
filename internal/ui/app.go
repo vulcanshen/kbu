@@ -977,7 +977,7 @@ func (m AppModel) View() string {
 		panelH := m.height - 1 - m.statusLine.LineCount()
 		panelW := m.width - 2*panelHMargin
 		m.detail.SetSize(panelW-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, panelH, true, m.theme, m.detail.ScrollInfo())
+		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint())
 		hMargin := blankColumn(panelHMargin, panelH)
 		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, fullPanel, hMargin)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
@@ -987,8 +987,8 @@ func (m AppModel) View() string {
 		m.table.SetSize(panelW-2, upperH-2)
 		m.detail.SetSize(panelW-2, detailH-2)
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
-		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
+		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "")
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint())
 		middle := joinTableAndDetail(tablePanel, detailPanel, panelW)
 		fullH := upperH + panelVSpace + detailH
 		hMargin := blankColumn(panelHMargin, fullH)
@@ -1001,10 +1001,10 @@ func (m AppModel) View() string {
 		m.table.SetSize(rw-2, upperH-2)
 		m.detail.SetSize(rw-2, detailH-2)
 
-		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo())
+		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "")
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
-		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
+		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "")
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint())
 
 		rightSide := joinTableAndDetail(tablePanel, detailPanel, rw)
 
@@ -1543,10 +1543,10 @@ type ScrollInfo struct {
 }
 
 func renderPanel(content, title string, width, height int, focused bool, t *theme.Theme) string {
-	return renderPanelWithScroll(content, title, width, height, focused, t, nil)
+	return renderPanelWithScroll(content, title, width, height, focused, t, nil, "")
 }
 
-func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo) string {
+func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo, topRight string) string {
 	if width < 4 || height < 3 {
 		return content
 	}
@@ -1571,13 +1571,30 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	var b strings.Builder
 
 	titleVis := lipgloss.Width(title)
-	dashesAfter := innerW - 1 - titleVis
+	// Top-right hint format: " <hint>─" (leading space + hint + 1 dash
+	// before the corner). Drop the hint silently if title+hint+1 dash
+	// would overflow innerW — small terminals get plain border.
+	hintVis := 0
+	if topRight != "" {
+		hintVis = lipgloss.Width(topRight) + 2
+		if titleVis+hintVis+1 > innerW {
+			hintVis = 0
+			topRight = ""
+		}
+	}
+	dashesAfter := innerW - 1 - titleVis - hintVis
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
 	b.WriteString(bStyle.Render("╭─"))
 	b.WriteString(tStyle.Render(title))
-	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter) + "╮"))
+	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter)))
+	if topRight != "" {
+		b.WriteString(bStyle.Render(" "))
+		b.WriteString(tStyle.Render(topRight))
+		b.WriteString(bStyle.Render("─"))
+	}
+	b.WriteString(bStyle.Render("╮"))
 	b.WriteString("\n")
 
 	leftBorder := bStyle.Render("│")
