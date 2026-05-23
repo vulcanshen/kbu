@@ -57,6 +57,12 @@ type DetailModel struct {
 	followTail   bool // Logs tab: stick to bottom on new lines until user scrolls up
 	refetching   bool // true while fetchResourceDetail is in-flight; drives spinner
 	spinnerFrame int
+
+	// Overview tab state: entries are the logical rows (drillable + info +
+	// section headers); overviewCursor is the index of the currently-selected
+	// entry. Cursor only lands on selectable entries (sections skipped).
+	overviewEntries []overviewEntry
+	overviewCursor  int
 }
 
 type detailSpinnerTickMsg struct{}
@@ -111,14 +117,16 @@ func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
 // open the YAML popup.
 func (m DetailModel) YAMLContent() string { return m.detail.YAML }
 
-// NewDetailModel creates a new detail model with no data and the Detail tab active.
+// NewDetailModel creates a new detail model with no data and the Overview tab
+// active. SetResourceType refines the tab list (and reorders for Pod/Deploy).
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{
-		activeTab:   DetailTabInfo,
-		tabs:        []string{"YAML", "Events"},
-		theme:       t,
-		maxLogLines: 1000,
-		followTail:  true,
+		activeTab:      DetailTabInfo,
+		tabs:           []string{"Overview", "Events"},
+		theme:          t,
+		maxLogLines:    1000,
+		followTail:     true,
+		overviewCursor: -1,
 	}
 }
 
@@ -159,6 +167,15 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 	if m.searching {
 		return m.handleSearchKey(msg)
+	}
+
+	// Overview tab uses j/k for cursor navigation (not line scroll) and Enter
+	// to drill into the highlighted ref. Other tabs scroll by line — fall
+	// through to the standard logic.
+	if m.ActiveTabName() == "Overview" {
+		if newModel, handled, cmd := m.handleOverviewKey(msg); handled {
+			return newModel, cmd
+		}
 	}
 
 	if m.pendingG {
@@ -227,6 +244,47 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handleOverviewKey intercepts the keys with Overview-tab-specific semantics:
+// j/k move the cursor between drillable entries, Enter emits OverviewDrillMsg.
+// Returns handled=false to let the caller fall back to the generic per-line
+// scroll handlers for everything else.
+func (m DetailModel) handleOverviewKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyRunes:
+		if len(msg.Runes) != 1 {
+			return m, false, nil
+		}
+		switch msg.Runes[0] {
+		case 'j':
+			m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, +1)
+			m.buildContentLines()
+			return m, true, nil
+		case 'k':
+			m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, -1)
+			m.buildContentLines()
+			return m, true, nil
+		}
+	case tea.KeyDown:
+		m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, +1)
+		m.buildContentLines()
+		return m, true, nil
+	case tea.KeyUp:
+		m.overviewCursor = nextSelectableCursor(m.overviewEntries, m.overviewCursor, -1)
+		m.buildContentLines()
+		return m, true, nil
+	case tea.KeyEnter:
+		ref := m.SelectedOverviewRef()
+		if ref == nil {
+			return m, true, nil
+		}
+		target := *ref
+		return m, true, func() tea.Msg {
+			return OverviewDrillMsg{Ref: target}
+		}
+	}
+	return m, false, nil
 }
 
 func (m DetailModel) handleSearchKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
@@ -421,16 +479,11 @@ func (m *DetailModel) SetFocused(focused bool) {
 
 // CopyableContent returns the current tab's content as plain text (no ANSI
 // codes), respecting the active search filter. Used by the global `y` key
-// to copy the visible panel content to the clipboard.
-//
-// On the Detail tab, when YAML is available and no search filter is active,
-// the raw unwrapped YAML is returned so it stays valid for paste-back use.
+// to copy the visible panel content to the clipboard. For raw YAML, the
+// user opens the `Y` popup and copies from there.
 func (m DetailModel) CopyableContent() string {
 	if !m.hasData {
 		return ""
-	}
-	if m.ActiveTabName() == "YAML" && m.detail.YAML != "" && m.searchQuery == "" {
-		return strings.TrimRight(m.detail.YAML, "\n")
 	}
 	lines := m.filteredContentLines()
 	plain := make([]string, len(lines))
@@ -499,32 +552,28 @@ func (m *DetailModel) ClearDetail() {
 }
 
 // SetResourceType sets the current resource type and adjusts available tabs.
-// Tab order convention:
-//   - Pods:        YAML  → Logs → Events   (current default; YAML first)
-//   - Deployments: Logs  → YAML → Events   (aggregate Logs is the killer use
-//     case for Deployment detail —
-//     tracking which pod is misbehaving
-//     during a rollout — so put it
-//     first per PROGRESS [3] design)
-//   - Events:      YAML alone
-//   - everything else: YAML → Events
+//
+// Tab order convention (post-[4] Overview migration; YAML moved to Y popup):
+//   - Pods / Deployments: Logs → Overview → Events
+//   - Events:             Overview alone
+//   - everything else:    Overview → Events
+//
+// Pod gets the structured Owner/Node/SA/Image Overview; other kinds use the
+// generic labels + annotations + structured-fields fallback so the panel
+// never renders empty.
 func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
 	switch {
-	case rt == k8s.ResourceDeployments:
-		m.tabs = []string{"Logs", "YAML", "Events"}
+	case rt == k8s.ResourcePods, rt == k8s.ResourceDeployments:
+		m.tabs = []string{"Logs", "Overview", "Events"}
 	case rt == k8s.ResourceEvents:
-		m.tabs = []string{"YAML"}
+		m.tabs = []string{"Overview"}
 	default:
-		def := k8s.DefaultRegistry.Get(rt)
-		if def != nil && def.HasLogs {
-			m.tabs = []string{"YAML", "Logs", "Events"}
-		} else {
-			m.tabs = []string{"YAML", "Events"}
-		}
+		m.tabs = []string{"Overview", "Events"}
 	}
 	m.activeTab = 0
 	m.scrollOffset = 0
+	m.overviewCursor = -1
 	m.buildContentLines()
 }
 
@@ -569,8 +618,10 @@ func (m *DetailModel) AppendLogLine(pod, container, text string) {
 // buildContentLines rebuilds the pre-rendered content lines for the current tab.
 func (m *DetailModel) buildContentLines() {
 	switch m.ActiveTabName() {
-	case "YAML":
-		m.contentLines = m.buildInfoLines()
+	case "Overview":
+		m.rebuildOverviewEntries()
+		lines, _ := renderOverviewEntries(m.overviewEntries, m.overviewCursor, m.width, m.theme)
+		m.contentLines = lines
 	case "Logs":
 		m.contentLines = m.buildLogLines()
 	case "Events":
@@ -578,187 +629,36 @@ func (m *DetailModel) buildContentLines() {
 	}
 }
 
-func (m DetailModel) buildInfoLines() []string {
+// rebuildOverviewEntries refreshes m.overviewEntries based on the current
+// resource type + detail data, and re-clamps the cursor to the first
+// selectable entry when out of bounds.
+func (m *DetailModel) rebuildOverviewEntries() {
 	if !m.hasData {
-		return nil
+		m.overviewEntries = nil
+		m.overviewCursor = -1
+		return
 	}
-	if m.detail.YAML != "" {
-		return m.buildYAMLLines()
+	if m.resourceType == k8s.ResourcePods {
+		m.overviewEntries = buildPodOverviewEntries(m.detail)
+	} else {
+		m.overviewEntries = buildGenericOverviewEntries(m.detail)
 	}
-
-	labelStyle := m.theme.DetailLabelStyle()
-	valueStyle := m.theme.DetailValueStyle()
-
-	const labelW = 12
-	const indent = "  "
-	valueAvail := m.width - len(indent) - labelW
-
-	var lines []string
-
-	addField := func(label, value string) {
-		labelCol := labelStyle.Render(fmt.Sprintf("%-*s", labelW, label))
-		valueLines := wrapPlain(value, valueAvail)
-		if len(valueLines) == 0 {
-			valueLines = []string{""}
-		}
-		lines = append(lines, indent+labelCol+valueStyle.Render(valueLines[0]))
-		contIndent := indent + strings.Repeat(" ", labelW)
-		for _, v := range valueLines[1:] {
-			lines = append(lines, contIndent+valueStyle.Render(v))
-		}
+	if m.overviewCursor < 0 || m.overviewCursor >= len(m.overviewEntries) ||
+		(m.overviewCursor < len(m.overviewEntries) && !m.overviewEntries[m.overviewCursor].isSelectable()) {
+		m.overviewCursor = firstSelectableCursor(m.overviewEntries)
 	}
-
-	if m.detail.Name != "" {
-		addField("Name:", m.detail.Name)
-	}
-	if m.detail.Namespace != "" {
-		addField("Namespace:", m.detail.Namespace)
-	}
-	if m.detail.Kind != "" {
-		addField("Kind:", m.detail.Kind)
-	}
-	if m.detail.UID != "" {
-		addField("UID:", m.detail.UID)
-	}
-	if m.detail.CreatedAt != "" {
-		addField("Created:", m.detail.CreatedAt)
-	}
-
-	// Labels section.
-	if len(m.detail.Labels) > 0 {
-		keys := sortedKeys(m.detail.Labels)
-		if len(keys) <= 3 {
-			var pairs []string
-			for _, k := range keys {
-				pairs = append(pairs, k+"="+m.detail.Labels[k])
-			}
-			addField("Labels:", strings.Join(pairs, ", "))
-		} else {
-			lines = append(lines, indent+labelStyle.Render("Labels:"))
-			subAvail := m.width - 4
-			subIndent := "    "
-			contIndent := "      "
-			for _, k := range keys {
-				v := m.detail.Labels[k]
-				wrapped := wrapPlain(k+"="+v, subAvail)
-				if len(wrapped) == 0 {
-					continue
-				}
-				lines = append(lines, subIndent+valueStyle.Render(wrapped[0]))
-				for _, cont := range wrapped[1:] {
-					lines = append(lines, contIndent+valueStyle.Render(cont))
-				}
-			}
-		}
-	}
-
-	// Annotations section.
-	if len(m.detail.Annotations) > 0 {
-		keys := sortedKeys(m.detail.Annotations)
-		if len(keys) <= 3 {
-			var pairs []string
-			for _, k := range keys {
-				pairs = append(pairs, k+"="+m.detail.Annotations[k])
-			}
-			addField("Annotations:", strings.Join(pairs, ", "))
-		} else {
-			lines = append(lines, indent+labelStyle.Render("Annotations:"))
-			subAvail := m.width - 4
-			subIndent := "    "
-			contIndent := "      "
-			for _, k := range keys {
-				v := m.detail.Annotations[k]
-				wrapped := wrapPlain(k+"="+v, subAvail)
-				if len(wrapped) == 0 {
-					continue
-				}
-				lines = append(lines, subIndent+valueStyle.Render(wrapped[0]))
-				for _, cont := range wrapped[1:] {
-					lines = append(lines, contIndent+valueStyle.Render(cont))
-				}
-			}
-		}
-	}
-
-	// Extra fields.
-	for _, f := range m.detail.Fields {
-		addField(f.Label+":", f.Value)
-	}
-
-	// Containers section.
-	if len(m.detail.Containers) > 0 {
-		lines = append(lines, indent+labelStyle.Render("Containers:"))
-		const cFieldW = 8
-		cFieldAvail := m.width - 6 - cFieldW
-		for _, c := range m.detail.Containers {
-			prefix := "  "
-			if c.Init {
-				prefix = "  (init) "
-			}
-			lines = append(lines, indent+labelStyle.Render(prefix+c.Name))
-
-			addContainerField := func(label, value string) {
-				if value == "" {
-					return
-				}
-				labelCol := labelStyle.Render(fmt.Sprintf("%-*s", cFieldW, label))
-				wrapped := wrapPlain(value, cFieldAvail)
-				if len(wrapped) == 0 {
-					wrapped = []string{""}
-				}
-				lines = append(lines, "      "+labelCol+valueStyle.Render(wrapped[0]))
-				contIndent := "      " + strings.Repeat(" ", cFieldW)
-				for _, v := range wrapped[1:] {
-					lines = append(lines, contIndent+valueStyle.Render(v))
-				}
-			}
-			addContainerField("Image:", c.Image)
-			addContainerField("State:", c.State)
-			readyStr := "false"
-			if c.Ready {
-				readyStr = "true"
-			}
-			addContainerField("Ready:", readyStr)
-			if c.Restarts > 0 {
-				addContainerField("Restarts:", fmt.Sprintf("%d", c.Restarts))
-			}
-			if c.Ports != "" {
-				addContainerField("Ports:", c.Ports)
-			}
-		}
-	}
-
-	return lines
 }
 
-// buildYAMLLines renders the resource's raw YAML with a 2-space left indent,
-// wrapping long lines and applying syntax highlighting per line.
-func (m DetailModel) buildYAMLLines() []string {
-	raw := strings.TrimRight(m.detail.YAML, "\n")
-	if raw == "" {
+// SelectedOverviewRef returns the drill ref under the Overview cursor, or
+// nil if the cursor is on an info-only row (or the tab has no entries).
+func (m DetailModel) SelectedOverviewRef() *k8s.RefTarget {
+	if m.ActiveTabName() != "Overview" {
 		return nil
 	}
-	valueStyle := m.theme.DetailValueStyle()
-	const indent = "  "
-	const contIndent = "    "
-	avail := m.width - len(indent)
-	var out []string
-	for _, line := range strings.Split(raw, "\n") {
-		if avail <= 0 {
-			out = append(out, indent+highlightYAMLLine(line, m.theme))
-			continue
-		}
-		wrapped := wrapPlain(line, avail)
-		if len(wrapped) == 0 {
-			out = append(out, indent)
-			continue
-		}
-		out = append(out, indent+highlightYAMLLine(wrapped[0], m.theme))
-		for _, w := range wrapped[1:] {
-			out = append(out, contIndent+valueStyle.Render(w))
-		}
+	if m.overviewCursor < 0 || m.overviewCursor >= len(m.overviewEntries) {
+		return nil
 	}
-	return out
+	return m.overviewEntries[m.overviewCursor].ref
 }
 
 func (m DetailModel) buildEventLines() []string {

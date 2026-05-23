@@ -7,6 +7,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Overview tab + Lens-style navigable references**: every detail panel now has an Overview tab as its default (post-YAML-migration tab order; YAML lives in the `Y` popup). For Pods, Overview lists Owner / Node / ServiceAccount / Image as a structured view; `j`/`k` move the cursor between drillable refs and `Enter` opens the referenced resource (`Deployment/nginx`, `Node/worker-3`, `ServiceAccount/nginx-sa`, ...) in the YAML popup. Other resource kinds get a generic Overview fallback (Name + structured fields + Labels + Annotations) so the panel never renders empty. This is km8 finally delivering on the CLAUDE.md tagline "Lens IDE terminal alternative" — graph navigation in a TUI.
+- New `k8s.PodOverviewData` and `k8s.RefTarget` carry the navigable refs through the existing `ResourceDetail` so the ui package never needs to parse `*corev1.Pod` directly.
+- New `k8s.FetchResourceByRef(ctx, cs, ref)` fetches a single resource by km8 type + name + namespace, used by Overview drill-down. Supports Pods, Deployments, DaemonSets, StatefulSets, Jobs, CronJobs, Nodes, ServiceAccounts, ConfigMaps, Secrets, PVCs, PVs, Services.
+
+### Changed
+- **Detail tab order: YAML out, Overview in.** YAML moves entirely to the `Y` popup (introduced earlier in this branch). New defaults:
+  - Pod: `Logs` / `Overview` / `Events`
+  - Deployment: `Logs` / `Overview` / `Events`
+  - Events resource: `Overview` alone
+  - everything else: `Overview` / `Events`
+  Existing users will notice that pressing `1`/`2`/`3` or `h`/`l` no longer cycles to a YAML tab — use `Y` instead.
+
+### Added
 - **Aggregate logs for Deployments**: selecting a Deployment row now streams logs from every pod in its current ReplicaSet into a unified Logs tab (also the default tab for Deployment detail, since "which pod is misbehaving during a rollout" is the most common reason to open a Deployment). Lines are prefixed `<pod-hash>│<container>│<text>` — three independent colors derived from FNV hash + the existing 8-entry Catppuccin palette. Pod-hash is the trailing segment of the pod name (last 5 chars of the random suffix). Cross-stream timestamp sorting is intentionally not attempted — clock skew + jitter would make any ordering misleading; lines arrive in the order kubectl's API returns them. Tab order for Deployment is `Logs` → `YAML` → `Events` (was `YAML` → `Events`). Falls back to the Deployment selector when the current-ReplicaSet lookup fails (e.g. RBAC denies ReplicaSet list).
 - **Persistent KM8erm**: `Alt+T` is now the single toggle for the embedded shell — spawn / show / hide. The shell never dies on hide; subsequent `Alt+T` presses cycle visibility while cwd, history, env vars, and background jobs are all preserved. The status bar carries a chip showing the state (right after `ns:`) — green `attached` while the popup is visible, amber `km8erm` while the shell is hidden in the background. The shell is killed cleanly when km8 quits (`q` confirm or `Ctrl+C`). `Alt+T` only applies to KM8erm (Shell-kind PTY); `kubectl edit` and `kubectl exec` popups treat it as a normal keypress because their lifecycle is bounded by the subprocess they wrap. **`T` (uppercase) is no longer bound** — Alt+T replaces it.
 - Pressing `e` (edit) or `s` (shell exec) while a PTY is alive (visible or hidden) now refuses with a toast / app log warning instead of clobbering the in-flight subprocess — close the current PTY first (`exit` in the shell, or `Alt+T` then `exit`).

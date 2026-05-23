@@ -63,6 +63,23 @@ type NamespaceListMsg struct {
 	Namespaces []string
 }
 
+// OverviewDrillMsg is emitted when the user presses Enter on a drillable
+// entry in the Overview tab (Owner, Node, ServiceAccount, ...). AppModel
+// handles it by fetching the target resource and opening a YamlPopup.
+type OverviewDrillMsg struct {
+	Ref k8s.RefTarget
+}
+
+// resourceFetchedForDrillMsg carries a resource fetched in response to an
+// OverviewDrillMsg, ready to populate a YamlPopup. err non-nil = fetch
+// failed; caller should toast + skip popup.
+type resourceFetchedForDrillMsg struct {
+	ref  k8s.RefTarget
+	item k8s.ResourceItem
+	yaml string
+	err  error
+}
+
 // aggregateLogsReadyMsg carries the resolved pod targets for a workload's
 // aggregate-log stream. Emitted by startAggregateLogs after the pod-list API
 // call completes off the Bubble Tea Update path. err non-nil = no targets;

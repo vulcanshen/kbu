@@ -137,6 +137,104 @@ func TestPodsForDeployment_NoPods_EmptyResult(t *testing.T) {
 	}
 }
 
+// ── Pod Overview parsing ──────────────────────────────────────────────────
+
+func TestBuildPodOverview_ExtractsOwnerNodeServiceAccount(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nginx-7f9c4d-abc12",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind: "ReplicaSet", Name: "nginx-7f9c4d", UID: "rs-uid",
+			}},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:           "worker-3",
+			ServiceAccountName: "nginx-sa",
+			Containers:         []corev1.Container{{Name: "web", Image: "nginx:1.27.1"}},
+			InitContainers:     []corev1.Container{{Name: "wait-db", Image: "busybox:latest"}},
+		},
+	}
+	po := buildPodOverview(pod)
+	if po.Owner == nil || po.Owner.Name != "nginx-7f9c4d" {
+		t.Errorf("owner: expected nginx-7f9c4d, got %v", po.Owner)
+	}
+	if po.Owner.Type != ResourceDeployments {
+		t.Errorf("ReplicaSet owner should map to Deployment (closest user-meaningful kind), got %v", po.Owner.Type)
+	}
+	if po.Node == nil || po.Node.Name != "worker-3" {
+		t.Errorf("node: expected worker-3, got %v", po.Node)
+	}
+	if po.Node.Type != ResourceNodes {
+		t.Errorf("node Type should be ResourceNodes, got %v", po.Node.Type)
+	}
+	if po.ServiceAccount == nil || po.ServiceAccount.Name != "nginx-sa" {
+		t.Errorf("SA: expected nginx-sa, got %v", po.ServiceAccount)
+	}
+	if len(po.Images) != 1 || po.Images[0] != "nginx:1.27.1" {
+		t.Errorf("images: expected [nginx:1.27.1], got %v", po.Images)
+	}
+	if len(po.InitImages) != 1 || po.InitImages[0] != "busybox:latest" {
+		t.Errorf("init images: expected [busybox:latest], got %v", po.InitImages)
+	}
+}
+
+func TestBuildPodOverview_SkipsDefaultServiceAccount(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "default"},
+		Spec:       corev1.PodSpec{ServiceAccountName: "default"},
+	}
+	po := buildPodOverview(pod)
+	if po.ServiceAccount != nil {
+		t.Errorf("default SA should be elided, got %v", po.ServiceAccount)
+	}
+}
+
+func TestBuildPodOverview_UnknownOwnerKindOmits(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "p",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind: "WeirdControllerKind", Name: "thing",
+			}},
+		},
+	}
+	po := buildPodOverview(pod)
+	if po.Owner != nil {
+		t.Errorf("unknown owner kind should be omitted (not drillable), got %v", po.Owner)
+	}
+}
+
+// ── FetchResourceByRef ────────────────────────────────────────────────────
+
+func TestFetchResourceByRef_Pod(t *testing.T) {
+	pod := makePod("nginx-abc", "default", nil, []string{"web"})
+	cs := fake.NewSimpleClientset(pod)
+	item, err := FetchResourceByRef(context.Background(), cs, RefTarget{
+		Type: ResourcePods, Name: "nginx-abc", Namespace: "default",
+	})
+	if err != nil {
+		t.Fatalf("FetchResourceByRef: %v", err)
+	}
+	if item.Name != "nginx-abc" {
+		t.Errorf("expected Name=nginx-abc, got %q", item.Name)
+	}
+	if _, ok := item.Raw.(*corev1.Pod); !ok {
+		t.Errorf("expected Raw to be *corev1.Pod, got %T", item.Raw)
+	}
+}
+
+func TestFetchResourceByRef_UnsupportedType(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	_, err := FetchResourceByRef(context.Background(), cs, RefTarget{
+		Type: "made-up", Name: "x",
+	})
+	if err == nil {
+		t.Error("expected error for unsupported type")
+	}
+}
+
 func TestPodsForWorkload_RejectsUnsupportedKind(t *testing.T) {
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "default"}}
 	cs := fake.NewSimpleClientset(pod)

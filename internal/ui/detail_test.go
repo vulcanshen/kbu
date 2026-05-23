@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	"testing"
 
@@ -60,8 +61,8 @@ func TestDetailModel_InitialState(t *testing.T) {
 	if len(m.tabs) != 2 {
 		t.Errorf("expected 2 tabs (no Logs for non-Pod), got %d", len(m.tabs))
 	}
-	if m.tabs[0] != "YAML" || m.tabs[1] != "Events" {
-		t.Errorf("expected tabs=[YAML, Events], got %v", m.tabs)
+	if m.tabs[0] != "Overview" || m.tabs[1] != "Events" {
+		t.Errorf("expected tabs=[Overview, Events], got %v", m.tabs)
 	}
 	if m.scrollOffset != 0 {
 		t.Errorf("expected scrollOffset=0, got %d", m.scrollOffset)
@@ -89,59 +90,54 @@ func TestDetailModel_SetDetail(t *testing.T) {
 
 func TestDetailModel_SwitchTab(t *testing.T) {
 	m := newTestDetail()
-	m.SetResourceType(k8s.ResourcePods) // 3 tabs: Detail, Logs, Events
+	m.SetResourceType(k8s.ResourcePods) // 3 tabs: Logs, Overview, Events
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	if m.activeTab != 0 {
-		t.Fatalf("expected activeTab=0 (Detail), got %d", m.activeTab)
+		t.Fatalf("expected activeTab=0 (Logs), got %d", m.activeTab)
 	}
-
-	// ']' cycles Detail → Logs
-	m, _ = m.Update(keyMsg(']'))
 	if m.ActiveTabName() != "Logs" {
-		t.Errorf("expected Logs after first ']', got %s", m.ActiveTabName())
+		t.Fatalf("expected default tab=Logs for Pod, got %s", m.ActiveTabName())
 	}
 
-	// ']' cycles Logs → Events
+	// ']' cycles Logs → Overview
+	m, _ = m.Update(keyMsg(']'))
+	if m.ActiveTabName() != "Overview" {
+		t.Errorf("expected Overview after first ']', got %s", m.ActiveTabName())
+	}
+
+	// ']' cycles Overview → Events
 	m, _ = m.Update(keyMsg(']'))
 	if m.ActiveTabName() != "Events" {
 		t.Errorf("expected Events after second ']', got %s", m.ActiveTabName())
 	}
 
-	// ']' wraps Events → Detail
+	// ']' wraps Events → Logs
 	m, _ = m.Update(keyMsg(']'))
-	if m.ActiveTabName() != "YAML" {
-		t.Errorf("expected YAML after wrap ']', got %s", m.ActiveTabName())
+	if m.ActiveTabName() != "Logs" {
+		t.Errorf("expected Logs after wrap ']', got %s", m.ActiveTabName())
 	}
 
-	// '[' wraps Detail → Events (backward)
+	// '[' wraps Logs → Events (backward)
 	m, _ = m.Update(keyMsg('['))
 	if m.ActiveTabName() != "Events" {
-		t.Errorf("expected Events after '[' from Detail, got %s", m.ActiveTabName())
-	}
-
-	// '[' cycles Events → Logs
-	m, _ = m.Update(keyMsg('['))
-	if m.ActiveTabName() != "Logs" {
-		t.Errorf("expected Logs after '[' from Events, got %s", m.ActiveTabName())
-	}
-
-	// '[' cycles Logs → Detail
-	m, _ = m.Update(keyMsg('['))
-	if m.activeTab != DetailTabInfo {
-		t.Errorf("expected activeTab=DetailTabInfo after '[' from Events, got %d", m.activeTab)
+		t.Errorf("expected Events after '[' from Logs, got %s", m.ActiveTabName())
 	}
 }
 
 func TestDetailModel_ScrollDown(t *testing.T) {
 	m := newTestDetail()
-	// Generate enough content to scroll.
-	detail := sampleDetail()
-	detail.Labels = make(map[string]string)
-	for i := 0; i < 30; i++ {
-		detail.Labels[fmt.Sprintf("label-%02d", i)] = fmt.Sprintf("value-%02d", i)
+	m.SetResourceType(k8s.ResourcePods) // gives us Logs tab at index 0
+	m.SetDetail(sampleDetail(), sampleEvents())
+	// Logs tab scrolls by line — Overview tab uses j/k for cursor navigation,
+	// so use Logs as the scroll-mechanics testbed.
+	m = m.switchToTab(0)
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
-	m.SetDetail(detail, sampleEvents())
+	// Pause follow-tail so scrollOffset can move freely.
+	m.followTail = false
+	m.scrollOffset = 0
 
 	if m.scrollOffset != 0 {
 		t.Fatalf("expected scrollOffset=0 initially, got %d", m.scrollOffset)
@@ -162,12 +158,14 @@ func TestDetailModel_ScrollDown(t *testing.T) {
 
 func TestDetailModel_ScrollUp(t *testing.T) {
 	m := newTestDetail()
-	detail := sampleDetail()
-	detail.Labels = make(map[string]string)
-	for i := 0; i < 30; i++ {
-		detail.Labels[fmt.Sprintf("label-%02d", i)] = fmt.Sprintf("value-%02d", i)
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), sampleEvents())
+	m = m.switchToTab(0) // Logs
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
-	m.SetDetail(detail, sampleEvents())
+	m.followTail = false
+	m.scrollOffset = 0
 
 	// Scroll down a few lines first.
 	m, _ = m.Update(keyMsg('j'))
@@ -194,12 +192,14 @@ func TestDetailModel_ScrollUp(t *testing.T) {
 
 func TestDetailModel_GG(t *testing.T) {
 	m := newTestDetail()
-	detail := sampleDetail()
-	detail.Labels = make(map[string]string)
-	for i := 0; i < 30; i++ {
-		detail.Labels[fmt.Sprintf("label-%02d", i)] = fmt.Sprintf("value-%02d", i)
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), sampleEvents())
+	m = m.switchToTab(0) // Logs
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
-	m.SetDetail(detail, sampleEvents())
+	m.followTail = false
+	m.scrollOffset = 0
 
 	// Scroll down several lines.
 	for i := 0; i < 5; i++ {
@@ -227,12 +227,14 @@ func TestDetailModel_GG(t *testing.T) {
 
 func TestDetailModel_ShiftG(t *testing.T) {
 	m := newTestDetail()
-	detail := sampleDetail()
-	detail.Labels = make(map[string]string)
-	for i := 0; i < 30; i++ {
-		detail.Labels[fmt.Sprintf("label-%02d", i)] = fmt.Sprintf("value-%02d", i)
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), sampleEvents())
+	m = m.switchToTab(0) // Logs
+	for i := 0; i < 50; i++ {
+		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
-	m.SetDetail(detail, sampleEvents())
+	m.followTail = false
+	m.scrollOffset = 0
 
 	// Press G — scrollOffset should go to max.
 	m, _ = m.Update(keyMsg('G'))
@@ -264,7 +266,7 @@ func TestDetailModel_Deployment_TabOrderLogsFirst(t *testing.T) {
 	if len(m.tabs) != 3 {
 		t.Fatalf("expected 3 tabs for Deployment, got %d (%v)", len(m.tabs), m.tabs)
 	}
-	wantOrder := []string{"Logs", "YAML", "Events"}
+	wantOrder := []string{"Logs", "Overview", "Events"}
 	for i, want := range wantOrder {
 		if m.tabs[i] != want {
 			t.Errorf("tab %d: expected %q, got %q", i, want, m.tabs[i])
@@ -294,6 +296,130 @@ func TestDetailModel_AppendLogLine_AggregatePrefix(t *testing.T) {
 	}
 }
 
+// ── Overview tab + drill ─────────────────────────────────────────────────
+
+func samplePodOverviewDetail() k8s.ResourceDetail {
+	return k8s.ResourceDetail{
+		Name:      "nginx-7f9c4d-abc12",
+		Namespace: "default",
+		Kind:      "Pod",
+		PodOverview: &k8s.PodOverviewData{
+			Owner: &k8s.RefTarget{
+				Type: k8s.ResourceDeployments, Name: "nginx", Namespace: "default",
+			},
+			Node:           &k8s.RefTarget{Type: k8s.ResourceNodes, Name: "worker-3"},
+			ServiceAccount: &k8s.RefTarget{Type: k8s.ResourceServiceAccounts, Name: "nginx-sa", Namespace: "default"},
+			Images:         []string{"nginx:1.27.1"},
+		},
+	}
+}
+
+func TestDetailModel_OverviewTab_RendersDrillableRefs(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodOverviewDetail(), nil)
+	m = m.switchToTab(1) // Overview
+
+	joined := strings.Join(m.contentLines, "\n")
+	for _, want := range []string{"Owner", "Node", "ServiceAccount", "worker-3", "nginx-sa", "nginx:1.27.1"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("Overview must contain %q, got:\n%s", want, joined)
+		}
+	}
+}
+
+func TestDetailModel_OverviewCursor_LandsOnFirstSelectable(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodOverviewDetail(), nil)
+	m = m.switchToTab(1)
+
+	if m.overviewCursor < 0 || m.overviewCursor >= len(m.overviewEntries) {
+		t.Fatalf("cursor out of bounds: %d (entries %d)", m.overviewCursor, len(m.overviewEntries))
+	}
+	got := m.overviewEntries[m.overviewCursor]
+	if !got.isSelectable() {
+		t.Errorf("cursor must land on selectable entry, got section header %q", got.label)
+	}
+	if got.label != "Owner" {
+		t.Errorf("first selectable should be Owner, got %q", got.label)
+	}
+}
+
+func TestDetailModel_OverviewCursor_JKMovesBetweenSelectable(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodOverviewDetail(), nil)
+	m = m.switchToTab(1)
+
+	// Initial: Owner
+	if m.overviewEntries[m.overviewCursor].label != "Owner" {
+		t.Fatalf("setup: cursor expected on Owner, got %q", m.overviewEntries[m.overviewCursor].label)
+	}
+	// j → Node
+	m, _ = m.Update(keyMsg('j'))
+	if m.overviewEntries[m.overviewCursor].label != "Node" {
+		t.Errorf("after j: expected Node, got %q", m.overviewEntries[m.overviewCursor].label)
+	}
+	// j → ServiceAccount
+	m, _ = m.Update(keyMsg('j'))
+	if m.overviewEntries[m.overviewCursor].label != "ServiceAccount" {
+		t.Errorf("after j×2: expected ServiceAccount, got %q", m.overviewEntries[m.overviewCursor].label)
+	}
+	// k → Node
+	m, _ = m.Update(keyMsg('k'))
+	if m.overviewEntries[m.overviewCursor].label != "Node" {
+		t.Errorf("after k: expected Node back, got %q", m.overviewEntries[m.overviewCursor].label)
+	}
+}
+
+func TestDetailModel_OverviewEnter_EmitsDrillMsg(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodOverviewDetail(), nil)
+	m = m.switchToTab(1)
+
+	// Cursor on Owner; Enter must emit OverviewDrillMsg with the Owner ref.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on drillable entry must return a Cmd")
+	}
+	drill, ok := cmd().(OverviewDrillMsg)
+	if !ok {
+		t.Fatalf("expected OverviewDrillMsg, got %T", cmd())
+	}
+	if drill.Ref.Type != k8s.ResourceDeployments || drill.Ref.Name != "nginx" {
+		t.Errorf("expected drill to deployment/nginx, got %v", drill.Ref)
+	}
+}
+
+func TestDetailModel_OverviewEnter_NoOpOnInfoRow(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodOverviewDetail(), nil)
+	m = m.switchToTab(1)
+
+	// Move to first Image row (info-only, no ref).
+	// Order: Owner / Node / SA / (section Images) / "  app" img / Labels (none here) / Annotations (none here)
+	// After Owner→Node→SA, next selectable is the "  app" image row.
+	m, _ = m.Update(keyMsg('j'))
+	m, _ = m.Update(keyMsg('j'))
+	m, _ = m.Update(keyMsg('j'))
+	if m.overviewEntries[m.overviewCursor].label == "Owner" {
+		t.Fatal("setup: expected cursor to advance past Owner")
+	}
+	// Enter on a non-ref row must not emit drill.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		// cmd may run as no-op; ensure no OverviewDrillMsg
+		if msg := cmd(); msg != nil {
+			if _, isDrill := msg.(OverviewDrillMsg); isDrill {
+				t.Error("Enter on info-only row must not emit OverviewDrillMsg")
+			}
+		}
+	}
+}
+
 func TestPodHashTag(t *testing.T) {
 	cases := []struct {
 		name string
@@ -319,7 +445,7 @@ func TestDetailModel_LogsTab_PodWaiting(t *testing.T) {
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	// Switch to Logs tab — no log lines yet.
-	m = m.switchToTab(1) // Logs tab for Pods is index 1
+	m = m.switchToTab(0) // Logs tab for Pods is index 0 (was 1 before YAML→Y popup migration)
 
 	if len(m.contentLines) != 1 {
 		t.Fatalf("expected 1 content line, got %d", len(m.contentLines))
@@ -360,7 +486,7 @@ func TestDetailModel_AppendLogLine_WrapsLongText(t *testing.T) {
 	}
 
 	// Render-time wrap: switch to Logs tab and inspect contentLines.
-	m = m.switchToTab(1)
+	m = m.switchToTab(0)
 	if len(m.contentLines) < 2 {
 		t.Fatalf("expected long log to wrap to multiple content lines, got %d", len(m.contentLines))
 	}
@@ -377,7 +503,7 @@ func TestDetailModel_Logs_ReflowOnResize(t *testing.T) {
 	m := newTestDetail() // width=80
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	longText := strings.Repeat("foo bar baz ", 20)
 	m.AppendLogLine("", "nginx", longText)
 
@@ -421,7 +547,7 @@ func TestDetailModel_LogsTab_WithLogLines(t *testing.T) {
 	m.AppendLogLine("", "sidecar", "log entry 2")
 
 	// Switch to Logs tab.
-	m = m.switchToTab(1) // Logs tab for Pods is index 1
+	m = m.switchToTab(0) // Logs tab for Pods is index 0 (was 1 before YAML→Y popup migration)
 
 	if len(m.contentLines) != 2 {
 		t.Fatalf("expected 2 content lines on Logs tab, got %d", len(m.contentLines))
@@ -525,49 +651,9 @@ func TestDetailModel_SearchJKAreTypedNotNavigation(t *testing.T) {
 	}
 }
 
-func TestDetailModel_BuildInfo_YAMLPath(t *testing.T) {
-	m := newTestDetail()
-	d := sampleDetail()
-	d.YAML = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx"
-	m.SetDetail(d, nil)
-
-	joined := strings.Join(m.contentLines, "\n")
-	if !strings.Contains(joined, "apiVersion: v1") {
-		t.Errorf("expected YAML to be rendered, got:\n%s", joined)
-	}
-	if !strings.Contains(joined, "kind: Pod") {
-		t.Errorf("expected YAML kind line, got:\n%s", joined)
-	}
-}
-
-func TestDetailModel_CopyableContent_YAMLReturnsRawWhenNoSearch(t *testing.T) {
-	m := newTestDetail()
-	d := sampleDetail()
-	d.YAML = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx\n"
-	m.SetDetail(d, nil)
-
-	got := m.CopyableContent()
-	want := "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx"
-	if got != want {
-		t.Errorf("expected raw YAML for copy, got:\n%s", got)
-	}
-}
-
-func TestDetailModel_CopyableContent_YAMLFallsBackToFilteredWhenSearching(t *testing.T) {
-	m := newTestDetail()
-	d := sampleDetail()
-	d.YAML = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: nginx"
-	m.SetDetail(d, nil)
-	m.searchQuery = "kind"
-
-	got := m.CopyableContent()
-	if !strings.Contains(got, "kind: Pod") {
-		t.Errorf("expected filtered output to include kind line, got:\n%s", got)
-	}
-	if strings.Contains(got, "apiVersion") {
-		t.Errorf("expected non-matching lines to be filtered out, got:\n%s", got)
-	}
-}
+// YAML-rendering tests were removed in the Overview migration — YAML now
+// lives in the `Y` popup, covered by yamlpopup_test.go. CopyableContent's
+// YAML special-case is gone too; users copy raw YAML from inside the popup.
 
 func TestDetailModel_CopyableContent_StripsANSI(t *testing.T) {
 	m := newTestDetail()
@@ -626,7 +712,7 @@ func TestDetailModel_FollowTail_AppendSnapsToBottom(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 
 	// Spam enough lines that scroll has somewhere to go.
 	for i := 0; i < 100; i++ {
@@ -645,7 +731,7 @@ func TestDetailModel_FollowTail_AppendDoesNotMoveWhenPaused(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs, followTail=true at bottom
+	m = m.switchToTab(0) // Logs, followTail=true at bottom
 
 	// Fill some lines, then user scrolls up — disables follow.
 	for i := 0; i < 50; i++ {
@@ -671,17 +757,18 @@ func TestDetailModel_FollowTail_ScrollUpDisablesOnLogsOnly(t *testing.T) {
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
 
-	// YAML tab: scrollUp must NOT touch followTail (out-of-context).
-	if m.ActiveTabName() != "YAML" {
-		t.Fatalf("expected YAML active, got %s", m.ActiveTabName())
+	// Overview tab (index 1): scrollUp must NOT touch followTail.
+	m = m.switchToTab(1)
+	if m.ActiveTabName() != "Overview" {
+		t.Fatalf("expected Overview active, got %s", m.ActiveTabName())
 	}
 	m, _ = m.Update(keyMsg('k'))
 	if !m.followTail {
-		t.Error("scrolling up on YAML tab must not disable followTail")
+		t.Error("scrolling up on Overview tab must not disable followTail")
 	}
 
-	// Logs tab: scrollUp disables.
-	m = m.switchToTab(1)
+	// Logs tab (index 0): scrollUp disables.
+	m = m.switchToTab(0)
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -695,7 +782,7 @@ func TestDetailModel_FollowTail_GReEnables(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1)
+	m = m.switchToTab(0)
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -718,8 +805,9 @@ func TestDetailModel_FollowTail_GOutsideLogsDoesNotEnable(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	// YAML tab — followTail should remain whatever it is; we don't want G on
-	// a non-Logs tab to flip a state that's irrelevant there.
+	// Switch off the Logs tab — G on a non-Logs tab must not flip a state
+	// that's irrelevant there.
+	m = m.switchToTab(2) // Events
 	m.followTail = false
 	m, _ = m.Update(keyMsg('G'))
 	if m.followTail {
@@ -731,7 +819,7 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -741,8 +829,8 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 	}
 
 	// Leave Logs and return → state resets to follow.
-	m = m.switchToTab(0) // YAML
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(1) // Overview
+	m = m.switchToTab(0) // Logs
 	if !m.followTail {
 		t.Error("re-entering Logs tab must reset followTail to true")
 	}
@@ -752,7 +840,7 @@ func TestDetailModel_ActiveTabTitle_FollowMarker(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs, followTail=true
+	m = m.switchToTab(0) // Logs, followTail=true
 
 	if got := m.ActiveTabTitle(); got != "Logs ▼" {
 		t.Errorf("expected active tab title 'Logs ▼' when following, got %q", got)
