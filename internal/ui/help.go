@@ -454,7 +454,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{key: "D", desc: "Delete resource"},
 		{key: "s", desc: "Shell into container"},
 		{isSection: true, text: "Detail"},
-		{key: "h / l", desc: "Switch tab (or drill on Links)"},
+		{key: "h / l", desc: "Switch tab (from Table panel)"},
 		{key: "= / -", desc: "Expand / restore"},
 		{isSection: true, text: "Links tab"},
 		{key: "Enter / l", desc: "Drill into ref"},
