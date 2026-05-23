@@ -99,14 +99,27 @@ type RefTarget struct {
 // StatefulSet / Job). Drilling further (RS → Deployment) is left to follow-up
 // commits — for MVP we surface the one-hop owner only.
 //
+// Volumes lists the Pod's spec.volumes with their source kind and an optional
+// drill ref (ConfigMap / Secret / PVC sources are drillable; emptyDir /
+// hostPath / projected / downwardAPI are informational).
+//
 // Images carries the rendered image strings (e.g. "nginx:1.27.1") for
 // informational display — there's no K8s resource to drill into for an image.
 type PodOverviewData struct {
 	Owner          *RefTarget
 	Node           *RefTarget // cluster-scoped
 	ServiceAccount *RefTarget
+	Volumes        []VolumeRef
 	Images         []string
 	InitImages     []string
+}
+
+// VolumeRef describes a Pod volume's source. Ref is non-nil when the source
+// is another K8s resource the user can drill into (ConfigMap, Secret, PVC).
+type VolumeRef struct {
+	Name string // volume name in spec.volumes
+	Kind string // "configMap" / "secret" / "persistentVolumeClaim" / "emptyDir" / "hostPath" / "projected" / "downwardAPI" / "other"
+	Ref  *RefTarget
 }
 
 // DetailField is a key-value pair for resource-specific detail.
