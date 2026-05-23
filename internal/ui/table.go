@@ -448,6 +448,7 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		if i < len(values) {
 			val = values[i]
 		}
+		raw := val // pre-truncation value — stylizeCell uses this for the color lookup
 		// Pad or truncate (plain — visual width = byte length here since
 		// resource Row strings are ASCII).
 		if len(val) > w {
@@ -464,7 +465,10 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		// Inject per-column color AFTER padding so the cell's visual width
 		// stays exactly w. Only fires when this column is the Pod STATUS
 		// column and the value is a known status — other cells pass through.
-		val = m.stylizeCell(i, val)
+		// raw (pre-truncation) feeds the color lookup so narrow columns that
+		// truncate the status word (e.g. "CrashLoopBackOff" → "CrashL…") are
+		// still recognised and coloured.
+		val = m.stylizeCell(i, val, raw)
 		parts = append(parts, val)
 	}
 
@@ -481,9 +485,13 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 
 // stylizeCell colors known semantic cells (currently only Pod STATUS) using
 // the theme's status palette. The injected ANSI codes do not change the
-// cell's visual width — padding has already happened. Selected rows skip
-// styling so the row's background highlight reads cleanly.
-func (m TableModel) stylizeCell(colIdx int, padded string) string {
+// cell's visual width — padding has already happened.
+//
+// `raw` is the pre-truncation cell value; it feeds the color lookup so a
+// narrow STATUS column that truncates the status word (e.g.
+// "CrashLoopBackOff" → "CrashL…") still gets coloured — the visible
+// (possibly truncated) text gets the ANSI wrap, not the original.
+func (m TableModel) stylizeCell(colIdx int, padded, raw string) string {
 	if m.resourceType != k8s.ResourcePods {
 		return padded
 	}
@@ -491,14 +499,17 @@ func (m TableModel) stylizeCell(colIdx int, padded string) string {
 	if colIdx != 2 {
 		return padded
 	}
-	trimmed := strings.TrimSpace(padded)
-	color := podStatusColor(trimmed, m.theme)
+	color := podStatusColor(strings.TrimSpace(raw), m.theme)
 	if color == "" {
 		return padded
 	}
-	// Find the trimmed status word inside the padded slot and wrap just that
-	// span so the trailing spaces stay uncolored (avoids selected-row bg
-	// bleed showing colored space).
+	// Find the visible (possibly truncated) text inside the padded slot and
+	// wrap just that span so the trailing spaces stay uncolored (avoids
+	// selected-row bg bleed showing colored space).
+	trimmed := strings.TrimSpace(padded)
+	if trimmed == "" {
+		return padded
+	}
 	idx := strings.Index(padded, trimmed)
 	if idx < 0 {
 		return padded
