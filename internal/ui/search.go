@@ -7,13 +7,25 @@ import (
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
+// renderSearchBox draws the inline search input box, with the border color
+// reflecting the input state:
+//   - active (`/` pressed, user is typing): default category color (cyan)
+//   - inactive with a non-empty query (filter locked, focus back to content):
+//     status-pending color (amber/warm yellow) — signals "this is what the
+//     view is filtered by, j/k/n navigate within it"
+//   - inactive with empty query: default color (rare; caller almost always
+//     skips rendering altogether in this state)
 func renderSearchBox(query string, active bool, width int, t *theme.Theme) string {
-	return renderSearchBoxWithColor(query, active, width, t, lipgloss.Color(t.Sidebar.CategoryFg))
+	color := lipgloss.Color(t.Sidebar.CategoryFg)
+	if !active && query != "" {
+		color = lipgloss.Color(t.Status.Pending)
+	}
+	return renderSearchBoxWithColor(query, active, width, t, color)
 }
 
 // renderSearchBoxWithColor renders the search box with a caller-supplied
-// border color. Use to express "filter locked" state (e.g. amber/orange after
-// the user commits a query with Enter and focus shifts back to content).
+// border color override. Use when the default active/locked color logic in
+// renderSearchBox isn't right for a specific call site.
 func renderSearchBoxWithColor(query string, active bool, width int, t *theme.Theme, borderColor lipgloss.Color) string {
 	bc := borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
