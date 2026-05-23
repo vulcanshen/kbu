@@ -159,8 +159,9 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 
 	left := bStyle.Render("│")
 	right := bStyle.Render("│")
-	rows = append([]string{""}, rows...)
-	rows = append(rows, "")
+	// No top/bottom padding rows — borders alone separate content from
+	// the surrounding panel; the extra blank rows were wasted vertical
+	// space, matching the YAML-popup tightening.
 	for _, line := range rows {
 		lw := lipgloss.Width(line)
 		pad := ""
