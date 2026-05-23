@@ -84,17 +84,21 @@ func buildPodOverviewEntries(detail k8s.ResourceDetail) []overviewEntry {
 		}
 	}
 
-	entries = append(entries, labelsAnnotationsEntries(detail)...)
+	// Labels / Annotations are deliberately NOT included here — they bury
+	// the navigable refs that are the whole point of Overview. Users who
+	// want them open the YAML popup with `Y`.
 	return entries
 }
 
 // buildGenericOverviewEntries is the fallback Overview content used for any
 // resource kind that doesn't have a custom Overview builder yet. It surfaces
-// the structured fields the resource-specific detailer already populates
-// (Strategy, Replicas, etc.) plus labels and annotations.
+// just the structured fields the resource-specific detailer already populates
+// (Strategy, Replicas, etc.) — Labels and Annotations live in the `Y` YAML
+// popup, intentionally NOT inlined here so the Overview stays a navigable
+// switchboard rather than a wall of metadata.
 func buildGenericOverviewEntries(detail k8s.ResourceDetail) []overviewEntry {
 	var entries []overviewEntry
-	if detail.Name == "" && len(detail.Labels) == 0 && len(detail.Annotations) == 0 && len(detail.Fields) == 0 {
+	if detail.Name == "" && len(detail.Fields) == 0 {
 		return entries
 	}
 	if detail.Name != "" {
@@ -111,24 +115,6 @@ func buildGenericOverviewEntries(detail k8s.ResourceDetail) []overviewEntry {
 	}
 	for _, f := range detail.Fields {
 		entries = append(entries, overviewEntry{label: strings.TrimSuffix(f.Label, ":"), value: f.Value})
-	}
-	entries = append(entries, labelsAnnotationsEntries(detail)...)
-	return entries
-}
-
-func labelsAnnotationsEntries(detail k8s.ResourceDetail) []overviewEntry {
-	var entries []overviewEntry
-	if len(detail.Labels) > 0 {
-		entries = append(entries, overviewEntry{section: true, label: "Labels"})
-		for _, k := range sortedKeys(detail.Labels) {
-			entries = append(entries, overviewEntry{label: "  " + k, value: detail.Labels[k]})
-		}
-	}
-	if len(detail.Annotations) > 0 {
-		entries = append(entries, overviewEntry{section: true, label: "Annotations"})
-		for _, k := range sortedKeys(detail.Annotations) {
-			entries = append(entries, overviewEntry{label: "  " + k, value: detail.Annotations[k]})
-		}
 	}
 	return entries
 }
