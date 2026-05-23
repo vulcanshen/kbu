@@ -169,9 +169,32 @@ func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
 			m.seenErrorCount = 0
 			m.lastError = ""
 			m.scrollOffset = 0
+		case "y":
+			return m, copyToClipboardCmd(m.PlainText())
 		}
 	}
 	return m, nil
+}
+
+// PlainText returns every log entry as a single string, one entry per
+// line, newest first to match the on-screen order. Used by y-to-copy
+// so the user can paste the full log into an issue / chat.
+func (m AppLogModel) PlainText() string {
+	if len(m.entries) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i := len(m.entries) - 1; i >= 0; i-- {
+		e := m.entries[i]
+		ts, level := e.FormatPrefix()
+		b.WriteString(ts)
+		b.WriteByte(' ')
+		b.WriteString(level)
+		b.WriteByte(' ')
+		b.WriteString(e.Message)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func (m AppLogModel) popupHeight() int {
@@ -357,7 +380,7 @@ func (m AppLogModel) renderFullPopup() string {
 		}
 		b.WriteString("\n")
 	}
-	hint := " !:close j/k u/d D:clear "
+	hint := " !:close j/k u/d y:copy D:clear "
 	indicator := ""
 	if totalLines := len(allLines); totalLines > 0 {
 		indicator = fmt.Sprintf(" %d of %d ", m.scrollOffset+1, totalLines)

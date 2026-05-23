@@ -288,7 +288,7 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 //   - Enter / l: drill into the highlighted ref (push a frame onto the
 //     Links chain — emits LinkPushMsg, AppModel handles cycle check + fetch).
 //   - h / Esc: pop one level off the chain. No-op at root level.
-//   - i: open the breadcrumb popup so the user can jump back to any
+//   - b: open the breadcrumb popup so the user can jump back to any
 //     ancestor level. No-op at root (nothing to navigate).
 //
 // Returns handled=false to let the caller fall back to the generic per-line
@@ -314,7 +314,7 @@ func (m DetailModel) handleLinkKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) 
 			return m.dispatchLinkPush()
 		case 'h':
 			return m.dispatchLinkPop()
-		case 'i':
+		case 'b':
 			if m.Depth() <= 1 {
 				return m, true, nil
 			}

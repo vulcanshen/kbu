@@ -11,8 +11,8 @@ import (
 )
 
 // BreadcrumbPopupModel lists the Links-tab drill chain and lets the user
-// jump back to any ancestor level via j/k + Enter. Opened by `i` on the
-// Links tab at depth > 1; closed by Esc / q / i.
+// jump back to any ancestor level via j/k + Enter. Opened by `b` on the
+// Links tab at depth > 1; closed by Esc / q / b.
 //
 // On Enter the model emits LinkJumpMsg{Level: 1-indexed level} so
 // AppModel can call detail.JumpToDrillLevel — popping intermediate
@@ -87,7 +87,7 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 			closeCmd := m.animator.Close()
 			jumpCmd := func() tea.Msg { return LinkJumpMsg{Level: level} }
 			return m, tea.Batch(closeCmd, jumpCmd)
-		case "esc", "q", "i":
+		case "esc", "q", "b":
 			return m, m.animator.Close()
 		}
 	}
@@ -109,34 +109,27 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	currentMarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending)).Bold(true)
 
 	title := "󰍒 Breadcrumb"
-	hint := " j/k: move  Enter: jump  Esc/q/i: close "
+	hint := " j/k: move  Enter: jump  Esc/q/b: close "
 
+	// Widened from 70% to 85% so long resource names (RS-hash suffixes,
+	// generated Job names, ...) get more horizontal room before the
+	// wrap-fallback kicks in.
 	maxInnerW := 80
 	if m.screenW > 0 {
-		maxInnerW = m.screenW * 70 / 100
+		maxInnerW = m.screenW * 85 / 100
 		if maxInnerW < 40 {
 			maxInnerW = 40
 		}
 	}
 
-	rows := make([]string, 0, len(m.chain))
+	// First pass: pick innerW from label widths so short chains use a
+	// snug popup; long chains expand up to maxInnerW.
+	innerW := lipgloss.Width(title) + 4
 	for i, ref := range m.chain {
 		levelTag := fmt.Sprintf("%d.", i+1)
-		label := refDisplay(ref)
-		marker := "  "
-		if i == len(m.chain)-1 {
-			marker = currentMarkStyle.Render("● ")
-		}
-		row := " " + levelStyle.Render(levelTag) + " " + marker + label
-		if i == m.cursor {
-			row = cursorStyle.Render(" " + levelTag + " " + stripStyles(marker) + label + " ")
-		}
-		rows = append(rows, row)
-	}
-
-	innerW := lipgloss.Width(title) + 4
-	for _, r := range rows {
-		if w := lipgloss.Width(r) + 2; w > innerW {
+		// 1 (lead) + len(tag) + 1 + marker(2) + label + 2 (cursor pad)
+		w := 1 + lipgloss.Width(levelTag) + 1 + 2 + lipgloss.Width(refDisplay(ref)) + 2
+		if w > innerW {
 			innerW = w
 		}
 	}
@@ -145,6 +138,15 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	}
 	if innerW > maxInnerW {
 		innerW = maxInnerW
+	}
+
+	// Second pass: render rows with wrap-fallback for labels that
+	// exceed the chosen innerW (e.g. "Deployment/<60-char-name>...").
+	// Continuation lines are indented under the label start so the
+	// chain remains visually scannable.
+	var rows []string
+	for i, ref := range m.chain {
+		rows = append(rows, m.renderEntry(i, ref, innerW, levelStyle, cursorStyle, currentMarkStyle)...)
 	}
 
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
@@ -177,6 +179,62 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	return b.String()
 }
 
+// renderEntry produces the one or more display lines for a single chain
+// entry. Long labels wrap to fit innerW; cursor styling spans every
+// wrapped line so the highlight reads as one block.
+func (m BreadcrumbPopupModel) renderEntry(
+	i int, ref k8s.RefTarget, innerW int,
+	levelStyle, cursorStyle, currentMarkStyle lipgloss.Style,
+) []string {
+	levelTag := fmt.Sprintf("%d.", i+1)
+	prefix := " " + levelTag + " "
+	const markerW = 2
+	marker := "  "
+	if i == len(m.chain)-1 {
+		marker = "● "
+	}
+
+	prefixW := lipgloss.Width(prefix)
+	contentW := innerW - 2 // leading + trailing cursor pad
+	labelBudget := contentW - prefixW - markerW
+	if labelBudget < 10 {
+		labelBudget = 10
+	}
+	chunks := wrapPlain(refDisplay(ref), labelBudget)
+	contIndent := strings.Repeat(" ", prefixW+markerW)
+	isCursor := i == m.cursor
+
+	out := make([]string, 0, len(chunks))
+	for ci, chunk := range chunks {
+		var plain string
+		if ci == 0 {
+			plain = prefix + marker + chunk
+		} else {
+			plain = contIndent + chunk
+		}
+		if w := lipgloss.Width(plain); w < contentW {
+			plain = plain + strings.Repeat(" ", contentW-w)
+		}
+		if isCursor {
+			out = append(out, cursorStyle.Render(" "+plain+" "))
+			continue
+		}
+		// Non-cursor row: re-style the prefix + marker pieces while
+		// keeping continuation lines as plain whitespace.
+		if ci == 0 {
+			markerStyled := marker
+			if marker == "● " {
+				markerStyled = currentMarkStyle.Render("● ")
+			}
+			rest := strings.TrimPrefix(plain, prefix+marker)
+			out = append(out, " "+levelStyle.Render(levelTag)+" "+markerStyled+rest)
+		} else {
+			out = append(out, " "+plain)
+		}
+	}
+	return out
+}
+
 // refDisplay formats a RefTarget for the breadcrumb row. Cluster-scoped
 // refs (empty namespace) drop the ns/ prefix.
 func refDisplay(ref k8s.RefTarget) string {
@@ -189,9 +247,3 @@ func refDisplay(ref k8s.RefTarget) string {
 	}
 	return fmt.Sprintf("%s/%s in %s", kind, ref.Name, ref.Namespace)
 }
-
-// stripStyles is a placeholder for "the marker rendered as plain text"
-// when we need to measure its width inside a cursor-highlighted row.
-// Currently the marker is always two cells wide regardless of style, so
-// we just return two spaces.
-func stripStyles(_ string) string { return "  " }

@@ -459,7 +459,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{isSection: true, text: "Links tab"},
 		{key: "Enter / l", desc: "Drill into ref"},
 		{key: "h / Esc", desc: "Back one level"},
-		{key: "i", desc: "Breadcrumb popup"},
+		{key: "b", desc: "Breadcrumb popup"},
 		{key: "Y", desc: "YAML of cursor ref"},
 		{isSection: true, text: "Global"},
 		{key: "n / N", desc: "Switch namespace"},

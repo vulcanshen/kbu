@@ -306,6 +306,62 @@ func TestAppLogModel_RenderAllLines_NewestFirst(t *testing.T) {
 	}
 }
 
+func TestAppLogModel_PlainText_NewestFirst(t *testing.T) {
+	m := newTestAppLog()
+	m.Info("first")
+	m.Warn("second warn")
+	m.Error("third err")
+
+	got := m.PlainText()
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %q", len(lines), got)
+	}
+	if !strings.Contains(lines[0], "third err") {
+		t.Errorf("line[0] should be newest 'third err', got %q", lines[0])
+	}
+	if !strings.Contains(lines[2], "first") {
+		t.Errorf("line[2] should be oldest 'first', got %q", lines[2])
+	}
+	// Each line should contain timestamp + LEVEL + message.
+	for _, l := range lines {
+		if !strings.Contains(l, ":") {
+			t.Errorf("line missing timestamp colon: %q", l)
+		}
+	}
+}
+
+func TestAppLogModel_PlainText_EmptyWhenNoEntries(t *testing.T) {
+	m := newTestAppLog()
+	if got := m.PlainText(); got != "" {
+		t.Errorf("empty log should yield empty string, got %q", got)
+	}
+}
+
+func TestAppLogModel_Y_ReturnsCopyCmd(t *testing.T) {
+	m := newTestAppLog()
+	m.Info("first")
+	openLog(&m)
+
+	_, cmd := m.Update(keyMsg('y'))
+	if cmd == nil {
+		t.Fatal("y should return a copy Cmd")
+	}
+	// Execute the Cmd to verify it produces a clipboard message.
+	msg := cmd()
+	if msg == nil {
+		t.Fatal("copy Cmd returned nil msg")
+	}
+	if _, ok := msg.(ClipboardCopiedMsg); !ok {
+		// ClipboardCopyFailedMsg is also acceptable in CI without a terminal
+		// — what matters is the Cmd is correctly wired, not whether OSC 52
+		// actually reaches a real clipboard.
+		if _, ok := msg.(ClipboardCopyFailedMsg); !ok {
+			t.Errorf("expected clipboard msg, got %T", msg)
+		}
+	}
+}
+
 func TestAppLogModel_RenderAllLines_EmptyWhenNoEntries(t *testing.T) {
 	m := newTestAppLog()
 	lines := m.renderAllLines()
