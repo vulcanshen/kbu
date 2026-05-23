@@ -186,6 +186,14 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 		return m, tea.Batch(closeCmd, func() tea.Msg {
 			return startEditMsg{resource: rt, item: item, contextName: ctx}
 		})
+	case "y":
+		// Copy the full YAML (not just the visible viewport) — paste-back
+		// use cases want the whole document. OSC 52 via copyToClipboardCmd
+		// works through tmux / SSH without xclip / pbcopy.
+		if m.yaml == "" {
+			return m, nil
+		}
+		return m, copyToClipboardCmd(m.yaml)
 	}
 	return m, nil
 }
@@ -447,8 +455,8 @@ func (m YamlPopupModel) renderFullPopup() string {
 // hint. Falls back to a short hint and finally drops the indicator if the
 // popup width is too tight.
 func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicator string) {
-	const hintFull = " e:edit  /:search  Esc:close "
-	const hintShort = " e  /  Esc "
+	const hintFull = " e:edit  y:copy  /:search  Esc:close "
+	const hintShort = " e  y  /  Esc "
 	hint = hintFull
 
 	total := len(m.contentLines)
