@@ -491,6 +491,53 @@ func TestDetailModel_TabTitle_ShowsLevelWhenDrilled(t *testing.T) {
 	}
 }
 
+// TestDetailModel_LinksTab_LongValueWrapsConsistently verifies a Links
+// row whose value (resource name) is too long for the row width wraps
+// to multiple display lines — and does so the same way for cursor and
+// non-cursor rows, fixing a previous inconsistency where the cursor
+// row wrapped (via lipgloss.Width) but non-cursor rows got truncated
+// by the outer panel render.
+func TestDetailModel_LinksTab_LongValueWrapsConsistently(t *testing.T) {
+	longName := "harbor-registry-htpasswd-very-long-name-here"
+	detail := k8s.ResourceDetail{
+		Name:      "p",
+		Namespace: "ns",
+		Kind:      "Pod",
+		PodLinks: &k8s.PodLinksData{
+			Volumes: []k8s.VolumeRef{
+				{
+					Name: "vol1",
+					Kind: "secret",
+					Ref:  &k8s.RefTarget{Type: k8s.ResourceSecrets, Name: longName, Namespace: "ns"},
+				},
+			},
+		},
+	}
+	m := newTestDetail()
+	m.SetSize(40, 20) // narrow panel forces wrap
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(detail, nil)
+	m = m.switchToTab(1) // Links
+
+	joined := strings.Join(m.contentLines, "\n")
+	// Wrap broke the long name at character boundary, so the substring
+	// won't appear contiguous. Instead, assert both ends of the long
+	// name are present — truncation (the regression we're guarding
+	// against) would lose the tail.
+	head := longName[:10]
+	tail := longName[len(longName)-10:]
+	if !strings.Contains(joined, head) {
+		t.Errorf("start of long name (%q) missing, got:\n%s", head, joined)
+	}
+	if !strings.Contains(joined, tail) {
+		t.Errorf("end of long name (%q) missing — value was truncated, not wrapped:\n%s", tail, joined)
+	}
+	// Drill arrow must still render after wrap.
+	if !strings.Contains(joined, "→") {
+		t.Errorf("drill arrow lost after wrap, got:\n%s", joined)
+	}
+}
+
 func TestDetailModel_BorderTopRightHint(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
