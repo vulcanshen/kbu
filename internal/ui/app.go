@@ -41,7 +41,7 @@ const (
 	panelDetailHeight = 14 // panel 3 (detail)  — fixed absolute height
 	panelHMargin      = 1  // cells between terminal left/right edge and panels
 	panelHSpace       = 1  // cells between sidebar and right side
-	panelVSpace       = 1  // rows between table and detail
+	panelVSpace       = 0  // rows between table and detail (0 = flush borders)
 )
 
 type AppModel struct {
@@ -882,8 +882,7 @@ func (m AppModel) View() string {
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
 		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
-		vSpaceRow := strings.Repeat(" ", panelW)
-		middle := lipgloss.JoinVertical(lipgloss.Left, tablePanel, vSpaceRow, detailPanel)
+		middle := joinTableAndDetail(tablePanel, detailPanel, panelW)
 		fullH := upperH + panelVSpace + detailH
 		hMargin := blankColumn(panelHMargin, fullH)
 		middleWithMargins := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, middle, hMargin)
@@ -900,9 +899,7 @@ func (m AppModel) View() string {
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo())
 		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo())
 
-		// 1-row gap between table and detail on the right side.
-		vSpaceRow := strings.Repeat(" ", rw)
-		rightSide := lipgloss.JoinVertical(lipgloss.Left, tablePanel, vSpaceRow, detailPanel)
+		rightSide := joinTableAndDetail(tablePanel, detailPanel, rw)
 
 		// 1-col gap between sidebar and right side, plus 1-col margins on
 		// the outer edges so panel borders sit 1 cell inside the terminal.
@@ -1028,6 +1025,17 @@ func blankColumn(w, h int) string {
 		return line
 	}
 	return strings.Repeat(line+"\n", h-1) + line
+}
+
+// joinTableAndDetail vertically stacks the table + detail panels on the
+// right side. When panelVSpace > 0, inserts that many blank rows between
+// them; when 0 (current default) the borders sit flush.
+func joinTableAndDetail(tablePanel, detailPanel string, w int) string {
+	if panelVSpace <= 0 {
+		return lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
+	}
+	spacer := blankColumn(w, panelVSpace)
+	return lipgloss.JoinVertical(lipgloss.Left, tablePanel, spacer, detailPanel)
 }
 
 func (m *AppModel) enterDrillDown() tea.Cmd {
