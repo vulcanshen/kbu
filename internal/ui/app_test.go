@@ -39,7 +39,6 @@ func TestTerminalTitle_PrefixAndSuffix(t *testing.T) {
 	if !strings.Contains(title, "KM8erm") {
 		t.Errorf("title must contain 'KM8erm' marker, got %q", title)
 	}
-	if strings.HasSuffix(title, ".local") {
-		t.Errorf("title must not retain .local mDNS suffix, got %q", title)
-	}
+	// We deliberately pass mDNS suffixes through (`.local`, `.home`, ...)
+	// because the user wants the raw hostname. No suffix assertion.
 }

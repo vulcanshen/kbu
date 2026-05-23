@@ -139,7 +139,10 @@ func renderOverviewEntries(entries []overviewEntry, cursor int, width int, t *th
 	valueStyle := t.DetailValueStyle()
 	sectionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Sidebar.CategoryFg)).Bold(true)
 	drillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Sidebar.CategoryFg)).Bold(true)
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Pending)).Bold(true)
+	// Cursor row uses a full-row background highlight (same treatment as
+	// panel-view selected rows and YAML-popup match cursor) — far more
+	// visible than the previous ▸ marker, especially on dense panels.
+	cursorRowStyle := t.TableSelectedRowStyle()
 
 	const labelW = 18
 	const indent = "  "
@@ -150,29 +153,40 @@ func renderOverviewEntries(entries []overviewEntry, cursor int, width int, t *th
 		}
 	}
 
+	rowWidth := width
+	if rowWidth < 20 {
+		rowWidth = 20
+	}
+
 	for i, e := range entries {
 		if e.section {
-			lines = append(lines, "")
+			// No blank separator above section headers — keeps Overview
+			// compact (per UX feedback). The section's bold colored label
+			// is enough visual break.
 			lines = append(lines, indent+sectionStyle.Render(e.label))
 			continue
 		}
 		isCursor := cursor >= 0 && cursor < len(entries) && cursor == i
-		cursorMarker := "  "
-		if isCursor {
-			cursorMarker = cursorStyle.Render("▸ ")
-			cursorLine = len(lines)
-		}
 		labelText := e.label
 		if len(labelText) < labelW {
 			labelText = labelText + strings.Repeat(" ", labelW-len(labelText))
 		}
-		row := cursorMarker + labelStyle.Render(labelText) + " " + valueStyle.Render(e.value)
+		if isCursor {
+			cursorLine = len(lines)
+			// Strip styles by re-building from plain text — lipgloss
+			// Background composes poorly with the existing per-segment
+			// foregrounds (resets leak default bg through the row).
+			plain := "  " + labelText + " " + e.value
+			if e.ref != nil {
+				plain += " →"
+			}
+			lines = append(lines, cursorRowStyle.Width(rowWidth).Render(plain))
+			continue
+		}
+		row := "  " + labelStyle.Render(labelText) + " " + valueStyle.Render(e.value)
 		if e.ref != nil {
 			row += " " + drillStyle.Render("→")
 		}
-		// Width budget left over for wrapping; for MVP, just trust terminal
-		// soft-wrap (overview rows are usually short).
-		_ = width
 		lines = append(lines, row)
 	}
 	return lines, selectableIdxs, cursorLine
