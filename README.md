@@ -21,7 +21,7 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Vim-style navigation** -- `j`/`k`, `u`/`d` page scroll, `gg`/`G`, `/` search
 - **3-panel lazygit-style layout** -- numbered sidebar, list, and detail panels with scroll indicator
 - **Drill-down navigation** -- Deployment / DaemonSet / StatefulSet / Job → Pods → Containers; CronJob → Jobs; HPA → target workload; PVC → mounting Pods; PDB → protected Pods
-- **Links tab — Lens-style graph navigation** -- every detail panel (except Namespaces) lists the resource's navigable references (owners, selected pods, scaleTargetRef, mounted-by pods, ...). `Enter`/`l` drills into the cursor's ref — the panel re-renders showing *that* resource's Links, building a chain (Deployment → Pod → ConfigMap → consumer Pods, ...). `h`/`Esc` pops one level. `b` opens a breadcrumb popup so you can jump back to any ancestor in one step. Tab label shows `Links ↳N` at depth>1. `Y` opens the YAML of whichever entry the cursor is on. Cycle detection blocks revisiting an ancestor; fetch failures toast and stay put. 25 of 26 resource kinds covered — ConfigMaps / Secrets / ServiceAccounts surface *reverse* refs (which Pods use me)
+- **Relatives tab — Lens-style graph navigation** -- every detail panel (except Namespaces) lists the resource's navigable references (owners, selected pods, scaleTargetRef, mounted-by pods, ...). `Enter`/`l` drills into the cursor's ref — the panel re-renders showing *that* resource's Relatives, building a chain (Deployment → Pod → ConfigMap → consumer Pods, ...). `h`/`Esc` pops one level. `b` opens a breadcrumb popup so you can jump back to any ancestor in one step. `Space` jumps panels 1+2 to the cursor's ref (confirms first) — so a chain you walked into can become the new primary view. Tab label shows `Relatives N` at depth>1. `Y` opens the YAML of whichever entry the cursor is on. Cycle detection blocks revisiting an ancestor; fetch failures toast and stay put. 25 of 26 resource kinds covered — ConfigMaps / Secrets / ServiceAccounts surface *reverse* refs (which Pods use me, which RoleBindings name this SA as a subject, ...)
 - **YAML popup (`Y`)** -- raw `kubectl get -o yaml` of the selected resource in a full-screen overlay with `j/k/u/d/gg/G` scroll, `/` search (`n`/`N` step through matches with full-row highlight), `y` to copy the full YAML to your clipboard, and `e` to dispatch `kubectl edit` directly from the popup. YAML lives in the popup, not the detail panel, so vertical layout no longer wraps long YAML lines awkwardly
 - **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
 - **Aggregate logs for Deployments** -- selecting a Deployment streams logs from **every pod in the current ReplicaSet** into a single Logs tab (also the default tab for Deployment detail). Lines are prefixed `<pod-hash>│<container>│<text>` with each segment in its own stable color, so during a rollout you can spot at a glance which pod is throwing errors without drill-down. Pods churning during rollout: the stream snapshots at row-select; re-select the Deployment row to refresh. Falls back to Deployment selector when current-ReplicaSet lookup fails (e.g. missing RBAC on ReplicaSet)
@@ -33,9 +33,10 @@ A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [laz
 - **Resource deletion** -- `D` with confirmation dialog
 - **Search/filter** -- `/` to search in all three panels and in the namespace/context picker popups. Sidebar search also matches category names (e.g. "cluster" expands the Cluster category)
 - **Clipboard copy (`y`)** -- copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required). Inside the App Log popup (`!`), `y` copies the full log; inside the YAML popup, `y` copies the full YAML
-- **Toast notifications with levels** -- info-level (1s sky-blue) for confirmations like "Copied!"; warning-level (2s peach with `󰀦`) for blocked actions like Links cycle detection or drill failures
+- **Toast notifications with levels** -- info-level (1s sky-blue) for confirmations like "Copied!"; warning-level (2s peach with `󰀦`) for blocked actions like Relatives cycle detection or drill failures
 - **Namespace and context switching** -- `n`/`N` for namespace, `c`/`C` for context (uppercase aliases for users who prefer them; both open the same picker)
-- **Detail tabs** -- YAML / Events / Logs (Logs tab only for Pods)
+- **Panel-aware selection styling** -- the focused panel's cursor row gets a bright reverse-video highlight; the *unfocused* panel's selected row keeps a softer bg + bold so you can always see which resource each panel "remembers" while you work in another. Pod STATUS uses a darker palette variant when it lands on a light-bg highlighted row so the green/yellow/red stays readable
+- **Detail tabs** -- `Relatives` / `Logs` (Pods + Deployments) / `Events`. Relatives is always first when present, so `Space` jumps land on the same tab you came from
 - **Long values wrap, never truncate** -- applies to YAML, Events, and Logs; wrap points reflow on panel resize
 - **Panel expand** -- `=`/`-` to toggle full-screen Table or Detail panel
 - **Theme system** -- drop a `theme.yaml` into config directory to override colors
@@ -116,12 +117,20 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 | `1` / `2` / `3` | Switch panel |
 | `Tab` | Cycle panels |
 
+### Sidebar (Panel 1)
+
+| Key | Action |
+|---|---|
+| `j` / `k` | Move cursor (auto-selects the resource and restarts the watcher) |
+| `l` / `Enter` | Move focus to Panel 2 (resource already selected by `j`/`k`, no reload) |
+| `/` | Search / filter resource names + category names |
+
 ### Table (Panel 2)
 
 | Key | Action |
 |---|---|
 | `/` | Search / filter |
-| `Enter` | Drill down |
+| `Enter` | Drill into children (Pods → Containers, HPA → workload, ...) **or** move focus to Panel 3 when the resource has nothing to drill into |
 | `e` | Edit resource via `kubectl edit` (asks for confirmation) |
 | `D` | Delete resource (asks for confirmation) |
 | `s` | Shell into container via `kubectl exec -it` (asks for confirmation) |
@@ -130,21 +139,22 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 
 | Key | Action |
 |---|---|
-| `h` / `l` | Switch tab (only from Panel 2 — on Panel 3 these belong to the Links chain) |
+| `h` / `l` | Switch tab (only from Panel 2 — on Panel 3 these belong to the Relatives chain) |
 | `=` / `-` | Expand / restore panel |
 | `G` | Jump to bottom (on Logs: also resumes follow-tail) |
 | `k` / `↑` / `u` / `gg` | Scroll up (on Logs: pauses follow-tail) |
 
-### Links tab (drill chain)
+### Relatives tab (drill chain)
 
-`Enter` and `l` push a frame onto the chain; `h` / `Esc` pop. The Links tab label shows depth as `Links ↳N` once you've drilled, and the panel border carries a `[b]readcrumbs` hint at the top-right.
+`Enter` and `l` push a frame onto the chain; `h` / `Esc` pop. `Space` jumps the table to whatever ref the cursor is on (confirms first). The tab label shows depth as `Relatives N` once you've drilled, and the panel border carries a `[b]readcrumbs` hint at the top-right.
 
 | Key | Action |
 |---|---|
 | `j` / `k` | Move cursor between drillable refs |
 | `Enter` / `l` | Drill into the cursor's ref (push frame) |
 | `h` / `Esc` | Back one level (pop frame). No-op at root |
-| `b` | Open the breadcrumb popup — `j`/`k` to pick a level, `Enter` to jump back, `Esc`/`q`/`b` to close |
+| `b` | Open the breadcrumb popup — `j`/`k` to pick a level, `Enter` to jump back, `Space` to switch panels to that level, `Esc`/`q`/`b` to close |
+| `Space` | Switch panels 1+2 to the cursor's ref (asks for confirmation). Drill chain resets afterwards |
 | `Y` | Open the YAML popup of the cursor's ref |
 
 ### Global
@@ -227,18 +237,22 @@ Drop a `theme.yaml` to customize colors. Only override what you need -- unspecif
 
 ```yaml
 sidebar:
-  background: ""           # empty = terminal transparent
+  background: ""                       # empty = terminal transparent
   foreground: "#cdd6f4"
-  selected_bg: "#45475a"
-  selected_fg: "#cdd6f4"
+  selected_bg: "#bac2de"               # focused-panel cursor bg (reverse-video)
+  selected_fg: "#1e1e2e"
+  unfocused_selected_bg: "#353648"     # other-panel "remembered" selection bg
+  unfocused_selected_fg: "#cdd6f4"
   category_fg: "#89b4fa"
 
 table:
   header_bg: "#313244"
   header_fg: "#89b4fa"
   row_fg: "#cdd6f4"
-  selected_row_bg: "#45475a"
-  selected_row_fg: "#cdd6f4"
+  selected_row_bg: "#bac2de"           # focused-panel cursor bg (reverse-video)
+  selected_row_fg: "#1e1e2e"
+  unfocused_selected_row_bg: "#353648" # other-panel "remembered" selection bg
+  unfocused_selected_row_fg: "#cdd6f4"
   alternating_bg: ""
 
 detail:
