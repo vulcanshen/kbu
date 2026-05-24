@@ -39,7 +39,7 @@ func TestBuildIngressLinks_BackendsAndTLS(t *testing.T) {
 			TLS: []networkingv1.IngressTLS{{SecretName: "tls-cert", Hosts: []string{"example.com"}}},
 		},
 	}
-	got := buildIngressLinks(ing)
+	got := buildIngressRelatives(ing)
 	if len(got) != 3 {
 		t.Fatalf("expected 3 sections (class, backends, tls), got %d", len(got))
 	}
@@ -64,7 +64,7 @@ func TestBuildHPALinks_ScaleTarget(t *testing.T) {
 			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{Kind: "Deployment", Name: "api"},
 		},
 	}
-	got := buildHPALinks(hpa)
+	got := buildHPARelatives(hpa)
 	if len(got) != 1 || len(got[0].Entries) != 1 {
 		t.Fatalf("want 1 section/1 entry, got %+v", got)
 	}
@@ -81,13 +81,13 @@ func TestBuildHPALinks_UnsupportedKind(t *testing.T) {
 		},
 	}
 	// ReplicaSet maps to Deployments via kindToResourceType, so this still produces a section.
-	got := buildHPALinks(hpa)
+	got := buildHPARelatives(hpa)
 	if len(got) != 1 {
 		t.Fatalf("ReplicaSet should map to Deployment link, got %d sections", len(got))
 	}
 
 	hpa.Spec.ScaleTargetRef.Kind = "WeirdKind"
-	if buildHPALinks(hpa) != nil {
+	if buildHPARelatives(hpa) != nil {
 		t.Errorf("unknown kind should return nil")
 	}
 }
@@ -99,7 +99,7 @@ func TestBuildPVCLinks_BoundAndStorageClass(t *testing.T) {
 			StorageClassName: ptrStr("ssd"),
 		},
 	}
-	got := buildPVCLinks(pvc)
+	got := buildPVCRelatives(pvc)
 	if len(got) != 1 || len(got[0].Entries) != 2 {
 		t.Fatalf("want 1 section/2 entries, got %+v", got)
 	}
@@ -113,8 +113,8 @@ func TestBuildPVCLinks_BoundAndStorageClass(t *testing.T) {
 
 func TestBuildPVCLinks_Unbound(t *testing.T) {
 	pvc := &corev1.PersistentVolumeClaim{}
-	if got := buildPVCLinks(pvc); got != nil {
-		t.Errorf("empty PVC should yield nil links, got %+v", got)
+	if got := buildPVCRelatives(pvc); got != nil {
+		t.Errorf("empty PVC should yield nil relatives, got %+v", got)
 	}
 }
 
@@ -127,7 +127,7 @@ func TestBuildCronJobLinks_ActiveJobs(t *testing.T) {
 			},
 		},
 	}
-	got := buildCronJobLinks(cj)
+	got := buildCronJobRelatives(cj)
 	if len(got) != 1 || len(got[0].Entries) != 2 {
 		t.Fatalf("want 2 active jobs, got %+v", got)
 	}
@@ -139,11 +139,11 @@ func TestBuildCronJobLinks_ActiveJobs(t *testing.T) {
 }
 
 func TestBuildWorkloadStaticLinks_SkipsDefaultSA(t *testing.T) {
-	got := buildWorkloadStaticLinks(nil, "default", "n")
+	got := buildWorkloadStaticRelatives(nil, "default", "n")
 	if got != nil {
 		t.Errorf("default SA should be skipped: %+v", got)
 	}
-	got = buildWorkloadStaticLinks(nil, "my-sa", "n")
+	got = buildWorkloadStaticRelatives(nil, "my-sa", "n")
 	if len(got) != 1 || len(got[0].Entries) != 1 || got[0].Entries[0].Ref.Type != ResourceServiceAccounts {
 		t.Errorf("non-default SA expected: %+v", got)
 	}
@@ -260,26 +260,26 @@ func TestEnrichLinks_ConfigMapConsumers(t *testing.T) {
 	cs := fake.NewSimpleClientset(cm, user, other)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceConfigMaps, ResourceItem{Raw: cm}, detail)
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("expected 1 consumer, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceConfigMaps, ResourceItem{Raw: cm}, detail)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("expected 1 consumer, got %+v", detail.Relatives)
 	}
-	if detail.Links[0].Entries[0].Ref.Name != "user-pod" {
-		t.Errorf("wrong consumer: %s", detail.Links[0].Entries[0].Ref.Name)
+	if detail.Relatives[0].Entries[0].Ref.Name != "user-pod" {
+		t.Errorf("wrong consumer: %s", detail.Relatives[0].Entries[0].Ref.Name)
 	}
 }
 
-func TestBuildEventLinks(t *testing.T) {
+func TestBuildEventRelatives(t *testing.T) {
 	e := &corev1.Event{
 		InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "p1", Namespace: "ns"},
 	}
-	got := buildEventLinks(e)
+	got := buildEventRelatives(e)
 	if len(got) != 1 || got[0].Entries[0].Ref.Type != ResourcePods {
 		t.Fatalf("expected Pod drill, got %+v", got)
 	}
 
 	unknown := &corev1.Event{InvolvedObject: corev1.ObjectReference{Kind: "CustomThing", Name: "x"}}
-	if buildEventLinks(unknown) != nil {
+	if buildEventRelatives(unknown) != nil {
 		t.Errorf("unknown kind should yield nil")
 	}
 }
@@ -291,7 +291,7 @@ func TestBuildPVLinks_ClaimAndStorageClass(t *testing.T) {
 			StorageClassName: "ssd",
 		},
 	}
-	got := buildPVLinks(pv)
+	got := buildPVRelatives(pv)
 	if len(got) != 1 || len(got[0].Entries) != 2 {
 		t.Fatalf("want 1 section/2 entries, got %+v", got)
 	}
@@ -315,7 +315,7 @@ func TestBuildEndpointSliceLinks_ServiceAndPods(t *testing.T) {
 			{TargetRef: &corev1.ObjectReference{Kind: "Node", Name: "n1"}},                     // not a Pod
 		},
 	}
-	got := buildEndpointSliceLinks(es)
+	got := buildEndpointSliceRelatives(es)
 	if len(got) != 2 {
 		t.Fatalf("want 2 sections (service, endpoints), got %d", len(got))
 	}
@@ -335,7 +335,7 @@ func TestBuildClusterRoleBindingLinks_RoleRefAndSubjects(t *testing.T) {
 			{Kind: "User", Name: "alice"},
 		},
 	}
-	got := buildClusterRoleBindingLinks(crb)
+	got := buildClusterRoleBindingRelatives(crb)
 	if len(got) != 2 {
 		t.Fatalf("want 2 sections, got %d", len(got))
 	}
@@ -355,7 +355,7 @@ func TestBuildRoleBindingLinks_RoleScopedToBindingNS(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a"},
 		RoleRef:    rbacv1.RoleRef{Kind: "Role", Name: "viewer"},
 	}
-	got := buildRoleBindingLinks(rb)
+	got := buildRoleBindingRelatives(rb)
 	if len(got) == 0 || got[0].Entries[0].Ref.Namespace != "team-a" {
 		t.Errorf("role ref should inherit binding namespace, got %+v", got[0].Entries[0].Ref)
 	}
@@ -364,19 +364,19 @@ func TestBuildRoleBindingLinks_RoleScopedToBindingNS(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a"},
 		RoleRef:    rbacv1.RoleRef{Kind: "ClusterRole", Name: "view"},
 	}
-	got2 := buildRoleBindingLinks(rb2)
+	got2 := buildRoleBindingRelatives(rb2)
 	if got2[0].Entries[0].Ref.Namespace != "" {
 		t.Errorf("ClusterRole ref should be cluster-scoped, got %+v", got2[0].Entries[0].Ref)
 	}
 }
 
-func TestBuildServiceAccountStaticLinks(t *testing.T) {
+func TestBuildServiceAccountStaticRelatives(t *testing.T) {
 	sa := &corev1.ServiceAccount{
 		ObjectMeta:       metav1.ObjectMeta{Name: "sa1", Namespace: "ns"},
 		Secrets:          []corev1.ObjectReference{{Name: "token-1"}},
 		ImagePullSecrets: []corev1.LocalObjectReference{{Name: "regcred"}},
 	}
-	got := buildServiceAccountStaticLinks(sa)
+	got := buildServiceAccountStaticRelatives(sa)
 	if len(got) != 2 {
 		t.Fatalf("want 2 sections, got %d", len(got))
 	}
@@ -402,12 +402,12 @@ func TestEnrichLinks_NodePods(t *testing.T) {
 	cs := fake.NewSimpleClientset(node, pod, other)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceNodes, ResourceItem{Raw: node}, detail)
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("expected 1 pod, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceNodes, ResourceItem{Raw: node}, detail)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("expected 1 pod, got %+v", detail.Relatives)
 	}
-	if detail.Links[0].Entries[0].Ref.Name != "p" {
-		t.Errorf("wrong pod: %s", detail.Links[0].Entries[0].Ref.Name)
+	if detail.Relatives[0].Entries[0].Ref.Name != "p" {
+		t.Errorf("wrong pod: %s", detail.Relatives[0].Entries[0].Ref.Name)
 	}
 }
 
@@ -424,9 +424,9 @@ func TestEnrichLinks_ServiceAccountConsumers_DefaultSADoesNotMatchEmpty(t *testi
 	cs := fake.NewSimpleClientset(sa, user, other)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceServiceAccounts, ResourceItem{Raw: sa}, detail)
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("want only 'user' pod, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceServiceAccounts, ResourceItem{Raw: sa}, detail)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("want only 'user' pod, got %+v", detail.Relatives)
 	}
 }
 
@@ -455,13 +455,13 @@ func TestEnrichLinks_ServiceAccountBindings(t *testing.T) {
 	detail := &ResourceDetail{}
 	enrichServiceAccountBindings(context.Background(), cs, ResourceItem{Raw: sa}, detail)
 
-	var rbSection, crbSection *LinkSection
-	for i := range detail.Links {
+	var rbSection, crbSection *RelativeSection
+	for i := range detail.Relatives {
 		switch {
-		case strings.HasPrefix(detail.Links[i].Title, "RoleBindings"):
-			rbSection = &detail.Links[i]
-		case strings.HasPrefix(detail.Links[i].Title, "ClusterRoleBindings"):
-			crbSection = &detail.Links[i]
+		case strings.HasPrefix(detail.Relatives[i].Title, "RoleBindings"):
+			rbSection = &detail.Relatives[i]
+		case strings.HasPrefix(detail.Relatives[i].Title, "ClusterRoleBindings"):
+			crbSection = &detail.Relatives[i]
 		}
 	}
 	if rbSection == nil || len(rbSection.Entries) != 1 || rbSection.Entries[0].Ref.Name != "rb-match" {
@@ -493,11 +493,11 @@ func TestEnrichLinks_ServiceAccountTokenSecrets(t *testing.T) {
 	detail := &ResourceDetail{}
 	enrichServiceAccountTokenSecrets(context.Background(), cs, ResourceItem{Raw: sa}, detail)
 
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("expected one Token Secrets section with one entry, got %+v", detail.Links)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("expected one Token Secrets section with one entry, got %+v", detail.Relatives)
 	}
-	if detail.Links[0].Entries[0].Ref.Name != "my-sa-token" {
-		t.Errorf("expected my-sa-token ref, got %+v", detail.Links[0].Entries[0])
+	if detail.Relatives[0].Entries[0].Ref.Name != "my-sa-token" {
+		t.Errorf("expected my-sa-token ref, got %+v", detail.Relatives[0].Entries[0])
 	}
 }
 
@@ -516,10 +516,10 @@ func TestEnrichLinks_SecretServiceAccount(t *testing.T) {
 	detail := &ResourceDetail{}
 	enrichSecretServiceAccount(context.Background(), cs, ResourceItem{Raw: secret}, detail)
 
-	if len(detail.Links) != 1 || detail.Links[0].Title != "ServiceAccount" {
-		t.Fatalf("expected one ServiceAccount section, got %+v", detail.Links)
+	if len(detail.Relatives) != 1 || detail.Relatives[0].Title != "ServiceAccount" {
+		t.Fatalf("expected one ServiceAccount section, got %+v", detail.Relatives)
 	}
-	entry := detail.Links[0].Entries[0]
+	entry := detail.Relatives[0].Entries[0]
 	if entry.Ref.Type != ResourceServiceAccounts || entry.Ref.Name != "my-sa" || entry.Ref.Namespace != "ns" {
 		t.Errorf("ref = %+v, want SA my-sa in ns", entry.Ref)
 	}
@@ -537,8 +537,8 @@ func TestEnrichLinks_SecretServiceAccount_AnnotationAbsent(t *testing.T) {
 	detail := &ResourceDetail{}
 	enrichSecretServiceAccount(context.Background(), cs, ResourceItem{Raw: secret}, detail)
 
-	if len(detail.Links) != 0 {
-		t.Errorf("expected no section for non-SA Secret, got %+v", detail.Links)
+	if len(detail.Relatives) != 0 {
+		t.Errorf("expected no section for non-SA Secret, got %+v", detail.Relatives)
 	}
 }
 
@@ -555,9 +555,9 @@ func TestEnrichLinks_PDBPods(t *testing.T) {
 	cs := fake.NewSimpleClientset(pdb, pod)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourcePodDisruptionBudgets, ResourceItem{Raw: pdb}, detail)
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("expected 1 pod section, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourcePodDisruptionBudgets, ResourceItem{Raw: pdb}, detail)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("expected 1 pod section, got %+v", detail.Relatives)
 	}
 }
 
@@ -574,9 +574,9 @@ func TestEnrichLinks_NetworkPolicyPods(t *testing.T) {
 	cs := fake.NewSimpleClientset(np, pod)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceNetworkPolicies, ResourceItem{Raw: np}, detail)
-	if len(detail.Links) != 1 || detail.Links[0].Entries[0].Ref.Name != "db-1" {
-		t.Fatalf("expected db-1 pod, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceNetworkPolicies, ResourceItem{Raw: np}, detail)
+	if len(detail.Relatives) != 1 || detail.Relatives[0].Entries[0].Ref.Name != "db-1" {
+		t.Fatalf("expected db-1 pod, got %+v", detail.Relatives)
 	}
 }
 
@@ -593,20 +593,20 @@ func TestEnrichLinks_RoleBindings(t *testing.T) {
 	cs := fake.NewSimpleClientset(role, rb, other)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceRoles, ResourceItem{Raw: role}, detail)
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("expected 1 binding, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceRoles, ResourceItem{Raw: role}, detail)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("expected 1 binding, got %+v", detail.Relatives)
 	}
-	if detail.Links[0].Entries[0].Ref.Name != "view-binding" {
-		t.Errorf("wrong binding: %s", detail.Links[0].Entries[0].Ref.Name)
+	if detail.Relatives[0].Entries[0].Ref.Name != "view-binding" {
+		t.Errorf("wrong binding: %s", detail.Relatives[0].Entries[0].Ref.Name)
 	}
 }
 
 func TestEnrichLinks_PodOwner_ResolvesReplicaSetToDeployment(t *testing.T) {
 	// Pod is owned by a ReplicaSet (Kubernetes auto-created); the RS in
-	// turn is owned by the Deployment "harbor-core". buildPodLinks
+	// turn is owned by the Deployment "harbor-core". buildPodRelatives
 	// initially sets Owner to Deployments/<RS-name> (wrong name);
-	// EnrichLinks must rewrite Name to the actual Deployment name.
+	// EnrichRelatives must rewrite Name to the actual Deployment name.
 	rs := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "harbor-core-847f66dfbc",
@@ -628,26 +628,26 @@ func TestEnrichLinks_PodOwner_ResolvesReplicaSetToDeployment(t *testing.T) {
 	cs := fake.NewSimpleClientset(rs, pod)
 
 	detail := &ResourceDetail{
-		PodLinks: &PodLinksData{
+		PodRelatives: &PodRelativesData{
 			Owner: &RefTarget{
 				Type:      ResourceDeployments,
-				Name:      "harbor-core-847f66dfbc", // wrong name set by buildPodLinks
+				Name:      "harbor-core-847f66dfbc", // wrong name set by buildPodRelatives
 				Namespace: "default",
 			},
 		},
 	}
-	EnrichLinks(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
+	EnrichRelatives(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
 
-	if detail.PodLinks.Owner.Name != "harbor-core" {
-		t.Errorf("Owner.Name should be resolved to 'harbor-core', got %q", detail.PodLinks.Owner.Name)
+	if detail.PodRelatives.Owner.Name != "harbor-core" {
+		t.Errorf("Owner.Name should be resolved to 'harbor-core', got %q", detail.PodRelatives.Owner.Name)
 	}
-	if detail.PodLinks.Owner.Type != ResourceDeployments {
-		t.Errorf("Owner.Type should stay Deployments, got %s", detail.PodLinks.Owner.Type)
+	if detail.PodRelatives.Owner.Type != ResourceDeployments {
+		t.Errorf("Owner.Type should stay Deployments, got %s", detail.PodRelatives.Owner.Type)
 	}
 }
 
 func TestEnrichLinks_PodOwner_NonReplicaSetUnchanged(t *testing.T) {
-	// DaemonSet-owned pods carry the DS name directly — EnrichLinks must
+	// DaemonSet-owned pods carry the DS name directly — EnrichRelatives must
 	// leave the Owner alone (already-correct).
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -661,14 +661,14 @@ func TestEnrichLinks_PodOwner_NonReplicaSetUnchanged(t *testing.T) {
 	cs := fake.NewSimpleClientset(pod)
 
 	detail := &ResourceDetail{
-		PodLinks: &PodLinksData{
+		PodRelatives: &PodRelativesData{
 			Owner: &RefTarget{Type: ResourceDaemonSets, Name: "node-exporter", Namespace: "monitoring"},
 		},
 	}
-	EnrichLinks(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
+	EnrichRelatives(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
 
-	if detail.PodLinks.Owner.Name != "node-exporter" {
-		t.Errorf("DaemonSet owner should be untouched, got %q", detail.PodLinks.Owner.Name)
+	if detail.PodRelatives.Owner.Name != "node-exporter" {
+		t.Errorf("DaemonSet owner should be untouched, got %q", detail.PodRelatives.Owner.Name)
 	}
 }
 
@@ -689,14 +689,14 @@ func TestEnrichLinks_PodOwner_RSLookupFailureLeavesOwnerUnchanged(t *testing.T) 
 	cs := fake.NewSimpleClientset(pod) // no RS object
 
 	detail := &ResourceDetail{
-		PodLinks: &PodLinksData{
+		PodRelatives: &PodRelativesData{
 			Owner: &RefTarget{Type: ResourceDeployments, Name: "missing-rs", Namespace: "default"},
 		},
 	}
-	EnrichLinks(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
+	EnrichRelatives(context.Background(), cs, ResourcePods, ResourceItem{Raw: pod}, detail)
 
-	if detail.PodLinks.Owner.Name != "missing-rs" {
-		t.Errorf("on lookup failure, Owner should be unchanged; got %q", detail.PodLinks.Owner.Name)
+	if detail.PodRelatives.Owner.Name != "missing-rs" {
+		t.Errorf("on lookup failure, Owner should be unchanged; got %q", detail.PodRelatives.Owner.Name)
 	}
 }
 
@@ -717,15 +717,15 @@ func TestEnrichLinks_ClusterRoleBindings(t *testing.T) {
 	cs := fake.NewSimpleClientset(cr, crb, rb, unrelated)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceClusterRoles, ResourceItem{Raw: cr}, detail)
-	if len(detail.Links) != 2 {
-		t.Fatalf("expected 2 sections (CRBs + RBs), got %d: %+v", len(detail.Links), detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceClusterRoles, ResourceItem{Raw: cr}, detail)
+	if len(detail.Relatives) != 2 {
+		t.Fatalf("expected 2 sections (CRBs + RBs), got %d: %+v", len(detail.Relatives), detail.Relatives)
 	}
-	if detail.Links[0].Entries[0].Ref.Name != "viewers" {
-		t.Errorf("CRB ref wrong: %+v", detail.Links[0].Entries[0])
+	if detail.Relatives[0].Entries[0].Ref.Name != "viewers" {
+		t.Errorf("CRB ref wrong: %+v", detail.Relatives[0].Entries[0])
 	}
-	if detail.Links[1].Entries[0].Ref.Name != "team-viewers" || detail.Links[1].Entries[0].Ref.Namespace != "team-a" {
-		t.Errorf("RB ref wrong: %+v", detail.Links[1].Entries[0])
+	if detail.Relatives[1].Entries[0].Ref.Name != "team-viewers" || detail.Relatives[1].Entries[0].Ref.Namespace != "team-a" {
+		t.Errorf("RB ref wrong: %+v", detail.Relatives[1].Entries[0])
 	}
 }
 
@@ -743,12 +743,12 @@ func TestEnrichLinks_StorageClassPVCs(t *testing.T) {
 	cs := fake.NewSimpleClientset(sc, user, other)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceStorageClasses, ResourceItem{Raw: sc}, detail)
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("expected 1 PVC, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceStorageClasses, ResourceItem{Raw: sc}, detail)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("expected 1 PVC, got %+v", detail.Relatives)
 	}
-	if detail.Links[0].Entries[0].Ref.Name != "data" {
-		t.Errorf("wrong PVC: %s", detail.Links[0].Entries[0].Ref.Name)
+	if detail.Relatives[0].Entries[0].Ref.Name != "data" {
+		t.Errorf("wrong PVC: %s", detail.Relatives[0].Entries[0].Ref.Name)
 	}
 }
 
@@ -765,12 +765,12 @@ func TestEnrichLinks_IngressClassIngresses(t *testing.T) {
 	cs := fake.NewSimpleClientset(ic, user, other)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceIngressClasses, ResourceItem{Raw: ic}, detail)
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("expected 1 ingress, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceIngressClasses, ResourceItem{Raw: ic}, detail)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("expected 1 ingress, got %+v", detail.Relatives)
 	}
-	if detail.Links[0].Entries[0].Ref.Name != "site" {
-		t.Errorf("wrong Ingress: %s", detail.Links[0].Entries[0].Ref.Name)
+	if detail.Relatives[0].Entries[0].Ref.Name != "site" {
+		t.Errorf("wrong Ingress: %s", detail.Relatives[0].Entries[0].Ref.Name)
 	}
 }
 
@@ -791,11 +791,11 @@ func TestEnrichLinks_WorkloadPods(t *testing.T) {
 	cs := fake.NewSimpleClientset(dep, pod)
 
 	detail := &ResourceDetail{}
-	EnrichLinks(context.Background(), cs, ResourceDeployments, ResourceItem{Raw: dep}, detail)
-	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
-		t.Fatalf("expected 1 pod section/1 entry, got %+v", detail.Links)
+	EnrichRelatives(context.Background(), cs, ResourceDeployments, ResourceItem{Raw: dep}, detail)
+	if len(detail.Relatives) != 1 || len(detail.Relatives[0].Entries) != 1 {
+		t.Fatalf("expected 1 pod section/1 entry, got %+v", detail.Relatives)
 	}
-	if detail.Links[0].Entries[0].Ref.Name != "api-1" {
-		t.Errorf("wrong pod: %s", detail.Links[0].Entries[0].Ref.Name)
+	if detail.Relatives[0].Entries[0].Ref.Name != "api-1" {
+		t.Errorf("wrong pod: %s", detail.Relatives[0].Entries[0].Ref.Name)
 	}
 }

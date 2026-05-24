@@ -9,26 +9,26 @@ import (
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
-// linkEntry is one row of the Links tab. Two flavours:
+// relativeEntry is one row of the Relatives tab. Two flavours:
 //   - section: header row (just a label, not selectable)
 //   - drill:   label + value with a ref (Enter fetches & opens YamlPopup)
 //
-// There's no "info-only selectable row" by design — Links is strictly a
+// There's no "info-only selectable row" by design — Relatives is strictly a
 // navigation hub. Pure-info content (labels, annotations, container image
 // strings, status fields) lives in the `Y` YAML popup. Cursor only lands on
 // rows that have somewhere to go.
-type linkEntry struct {
+type relativeEntry struct {
 	label   string
 	value   string
 	ref     *k8s.RefTarget
 	section bool
 }
 
-func (e linkEntry) isSelectable() bool { return !e.section && e.ref != nil }
+func (e relativeEntry) isSelectable() bool { return !e.section && e.ref != nil }
 
-// buildPodLinkEntries renders the Pod-specific Links list using the parsed
-// PodLinksData stashed in ResourceDetail. Returns an empty slice when no
-// PodLinks are present (e.g. detail still loading) — the renderer will then
+// buildPodRelativeEntries renders the Pod-specific Relatives list using the parsed
+// PodRelativesData stashed in ResourceDetail. Returns an empty slice when no
+// PodRelatives are present (e.g. detail still loading) — the renderer will then
 // show a placeholder hint.
 //
 // Strict refs only: Owner, Node, ServiceAccount, and Volumes whose source is
@@ -36,29 +36,29 @@ func (e linkEntry) isSelectable() bool { return !e.section && e.ref != nil }
 // sources (emptyDir / hostPath / projected / downwardAPI) and container
 // images are intentionally excluded — they're not navigable, so they belong
 // in the YAML popup, not here.
-func buildPodLinkEntries(detail k8s.ResourceDetail) []linkEntry {
-	if detail.PodLinks == nil {
+func buildPodRelativeEntries(detail k8s.ResourceDetail) []relativeEntry {
+	if detail.PodRelatives == nil {
 		return nil
 	}
-	po := detail.PodLinks
-	var entries []linkEntry
+	po := detail.PodRelatives
+	var entries []relativeEntry
 
 	if po.Owner != nil {
-		entries = append(entries, linkEntry{
+		entries = append(entries, relativeEntry{
 			label: "Owner",
 			value: ownerDisplay(*po.Owner),
 			ref:   po.Owner,
 		})
 	}
 	if po.Node != nil {
-		entries = append(entries, linkEntry{
+		entries = append(entries, relativeEntry{
 			label: "Node",
 			value: po.Node.Name,
 			ref:   po.Node,
 		})
 	}
 	if po.ServiceAccount != nil {
-		entries = append(entries, linkEntry{
+		entries = append(entries, relativeEntry{
 			label: "ServiceAccount",
 			value: po.ServiceAccount.Name,
 			ref:   po.ServiceAccount,
@@ -73,9 +73,9 @@ func buildPodLinkEntries(detail k8s.ResourceDetail) []linkEntry {
 		}
 	}
 	if len(drillVols) > 0 {
-		entries = append(entries, linkEntry{section: true, label: "Volumes"})
+		entries = append(entries, relativeEntry{section: true, label: "Volumes"})
 		for _, v := range drillVols {
-			entries = append(entries, linkEntry{
+			entries = append(entries, relativeEntry{
 				label: "  " + v.Name,
 				value: v.Kind + "/" + v.Ref.Name,
 				ref:   v.Ref,
@@ -86,21 +86,21 @@ func buildPodLinkEntries(detail k8s.ResourceDetail) []linkEntry {
 	return entries
 }
 
-// buildServiceLinkEntries renders Service Links: the set of Pods selected
+// buildServiceRelativeEntries renders Service Relatives: the set of Pods selected
 // by the Service's label selector. Each pod is drillable to its YAML.
 // Empty when the Service has no selector (ExternalName, headless without
 // selector) — the placeholder line takes over.
-func buildServiceLinkEntries(detail k8s.ResourceDetail) []linkEntry {
-	sl := detail.ServiceLinks
+func buildServiceRelativeEntries(detail k8s.ResourceDetail) []relativeEntry {
+	sl := detail.ServiceRelatives
 	if sl == nil || len(sl.Pods) == 0 {
 		return nil
 	}
-	entries := []linkEntry{
+	entries := []relativeEntry{
 		{section: true, label: fmt.Sprintf("Pods (%d)", len(sl.Pods))},
 	}
 	for i := range sl.Pods {
 		p := &sl.Pods[i]
-		entries = append(entries, linkEntry{
+		entries = append(entries, relativeEntry{
 			label: "  " + p.Name,
 			value: "pod",
 			ref:   p,
@@ -109,22 +109,22 @@ func buildServiceLinkEntries(detail k8s.ResourceDetail) []linkEntry {
 	return entries
 }
 
-// buildGenericLinkEntries converts the generic detail.Links payload
-// (populated by per-kind detailXxx + EnrichLinks in the k8s layer) into
-// linkEntry rows. Empty input returns nil so the renderer falls back to
-// the "no links — press Y" placeholder.
-func buildGenericLinkEntries(detail k8s.ResourceDetail) []linkEntry {
-	if len(detail.Links) == 0 {
+// buildGenericRelativeEntries converts the generic detail.Relatives payload
+// (populated by per-kind detailXxx + EnrichRelatives in the k8s layer) into
+// relativeEntry rows. Empty input returns nil so the renderer falls back to
+// the "no relatives — press Y" placeholder.
+func buildGenericRelativeEntries(detail k8s.ResourceDetail) []relativeEntry {
+	if len(detail.Relatives) == 0 {
 		return nil
 	}
-	var entries []linkEntry
-	for _, sec := range detail.Links {
+	var entries []relativeEntry
+	for _, sec := range detail.Relatives {
 		if sec.Title != "" {
-			entries = append(entries, linkEntry{section: true, label: sec.Title})
+			entries = append(entries, relativeEntry{section: true, label: sec.Title})
 		}
 		for i := range sec.Entries {
 			row := sec.Entries[i]
-			entries = append(entries, linkEntry{
+			entries = append(entries, relativeEntry{
 				label: row.Label,
 				value: row.Value,
 				ref:   row.Ref,
@@ -134,18 +134,18 @@ func buildGenericLinkEntries(detail k8s.ResourceDetail) []linkEntry {
 	return entries
 }
 
-// linksApplicable returns false for kinds where the Links tab has nothing
+// relativesApplicable returns false for kinds where the Relatives tab has nothing
 // meaningful to surface. Such kinds drop the tab entirely (handled by
 // SetResourceType) instead of showing an empty pane.
-func linksApplicable(rt k8s.ResourceType) bool {
+func relativesApplicable(rt k8s.ResourceType) bool {
 	return rt != k8s.ResourceNamespaces
 }
 
-// linksPlaceholderEmpty is shown when the active resource has no refs to
-// drill into right now. Every non-Namespace kind has a Links builder, so
+// relativesPlaceholderEmpty is shown when the active resource has no refs to
+// drill into right now. Every non-Namespace kind has a Relatives builder, so
 // this is the only placeholder users will see — empty means "this
 // instance genuinely has nothing", not "we haven't written the code yet."
-const linksPlaceholderEmpty = "(no links to show — press Y for full YAML)"
+const relativesPlaceholderEmpty = "(no relatives to show — press Y for full YAML)"
 
 func ownerDisplay(ref k8s.RefTarget) string {
 	// Short kind label + name. Use the registry display name when available,
@@ -157,17 +157,17 @@ func ownerDisplay(ref k8s.RefTarget) string {
 	return fmt.Sprintf("%s/%s", kind, ref.Name)
 }
 
-// renderLinkEntries turns the entry list into display lines, applying
+// renderRelativeEntries turns the entry list into display lines, applying
 // styles and adding a cursor highlight on `cursor`. The caller picks the
 // placeholder text shown when entries is empty — that's how we surface
-// "no links to show" vs "kind not yet supported" without renderLinkEntries
+// "no relatives to show" vs "kind not yet supported" without renderRelativeEntries
 // having to know about resource types. Returns:
 //   - lines:           rendered display lines
 //   - selectableIdxs:  indices into `entries` that the cursor can land on
 //   - cursorLine:      display-line index of the cursor row (-1 if none) —
 //     used by the caller to auto-scroll the viewport so
 //     the cursor stays visible
-func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Theme, placeholder string, focused bool) (lines []string, selectableIdxs []int, cursorLine int) {
+func renderRelativeEntries(entries []relativeEntry, cursor int, width int, t *theme.Theme, placeholder string, focused bool) (lines []string, selectableIdxs []int, cursorLine int) {
 	cursorLine = -1
 	labelStyle := t.DetailLabelStyle()
 	valueStyle := t.DetailValueStyle()
@@ -198,7 +198,7 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 		rowWidth = 20
 	}
 
-	arrowSuffix := " " + linksDrillArrow
+	arrowSuffix := " " + relativesDrillArrow
 
 	for i, e := range entries {
 		if e.section {
@@ -288,7 +288,7 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 				row = contIndent + valueStyle.Render(chunk)
 			}
 			if withArrow {
-				row += " " + drillStyle.Render(linksDrillArrow)
+				row += " " + drillStyle.Render(relativesDrillArrow)
 			}
 			lines = append(lines, row)
 		}
@@ -305,7 +305,7 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 // Returns (rendered lines, index of the first line within those lines —
 // used by the caller to set cursorLine = baseOffset + line0).
 func renderNestedDrillEntry(
-	e linkEntry, outerIndent string, rowWidth int, isCursor bool,
+	e relativeEntry, outerIndent string, rowWidth int, isCursor bool,
 	labelStyle, valueStyle, drillStyle, cursorRowStyle lipgloss.Style,
 	arrowSuffix string,
 ) (lines []string, line0 int) {
@@ -363,7 +363,7 @@ func renderNestedDrillEntry(
 		}
 		row := valueIndent + valueStyle.Render(chunk)
 		if withArrow {
-			row += " " + drillStyle.Render(linksDrillArrow)
+			row += " " + drillStyle.Render(relativesDrillArrow)
 		}
 		lines = append(lines, row)
 	}
@@ -373,7 +373,7 @@ func renderNestedDrillEntry(
 // nextSelectableCursor returns the next/prev cursor index that lands on a
 // selectable entry (skipping section headers + non-drillable rows).
 // dir=+1 → next, -1 → prev. Clamps at the ends of the list.
-func nextSelectableCursor(entries []linkEntry, cursor, dir int) int {
+func nextSelectableCursor(entries []relativeEntry, cursor, dir int) int {
 	if len(entries) == 0 {
 		return -1
 	}
@@ -387,7 +387,7 @@ func nextSelectableCursor(entries []linkEntry, cursor, dir int) int {
 
 // firstSelectableCursor returns the first selectable entry index, or -1 if
 // the list has no selectable entries.
-func firstSelectableCursor(entries []linkEntry) int {
+func firstSelectableCursor(entries []relativeEntry) int {
 	for i, e := range entries {
 		if e.isSelectable() {
 			return i

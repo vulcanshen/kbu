@@ -668,7 +668,7 @@ func (m TableModel) SelectedRow() int {
 // unfiltered allRows). When a search filter is active, the cursor jumps
 // to the matching position in the filtered view; if the target row is
 // filtered out, the cursor stays put. Out-of-range indices are ignored.
-// Used by the Links-tab "space — jump to this resource" flow once the
+// Used by the Relatives-tab "space — jump to this resource" flow once the
 // new resource type's items arrive.
 func (m *TableModel) SetCursor(originalIdx int) {
 	if originalIdx < 0 || originalIdx >= len(m.allRows) {

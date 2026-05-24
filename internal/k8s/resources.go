@@ -411,15 +411,15 @@ func detailPod(item ResourceItem) ResourceDetail {
 		d.Containers = append(d.Containers, containerDetail(c, statusMap, false))
 	}
 
-	d.PodLinks = buildPodLinks(p)
+	d.PodRelatives = buildPodRelatives(p)
 	return d
 }
 
-// buildPodLinks extracts the navigable references from a Pod for the
-// Links tab: immediate owner, node, service account, and image strings.
+// buildPodRelatives extracts the navigable references from a Pod for the
+// Relatives tab: immediate owner, node, service account, and image strings.
 // Cluster-scoped refs (Node) leave Namespace empty.
-func buildPodLinks(p *corev1.Pod) *PodLinksData {
-	o := &PodLinksData{}
+func buildPodRelatives(p *corev1.Pod) *PodRelativesData {
+	o := &PodRelativesData{}
 	if len(p.OwnerReferences) > 0 {
 		ref := p.OwnerReferences[0]
 		if rt, ok := kindToResourceType(ref.Kind); ok {
@@ -523,7 +523,7 @@ func kindToResourceType(kind string) (ResourceType, bool) {
 }
 
 // FetchResourceByRef fetches a single resource by its kind + name + namespace
-// and returns a ResourceItem ready for YAML rendering. Used by the Links
+// and returns a ResourceItem ready for YAML rendering. Used by the Relatives
 // tab's drill-to-popup flow.
 //
 // Returns the same ResourceItem shape the table would produce, with Raw set
@@ -893,7 +893,7 @@ func detailDeployment(item ResourceItem) ResourceDetail {
 			DetailField{Label: "Max Surge", Value: maxSurge},
 		)
 	}
-	d.Links = buildWorkloadStaticLinks(dep.OwnerReferences, dep.Spec.Template.Spec.ServiceAccountName, dep.Namespace)
+	d.Relatives = buildWorkloadStaticRelatives(dep.OwnerReferences, dep.Spec.Template.Spec.ServiceAccountName, dep.Namespace)
 	return d
 }
 
@@ -937,7 +937,7 @@ func detailDaemonSet(item ResourceItem) ResourceDetail {
 		{Label: "Available", Value: fmt.Sprintf("%d", ds.Status.NumberAvailable)},
 		{Label: "Update Strategy", Value: string(ds.Spec.UpdateStrategy.Type)},
 	}
-	d.Links = buildWorkloadStaticLinks(ds.OwnerReferences, ds.Spec.Template.Spec.ServiceAccountName, ds.Namespace)
+	d.Relatives = buildWorkloadStaticRelatives(ds.OwnerReferences, ds.Spec.Template.Spec.ServiceAccountName, ds.Namespace)
 	return d
 }
 
@@ -986,10 +986,10 @@ func detailStatefulSet(item ResourceItem) ResourceDetail {
 		{Label: "Pod Management Policy", Value: string(ss.Spec.PodManagementPolicy)},
 		{Label: "Service Name", Value: ss.Spec.ServiceName},
 	}
-	d.Links = buildWorkloadStaticLinks(ss.OwnerReferences, ss.Spec.Template.Spec.ServiceAccountName, ss.Namespace)
+	d.Relatives = buildWorkloadStaticRelatives(ss.OwnerReferences, ss.Spec.Template.Spec.ServiceAccountName, ss.Namespace)
 	if ss.Spec.ServiceName != "" {
-		d.Links = append(d.Links, LinkSection{
-			Entries: []LinkRow{{
+		d.Relatives = append(d.Relatives, RelativeSection{
+			Entries: []RelativeRow{{
 				Label: "Service",
 				Value: ss.Spec.ServiceName,
 				Ref:   &RefTarget{Type: ResourceServices, Name: ss.Spec.ServiceName, Namespace: ss.Namespace},
@@ -1078,7 +1078,7 @@ func detailJob(item ResourceItem) ResourceDetail {
 	if j.Spec.BackoffLimit != nil {
 		d.Fields = append(d.Fields, DetailField{Label: "Backoff Limit", Value: fmt.Sprintf("%d", *j.Spec.BackoffLimit)})
 	}
-	d.Links = buildWorkloadStaticLinks(j.OwnerReferences, j.Spec.Template.Spec.ServiceAccountName, j.Namespace)
+	d.Relatives = buildWorkloadStaticRelatives(j.OwnerReferences, j.Spec.Template.Spec.ServiceAccountName, j.Namespace)
 	return d
 }
 
@@ -1143,7 +1143,7 @@ func detailCronJob(item ResourceItem) ResourceDetail {
 	if cj.Spec.FailedJobsHistoryLimit != nil {
 		d.Fields = append(d.Fields, DetailField{Label: "Failed History Limit", Value: fmt.Sprintf("%d", *cj.Spec.FailedJobsHistoryLimit)})
 	}
-	d.Links = buildCronJobLinks(cj)
+	d.Relatives = buildCronJobRelatives(cj)
 	return d
 }
 
@@ -1209,18 +1209,18 @@ func servicePorts(svc *corev1.Service) string {
 	return strings.Join(ports, ",")
 }
 
-// EnrichLinks fills in kind-specific Links data that requires an API call
+// EnrichRelatives fills in kind-specific Relatives data that requires an API call
 // (selector → pod resolution, owner chains, endpoint slices, ...). The
 // synchronous Detailer can't do this because it has no clientset; the
-// caller (ui.fetchResourceDetail) invokes EnrichLinks after the detailer
-// returns. Quiet on error — the Links tab simply shows fewer entries.
-func EnrichLinks(ctx context.Context, cs kubernetes.Interface, rt ResourceType, item ResourceItem, detail *ResourceDetail) {
+// caller (ui.fetchResourceDetail) invokes EnrichRelatives after the detailer
+// returns. Quiet on error — the Relatives tab simply shows fewer entries.
+func EnrichRelatives(ctx context.Context, cs kubernetes.Interface, rt ResourceType, item ResourceItem, detail *ResourceDetail) {
 	switch rt {
 	case ResourcePods:
 		enrichPodOwner(ctx, cs, item, detail)
 	case ResourceServices:
 		if svc, ok := item.Raw.(*corev1.Service); ok {
-			detail.ServiceLinks = serviceLinksFor(ctx, cs, svc)
+			detail.ServiceRelatives = serviceRelativesFor(ctx, cs, svc)
 		}
 	case ResourceDeployments, ResourceStatefulSets, ResourceDaemonSets, ResourceJobs:
 		enrichWorkloadPods(ctx, cs, item, detail)
@@ -1252,11 +1252,11 @@ func EnrichLinks(ctx context.Context, cs kubernetes.Interface, rt ResourceType, 
 	}
 }
 
-// serviceLinksFor resolves a Service's label selector to the list of Pods
+// serviceRelativesFor resolves a Service's label selector to the list of Pods
 // it routes to. Each Pod becomes a drillable RefTarget. Empty selector
 // (ExternalName / headless without selector) returns an empty slice.
-func serviceLinksFor(ctx context.Context, cs kubernetes.Interface, svc *corev1.Service) *ServiceLinksData {
-	out := &ServiceLinksData{}
+func serviceRelativesFor(ctx context.Context, cs kubernetes.Interface, svc *corev1.Service) *ServiceRelativesData {
+	out := &ServiceRelativesData{}
 	if len(svc.Spec.Selector) == 0 {
 		return out
 	}
@@ -1393,7 +1393,7 @@ func detailIngress(item ResourceItem) ResourceDetail {
 			}
 		}
 	}
-	d.Links = buildIngressLinks(ing)
+	d.Relatives = buildIngressRelatives(ing)
 	return d
 }
 
@@ -1541,7 +1541,7 @@ func detailEvent(item ResourceItem) ResourceDetail {
 		{Label: "First Seen", Value: formatAge(e.FirstTimestamp.Time)},
 		{Label: "Last Seen", Value: formatAge(eventTime(*e))},
 	}
-	d.Links = buildEventLinks(e)
+	d.Relatives = buildEventRelatives(e)
 	return d
 }
 
@@ -1619,7 +1619,7 @@ func detailClusterRoleBinding(item ResourceItem) ResourceDetail {
 			Value: formatSubject(s),
 		})
 	}
-	d.Links = buildClusterRoleBindingLinks(crb)
+	d.Relatives = buildClusterRoleBindingRelatives(crb)
 	return d
 }
 
@@ -1699,7 +1699,7 @@ func detailRoleBinding(item ResourceItem) ResourceDetail {
 			Value: formatSubject(s),
 		})
 	}
-	d.Links = buildRoleBindingLinks(rb)
+	d.Relatives = buildRoleBindingRelatives(rb)
 	return d
 }
 
@@ -1791,7 +1791,7 @@ func detailPersistentVolume(item ResourceItem) ResourceDetail {
 	if pv.Status.Reason != "" {
 		d.Fields = append(d.Fields, DetailField{Label: "Reason", Value: pv.Status.Reason})
 	}
-	d.Links = buildPVLinks(pv)
+	d.Relatives = buildPVRelatives(pv)
 	return d
 }
 
@@ -1853,7 +1853,7 @@ func detailPersistentVolumeClaim(item ResourceItem) ResourceDetail {
 		{Label: "AccessModes", Value: shortAccessModes(pvc.Status.AccessModes)},
 		{Label: "StorageClass", Value: sc},
 	}
-	d.Links = buildPVCLinks(pvc)
+	d.Relatives = buildPVCRelatives(pvc)
 	return d
 }
 
@@ -2031,7 +2031,7 @@ func detailHorizontalPodAutoscaler(item ResourceItem) ResourceDetail {
 		{Label: "Targets", Value: hpaTargetSummary(hpa)},
 		{Label: "Metrics", Value: fmt.Sprintf("%d", len(hpa.Spec.Metrics))},
 	}
-	d.Links = buildHPALinks(hpa)
+	d.Relatives = buildHPARelatives(hpa)
 	return d
 }
 
@@ -2266,7 +2266,7 @@ func detailEndpointSlice(item ResourceItem) ResourceDetail {
 		{Label: "Endpoints", Value: fmt.Sprintf("%d", len(es.Endpoints))},
 		{Label: "Addresses", Value: strings.Join(endpoints, ",")},
 	}
-	d.Links = buildEndpointSliceLinks(es)
+	d.Relatives = buildEndpointSliceRelatives(es)
 	return d
 }
 
@@ -2444,7 +2444,7 @@ func detailServiceAccount(item ResourceItem) ResourceDetail {
 		{Label: "ImagePullSecrets", Value: fmt.Sprintf("%d", len(sa.ImagePullSecrets))},
 		{Label: "AutomountToken", Value: automount},
 	}
-	d.Links = buildServiceAccountStaticLinks(sa)
+	d.Relatives = buildServiceAccountStaticRelatives(sa)
 	return d
 }
 

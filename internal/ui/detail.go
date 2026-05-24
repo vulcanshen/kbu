@@ -58,25 +58,25 @@ type DetailModel struct {
 	refetching   bool // true while fetchResourceDetail is in-flight; drives spinner
 	spinnerFrame int
 
-	// Links tab state: entries are the logical rows (drillable + info +
-	// section headers); linkCursor is the index of the currently-selected
+	// Relatives tab state: entries are the logical rows (drillable + info +
+	// section headers); relativeCursor is the index of the currently-selected
 	// entry within the *current level*. Cursor only lands on selectable
 	// entries (sections skipped).
-	linkEntries    []linkEntry
-	linkCursor     int
-	linkCursorLine int // display-line index of cursor row; -1 when none
+	relativeEntries    []relativeEntry
+	relativeCursor     int
+	relativeCursorLine int // display-line index of cursor row; -1 when none
 
 	// drillStack is the chain of resources the user has drilled into via
-	// the Links tab (level 2+). Empty = at level 1 (root = the
+	// the Relatives tab (level 2+). Empty = at level 1 (root = the
 	// table-selected resource, whose data is m.detail). When non-empty,
-	// rebuildLinkEntries reads from drillStack[top].detail instead of
-	// m.detail. rootCursor preserves m.linkCursor at level 1 so it can be
+	// rebuildRelativeEntries reads from drillStack[top].detail instead of
+	// m.detail. rootCursor preserves m.relativeCursor at level 1 so it can be
 	// restored when popping back to root.
 	drillStack []drillFrame
 	rootCursor int
 }
 
-// drillFrame represents one level on the Links-tab drill chain. ref is the
+// drillFrame represents one level on the Relatives-tab drill chain. ref is the
 // (kind, ns, name) identity used for cycle detection; item carries the
 // fetched resource (UID + Raw for YAML); detail is the per-level link
 // payload; cursor is the link cursor remembered for this level when the
@@ -146,10 +146,10 @@ func (m *DetailModel) ClearSearch() {
 // HasActiveFilter returns true if a search filter is active.
 func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
 
-// CurrentLevelYAML returns the YAML for the Links-tab drill level the
+// CurrentLevelYAML returns the YAML for the Relatives-tab drill level the
 // user is currently viewing — at depth 1 that's the table-selected
 // resource's YAML, at deeper levels it's the YAML of the resource the
-// user has drilled into. Used as the Y-key fallback on the Links tab
+// user has drilled into. Used as the Y-key fallback on the Relatives tab
 // when the cursor isn't on a drillable entry.
 func (m DetailModel) CurrentLevelYAML() string {
 	if len(m.drillStack) == 0 {
@@ -163,16 +163,16 @@ func (m DetailModel) CurrentLevelYAML() string {
 // open the YAML popup.
 func (m DetailModel) YAMLContent() string { return m.detail.YAML }
 
-// NewDetailModel creates a new detail model with no data and the Links tab
+// NewDetailModel creates a new detail model with no data and the Relatives tab
 // active. SetResourceType refines the tab list (and reorders for Pod/Deploy).
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{
-		activeTab:   DetailTabInfo,
-		tabs:        []string{"Relatives", "Events"},
-		theme:       t,
-		maxLogLines: 1000,
-		followTail:  true,
-		linkCursor:  -1,
+		activeTab:      DetailTabInfo,
+		tabs:           []string{"Relatives", "Events"},
+		theme:          t,
+		maxLogLines:    1000,
+		followTail:     true,
+		relativeCursor: -1,
 	}
 }
 
@@ -215,11 +215,11 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	}
 
-	// Links tab uses j/k for cursor navigation (not line scroll) and Enter
+	// Relatives tab uses j/k for cursor navigation (not line scroll) and Enter
 	// to drill into the highlighted ref. Other tabs scroll by line — fall
 	// through to the standard logic.
 	if m.ActiveTabName() == "Relatives" {
-		if newModel, handled, cmd := m.handleLinkKey(msg); handled {
+		if newModel, handled, cmd := m.handleRelativeKey(msg); handled {
 			return newModel, cmd
 		}
 	}
@@ -292,18 +292,18 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 	return m, nil
 }
 
-// handleLinkKey intercepts the keys with Links-tab-specific semantics:
+// handleRelativeKey intercepts the keys with Relatives-tab-specific semantics:
 //   - j/k (or arrow keys): move the cursor between drillable entries,
 //     auto-scrolling the viewport so the cursor stays visible.
 //   - Enter / l: drill into the highlighted ref (push a frame onto the
-//     Links chain — emits LinkPushMsg, AppModel handles cycle check + fetch).
+//     Relatives chain — emits RelativePushMsg, AppModel handles cycle check + fetch).
 //   - h / Esc: pop one level off the chain. No-op at root level.
 //   - b: open the breadcrumb popup so the user can jump back to any
 //     ancestor level. No-op at root (nothing to navigate).
 //
 // Returns handled=false to let the caller fall back to the generic per-line
 // scroll handlers for everything else.
-func (m DetailModel) handleLinkKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) {
+func (m DetailModel) handleRelativeKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyRunes:
 		if len(msg.Runes) != 1 {
@@ -311,61 +311,61 @@ func (m DetailModel) handleLinkKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) 
 		}
 		switch msg.Runes[0] {
 		case 'j':
-			m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, +1)
+			m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, +1)
 			m.buildContentLines()
-			m = m.scrollLinkCursorIntoView()
+			m = m.scrollRelativeCursorIntoView()
 			return m, true, nil
 		case 'k':
-			m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, -1)
+			m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, -1)
 			m.buildContentLines()
-			m = m.scrollLinkCursorIntoView()
+			m = m.scrollRelativeCursorIntoView()
 			return m, true, nil
 		case 'l':
-			return m.dispatchLinkPush()
+			return m.dispatchRelativePush()
 		case 'h':
-			return m.dispatchLinkPop()
+			return m.dispatchRelativePop()
 		case 'b':
 			if m.Depth() <= 1 {
 				return m, true, nil
 			}
-			return m, true, func() tea.Msg { return LinkBreadcrumbMsg{} }
+			return m, true, func() tea.Msg { return RelativeBreadcrumbMsg{} }
 		}
 	case tea.KeyDown:
-		m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, +1)
+		m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, +1)
 		m.buildContentLines()
-		m = m.scrollLinkCursorIntoView()
+		m = m.scrollRelativeCursorIntoView()
 		return m, true, nil
 	case tea.KeyUp:
-		m.linkCursor = nextSelectableCursor(m.linkEntries, m.linkCursor, -1)
+		m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, -1)
 		m.buildContentLines()
-		m = m.scrollLinkCursorIntoView()
+		m = m.scrollRelativeCursorIntoView()
 		return m, true, nil
 	case tea.KeyEnter:
-		return m.dispatchLinkPush()
+		return m.dispatchRelativePush()
 	case tea.KeyEscape:
 		// Esc only handled here when we're drilled in; at root, fall
 		// through so the generic Esc handler (search-clear) can run.
 		if m.Depth() > 1 {
-			return m.dispatchLinkPop()
+			return m.dispatchRelativePop()
 		}
 	}
 	return m, false, nil
 }
 
-// dispatchLinkPush emits LinkPushMsg for the cursor-pointed entry. If
+// dispatchRelativePush emits RelativePushMsg for the cursor-pointed entry. If
 // the cursor isn't on a drillable row, it's a no-op (handled=true so the
 // caller doesn't double-process the key).
-func (m DetailModel) dispatchLinkPush() (DetailModel, bool, tea.Cmd) {
-	ref := m.SelectedLinkRef()
+func (m DetailModel) dispatchRelativePush() (DetailModel, bool, tea.Cmd) {
+	ref := m.SelectedRelativeRef()
 	if ref == nil {
 		return m, true, nil
 	}
 	target := *ref
-	return m, true, func() tea.Msg { return LinkPushMsg{Ref: target} }
+	return m, true, func() tea.Msg { return RelativePushMsg{Ref: target} }
 }
 
-// dispatchLinkPop pops one level off the chain. No-op at root.
-func (m DetailModel) dispatchLinkPop() (DetailModel, bool, tea.Cmd) {
+// dispatchRelativePop pops one level off the chain. No-op at root.
+func (m DetailModel) dispatchRelativePop() (DetailModel, bool, tea.Cmd) {
 	if m.Depth() <= 1 {
 		return m, true, nil
 	}
@@ -373,22 +373,22 @@ func (m DetailModel) dispatchLinkPop() (DetailModel, bool, tea.Cmd) {
 	return m, true, nil
 }
 
-// scrollLinkCursorIntoView nudges scrollOffset so the cursor row is
+// scrollRelativeCursorIntoView nudges scrollOffset so the cursor row is
 // inside the visible viewport. Mirrors the standard "follow cursor" behavior
 // of any selectable list — without it, j/k can move the cursor past the
 // bottom of the panel and the user has to manually scroll to see it.
-func (m DetailModel) scrollLinkCursorIntoView() DetailModel {
-	if m.linkCursorLine < 0 {
+func (m DetailModel) scrollRelativeCursorIntoView() DetailModel {
+	if m.relativeCursorLine < 0 {
 		return m
 	}
 	h := m.contentHeight()
 	if h <= 0 {
 		return m
 	}
-	if m.linkCursorLine < m.scrollOffset {
-		m.scrollOffset = m.linkCursorLine
-	} else if m.linkCursorLine >= m.scrollOffset+h {
-		m.scrollOffset = m.linkCursorLine - h + 1
+	if m.relativeCursorLine < m.scrollOffset {
+		m.scrollOffset = m.relativeCursorLine
+	} else if m.relativeCursorLine >= m.scrollOffset+h {
+		m.scrollOffset = m.relativeCursorLine - h + 1
 	}
 	if m.scrollOffset < 0 {
 		m.scrollOffset = 0
@@ -582,7 +582,7 @@ func (m *DetailModel) SetSize(width, height int) {
 }
 
 // SetFocused sets whether the detail panel is focused. Rebuilds the
-// pre-rendered Links content so the cursor row picks the focused vs
+// pre-rendered Relatives content so the cursor row picks the focused vs
 // unfocused style — without this, the panel would keep its previous
 // highlight color until the next data refresh.
 func (m *DetailModel) SetFocused(focused bool) {
@@ -626,7 +626,7 @@ func (m DetailModel) ScrollInfo() *ScrollInfo {
 
 // SetDetail updates the detail data and rebuilds content lines.
 //
-// Does NOT touch the Links drill chain — background watcher refreshes
+// Does NOT touch the Relatives drill chain — background watcher refreshes
 // keep dispatching detail fetches for the still-selected root row, and a
 // stale-arriving ResourceDetailMsg would otherwise wipe the user's in-
 // flight drill state and snap them back to level 1. The row-change path
@@ -641,14 +641,14 @@ func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventIte
 	m.buildContentLines()
 }
 
-// PushDrillFrame appends a level to the Links drill chain — used after a
+// PushDrillFrame appends a level to the Relatives drill chain — used after a
 // successful drill fetch (l/Enter on a drillable entry). Saves the
 // outgoing level's cursor so back-navigation restores it.
 func (m *DetailModel) PushDrillFrame(ref k8s.RefTarget, item k8s.ResourceItem, detail k8s.ResourceDetail) {
 	if len(m.drillStack) == 0 {
-		m.rootCursor = m.linkCursor
+		m.rootCursor = m.relativeCursor
 	} else {
-		m.drillStack[len(m.drillStack)-1].cursor = m.linkCursor
+		m.drillStack[len(m.drillStack)-1].cursor = m.relativeCursor
 	}
 	m.drillStack = append(m.drillStack, drillFrame{
 		ref:    ref,
@@ -656,14 +656,14 @@ func (m *DetailModel) PushDrillFrame(ref k8s.RefTarget, item k8s.ResourceItem, d
 		detail: detail,
 		cursor: -1,
 	})
-	m.linkCursor = -1
+	m.relativeCursor = -1
 	m.scrollOffset = 0
 	m.refetching = false
 	m.buildContentLines()
 }
 
 // PopDrillFrame removes the top of the drill chain — used by h/Esc on a
-// deeper level. No-op at level 1. Restores the linkCursor to whatever it
+// deeper level. No-op at level 1. Restores the relativeCursor to whatever it
 // was on the level we're returning to.
 func (m *DetailModel) PopDrillFrame() {
 	if len(m.drillStack) == 0 {
@@ -671,9 +671,9 @@ func (m *DetailModel) PopDrillFrame() {
 	}
 	m.drillStack = m.drillStack[:len(m.drillStack)-1]
 	if len(m.drillStack) == 0 {
-		m.linkCursor = m.rootCursor
+		m.relativeCursor = m.rootCursor
 	} else {
-		m.linkCursor = m.drillStack[len(m.drillStack)-1].cursor
+		m.relativeCursor = m.drillStack[len(m.drillStack)-1].cursor
 	}
 	m.scrollOffset = 0
 	m.buildContentLines()
@@ -699,13 +699,13 @@ func (m *DetailModel) ResetDrillStack() {
 		return
 	}
 	m.drillStack = nil
-	m.linkCursor = m.rootCursor
+	m.relativeCursor = m.rootCursor
 	m.scrollOffset = 0
 	m.buildContentLines()
 }
 
 // TabTitle returns the tab bar string for embedding in the panel border.
-// Adds a `(N)` suffix to the Links tab when the user has drilled deeper
+// Adds a `(N)` suffix to the Relatives tab when the user has drilled deeper
 // — N is the 1-indexed level (1=root, 2=first drill, ...). The
 // breadcrumb popup (`i` key) is the only way to see the full chain;
 // this number is the at-a-glance hint that you're not at root.
@@ -724,7 +724,7 @@ func (m DetailModel) TabTitle() string {
 
 // ActiveTabTitle returns the active tab name with a state marker suffix when
 // applicable — currently used to surface follow-tail state on the Logs tab
-// and the drill level on the Links tab. Embed this in Panel 3's border title
+// and the drill level on the Relatives tab. Embed this in Panel 3's border title
 // (which scopes to the active tab only), rather than the full TabTitle bar
 // on Panel 2.
 func (m DetailModel) ActiveTabTitle() string {
@@ -736,13 +736,13 @@ func (m DetailModel) ActiveTabTitle() string {
 }
 
 // tabLabel returns the per-tab label as it should appear in the tab bar,
-// including the drill-level suffix for the Links tab. The chain glyph
+// including the drill-level suffix for the Relatives tab. The chain glyph
 // matches the per-row drill arrow + the breadcrumb middle markers so
 // the three surfaces speak the same vocabulary — "you've gone N levels
 // down this chain."
 func (m DetailModel) tabLabel(name string) string {
 	if name == "Relatives" && m.Depth() > 1 {
-		return fmt.Sprintf("Relatives %s%d", linksDrillArrow, m.Depth())
+		return fmt.Sprintf("Relatives %s%d", relativesDrillArrow, m.Depth())
 	}
 	return name
 }
@@ -750,7 +750,7 @@ func (m DetailModel) tabLabel(name string) string {
 // BorderTopRightHint returns a short string to render at the top-right
 // of panel 3's border, or "" when no hint applies. Currently used to
 // surface the breadcrumb key when the user is in a drill chain on the
-// Links tab — discoverable affordance for "press b to see where you've
+// Relatives tab — discoverable affordance for "press b to see where you've
 // been". The chosen format keeps the hotkey in brackets so the user
 // can pattern-match it against `b` in the help screen.
 func (m DetailModel) BorderTopRightHint() string {
@@ -760,7 +760,7 @@ func (m DetailModel) BorderTopRightHint() string {
 	return ""
 }
 
-// ClearDetail clears the detail data and tears down the Links drill chain.
+// ClearDetail clears the detail data and tears down the Relatives drill chain.
 // Used by namespace/context switches, which invalidate every drilled-into
 // resource (different cluster scope, no guarantee the chain still exists).
 func (m *DetailModel) ClearDetail() {
@@ -772,7 +772,7 @@ func (m *DetailModel) ClearDetail() {
 	m.logLines = nil
 	m.drillStack = nil
 	m.rootCursor = -1
-	m.linkCursor = -1
+	m.relativeCursor = -1
 }
 
 // SetResourceType sets the current resource type and adjusts available tabs.
@@ -784,7 +784,7 @@ func (m *DetailModel) ClearDetail() {
 //
 //   - Pods / Deployments: Relatives → Logs → Events
 //   - Events:             Relatives alone
-//   - !linksApplicable:   Events only (Namespace — Relatives tab dropped)
+//   - !relativesApplicable:   Events only (Namespace — Relatives tab dropped)
 //   - everything else:    Relatives → Events
 //
 // Pod gets the structured Owner/Node/SA/Volumes Relatives; other kinds
@@ -797,14 +797,14 @@ func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 		m.tabs = []string{"Relatives", "Logs", "Events"}
 	case rt == k8s.ResourceEvents:
 		m.tabs = []string{"Relatives"}
-	case !linksApplicable(rt):
+	case !relativesApplicable(rt):
 		m.tabs = []string{"Events"}
 	default:
 		m.tabs = []string{"Relatives", "Events"}
 	}
 	m.activeTab = 0
 	m.scrollOffset = 0
-	m.linkCursor = -1
+	m.relativeCursor = -1
 	m.buildContentLines()
 }
 
@@ -850,10 +850,10 @@ func (m *DetailModel) AppendLogLine(pod, container, text string) {
 func (m *DetailModel) buildContentLines() {
 	switch m.ActiveTabName() {
 	case "Relatives":
-		m.rebuildLinkEntries()
-		lines, _, cursorLine := renderLinkEntries(m.linkEntries, m.linkCursor, m.width, m.theme, linksPlaceholderEmpty, m.focused)
+		m.rebuildRelativeEntries()
+		lines, _, cursorLine := renderRelativeEntries(m.relativeEntries, m.relativeCursor, m.width, m.theme, relativesPlaceholderEmpty, m.focused)
 		m.contentLines = lines
-		m.linkCursorLine = cursorLine
+		m.relativeCursorLine = cursorLine
 	case "Logs":
 		m.contentLines = m.buildLogLines()
 	case "Events":
@@ -884,14 +884,14 @@ func (m DetailModel) DrillChain() []k8s.RefTarget {
 }
 
 // CurrentLevelItem returns the ResourceItem of the level currently
-// displayed on the Links tab. At root (depth 1) the zero value is
+// displayed on the Relatives tab. At root (depth 1) the zero value is
 // returned — the caller (AppModel) substitutes the table-selected item.
 func (m DetailModel) CurrentLevelItem() k8s.ResourceItem {
 	return m.currentLevelItem()
 }
 
 // CurrentLevelRef returns the (kind, ns, name) identity of the resource
-// the user is currently viewing on the Links tab. At root it's the
+// the user is currently viewing on the Relatives tab. At root it's the
 // table-selected resource (same as RootRef); at deeper levels it's the
 // drilled-into resource. Used by the "space — jump to this resource"
 // flow so the caller doesn't have to assemble the ref from CurrentLevelKind
@@ -903,13 +903,13 @@ func (m DetailModel) CurrentLevelRef() k8s.RefTarget {
 	return m.drillStack[len(m.drillStack)-1].ref
 }
 
-// Depth returns the current Links-tab drill level. Level 1 = root
+// Depth returns the current Relatives-tab drill level. Level 1 = root
 // (table-selected resource); level 2+ = drilled in. Always >= 1 when the
 // panel has data.
 func (m DetailModel) Depth() int { return 1 + len(m.drillStack) }
 
 // currentLevelDetail returns the ResourceDetail for the level the user is
-// currently viewing on the Links tab.
+// currently viewing on the Relatives tab.
 func (m DetailModel) currentLevelDetail() k8s.ResourceDetail {
 	if len(m.drillStack) == 0 {
 		return m.detail
@@ -918,7 +918,7 @@ func (m DetailModel) currentLevelDetail() k8s.ResourceDetail {
 }
 
 // currentLevelKind returns the ResourceType for the level the user is
-// currently viewing on the Links tab. At level 1 this is m.resourceType;
+// currently viewing on the Relatives tab. At level 1 this is m.resourceType;
 // at deeper levels it's the drilled-into resource's kind.
 func (m DetailModel) currentLevelKind() k8s.ResourceType {
 	if len(m.drillStack) == 0 {
@@ -938,41 +938,41 @@ func (m DetailModel) currentLevelItem() k8s.ResourceItem {
 	return m.drillStack[len(m.drillStack)-1].item
 }
 
-// rebuildLinkEntries refreshes m.linkEntries based on the current
+// rebuildRelativeEntries refreshes m.relativeEntries based on the current
 // resource type + detail data, and re-clamps the cursor to the first
 // selectable entry when out of bounds.
-func (m *DetailModel) rebuildLinkEntries() {
+func (m *DetailModel) rebuildRelativeEntries() {
 	if !m.hasData {
-		m.linkEntries = nil
-		m.linkCursor = -1
+		m.relativeEntries = nil
+		m.relativeCursor = -1
 		return
 	}
 	kind := m.currentLevelKind()
 	detail := m.currentLevelDetail()
 	switch kind {
 	case k8s.ResourcePods:
-		m.linkEntries = buildPodLinkEntries(detail)
+		m.relativeEntries = buildPodRelativeEntries(detail)
 	case k8s.ResourceServices:
-		m.linkEntries = buildServiceLinkEntries(detail)
+		m.relativeEntries = buildServiceRelativeEntries(detail)
 	default:
-		m.linkEntries = buildGenericLinkEntries(detail)
+		m.relativeEntries = buildGenericRelativeEntries(detail)
 	}
-	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) ||
-		(m.linkCursor < len(m.linkEntries) && !m.linkEntries[m.linkCursor].isSelectable()) {
-		m.linkCursor = firstSelectableCursor(m.linkEntries)
+	if m.relativeCursor < 0 || m.relativeCursor >= len(m.relativeEntries) ||
+		(m.relativeCursor < len(m.relativeEntries) && !m.relativeEntries[m.relativeCursor].isSelectable()) {
+		m.relativeCursor = firstSelectableCursor(m.relativeEntries)
 	}
 }
 
-// SelectedLinkRef returns the drill ref under the Links cursor, or
+// SelectedRelativeRef returns the drill ref under the Relatives cursor, or
 // nil if the cursor is on an info-only row (or the tab has no entries).
-func (m DetailModel) SelectedLinkRef() *k8s.RefTarget {
+func (m DetailModel) SelectedRelativeRef() *k8s.RefTarget {
 	if m.ActiveTabName() != "Relatives" {
 		return nil
 	}
-	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) {
+	if m.relativeCursor < 0 || m.relativeCursor >= len(m.relativeEntries) {
 		return nil
 	}
-	return m.linkEntries[m.linkCursor].ref
+	return m.relativeEntries[m.relativeCursor].ref
 }
 
 func (m DetailModel) buildEventLines() []string {
