@@ -605,18 +605,20 @@ func (m DetailModel) ScrollInfo() *ScrollInfo {
 	return &ScrollInfo{Position: pos, Total: len(lines)}
 }
 
-// SetDetail updates the detail data and rebuilds content lines. Resets
-// the Links drill chain — fresh root data invalidates any drilled-into
-// state from the previous selection.
+// SetDetail updates the detail data and rebuilds content lines.
+//
+// Does NOT touch the Links drill chain — background watcher refreshes
+// keep dispatching detail fetches for the still-selected root row, and a
+// stale-arriving ResourceDetailMsg would otherwise wipe the user's in-
+// flight drill state and snap them back to level 1. The row-change path
+// (RowSelectedMsg) calls ResetDrillStack() explicitly before dispatch;
+// namespace/context switches go through ClearDetail() which resets too.
 func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventItem) {
 	m.detail = detail
 	m.events = events
 	m.hasData = true
 	m.scrollOffset = 0
 	m.refetching = false // fresh data arrived — stop the spinner
-	m.drillStack = nil
-	m.rootCursor = -1
-	m.linkCursor = -1
 	m.buildContentLines()
 }
 
@@ -738,7 +740,9 @@ func (m DetailModel) BorderTopRightHint() string {
 	return ""
 }
 
-// ClearDetail clears the detail data.
+// ClearDetail clears the detail data and tears down the Links drill chain.
+// Used by namespace/context switches, which invalidate every drilled-into
+// resource (different cluster scope, no guarantee the chain still exists).
 func (m *DetailModel) ClearDetail() {
 	m.detail = k8s.ResourceDetail{}
 	m.events = nil
@@ -746,6 +750,9 @@ func (m *DetailModel) ClearDetail() {
 	m.scrollOffset = 0
 	m.contentLines = nil
 	m.logLines = nil
+	m.drillStack = nil
+	m.rootCursor = -1
+	m.linkCursor = -1
 }
 
 // SetResourceType sets the current resource type and adjusts available tabs.
