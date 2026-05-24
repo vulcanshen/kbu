@@ -697,6 +697,134 @@ func enrichServiceAccountConsumers(ctx context.Context, cs kubernetes.Interface,
 	})
 }
 
+// enrichServiceAccountBindings: RoleBindings (in the SA's namespace) and
+// ClusterRoleBindings (cluster-wide) that name this SA as a subject —
+// i.e., what permissions the SA actually has. Two API calls; the CRB
+// pass is cluster-wide (tier 🔴 — slow on large clusters) but RBAC
+// queries this way are how you'd debug "why can / can't this SA do X".
+func enrichServiceAccountBindings(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	sa, ok := item.Raw.(*corev1.ServiceAccount)
+	if !ok {
+		return
+	}
+	if rbList, err := cs.RbacV1().RoleBindings(sa.Namespace).List(ctx, metav1.ListOptions{}); err == nil {
+		var entries []LinkRow
+		for i := range rbList.Items {
+			rb := &rbList.Items[i]
+			if !bindingHasSASubject(rb.Subjects, sa.Name, sa.Namespace) {
+				continue
+			}
+			entries = append(entries, LinkRow{
+				Label: "  " + rb.Name,
+				Value: "RoleBinding",
+				Ref:   &RefTarget{Type: ResourceRoleBindings, Name: rb.Name, Namespace: rb.Namespace},
+			})
+		}
+		if len(entries) > 0 {
+			detail.Links = append(detail.Links, LinkSection{
+				Title:   fmt.Sprintf("RoleBindings (%d)", len(entries)),
+				Entries: entries,
+			})
+		}
+	}
+	if crbList, err := cs.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{}); err == nil {
+		var entries []LinkRow
+		for i := range crbList.Items {
+			crb := &crbList.Items[i]
+			if !bindingHasSASubject(crb.Subjects, sa.Name, sa.Namespace) {
+				continue
+			}
+			entries = append(entries, LinkRow{
+				Label: "  " + crb.Name,
+				Value: "ClusterRoleBinding",
+				Ref:   &RefTarget{Type: ResourceClusterRoleBindings, Name: crb.Name},
+			})
+		}
+		if len(entries) > 0 {
+			detail.Links = append(detail.Links, LinkSection{
+				Title:   fmt.Sprintf("ClusterRoleBindings (%d)", len(entries)),
+				Entries: entries,
+			})
+		}
+	}
+}
+
+func bindingHasSASubject(subjects []rbacv1.Subject, saName, saNamespace string) bool {
+	for _, s := range subjects {
+		if s.Kind == "ServiceAccount" && s.Name == saName && s.Namespace == saNamespace {
+			return true
+		}
+	}
+	return false
+}
+
+// enrichServiceAccountTokenSecrets: Secrets in the SA's namespace whose
+// `kubernetes.io/service-account.name` annotation points back at this SA.
+// Catches the legacy SA-token Secrets that k8s used to auto-create and
+// any manually-bound token-type Secret — sa.Secrets only carries the
+// SA's own explicit reference list, which is usually empty on modern
+// (>=1.24) clusters.
+func enrichServiceAccountTokenSecrets(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	sa, ok := item.Raw.(*corev1.ServiceAccount)
+	if !ok {
+		return
+	}
+	list, err := cs.CoreV1().Secrets(sa.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	var entries []LinkRow
+	for i := range list.Items {
+		s := &list.Items[i]
+		if s.Annotations[saTokenAnnotationName] != sa.Name {
+			continue
+		}
+		entries = append(entries, LinkRow{
+			Label: "  " + s.Name,
+			Value: string(s.Type),
+			Ref:   &RefTarget{Type: ResourceSecrets, Name: s.Name, Namespace: s.Namespace},
+		})
+	}
+	if len(entries) == 0 {
+		return
+	}
+	detail.Links = append(detail.Links, LinkSection{
+		Title:   fmt.Sprintf("Token Secrets (%d)", len(entries)),
+		Entries: entries,
+	})
+}
+
+// enrichSecretServiceAccount: reverse direction of the SA→Secret link.
+// If the Secret carries the `kubernetes.io/service-account.name`
+// annotation, surface the named SA as a drillable section. Pure
+// annotation read, no API call — included in the enricher dispatch so
+// the section appears alongside Used by Pods.
+func enrichSecretServiceAccount(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
+	s, ok := item.Raw.(*corev1.Secret)
+	if !ok {
+		return
+	}
+	saName := s.Annotations[saTokenAnnotationName]
+	if saName == "" {
+		return
+	}
+	detail.Links = append(detail.Links, LinkSection{
+		Title: "ServiceAccount",
+		Entries: []LinkRow{{
+			Label: "  " + saName,
+			Value: "ServiceAccount",
+			Ref:   &RefTarget{Type: ResourceServiceAccounts, Name: saName, Namespace: s.Namespace},
+		}},
+	})
+}
+
+// saTokenAnnotationName is the well-known annotation key kubelet /
+// kube-controller-manager set on SA-token Secrets back-referencing the
+// owning ServiceAccount. The companion `kubernetes.io/service-account.uid`
+// annotation also exists but UID isn't useful for navigation — name +
+// namespace fully identify the SA.
+const saTokenAnnotationName = "kubernetes.io/service-account.name"
+
 // enrichPDBPods: pods matched by the PDB's selector — the ones it protects.
 func enrichPDBPods(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
 	pdb, ok := item.Raw.(*policyv1.PodDisruptionBudget)
