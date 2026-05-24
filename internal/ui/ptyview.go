@@ -658,7 +658,23 @@ func vtColorToLipgloss(c vt10x.Color) (lipgloss.Color, bool) {
 // terminal would write to a process's stdin. appCursor selects the DEC
 // application-cursor sequences (\x1bO_) when the running app has set DECCKM
 // (vim's normal mode); otherwise the standard sequences (\x1b[_) apply.
+//
+// When msg.Alt is set, the sequence is prefixed with ESC (the "meta" convention
+// every readline-based shell expects — Alt+f → \x1b f → forward-word, etc.).
+// Without this, Bubble Tea's parsed structured KeyMsg loses the Alt modifier
+// and the shell sees plain `f`.
 func ptyKeyBytes(msg tea.KeyMsg, appCursor bool) []byte {
+	b := ptyKeyBytesPlain(msg, appCursor)
+	if b == nil {
+		return nil
+	}
+	if msg.Alt {
+		return append([]byte{'\x1b'}, b...)
+	}
+	return b
+}
+
+func ptyKeyBytesPlain(msg tea.KeyMsg, appCursor bool) []byte {
 	if msg.Type == tea.KeyRunes {
 		return []byte(string(msg.Runes))
 	}
@@ -715,6 +731,38 @@ var ptyKeyBytesMap = map[tea.KeyType][]byte{
 	tea.KeyCtrlX:     {'\x18'},
 	tea.KeyCtrlY:     {'\x19'},
 	tea.KeyCtrlZ:     {'\x1a'},
+
+	// Shift+Tab — zsh reverse-completion. Without this, Shift+Tab returns
+	// nil from the fallback below and the keystroke is silently dropped.
+	tea.KeyShiftTab: {'\x1b', '[', 'Z'},
+
+	// xterm modifyOtherKeys / CSI 1;<mod><letter> sequences for arrow keys
+	// with Ctrl/Shift modifiers. zsh / vim / readline recognize these as
+	// word-jump (Ctrl+Left/Right) and selection (Shift+arrows).
+	tea.KeyCtrlLeft:   {'\x1b', '[', '1', ';', '5', 'D'},
+	tea.KeyCtrlRight:  {'\x1b', '[', '1', ';', '5', 'C'},
+	tea.KeyCtrlUp:     {'\x1b', '[', '1', ';', '5', 'A'},
+	tea.KeyCtrlDown:   {'\x1b', '[', '1', ';', '5', 'B'},
+	tea.KeyShiftLeft:  {'\x1b', '[', '1', ';', '2', 'D'},
+	tea.KeyShiftRight: {'\x1b', '[', '1', ';', '2', 'C'},
+	tea.KeyShiftUp:    {'\x1b', '[', '1', ';', '2', 'A'},
+	tea.KeyShiftDown:  {'\x1b', '[', '1', ';', '2', 'B'},
+
+	// F-keys: F1-F4 use the DEC SS3 sequences, F5+ use CSI ~ with xterm's
+	// historical numbering (no F6=16~, no F-keys 22~). Most TUIs / zsh
+	// plugins that bind F-keys expect this exact encoding.
+	tea.KeyF1:  {'\x1b', 'O', 'P'},
+	tea.KeyF2:  {'\x1b', 'O', 'Q'},
+	tea.KeyF3:  {'\x1b', 'O', 'R'},
+	tea.KeyF4:  {'\x1b', 'O', 'S'},
+	tea.KeyF5:  {'\x1b', '[', '1', '5', '~'},
+	tea.KeyF6:  {'\x1b', '[', '1', '7', '~'},
+	tea.KeyF7:  {'\x1b', '[', '1', '8', '~'},
+	tea.KeyF8:  {'\x1b', '[', '1', '9', '~'},
+	tea.KeyF9:  {'\x1b', '[', '2', '0', '~'},
+	tea.KeyF10: {'\x1b', '[', '2', '1', '~'},
+	tea.KeyF11: {'\x1b', '[', '2', '3', '~'},
+	tea.KeyF12: {'\x1b', '[', '2', '4', '~'},
 }
 
 var ptyKeyBytesAppCursorMap = map[tea.KeyType][]byte{
