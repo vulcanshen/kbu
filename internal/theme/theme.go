@@ -20,21 +20,25 @@ type Theme struct {
 
 // SidebarColors defines colors for the sidebar panel.
 type SidebarColors struct {
-	Background string `yaml:"background"`
-	Foreground string `yaml:"foreground"`
-	SelectedBg string `yaml:"selected_bg"`
-	SelectedFg string `yaml:"selected_fg"`
-	CategoryFg string `yaml:"category_fg"`
+	Background          string `yaml:"background"`
+	Foreground          string `yaml:"foreground"`
+	SelectedBg          string `yaml:"selected_bg"`
+	SelectedFg          string `yaml:"selected_fg"`
+	UnfocusedSelectedBg string `yaml:"unfocused_selected_bg"`
+	UnfocusedSelectedFg string `yaml:"unfocused_selected_fg"`
+	CategoryFg          string `yaml:"category_fg"`
 }
 
 // TableColors defines colors for the resource table.
 type TableColors struct {
-	HeaderBg      string `yaml:"header_bg"`
-	HeaderFg      string `yaml:"header_fg"`
-	RowFg         string `yaml:"row_fg"`
-	SelectedRowBg string `yaml:"selected_row_bg"`
-	SelectedRowFg string `yaml:"selected_row_fg"`
-	AlternatingBg string `yaml:"alternating_bg"`
+	HeaderBg               string `yaml:"header_bg"`
+	HeaderFg               string `yaml:"header_fg"`
+	RowFg                  string `yaml:"row_fg"`
+	SelectedRowBg          string `yaml:"selected_row_bg"`
+	SelectedRowFg          string `yaml:"selected_row_fg"`
+	UnfocusedSelectedRowBg string `yaml:"unfocused_selected_row_bg"`
+	UnfocusedSelectedRowFg string `yaml:"unfocused_selected_row_fg"`
+	AlternatingBg          string `yaml:"alternating_bg"`
 }
 
 // DetailColors defines colors for the detail panel.
@@ -74,19 +78,23 @@ type StatusColors struct {
 func DefaultTheme() *Theme {
 	return &Theme{
 		Sidebar: SidebarColors{
-			Background: "",
-			Foreground: "#cdd6f4",
-			SelectedBg: "#45475a",
-			SelectedFg: "#cdd6f4",
-			CategoryFg: "#89b4fa",
+			Background:          "",
+			Foreground:          "#cdd6f4",
+			SelectedBg:          "#bac2de", // Catppuccin Mocha subtext1 — muted blue-grey, reads "light highlight" without "white block"
+			SelectedFg:          "#1e1e2e", // Catppuccin Mocha base — high contrast, palette-native
+			UnfocusedSelectedBg: "#353648", // between surface0 + surface1 — visible but softer than focused
+			UnfocusedSelectedFg: "#cdd6f4", // Catppuccin text — light fg, paired with darker unfocused bg
+			CategoryFg:          "#89b4fa",
 		},
 		Table: TableColors{
-			HeaderBg:      "#313244",
-			HeaderFg:      "#89b4fa",
-			RowFg:         "#cdd6f4",
-			SelectedRowBg: "#45475a",
-			SelectedRowFg: "#cdd6f4",
-			AlternatingBg: "",
+			HeaderBg:               "#313244",
+			HeaderFg:               "#89b4fa",
+			RowFg:                  "#cdd6f4",
+			SelectedRowBg:          "#bac2de", // Catppuccin Mocha subtext1
+			SelectedRowFg:          "#1e1e2e", // Catppuccin Mocha base
+			UnfocusedSelectedRowBg: "#353648", // between surface0 + surface1 — visible but softer than focused
+			UnfocusedSelectedRowFg: "#cdd6f4", // Catppuccin text — light fg
+			AlternatingBg:          "",
 		},
 		Detail: DetailColors{
 			BorderColor:   "#585b70",
@@ -154,11 +162,24 @@ func (t *Theme) SidebarStyle() lipgloss.Style {
 	return s
 }
 
-// SidebarSelectedStyle returns the style for the selected sidebar item.
+// SidebarSelectedStyle returns the style for the selected sidebar item
+// while the sidebar panel has focus — bg highlight + bold, the classic
+// "you're driving this row" cursor look.
 func (t *Theme) SidebarSelectedStyle() lipgloss.Style {
 	return lipgloss.NewStyle().
 		Background(lipgloss.Color(t.Sidebar.SelectedBg)).
 		Foreground(lipgloss.Color(t.Sidebar.SelectedFg)).
+		Bold(true)
+}
+
+// SidebarUnfocusedSelectedStyle returns the style for the currently-active
+// resource when the sidebar isn't focused — softer bg than the focused
+// cursor plus bold, so the panel still reads as having a "remembered"
+// selection without competing visually with the focused panel.
+func (t *Theme) SidebarUnfocusedSelectedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(t.Sidebar.UnfocusedSelectedBg)).
+		Foreground(lipgloss.Color(t.Sidebar.UnfocusedSelectedFg)).
 		Bold(true)
 }
 
@@ -183,11 +204,22 @@ func (t *Theme) TableRowStyle() lipgloss.Style {
 		Foreground(lipgloss.Color(t.Table.RowFg))
 }
 
-// TableSelectedRowStyle returns the style for the selected table row.
+// TableSelectedRowStyle returns the style for the table cursor row while
+// the table panel has focus — bg highlight + bold.
 func (t *Theme) TableSelectedRowStyle() lipgloss.Style {
 	return lipgloss.NewStyle().
 		Background(lipgloss.Color(t.Table.SelectedRowBg)).
 		Foreground(lipgloss.Color(t.Table.SelectedRowFg)).
+		Bold(true)
+}
+
+// TableUnfocusedSelectedRowStyle returns the style for the table cursor
+// row when the table isn't focused — softer bg than focused + bold,
+// matching SidebarUnfocusedSelectedStyle.
+func (t *Theme) TableUnfocusedSelectedRowStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(t.Table.UnfocusedSelectedRowBg)).
+		Foreground(lipgloss.Color(t.Table.UnfocusedSelectedRowFg)).
 		Bold(true)
 }
 

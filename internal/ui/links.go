@@ -167,7 +167,7 @@ func ownerDisplay(ref k8s.RefTarget) string {
 //   - cursorLine:      display-line index of the cursor row (-1 if none) —
 //     used by the caller to auto-scroll the viewport so
 //     the cursor stays visible
-func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Theme, placeholder string) (lines []string, selectableIdxs []int, cursorLine int) {
+func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Theme, placeholder string, focused bool) (lines []string, selectableIdxs []int, cursorLine int) {
 	cursorLine = -1
 	labelStyle := t.DetailLabelStyle()
 	valueStyle := t.DetailValueStyle()
@@ -175,6 +175,9 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 	drillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Sidebar.CategoryFg)).Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	cursorRowStyle := t.TableSelectedRowStyle()
+	if !focused {
+		cursorRowStyle = t.TableUnfocusedSelectedRowStyle()
+	}
 
 	const labelW = 18
 	const indent = "  "

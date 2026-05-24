@@ -15,6 +15,7 @@ const (
 	ConfirmDelete
 	ConfirmQuit
 	ConfirmEdit
+	ConfirmSwitch
 )
 
 type ConfirmModel struct {

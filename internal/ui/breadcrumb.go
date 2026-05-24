@@ -17,9 +17,9 @@ import (
 // font renders these glyphs as 2-cell — they're intended for single-
 // width Nerd Font / Nerd Font Mono variants.
 const (
-	breadcrumbChainMarker   = " "          //  — step indicator (same as Links drill arrow)
-	breadcrumbCurrentMarker = "\U000f0cdf " // 󰳟 — "you are here" for the bottom-of-chain item
-	linksDrillArrow         = ""           //  — appears after each drillable Links entry
+	breadcrumbChainMarker   = " " //  — step indicator (same as Links drill arrow)
+	breadcrumbCurrentMarker = "● " // ● — you-are-here dot; visually distinct from the chain glyph
+	linksDrillArrow         = " " //  — appears after each drillable Links entry
 )
 
 // BreadcrumbPopupModel lists the Links-tab drill chain and lets the user
@@ -99,6 +99,19 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 			closeCmd := m.animator.Close()
 			jumpCmd := func() tea.Msg { return LinkJumpMsg{Level: level} }
 			return m, tea.Batch(closeCmd, jumpCmd)
+		case " ":
+			// Space — emit RequestSwitchToResourceMsg, leaving the
+			// breadcrumb open underneath. AppModel opens confirm
+			// stacked on top (confirm gets input via the routing
+			// order, render order puts confirm above). If user
+			// cancels, breadcrumb is still there and they can pick
+			// another level. If they confirm, SwitchToResourceMsg's
+			// handler closes the now-stale breadcrumb.
+			if m.cursor < 0 || m.cursor >= len(m.chain) {
+				return m, nil
+			}
+			ref := m.chain[m.cursor]
+			return m, func() tea.Msg { return RequestSwitchToResourceMsg{Ref: ref} }
 		case "esc", "q", "b":
 			return m, m.animator.Close()
 		}
@@ -121,7 +134,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	currentMarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending)).Bold(true)
 
 	title := "󰍒 Breadcrumb"
-	hint := " j/k: move  Enter: jump  Esc/q/b: close "
+	hint := " j/k: move  Enter: jump  Space: switch  Esc/q/b: close "
 
 	// Widened from 70% to 85% so long resource names (RS-hash suffixes,
 	// generated Job names, ...) get more horizontal room before the
