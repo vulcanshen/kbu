@@ -4,6 +4,134 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.4.0] - 2026-05-25
+
+The Relatives release. The graph navigation tab that v1.3.0 named "Links"
+gets the right name (Relatives — it's about what's related to this
+resource, not what this resource points at) and the right hotkey
+vocabulary to round it out: `Space` jumps the table cursor to whatever
+ref you're highlighting, in either the Relatives tab or the breadcrumb
+popup. Pod tab order swaps so Relatives is first — when you space-jump
+to a Pod you land where you came from instead of being teleported to
+Logs. ServiceAccount and Secret grow bidirectional links (RBAC
+subjects + token-secret annotations). Selection styling gains a focused
+vs unfocused distinction so you can always see which panel "remembers"
+the cursor. Two KM8erm/drill bug fixes from v1.3.0 hotfixes promoted in.
+
+### Added
+
+- **`Space` — jump panels 1+2 to a related resource.** On the Relatives
+  tab, pressing `Space` while the cursor is on a drillable ref pops a
+  confirm popup; pressing `y` / `Enter` switches the sidebar selection
+  and the table row to that resource (drill chain reset, panel 3
+  rescoped). Works at any depth, on any drillable entry — including
+  nested rows like `Volumes / config / configMap/harbor-core`. No
+  round-trip through `Enter` to drill first. From inside the breadcrumb
+  popup, `Space` does the same thing for the cursor-selected level;
+  the confirm popup stacks visually above the breadcrumb so cancelling
+  returns to the breadcrumb instead of dismissing it. (`Y` is still
+  cursor-aware YAML preview; the two hotkeys complement.)
+- **ServiceAccount ↔ Secret bidirectional links.** SA Relatives now
+  carry three new sections: `RoleBindings (N)` (namespace-scoped
+  bindings naming this SA as a subject), `ClusterRoleBindings (N)`
+  (cluster-wide same), and `Token Secrets (N)` (Secrets whose
+  `kubernetes.io/service-account.name` annotation references this SA —
+  catches legacy auto-created token Secrets that aren't in `sa.Secrets`).
+  Secret Relatives now show a `ServiceAccount` section back when that
+  annotation is set, completing the round trip. RBAC subject queries
+  are how you'd actually debug "why can / can't this SA do X" — they
+  needed a first-class surface, not a guess.
+- **Focus-shift hotkeys (`l` / `Enter`).** Sidebar `l` and `Enter` used
+  to re-fire `ResourceSelectedMsg` for the cursor row, duplicating what
+  `j`/`k` already auto-emitted. They now shift focus to panel 2 — the
+  natural "I've picked the resource, now show me the rows" motion.
+  Table `Enter` on rows without drill capability (Deployments without
+  child config, ConfigMaps, etc.) likewise shifts focus to panel 3
+  instead of being a silent no-op. Resources that DO drill (Pods →
+  containers, HPAs → workloads) keep their drill semantics. Status line
+  drops the "Enter drill" hint — focus-shift is the obvious
+  adjacent-panel motion and not worth a slot.
+- **Panel-aware selection styling.** Focused panel cursor: reverse-
+  video — Catppuccin subtext1 (`#bac2de`) bg + base (`#1e1e2e`) fg +
+  bold. Unfocused panel selected: softer bg (`#353648`, between surface0
+  and surface1) + text fg + bold. So the panel you're driving and the
+  panel that "remembers" your selection are both visible at a glance.
+  Pod STATUS column gets a Catppuccin Latte (darker) palette variant
+  when the row has the focused light bg — Mocha pastel `#a6e3a1` washes
+  out on cream, Latte `#40a02b` reads cleanly.
+
+### Changed
+
+- **Detail tab renamed: Links → Relatives.** The new name describes
+  the relationship, not the implementation. The tab title at depth ≥ 2
+  shows `Relatives N`. Internal Go identifiers also renamed
+  (`LinkSection` → `RelativeSection`, `EnrichLinks` → `EnrichRelatives`,
+  `internal/ui/links.go` → `relatives.go`, etc.) so the source vocabulary
+  matches the UI. Pure mechanical rename, no behavior change.
+- **Pod / Deployment tab order: Relatives first.** Was
+  `[Logs, Relatives, Events]`, now `[Relatives, Logs, Events]`. Space-
+  jumping to a Pod lands on Relatives — same tab the user came from, no
+  visual whiplash. Logs is one `]` away.
+- **Nested Relatives rows wrap to two lines.** Section children
+  (`Volumes / config / configMap/foo`) used to render as a single row
+  `alias  configMap/very-long-name `, which truncated badly on narrow
+  terminals. Now: alias on one line, indented `resourceKind/name `
+  on the next. Top-level entries (Owner / Node / ServiceAccount) keep
+  the single-line layout — short relationship words don't benefit from
+  splitting.
+- **Glyph vocabulary unified.** The Relatives drill arrow `→` becomes
+   (Nerd Font chain glyph). Breadcrumb middle rows carry the same
+  glyph; the bottom row keeps its `●` you-are-here dot. Three surfaces
+  (drill arrow, breadcrumb middle, breadcrumb current) now read as
+  consistent vocabulary.
+- **Search filters clear on `Space`-switch.** Stale sidebar / table /
+  detail filters from before the switch can't hide the freshly
+  selected resource anymore.
+
+### Fixed
+
+- **KM8erm: Alt+letter / Shift+Tab / Ctrl-arrows / F-keys forwarded
+  to the embedded shell.** `ptyKeyBytes` was dropping these — zsh
+  hotkeys like `Alt+.` / `Alt+f` / `Alt+Backspace`, Shift+Tab reverse
+  completion, Ctrl+Left/Right word jump, and F1–F12 all silently
+  no-op'd inside KM8erm. Now they serialize to the right escape
+  sequences (meta convention ESC prefix for Alt, xterm CSI for
+  modified arrows, DEC SS3 / CSI `~` for F-keys).
+- **Drill chain survives background watcher refresh.** While drilled
+  into a deeper Relatives level, the watcher's periodic
+  `ResourceDataMsg` would re-fire `fetchResourceDetail` for the
+  still-selected root row; the result's `SetDetail` wiped the drill
+  stack and snapped the user back to level 1 just as their fetch
+  finished. `SetDetail` no longer touches the drill stack; the
+  row-change path resets it explicitly, namespace/context switches go
+  through `ClearDetail` (which still resets).
+- **Selected-row highlight spans full row width.** A long-standing
+  rendering bug where the Pod STATUS column's inner ANSI reset killed
+  the row style for every column after it, leaving Restarts / Age /
+  Node uncolored on the selected row. Per-cell style application
+  (separator + trailing pad row-styled too) fixes it; the row
+  highlight now reaches the right edge.
+- **Detail panel cursor row honors focus state.** Was always
+  rendering with `TableSelectedRowStyle` regardless of panel focus,
+  so the unfocused-panel softer style only ever applied to the table.
+  Now the Relatives cursor row picks the unfocused style when panel 3
+  isn't focused; `SetFocused` rebuilds content lines on focus change
+  so the highlight refreshes immediately.
+
+### Internal
+
+- New AppModel messages: `RelativePushMsg`, `RelativeDrillMsg`,
+  `RelativeBreadcrumbMsg`, `RelativeJumpMsg`, `relativeDrillFetchedMsg`,
+  `FocusTableMsg`, `FocusDetailMsg`, `SwitchToResourceMsg`,
+  `RequestSwitchToResourceMsg`.
+- New helpers: `SidebarModel.ClearSearch`, `SidebarModel.SetSelected`,
+  `TableModel.SetCursor`, `DetailModel.ClearSearch`,
+  `DetailModel.CurrentLevelRef`, `AppModel.honorPendingTableSelect`.
+- New k8s enrichers: `enrichServiceAccountBindings`,
+  `enrichServiceAccountTokenSecrets`, `enrichSecretServiceAccount`.
+- New theme fields: `Sidebar.UnfocusedSelectedBg/Fg`,
+  `Table.UnfocusedSelectedRowBg/Fg`.
+
 ## [v1.3.0] - 2026-05-24
 
 The big one. km8 becomes a graph navigator — the Links tab lets you
