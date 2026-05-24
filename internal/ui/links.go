@@ -195,33 +195,47 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 		rowWidth = 20
 	}
 
+	arrowSuffix := " " + linksDrillArrow
+
 	for i, e := range entries {
 		if e.section {
 			lines = append(lines, indent+sectionStyle.Render(e.label))
 			continue
 		}
 		isCursor := cursor >= 0 && cursor < len(entries) && cursor == i
+		hasArrow := e.ref != nil
+
+		// Nested drillable entries (section children — label has its own
+		// "  " indent) render in two-line form: alias/name alone on row 1,
+		// resource ref + arrow on row 2 one level deeper. Avoids the
+		// "alias  configMap/very-long-name " truncation problem on
+		// narrow terminals and matches the user's mental model of a
+		// hierarchy (category → alias → target). Cursor highlight spans
+		// both rows so it reads as one selectable block.
+		if hasArrow && strings.HasPrefix(e.label, "  ") {
+			nestedLines, line0 := renderNestedDrillEntry(e, indent, rowWidth, isCursor,
+				labelStyle, valueStyle, drillStyle, cursorRowStyle, arrowSuffix)
+			if isCursor {
+				cursorLine = len(lines) + line0
+			}
+			lines = append(lines, nestedLines...)
+			continue
+		}
+
+		// Top-level entries (Owner / Node / ServiceAccount / IngressClass
+		// / etc.) keep the single-line "label  value " layout — their
+		// labels are short relationship words, splitting them off feels
+		// gratuitous. Value still wraps under the value column when
+		// needed.
 		labelText := e.label
 		if len(labelText) < labelW {
 			labelText = labelText + strings.Repeat(" ", labelW-len(labelText))
 		}
-
-		// Wrap value to fit (rowWidth - labelPrefixW), with continuation
-		// lines indented under the value column. Same behavior for
-		// cursor and non-cursor rows — the previous lipgloss.Width()
-		// cursor-only wrap left non-cursor rows truncated by the outer
-		// panel.
-		//
-		// Strategy: wrap (value + arrow) together so the arrow lands on
-		// the right chunk, then split the arrow back off the last
-		// chunk to render it in drillStyle. Keeps the arrow color
-		// consistent with the original non-wrap rendering.
 		labelPrefix := "  " + labelText + " "
 		labelPrefixW := lipgloss.Width(labelPrefix)
-		hasArrow := e.ref != nil
 		valueAndArrow := e.value
 		if hasArrow {
-			valueAndArrow += " →"
+			valueAndArrow += arrowSuffix
 		}
 		valueBudget := rowWidth - labelPrefixW
 		if valueBudget < 10 {
@@ -231,12 +245,9 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 		arrowChunkIdx := -1
 		if hasArrow && len(chunks) > 0 {
 			last := len(chunks) - 1
-			if strings.HasSuffix(chunks[last], " →") {
-				chunks[last] = strings.TrimSuffix(chunks[last], " →")
+			if strings.HasSuffix(chunks[last], arrowSuffix) {
+				chunks[last] = strings.TrimSuffix(chunks[last], arrowSuffix)
 				if chunks[last] == "" && last > 0 {
-					// Arrow ended up alone on a continuation line; drop
-					// the empty chunk and attach the arrow to the
-					// previous line instead.
 					chunks = chunks[:last]
 					arrowChunkIdx = len(chunks) - 1
 				} else {
@@ -259,10 +270,8 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 					plain = contIndent + chunk
 				}
 				if withArrow {
-					plain += " →"
+					plain += arrowSuffix
 				}
-				// Pad so the cursor background spans the full row
-				// width on every wrapped line.
 				if w := lipgloss.Width(plain); w < rowWidth {
 					plain = plain + strings.Repeat(" ", rowWidth-w)
 				}
@@ -276,12 +285,86 @@ func renderLinkEntries(entries []linkEntry, cursor int, width int, t *theme.Them
 				row = contIndent + valueStyle.Render(chunk)
 			}
 			if withArrow {
-				row += " " + drillStyle.Render("→")
+				row += " " + drillStyle.Render(linksDrillArrow)
 			}
 			lines = append(lines, row)
 		}
 	}
 	return lines, selectableIdxs, cursorLine
+}
+
+// renderNestedDrillEntry produces the 2-line (or 3+ lines if value wraps)
+// rendering for a nested drillable entry. Layout:
+//
+//	alias                          ← e.label (carries its own "  " indent)
+//	  resourceType/resourceName    ← e.value + arrow, one level deeper
+//
+// Returns (rendered lines, index of the first line within those lines —
+// used by the caller to set cursorLine = baseOffset + line0).
+func renderNestedDrillEntry(
+	e linkEntry, outerIndent string, rowWidth int, isCursor bool,
+	labelStyle, valueStyle, drillStyle, cursorRowStyle lipgloss.Style,
+	arrowSuffix string,
+) (lines []string, line0 int) {
+	// Label line: outer indent + e.label (which already has its own "  ").
+	labelLinePlain := outerIndent + e.label
+	// Value indent: outer + label's internal "  " + one more level "  ".
+	valueIndentW := lipgloss.Width(outerIndent) + 2 + 2
+	valueIndent := strings.Repeat(" ", valueIndentW)
+
+	valueAndArrow := e.value + arrowSuffix
+	valueBudget := rowWidth - valueIndentW
+	if valueBudget < 10 {
+		valueBudget = 10
+	}
+	chunks := wrapPlain(valueAndArrow, valueBudget)
+	arrowChunkIdx := -1
+	if len(chunks) > 0 {
+		last := len(chunks) - 1
+		if strings.HasSuffix(chunks[last], arrowSuffix) {
+			chunks[last] = strings.TrimSuffix(chunks[last], arrowSuffix)
+			if chunks[last] == "" && last > 0 {
+				chunks = chunks[:last]
+				arrowChunkIdx = len(chunks) - 1
+			} else {
+				arrowChunkIdx = last
+			}
+		}
+	}
+
+	// Label line first.
+	if isCursor {
+		line0 = 0
+		plain := labelLinePlain
+		if w := lipgloss.Width(plain); w < rowWidth {
+			plain += strings.Repeat(" ", rowWidth-w)
+		}
+		lines = append(lines, cursorRowStyle.Render(plain))
+	} else {
+		lines = append(lines, outerIndent+labelStyle.Render(e.label))
+	}
+
+	// Value line(s).
+	for ci, chunk := range chunks {
+		withArrow := ci == arrowChunkIdx
+		if isCursor {
+			plain := valueIndent + chunk
+			if withArrow {
+				plain += arrowSuffix
+			}
+			if w := lipgloss.Width(plain); w < rowWidth {
+				plain += strings.Repeat(" ", rowWidth-w)
+			}
+			lines = append(lines, cursorRowStyle.Render(plain))
+			continue
+		}
+		row := valueIndent + valueStyle.Render(chunk)
+		if withArrow {
+			row += " " + drillStyle.Render(linksDrillArrow)
+		}
+		lines = append(lines, row)
+	}
+	return lines, line0
 }
 
 // nextSelectableCursor returns the next/prev cursor index that lands on a
