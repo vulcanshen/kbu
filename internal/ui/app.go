@@ -84,6 +84,33 @@ type AppModel struct {
 	drillDownStack      []drillDownEntry
 	drillDownPod        *k8s.ResourceItem // innermost: Pod → Container
 	drillDownContainers []k8s.ContainerInfo
+
+	// pendingTableSelect holds the (kind, ns, name) of a resource the
+	// user asked to switch to via the Links-tab space hotkey. When the
+	// next ResourceDataMsg for the matching kind arrives, the table
+	// cursor jumps to the row whose name+namespace matches, and the
+	// pointer is cleared. nil otherwise.
+	pendingTableSelect *k8s.RefTarget
+}
+
+// honorPendingTableSelect snaps the table cursor onto the requested
+// name+namespace when a ResourceDataMsg for the matching kind arrives,
+// then clears the pending pointer. If the target isn't in the result
+// set (different namespace scope, drifted away, ...), the cursor stays
+// at its current position; pending still clears so we don't keep
+// hunting on every subsequent watcher tick. Split out so tests can
+// drive just this slice without the surrounding watcher plumbing.
+func (m *AppModel) honorPendingTableSelect(kind k8s.ResourceType, items []k8s.ResourceItem) {
+	if m.pendingTableSelect == nil || m.pendingTableSelect.Type != kind {
+		return
+	}
+	for i, item := range items {
+		if item.Name == m.pendingTableSelect.Name && item.Namespace == m.pendingTableSelect.Namespace {
+			m.table.SetCursor(i)
+			break
+		}
+	}
+	m.pendingTableSelect = nil
 }
 
 type drillDownEntry struct {
@@ -505,7 +532,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// depth 1 that's the table-selected resource's YAML
 			// (existing behavior), at deeper levels it's the resource
 			// the user has drilled into.
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Links" {
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Relatives" {
 				if ref := m.detail.SelectedLinkRef(); ref != nil {
 					target := *ref
 					return m, func() tea.Msg { return LinkDrillMsg{Ref: target} }
@@ -529,7 +556,82 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.yamlPopup.SetSize(m.width, m.height)
 			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
+		case " ":
+			// Relatives tab "jump to this resource": promote the
+			// CURSOR-POINTED ref (what the user is highlighting).
+			// Routed through RequestSwitchToResourceMsg so both this
+			// hotkey and the breadcrumb-popup space share one
+			// confirm-gate code path.
+			if m.activePanel != DetailPanel || m.detail.ActiveTabName() != "Relatives" {
+				return m, nil
+			}
+			ref := m.detail.SelectedLinkRef()
+			if ref == nil {
+				return m, nil
+			}
+			target := *ref
+			return m, func() tea.Msg { return RequestSwitchToResourceMsg{Ref: target} }
 		}
+
+	case FocusTableMsg:
+		// Sidebar's l/Enter — move focus into panel 2 without re-firing
+		// ResourceSelectedMsg (j/k already did the resource selection).
+		m.setPanel(TablePanel)
+		return m, nil
+
+	case FocusDetailMsg:
+		// Table's Enter — move focus into panel 3. Detail content was
+		// kept in sync by the row-cursor's auto-emitted RowSelectedMsg,
+		// so there's nothing extra to fetch here.
+		m.setPanel(DetailPanel)
+		return m, nil
+
+	case RequestSwitchToResourceMsg:
+		// Single confirm-gate for both Relatives space and breadcrumb
+		// space. On confirm, fire SwitchToResourceMsg which does the
+		// actual sidebar + table + drill-chain rearrangement.
+		kindLabel := string(msg.Ref.Type)
+		if def := k8s.DefaultRegistry.Get(msg.Ref.Type); def != nil {
+			kindLabel = strings.TrimSuffix(def.DisplayName, "s")
+		}
+		detail := fmt.Sprintf("%s/%s", kindLabel, msg.Ref.Name)
+		if msg.Ref.Namespace != "" {
+			detail += "  namespace: " + msg.Ref.Namespace
+		}
+		target := msg.Ref
+		onConfirm := func() tea.Msg { return SwitchToResourceMsg{Ref: target} }
+		return m, m.confirm.Show(ConfirmSwitch, "Switch panel 1 + 2 to this resource?", detail, onConfirm)
+
+	case SwitchToResourceMsg:
+		// Confirmed Relatives-tab jump-to-this-resource. Update sidebar
+		// state synchronously so panel 1 highlight is correct on the
+		// next render, then route through the standard ResourceSelected
+		// flow (which clears table/detail/drill state, restarts the
+		// watcher, and fetches new items). The pendingTableSelect hook
+		// then moves the table cursor onto the target row once
+		// ResourceDataMsg arrives for the new kind.
+		//
+		// Clear search filters on all three panels first — a stale
+		// sidebar / table / detail filter from the previous selection
+		// could hide the new target. Table's ResourceSelectedMsg
+		// handler already self-clears, but sidebar + detail don't
+		// consume that message, so we reset them explicitly.
+		m.sidebar.ClearSearch()
+		m.detail.ClearSearch()
+		m.sidebar.SetSelected(msg.Ref.Type)
+		ref := msg.Ref
+		m.pendingTableSelect = &ref
+		batch := []tea.Cmd{func() tea.Msg { return ResourceSelectedMsg{Type: ref.Type} }}
+		// If the switch was launched from the breadcrumb popup, the
+		// popup's chain is now stale (post-switch the drill chain
+		// resets, so listed levels won't reach the same resources
+		// anymore). Tear it down.
+		if m.breadcrumbPopup.IsActive() {
+			if c := m.breadcrumbPopup.Close(); c != nil {
+				batch = append(batch, c)
+			}
+		}
+		return m, tea.Batch(batch...)
 
 	case ResourceSelectedMsg:
 		m.appLog.Info("switched to " + msg.Type.String())
@@ -574,6 +676,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			rows[i] = item.Row
 		}
 		m.table.SetRows(rows)
+		m.honorPendingTableSelect(msg.Type, msg.Items)
 		if len(msg.Items) > 0 {
 			idx := m.table.SelectedRow()
 			if idx >= 0 && idx < len(msg.Items) {
@@ -1026,11 +1129,6 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.help.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
-	if m.confirm.IsActive() {
-		m.confirm.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.confirm.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
 	if m.contextPicker.IsActive() {
 		mainView = overlay.Composite(m.contextPicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
@@ -1047,6 +1145,16 @@ func (m AppModel) View() string {
 	if m.breadcrumbPopup.IsActive() {
 		m.breadcrumbPopup.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.breadcrumbPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	// Confirm renders LAST among modal popups so it sits on top of any
+	// other open popup (breadcrumb especially — space on a breadcrumb
+	// row triggers confirm while breadcrumb stays visible underneath).
+	// Input routing checks confirm before breadcrumb (top of Update), so
+	// the topmost visual popup is also the one receiving keys.
+	if m.confirm.IsActive() {
+		m.confirm.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.confirm.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.toast.IsActive() {
@@ -1153,7 +1261,9 @@ func joinTableAndDetail(tablePanel, detailPanel string, w int) string {
 func (m *AppModel) enterDrillDown() tea.Cmd {
 	idx := m.table.SelectedRow()
 	if idx < 0 || idx >= len(m.items) {
-		return nil
+		// Empty / out-of-range table — no drill target, but still
+		// honour Enter as "move me to panel 3" so the key isn't silent.
+		return func() tea.Msg { return FocusDetailMsg{} }
 	}
 	item := m.items[idx]
 
@@ -1177,9 +1287,11 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 		return nil
 	}
 
-	// Resource → child resource drill-down
+	// Resource → child resource drill-down — only kinds with a
+	// registered DrillDown config (HPA → target workload, etc.). For
+	// everything else, Enter is the panel-2 → panel-3 focus shift.
 	if !m.currentResource.SupportsDrillDown() {
-		return nil
+		return func() tea.Msg { return FocusDetailMsg{} }
 	}
 
 	return func() tea.Msg {

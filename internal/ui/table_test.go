@@ -610,3 +610,45 @@ func TestPodStatusColor_Classification(t *testing.T) {
 		}
 	}
 }
+
+func TestTableModel_SetCursor_BasicAndOutOfRange(t *testing.T) {
+	m := newTestTable()
+	m.SetColumns(ColumnsForResource(k8s.ResourcePods))
+	rows := sampleRows(5)
+	m.SetRows(rows)
+
+	m.SetCursor(3)
+	if m.cursor != 3 {
+		t.Errorf("after SetCursor(3), cursor=%d want 3", m.cursor)
+	}
+
+	// Out-of-range is silently ignored.
+	m.SetCursor(99)
+	if m.cursor != 3 {
+		t.Errorf("after SetCursor(99) (out of range), cursor=%d want 3 unchanged", m.cursor)
+	}
+	m.SetCursor(-1)
+	if m.cursor != 3 {
+		t.Errorf("after SetCursor(-1), cursor=%d want 3 unchanged", m.cursor)
+	}
+}
+
+func TestTableModel_SetCursor_MapsThroughFilter(t *testing.T) {
+	m := newTestTable()
+	m.SetColumns(ColumnsForResource(k8s.ResourcePods))
+	rows := sampleRows(5) // rows are "pod-0".."pod-4" in column 1
+	m.SetRows(rows)
+	m.searchQuery = "pod-3"
+	m.filterRows()
+	if len(m.rows) != 1 {
+		t.Fatalf("filter setup failed, visible rows = %d, want 1", len(m.rows))
+	}
+	// Original index 3 should map to filtered position 0.
+	m.SetCursor(3)
+	if m.cursor != 0 {
+		t.Errorf("filtered SetCursor(3) -> cursor=%d, want 0", m.cursor)
+	}
+	if got := m.SelectedRow(); got != 3 {
+		t.Errorf("SelectedRow() = %d, want 3 (original idx)", got)
+	}
+}

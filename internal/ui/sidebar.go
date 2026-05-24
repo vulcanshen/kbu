@@ -185,7 +185,10 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		case 'k':
 			return m.moveUp(visible)
 		case 'l':
-			return m.activateResource(visible)
+			// j/k already auto-selects the cursor row, so l/Enter has
+			// no resource-switch work to do — promote it to "move me
+			// into the table" instead of re-firing ResourceSelectedMsg.
+			return m, func() tea.Msg { return FocusTableMsg{} }
 		case 'g':
 			m.pendingG = true
 			return m, nil
@@ -212,7 +215,9 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case tea.KeyUp:
 		return m.moveUp(visible)
 	case tea.KeyEnter:
-		return m.activateResource(visible)
+		// Same rationale as 'l' — auto-selection means Enter only needs
+		// to forward focus.
+		return m, func() tea.Msg { return FocusTableMsg{} }
 	case tea.KeyEscape:
 		if m.searchQuery != "" {
 			m.searchQuery = ""
@@ -436,14 +441,13 @@ func (m SidebarModel) View() string {
 			line = categoryStyle.Width(m.width).Render(truncateSidebarLabel(item.label, m.width))
 		} else {
 			label := "  " + truncateSidebarLabel(item.label, m.width-2)
+			unfocusedSelStyle := m.theme.SidebarUnfocusedSelectedStyle()
 			if isCursor && m.focused {
 				line = selectedStyle.Width(m.width).Render(label)
 			} else if isCursor {
-				dimStyle := baseStyle.Bold(true).Width(m.width)
-				line = dimStyle.Render(label)
+				line = unfocusedSelStyle.Width(m.width).Render(label)
 			} else if item.resourceType == m.selected {
-				selStyle := baseStyle.Bold(true).Width(m.width)
-				line = selStyle.Render(label)
+				line = unfocusedSelStyle.Width(m.width).Render(label)
 			} else {
 				line = baseStyle.Width(m.width).Render(label)
 			}
@@ -546,6 +550,35 @@ func (m *SidebarModel) SetFocused(focused bool) {
 }
 
 // Selected returns the currently selected resource type.
+// ClearSearch drops any active sidebar search filter and exits search
+// mode. Used by the Relatives-tab space hotkey so a stale filter from
+// before the switch doesn't hide the freshly-selected resource type.
+func (m *SidebarModel) ClearSearch() {
+	m.searching = false
+	m.searchQuery = ""
+}
+
+// SetSelected programmatically moves the sidebar cursor to the visible
+// item matching `rt` and marks it as selected. No-op when the type isn't
+// in the currently visible set (e.g. hidden by category collapse or
+// search filter). Caller is responsible for dispatching ResourceSelectedMsg
+// separately if downstream side effects need to fire — SetSelected only
+// updates sidebar state, doesn't emit anything.
+//
+// Used by the Links-tab "space — jump to this resource" flow so panel 1
+// highlight tracks the new resource type.
+func (m *SidebarModel) SetSelected(rt k8s.ResourceType) {
+	visible := m.visibleItems()
+	for i, item := range visible {
+		if item.resourceType == rt {
+			m.cursor = i
+			m.selected = rt
+			m.ensureCursorVisible()
+			return
+		}
+	}
+}
+
 func (m SidebarModel) Selected() k8s.ResourceType {
 	return m.selected
 }

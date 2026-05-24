@@ -45,7 +45,13 @@ func TestStatusLineModel_Hints_TablePanel(t *testing.T) {
 	mustContain(t, keys, "e", "table panel must have edit hint")
 	mustContain(t, keys, "D", "table panel must have delete hint")
 	mustContain(t, keys, "/", "table panel must have filter hint")
-	mustContain(t, keys, "Enter", "table panel must have drill hint")
+	// Enter (focus → detail) is omitted intentionally — it's the obvious
+	// adjacent-panel motion and not worth a slot in the hints bar.
+	for _, k := range keys {
+		if k == "Enter" {
+			t.Errorf("Enter hint should be hidden on table panel (focus-shift is obvious), got hints=%v", keys)
+		}
+	}
 }
 
 func TestStatusLineModel_Hints_TablePanel_DrillDown(t *testing.T) {

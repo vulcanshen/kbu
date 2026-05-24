@@ -133,6 +133,16 @@ func (m *DetailModel) advanceSpinner() tea.Cmd {
 // IsSearching returns true if the detail panel is in search mode.
 func (m DetailModel) IsSearching() bool { return m.searching }
 
+// ClearSearch drops any active detail-panel search filter and exits
+// search mode. Used by the Relatives-tab space hotkey so the freshly
+// switched-to resource isn't hidden behind a stale filter inherited
+// from the previous selection.
+func (m *DetailModel) ClearSearch() {
+	m.searching = false
+	m.searchQuery = ""
+	m.scrollOffset = 0
+}
+
 // HasActiveFilter returns true if a search filter is active.
 func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
 
@@ -158,7 +168,7 @@ func (m DetailModel) YAMLContent() string { return m.detail.YAML }
 func NewDetailModel(t *theme.Theme) DetailModel {
 	return DetailModel{
 		activeTab:   DetailTabInfo,
-		tabs:        []string{"Links", "Events"},
+		tabs:        []string{"Relatives", "Events"},
 		theme:       t,
 		maxLogLines: 1000,
 		followTail:  true,
@@ -208,7 +218,7 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 	// Links tab uses j/k for cursor navigation (not line scroll) and Enter
 	// to drill into the highlighted ref. Other tabs scroll by line — fall
 	// through to the standard logic.
-	if m.ActiveTabName() == "Links" {
+	if m.ActiveTabName() == "Relatives" {
 		if newModel, handled, cmd := m.handleLinkKey(msg); handled {
 			return newModel, cmd
 		}
@@ -571,9 +581,18 @@ func (m *DetailModel) SetSize(width, height int) {
 	}
 }
 
-// SetFocused sets whether the detail panel is focused.
+// SetFocused sets whether the detail panel is focused. Rebuilds the
+// pre-rendered Links content so the cursor row picks the focused vs
+// unfocused style — without this, the panel would keep its previous
+// highlight color until the next data refresh.
 func (m *DetailModel) SetFocused(focused bool) {
+	if m.focused == focused {
+		return
+	}
 	m.focused = focused
+	if m.ActiveTabName() == "Relatives" {
+		m.buildContentLines()
+	}
 }
 
 // CopyableContent returns the current tab's content as plain text (no ANSI
@@ -717,12 +736,13 @@ func (m DetailModel) ActiveTabTitle() string {
 }
 
 // tabLabel returns the per-tab label as it should appear in the tab bar,
-// including the drill-level suffix for the Links tab. The "↳N" arrow
-// reads as "you've gone N levels down" — more visual than the older
-// "(N)" parens.
+// including the drill-level suffix for the Links tab. The chain glyph
+// matches the per-row drill arrow + the breadcrumb middle markers so
+// the three surfaces speak the same vocabulary — "you've gone N levels
+// down this chain."
 func (m DetailModel) tabLabel(name string) string {
-	if name == "Links" && m.Depth() > 1 {
-		return fmt.Sprintf("Links ↳%d", m.Depth())
+	if name == "Relatives" && m.Depth() > 1 {
+		return fmt.Sprintf("Relatives %s%d", linksDrillArrow, m.Depth())
 	}
 	return name
 }
@@ -734,7 +754,7 @@ func (m DetailModel) tabLabel(name string) string {
 // been". The chosen format keeps the hotkey in brackets so the user
 // can pattern-match it against `b` in the help screen.
 func (m DetailModel) BorderTopRightHint() string {
-	if m.ActiveTabName() == "Links" && m.Depth() > 1 {
+	if m.ActiveTabName() == "Relatives" && m.Depth() > 1 {
 		return "[b]readcrumbs"
 	}
 	return ""
@@ -757,26 +777,30 @@ func (m *DetailModel) ClearDetail() {
 
 // SetResourceType sets the current resource type and adjusts available tabs.
 //
-// Tab order convention (post-[4] Links migration; YAML moved to Y popup):
-//   - Pods / Deployments: Logs → Links → Events
-//   - Events:             Links alone
-//   - !linksApplicable:   Events only (Namespace — Links tab dropped)
-//   - everything else:    Links → Events
+// Tab order convention — Relatives is always first when present, so the
+// space-hotkey jump-to-this-resource lands on the same tab the user came
+// from (no visual whiplash). Logs follows because users on a Pod/Deployment
+// almost always want logs once they've oriented themselves.
 //
-// Pod gets the structured Owner/Node/SA/Image Links; other kinds use the
-// generic labels + annotations + structured-fields fallback so the panel
-// never renders empty.
+//   - Pods / Deployments: Relatives → Logs → Events
+//   - Events:             Relatives alone
+//   - !linksApplicable:   Events only (Namespace — Relatives tab dropped)
+//   - everything else:    Relatives → Events
+//
+// Pod gets the structured Owner/Node/SA/Volumes Relatives; other kinds
+// use the generic labels + sections fallback so the panel never renders
+// empty.
 func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
 	switch {
 	case rt == k8s.ResourcePods, rt == k8s.ResourceDeployments:
-		m.tabs = []string{"Logs", "Links", "Events"}
+		m.tabs = []string{"Relatives", "Logs", "Events"}
 	case rt == k8s.ResourceEvents:
-		m.tabs = []string{"Links"}
+		m.tabs = []string{"Relatives"}
 	case !linksApplicable(rt):
 		m.tabs = []string{"Events"}
 	default:
-		m.tabs = []string{"Links", "Events"}
+		m.tabs = []string{"Relatives", "Events"}
 	}
 	m.activeTab = 0
 	m.scrollOffset = 0
@@ -825,9 +849,9 @@ func (m *DetailModel) AppendLogLine(pod, container, text string) {
 // buildContentLines rebuilds the pre-rendered content lines for the current tab.
 func (m *DetailModel) buildContentLines() {
 	switch m.ActiveTabName() {
-	case "Links":
+	case "Relatives":
 		m.rebuildLinkEntries()
-		lines, _, cursorLine := renderLinkEntries(m.linkEntries, m.linkCursor, m.width, m.theme, linksPlaceholderEmpty)
+		lines, _, cursorLine := renderLinkEntries(m.linkEntries, m.linkCursor, m.width, m.theme, linksPlaceholderEmpty, m.focused)
 		m.contentLines = lines
 		m.linkCursorLine = cursorLine
 	case "Logs":
@@ -864,6 +888,19 @@ func (m DetailModel) DrillChain() []k8s.RefTarget {
 // returned — the caller (AppModel) substitutes the table-selected item.
 func (m DetailModel) CurrentLevelItem() k8s.ResourceItem {
 	return m.currentLevelItem()
+}
+
+// CurrentLevelRef returns the (kind, ns, name) identity of the resource
+// the user is currently viewing on the Links tab. At root it's the
+// table-selected resource (same as RootRef); at deeper levels it's the
+// drilled-into resource. Used by the "space — jump to this resource"
+// flow so the caller doesn't have to assemble the ref from CurrentLevelKind
+// + CurrentLevelItem manually.
+func (m DetailModel) CurrentLevelRef() k8s.RefTarget {
+	if len(m.drillStack) == 0 {
+		return m.RootRef()
+	}
+	return m.drillStack[len(m.drillStack)-1].ref
 }
 
 // Depth returns the current Links-tab drill level. Level 1 = root
@@ -929,7 +966,7 @@ func (m *DetailModel) rebuildLinkEntries() {
 // SelectedLinkRef returns the drill ref under the Links cursor, or
 // nil if the cursor is on an info-only row (or the tab has no entries).
 func (m DetailModel) SelectedLinkRef() *k8s.RefTarget {
-	if m.ActiveTabName() != "Links" {
+	if m.ActiveTabName() != "Relatives" {
 		return nil
 	}
 	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) {

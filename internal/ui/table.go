@@ -211,11 +211,12 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 		return m, nil
 
 	case msg.Type == tea.KeyEnter:
+		// j/k already auto-fires RowSelectedMsg on cursor move, so
+		// Enter has no row-load work to do — promote it to "open this
+		// row's detail" by shifting focus to panel 3.
 		m.pendingG = false
 		if len(m.rows) > 0 {
-			return m, func() tea.Msg {
-				return RowSelectedMsg{Index: m.OriginalIndex(m.cursor)}
-			}
+			return m, func() tea.Msg { return FocusDetailMsg{} }
 		}
 
 	case msg.Type == tea.KeyEscape:
@@ -248,11 +249,12 @@ func (m TableModel) handleSearchKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 		return m, nil
 
 	case msg.Type == tea.KeyEnter:
+		// Search commits — leave search mode and shift focus to detail.
+		// j/k inside search already kept detail in sync via
+		// emitCursorChanged, so no extra row-load needed.
 		m.searching = false
 		if len(m.rows) > 0 {
-			return m, func() tea.Msg {
-				return RowSelectedMsg{Index: m.OriginalIndex(m.cursor)}
-			}
+			return m, func() tea.Msg { return FocusDetailMsg{} }
 		}
 		return m, nil
 
@@ -339,7 +341,7 @@ func (m TableModel) View() string {
 	if !m.focused {
 		headerStyle = m.theme.TableRowStyle().Bold(true)
 	}
-	header := m.renderRow(colWidths, m.columnTitles(), headerStyle)
+	header := m.renderRow(colWidths, m.columnTitles(), headerStyle, false)
 	b.WriteString(header)
 	b.WriteString("\n")
 
@@ -356,16 +358,21 @@ func (m TableModel) View() string {
 
 	for i := m.scrollOffset; i < end; i++ {
 		var style lipgloss.Style
+		// onLightBg signals stylizeCell to swap pastel status colors
+		// for darker variants — pastel green on the focused-cursor
+		// reverse-video row reads as "barely visible".
+		onLightBg := false
 		if i == m.cursor && m.focused {
 			style = m.theme.TableSelectedRowStyle()
+			onLightBg = true
 		} else if i == m.cursor {
-			style = m.theme.TableRowStyle().Bold(true)
+			style = m.theme.TableUnfocusedSelectedRowStyle()
 		} else if i%2 == 0 {
 			style = m.theme.TableAlternatingRowStyle()
 		} else {
 			style = m.theme.TableRowStyle()
 		}
-		row := m.renderRow(colWidths, m.rows[i], style)
+		row := m.renderRow(colWidths, m.rows[i], style, onLightBg)
 		b.WriteString(row)
 		if i < end-1 {
 			b.WriteString("\n")
@@ -441,7 +448,13 @@ func (m TableModel) calcColumnWidths() []int {
 	return widths
 }
 
-func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.Style) string {
+func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.Style, onLightBg bool) string {
+	// Apply the row style to each cell + separator + trailing padding
+	// rather than wrapping the whole line. Per-cell ANSI prevents the
+	// stylizeCell reset (\x1b[0m, emitted after the colored STATUS span)
+	// from killing the row style for the rest of the row — which is why
+	// the selected-row highlight used to die at the STATUS column and
+	// leave Restarts/Age/Node uncolored.
 	var parts []string
 	for i, w := range colWidths {
 		val := ""
@@ -449,8 +462,6 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 			val = values[i]
 		}
 		raw := val // pre-truncation value — stylizeCell uses this for the color lookup
-		// Pad or truncate (plain — visual width = byte length here since
-		// resource Row strings are ASCII).
 		if len(val) > w {
 			if w > 1 {
 				val = val[:w-1] + "…"
@@ -462,25 +473,25 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		} else {
 			val = val + strings.Repeat(" ", w-len(val))
 		}
-		// Inject per-column color AFTER padding so the cell's visual width
-		// stays exactly w. Only fires when this column is the Pod STATUS
-		// column and the value is a known status — other cells pass through.
-		// raw (pre-truncation) feeds the color lookup so narrow columns that
-		// truncate the status word (e.g. "CrashLoopBackOff" → "CrashL…") are
-		// still recognised and coloured.
-		val = m.stylizeCell(i, val, raw)
+		// stylizeCell wraps a span of the cell with a per-cell fg
+		// override (e.g. Pod STATUS color). It composes ON TOP of the
+		// row style — the row style's bold/fg applies elsewhere in the
+		// cell, the status color only paints the trimmed text.
+		val = m.stylizeCell(i, val, raw, style, onLightBg)
 		parts = append(parts, val)
 	}
 
-	line := strings.Join(parts, " ")
+	sep := style.Render(" ")
+	line := strings.Join(parts, sep)
 
-	// Ensure the line fills the full width
+	// Trailing pad to full row width, also row-styled so the highlight
+	// stretches edge-to-edge.
 	lineLen := lipgloss.Width(line)
 	if lineLen < m.width {
-		line = line + strings.Repeat(" ", m.width-lineLen)
+		line = line + style.Render(strings.Repeat(" ", m.width-lineLen))
 	}
 
-	return style.Render(line)
+	return line
 }
 
 // stylizeCell colors known semantic cells (currently only Pod STATUS) using
@@ -491,31 +502,41 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 // narrow STATUS column that truncates the status word (e.g.
 // "CrashLoopBackOff" → "CrashL…") still gets coloured — the visible
 // (possibly truncated) text gets the ANSI wrap, not the original.
-func (m TableModel) stylizeCell(colIdx int, padded, raw string) string {
-	if m.resourceType != k8s.ResourcePods {
-		return padded
-	}
-	// Pod columns are: NAME, READY, STATUS, RESTARTS, AGE, NODE (index 2 is STATUS)
-	if colIdx != 2 {
-		return padded
+func (m TableModel) stylizeCell(colIdx int, padded, raw string, base lipgloss.Style, onLightBg bool) string {
+	if m.resourceType != k8s.ResourcePods || colIdx != 2 {
+		return base.Render(padded)
 	}
 	color := podStatusColor(strings.TrimSpace(raw), m.theme)
-	if color == "" {
-		return padded
+	if onLightBg {
+		if dark := podStatusColorDark(strings.TrimSpace(raw)); dark != "" {
+			color = dark
+		}
 	}
-	// Find the visible (possibly truncated) text inside the padded slot and
-	// wrap just that span so the trailing spaces stay uncolored (avoids
-	// selected-row bg bleed showing colored space).
+	if color == "" {
+		return base.Render(padded)
+	}
+	// Status cell — overlay the status color on top of the row's base
+	// style, but only on the visible (trimmed) span. Trailing spaces in
+	// the cell stay rendered with the plain base style so any highlight
+	// fills cleanly without colored-space bleed.
 	trimmed := strings.TrimSpace(padded)
 	if trimmed == "" {
-		return padded
+		return base.Render(padded)
 	}
 	idx := strings.Index(padded, trimmed)
 	if idx < 0 {
-		return padded
+		return base.Render(padded)
 	}
-	styled := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(trimmed)
-	return padded[:idx] + styled + padded[idx+len(trimmed):]
+	statusStyle := base.Foreground(lipgloss.Color(color))
+	out := ""
+	if idx > 0 {
+		out += base.Render(padded[:idx])
+	}
+	out += statusStyle.Render(trimmed)
+	if tail := padded[idx+len(trimmed):]; tail != "" {
+		out += base.Render(tail)
+	}
+	return out
 }
 
 // podStatusColor classifies a pod status string into one of the theme's
@@ -537,6 +558,30 @@ func podStatusColor(status string, t *theme.Theme) string {
 	// Generic Init:<Reason> fallback: treat as error since unusual.
 	if strings.HasPrefix(status, "Init:") {
 		return t.Status.Error
+	}
+	return ""
+}
+
+// podStatusColorDark is the light-bg-readable counterpart of podStatusColor —
+// same status → colour buckets but with the Catppuccin Latte (darker)
+// variants. Used by stylizeCell on the focused-cursor row, whose reverse-
+// video bg makes the pastel Mocha greens / yellows wash out. Returns ""
+// for unknown statuses so the caller falls back to the row's base fg.
+func podStatusColorDark(status string) string {
+	switch status {
+	case "Running", "Succeeded", "Completed":
+		return "#40a02b" // Latte green
+	case "Pending", "ContainerCreating", "PodInitializing", "Init:PodInitializing":
+		return "#df8e1d" // Latte yellow
+	case "CrashLoopBackOff", "Error", "ImagePullBackOff", "ErrImagePull",
+		"CreateContainerConfigError", "CreateContainerError",
+		"InvalidImageName", "Evicted", "OOMKilled", "Failed":
+		return "#d20f39" // Latte red
+	case "Terminating", "Unknown":
+		return "#6c6f85" // Latte subtext0
+	}
+	if strings.HasPrefix(status, "Init:") {
+		return "#d20f39"
 	}
 	return ""
 }
@@ -617,6 +662,30 @@ func (m TableModel) OriginalIndex(displayIdx int) int {
 // SelectedRow returns the original index of the currently selected row.
 func (m TableModel) SelectedRow() int {
 	return m.OriginalIndex(m.cursor)
+}
+
+// SetCursor moves the cursor to the row at `originalIdx` (index into the
+// unfiltered allRows). When a search filter is active, the cursor jumps
+// to the matching position in the filtered view; if the target row is
+// filtered out, the cursor stays put. Out-of-range indices are ignored.
+// Used by the Links-tab "space — jump to this resource" flow once the
+// new resource type's items arrive.
+func (m *TableModel) SetCursor(originalIdx int) {
+	if originalIdx < 0 || originalIdx >= len(m.allRows) {
+		return
+	}
+	if m.filteredIndices == nil {
+		m.cursor = originalIdx
+		m.ensureCursorVisible()
+		return
+	}
+	for i, orig := range m.filteredIndices {
+		if orig == originalIdx {
+			m.cursor = i
+			m.ensureCursorVisible()
+			return
+		}
+	}
 }
 
 // IsSearching returns whether the table is in search mode.

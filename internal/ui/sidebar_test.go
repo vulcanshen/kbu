@@ -301,29 +301,36 @@ func TestSidebarModel_ShiftG(t *testing.T) {
 	}
 }
 
-func TestSidebarModel_EnterOnResource(t *testing.T) {
+// TestSidebarModel_EnterEmitsFocusTableMsg verifies l/Enter on the sidebar
+// (non-search) emit FocusTableMsg — they used to call activateResource and
+// re-fire ResourceSelectedMsg, but j/k already auto-selects, so the only
+// useful work left for l/Enter is forwarding focus to panel 2.
+func TestSidebarModel_EnterEmitsFocusTableMsg(t *testing.T) {
 	m := newTestSidebar()
 
-	// Cursor is on Pods (index 4). Press Enter.
 	var cmd tea.Cmd
 	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
-	// Selected should be Pods.
-	if m.Selected() != k8s.ResourcePods {
-		t.Errorf("expected selected=ResourcePods, got %v", m.Selected())
-	}
-
-	// Cmd should produce a ResourceSelectedMsg.
 	if cmd == nil {
-		t.Fatal("expected cmd to be non-nil")
+		t.Fatal("Enter must return a Cmd")
 	}
-	msg := cmd()
-	rsm, ok := msg.(ResourceSelectedMsg)
-	if !ok {
-		t.Fatalf("expected ResourceSelectedMsg, got %T", msg)
+	if _, ok := cmd().(FocusTableMsg); !ok {
+		t.Fatalf("expected FocusTableMsg, got %T", cmd())
 	}
-	if rsm.Type != k8s.ResourcePods {
-		t.Errorf("expected ResourceSelectedMsg.Type=ResourcePods, got %v", rsm.Type)
+}
+
+// TestSidebarModel_LEmitsFocusTableMsg mirrors the Enter test for 'l'.
+func TestSidebarModel_LEmitsFocusTableMsg(t *testing.T) {
+	m := newTestSidebar()
+
+	var cmd tea.Cmd
+	m, cmd = m.Update(keyMsg('l'))
+
+	if cmd == nil {
+		t.Fatal("l must return a Cmd")
+	}
+	if _, ok := cmd().(FocusTableMsg); !ok {
+		t.Fatalf("expected FocusTableMsg, got %T", cmd())
 	}
 }
 
@@ -438,5 +445,32 @@ func TestSidebarModel_Search_ItemMatchOnlyShowsMatching(t *testing.T) {
 		if it.isCategory && strings.EqualFold(it.label, "Cluster") {
 			t.Errorf("Cluster category should not appear when searching 'pods'")
 		}
+	}
+}
+
+func TestSidebarModel_SetSelected_MovesCursor(t *testing.T) {
+	m := newTestSidebar()
+	// Initial cursor is on Pods (index 5). Jump to Services (index 12).
+	m.SetSelected(k8s.ResourceServices)
+	if got := m.Selected(); got != k8s.ResourceServices {
+		t.Errorf("Selected() = %v, want %v", got, k8s.ResourceServices)
+	}
+	visible := m.visibleItems()
+	if m.cursor < 0 || m.cursor >= len(visible) || visible[m.cursor].resourceType != k8s.ResourceServices {
+		t.Errorf("cursor not pointing at Services row, cursor=%d", m.cursor)
+	}
+}
+
+func TestSidebarModel_SetSelected_NoOpOnMissingType(t *testing.T) {
+	m := newTestSidebar()
+	beforeCursor := m.cursor
+	beforeSelected := m.Selected()
+	// CRDs aren't in the default registry yet — sidebar shouldn't move.
+	m.SetSelected(k8s.ResourceType("definitely-not-a-real-kind"))
+	if m.cursor != beforeCursor {
+		t.Errorf("cursor moved on missing type: before=%d, after=%d", beforeCursor, m.cursor)
+	}
+	if m.Selected() != beforeSelected {
+		t.Errorf("selected changed on missing type: before=%v, after=%v", beforeSelected, m.Selected())
 	}
 }

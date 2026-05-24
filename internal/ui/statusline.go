@@ -69,9 +69,11 @@ func (m StatusLineModel) hints() []hint {
 				{"esc", "back"},
 			}
 		} else {
+			// No "Enter: focus detail" hint — moving between adjacent
+			// panels via Enter is the obvious vim-row-to-pane motion;
+			// reserving the slot for actually mnemonic actions.
 			panel = []hint{
 				{"/", "filter"},
-				{"Enter", "drill"},
 				{"e", "edit"},
 				{"s", "shell"},
 				{"D", "del"},

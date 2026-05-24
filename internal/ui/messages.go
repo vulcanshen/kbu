@@ -102,6 +102,39 @@ type linkDrillFetchedMsg struct {
 // any ancestor level.
 type LinkBreadcrumbMsg struct{}
 
+// SwitchToResourceMsg is emitted when the user confirms a Relatives-tab
+// "jump to this resource" action. AppModel routes it by updating sidebar
+// selection, recording a pending row-select for the next ResourceDataMsg,
+// and emitting ResourceSelectedMsg so the watcher restarts on the new
+// kind. This is the CONFIRMED step — see RequestSwitchToResourceMsg for
+// the pre-confirm request.
+type SwitchToResourceMsg struct {
+	Ref k8s.RefTarget
+}
+
+// RequestSwitchToResourceMsg is emitted from any UI surface that wants to
+// initiate a panel-1/2 jump (Relatives tab space, breadcrumb popup
+// space). AppModel handles it by opening the confirm popup with
+// SwitchToResourceMsg{Ref} queued as the on-confirm callback — same
+// gating regardless of caller, so users don't get surprising silent
+// switches from one entry-point but a confirm dialog from another.
+type RequestSwitchToResourceMsg struct {
+	Ref k8s.RefTarget
+}
+
+// FocusTableMsg is emitted when the user presses l / Enter on the
+// sidebar (outside search mode). Sidebar's j/k already auto-selects
+// the cursor row, so l / Enter would just re-fire the same
+// ResourceSelectedMsg and waste a watcher restart. Instead, treat
+// l / Enter as "I've picked the resource, now move me into the table"
+// and let AppModel shift active panel.
+type FocusTableMsg struct{}
+
+// FocusDetailMsg is the table-panel counterpart of FocusTableMsg —
+// pressing Enter on a row shifts focus to panel 3 instead of re-firing
+// the row-selection effect that j/k already triggered.
+type FocusDetailMsg struct{}
+
 // LinkJumpMsg is emitted by the breadcrumb popup when the user picks a
 // level to jump back to. Level=1 means root; values >Depth are clamped
 // by the handler.
