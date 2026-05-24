@@ -91,11 +91,60 @@ func TestPtyKeyBytes_SpecialKeys(t *testing.T) {
 		{tea.KeyEscape, []byte{'\x1b'}},
 		{tea.KeyCtrlC, []byte{'\x03'}},
 		{tea.KeyCtrlD, []byte{'\x04'}},
+
+		// Keys that previously returned nil and silently dropped — zsh
+		// reverse-completion + word-jump + readline bindings all need these.
+		{tea.KeyShiftTab, []byte{'\x1b', '[', 'Z'}},
+		{tea.KeyCtrlLeft, []byte{'\x1b', '[', '1', ';', '5', 'D'}},
+		{tea.KeyCtrlRight, []byte{'\x1b', '[', '1', ';', '5', 'C'}},
+		{tea.KeyShiftLeft, []byte{'\x1b', '[', '1', ';', '2', 'D'}},
+		{tea.KeyF1, []byte{'\x1b', 'O', 'P'}},
+		{tea.KeyF5, []byte{'\x1b', '[', '1', '5', '~'}},
+		{tea.KeyF12, []byte{'\x1b', '[', '2', '4', '~'}},
 	}
 	for _, c := range cases {
 		got := ptyKeyBytes(tea.KeyMsg{Type: c.key}, false)
 		if string(got) != string(c.want) {
 			t.Errorf("key %v = %v, want %v", c.key, got, c.want)
+		}
+	}
+}
+
+// TestPtyKeyBytes_AltPrefixesESC verifies the meta convention: Alt+X sends
+// ESC followed by whatever X would send alone. Covers both rune keys
+// (Alt+f for zsh forward-word) and special keys (Alt+Backspace for
+// delete-word-backward, the most common Alt + special combo).
+func TestPtyKeyBytes_AltPrefixesESC(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  tea.KeyMsg
+		want []byte
+	}{
+		{
+			name: "Alt+f (zsh forward-word)",
+			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}, Alt: true},
+			want: []byte{'\x1b', 'f'},
+		},
+		{
+			name: "Alt+. (zsh insert-last-arg)",
+			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'.'}, Alt: true},
+			want: []byte{'\x1b', '.'},
+		},
+		{
+			name: "Alt+Backspace (delete-word-backward)",
+			msg:  tea.KeyMsg{Type: tea.KeyBackspace, Alt: true},
+			want: []byte{'\x1b', '\x7f'},
+		},
+		{
+			name: "no Alt — rune unchanged",
+			msg:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}},
+			want: []byte{'f'},
+		},
+	}
+	for _, c := range cases {
+		got := ptyKeyBytes(c.msg, false)
+		if string(got) != string(c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}
 }
