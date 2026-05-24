@@ -17,14 +17,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// buildWorkloadStaticLinks builds the API-free portion of a workload's Links:
+// buildWorkloadStaticRelatives builds the API-free portion of a workload's Relatives:
 // owner ref (when present) and a non-default ServiceAccount. Dynamic content
-// (pods matched by selector) is appended by EnrichLinks.
-func buildWorkloadStaticLinks(owners []metav1.OwnerReference, podSA, namespace string) []LinkSection {
-	var entries []LinkRow
+// (pods matched by selector) is appended by EnrichRelatives.
+func buildWorkloadStaticRelatives(owners []metav1.OwnerReference, podSA, namespace string) []RelativeSection {
+	var entries []RelativeRow
 	for _, ref := range owners {
 		if rt, ok := kindToResourceType(ref.Kind); ok {
-			entries = append(entries, LinkRow{
+			entries = append(entries, RelativeRow{
 				Label: "Owner",
 				Value: fmt.Sprintf("%s/%s", ref.Kind, ref.Name),
 				Ref:   &RefTarget{Type: rt, Name: ref.Name, Namespace: namespace},
@@ -33,7 +33,7 @@ func buildWorkloadStaticLinks(owners []metav1.OwnerReference, podSA, namespace s
 		}
 	}
 	if podSA != "" && podSA != "default" {
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "ServiceAccount",
 			Value: podSA,
 			Ref:   &RefTarget{Type: ResourceServiceAccounts, Name: podSA, Namespace: namespace},
@@ -42,29 +42,29 @@ func buildWorkloadStaticLinks(owners []metav1.OwnerReference, podSA, namespace s
 	if len(entries) == 0 {
 		return nil
 	}
-	return []LinkSection{{Entries: entries}}
+	return []RelativeSection{{Entries: entries}}
 }
 
-// buildIngressLinks: IngressClass + backend Services (deduped) + TLS Secrets.
+// buildIngressRelatives: IngressClass + backend Services (deduped) + TLS Secrets.
 // Spec-only — no API call needed.
-func buildIngressLinks(ing *networkingv1.Ingress) []LinkSection {
-	var sections []LinkSection
+func buildIngressRelatives(ing *networkingv1.Ingress) []RelativeSection {
+	var sections []RelativeSection
 
-	var classEntries []LinkRow
+	var classEntries []RelativeRow
 	if ing.Spec.IngressClassName != nil && *ing.Spec.IngressClassName != "" {
 		name := *ing.Spec.IngressClassName
-		classEntries = append(classEntries, LinkRow{
+		classEntries = append(classEntries, RelativeRow{
 			Label: "IngressClass",
 			Value: name,
 			Ref:   &RefTarget{Type: ResourceIngressClasses, Name: name},
 		})
 	}
 	if len(classEntries) > 0 {
-		sections = append(sections, LinkSection{Entries: classEntries})
+		sections = append(sections, RelativeSection{Entries: classEntries})
 	}
 
 	seenSvc := make(map[string]bool)
-	var svcEntries []LinkRow
+	var svcEntries []RelativeRow
 	for _, rule := range ing.Spec.Rules {
 		if rule.HTTP == nil {
 			continue
@@ -87,7 +87,7 @@ func buildIngressLinks(ing *networkingv1.Ingress) []LinkSection {
 			if path.Path == "" {
 				route = host + "/"
 			}
-			svcEntries = append(svcEntries, LinkRow{
+			svcEntries = append(svcEntries, RelativeRow{
 				Label: "  " + name,
 				Value: route,
 				Ref:   &RefTarget{Type: ResourceServices, Name: name, Namespace: ing.Namespace},
@@ -95,28 +95,28 @@ func buildIngressLinks(ing *networkingv1.Ingress) []LinkSection {
 		}
 	}
 	if len(svcEntries) > 0 {
-		sections = append(sections, LinkSection{
+		sections = append(sections, RelativeSection{
 			Title:   fmt.Sprintf("Backend Services (%d)", len(svcEntries)),
 			Entries: svcEntries,
 		})
 	}
 
 	seenSec := make(map[string]bool)
-	var tlsEntries []LinkRow
+	var tlsEntries []RelativeRow
 	for _, tls := range ing.Spec.TLS {
 		if tls.SecretName == "" || seenSec[tls.SecretName] {
 			continue
 		}
 		seenSec[tls.SecretName] = true
 		desc := fmt.Sprintf("%d host(s)", len(tls.Hosts))
-		tlsEntries = append(tlsEntries, LinkRow{
+		tlsEntries = append(tlsEntries, RelativeRow{
 			Label: "  " + tls.SecretName,
 			Value: desc,
 			Ref:   &RefTarget{Type: ResourceSecrets, Name: tls.SecretName, Namespace: ing.Namespace},
 		})
 	}
 	if len(tlsEntries) > 0 {
-		sections = append(sections, LinkSection{
+		sections = append(sections, RelativeSection{
 			Title:   fmt.Sprintf("TLS Secrets (%d)", len(tlsEntries)),
 			Entries: tlsEntries,
 		})
@@ -125,16 +125,16 @@ func buildIngressLinks(ing *networkingv1.Ingress) []LinkSection {
 	return sections
 }
 
-// buildHPALinks: scaleTargetRef → Deployment / StatefulSet / DaemonSet.
+// buildHPARelatives: scaleTargetRef → Deployment / StatefulSet / DaemonSet.
 // Unsupported kinds (ReplicaSet etc.) render no link.
-func buildHPALinks(hpa *autoscalingv2.HorizontalPodAutoscaler) []LinkSection {
+func buildHPARelatives(hpa *autoscalingv2.HorizontalPodAutoscaler) []RelativeSection {
 	ref := hpa.Spec.ScaleTargetRef
 	rt, ok := kindToResourceType(ref.Kind)
 	if !ok {
 		return nil
 	}
-	return []LinkSection{{
-		Entries: []LinkRow{{
+	return []RelativeSection{{
+		Entries: []RelativeRow{{
 			Label: "ScaleTarget",
 			Value: fmt.Sprintf("%s/%s", ref.Kind, ref.Name),
 			Ref:   &RefTarget{Type: rt, Name: ref.Name, Namespace: hpa.Namespace},
@@ -142,11 +142,11 @@ func buildHPALinks(hpa *autoscalingv2.HorizontalPodAutoscaler) []LinkSection {
 	}}
 }
 
-// buildPVCLinks: bound PV + StorageClass. Both refs are cluster-scoped.
-func buildPVCLinks(pvc *corev1.PersistentVolumeClaim) []LinkSection {
-	var entries []LinkRow
+// buildPVCRelatives: bound PV + StorageClass. Both refs are cluster-scoped.
+func buildPVCRelatives(pvc *corev1.PersistentVolumeClaim) []RelativeSection {
+	var entries []RelativeRow
 	if pvc.Spec.VolumeName != "" {
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "Volume",
 			Value: pvc.Spec.VolumeName,
 			Ref:   &RefTarget{Type: ResourcePersistentVolumes, Name: pvc.Spec.VolumeName},
@@ -154,7 +154,7 @@ func buildPVCLinks(pvc *corev1.PersistentVolumeClaim) []LinkSection {
 	}
 	if pvc.Spec.StorageClassName != nil && *pvc.Spec.StorageClassName != "" {
 		name := *pvc.Spec.StorageClassName
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "StorageClass",
 			Value: name,
 			Ref:   &RefTarget{Type: ResourceStorageClasses, Name: name},
@@ -163,24 +163,24 @@ func buildPVCLinks(pvc *corev1.PersistentVolumeClaim) []LinkSection {
 	if len(entries) == 0 {
 		return nil
 	}
-	return []LinkSection{{Entries: entries}}
+	return []RelativeSection{{Entries: entries}}
 }
 
-// buildCronJobLinks: active Jobs spawned by the CronJob (read off
+// buildCronJobRelatives: active Jobs spawned by the CronJob (read off
 // status.active so no extra API call is needed at detail time).
-func buildCronJobLinks(cj *batchv1.CronJob) []LinkSection {
+func buildCronJobRelatives(cj *batchv1.CronJob) []RelativeSection {
 	if len(cj.Status.Active) == 0 {
 		return nil
 	}
-	entries := make([]LinkRow, 0, len(cj.Status.Active))
+	entries := make([]RelativeRow, 0, len(cj.Status.Active))
 	for _, ref := range cj.Status.Active {
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + ref.Name,
 			Value: "Job",
 			Ref:   &RefTarget{Type: ResourceJobs, Name: ref.Name, Namespace: ref.Namespace},
 		})
 	}
-	return []LinkSection{{
+	return []RelativeSection{{
 		Title:   fmt.Sprintf("Active Jobs (%d)", len(entries)),
 		Entries: entries,
 	}}
@@ -207,16 +207,16 @@ func enrichWorkloadPods(ctx context.Context, cs kubernetes.Interface, item Resou
 	if err != nil || len(list.Items) == 0 {
 		return
 	}
-	entries := make([]LinkRow, 0, len(list.Items))
+	entries := make([]RelativeRow, 0, len(list.Items))
 	for i := range list.Items {
 		p := &list.Items[i]
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + p.Name,
 			Value: string(p.Status.Phase),
 			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
 		})
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Pods (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -260,7 +260,7 @@ func enrichPVCConsumers(ctx context.Context, cs kubernetes.Interface, item Resou
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		p := &list.Items[i]
 		uses := false
@@ -273,7 +273,7 @@ func enrichPVCConsumers(ctx context.Context, cs kubernetes.Interface, item Resou
 		if !uses {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + p.Name,
 			Value: string(p.Status.Phase),
 			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
@@ -282,7 +282,7 @@ func enrichPVCConsumers(ctx context.Context, cs kubernetes.Interface, item Resou
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Mounted by (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -301,13 +301,13 @@ func enrichConfigMapConsumers(ctx context.Context, cs kubernetes.Interface, item
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		p := &list.Items[i]
 		if !podUsesConfigMap(p, cm.Name) {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + p.Name,
 			Value: string(p.Status.Phase),
 			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
@@ -316,7 +316,7 @@ func enrichConfigMapConsumers(ctx context.Context, cs kubernetes.Interface, item
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Used by Pods (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -331,13 +331,13 @@ func enrichSecretConsumers(ctx context.Context, cs kubernetes.Interface, item Re
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		p := &list.Items[i]
 		if !podUsesSecret(p, s.Name) {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + p.Name,
 			Value: string(p.Status.Phase),
 			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
@@ -346,7 +346,7 @@ func enrichSecretConsumers(ctx context.Context, cs kubernetes.Interface, item Re
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Used by Pods (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -431,9 +431,9 @@ func containerUsesSecret(cs []corev1.Container, name string) bool {
 // Static builders (no API call)
 // ---------------------------------------------------------------------------
 
-// buildEventLinks: drill to the involved object when km8 recognizes the kind.
+// buildEventRelatives: drill to the involved object when km8 recognizes the kind.
 // Empty when the object's kind isn't in kindToResourceType (e.g. CRDs).
-func buildEventLinks(e *corev1.Event) []LinkSection {
+func buildEventRelatives(e *corev1.Event) []RelativeSection {
 	if e.InvolvedObject.Name == "" {
 		return nil
 	}
@@ -441,8 +441,8 @@ func buildEventLinks(e *corev1.Event) []LinkSection {
 	if !ok {
 		return nil
 	}
-	return []LinkSection{{
-		Entries: []LinkRow{{
+	return []RelativeSection{{
+		Entries: []RelativeRow{{
 			Label: "Object",
 			Value: fmt.Sprintf("%s/%s", e.InvolvedObject.Kind, e.InvolvedObject.Name),
 			Ref:   &RefTarget{Type: rt, Name: e.InvolvedObject.Name, Namespace: e.InvolvedObject.Namespace},
@@ -450,12 +450,12 @@ func buildEventLinks(e *corev1.Event) []LinkSection {
 	}}
 }
 
-// buildPVLinks: ClaimRef (PVC) + StorageClass. ClaimRef carries its own
+// buildPVRelatives: ClaimRef (PVC) + StorageClass. ClaimRef carries its own
 // namespace; StorageClass is cluster-scoped.
-func buildPVLinks(pv *corev1.PersistentVolume) []LinkSection {
-	var entries []LinkRow
+func buildPVRelatives(pv *corev1.PersistentVolume) []RelativeSection {
+	var entries []RelativeRow
 	if pv.Spec.ClaimRef != nil && pv.Spec.ClaimRef.Name != "" {
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "Claim",
 			Value: fmt.Sprintf("%s/%s", pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name),
 			Ref: &RefTarget{
@@ -466,7 +466,7 @@ func buildPVLinks(pv *corev1.PersistentVolume) []LinkSection {
 		})
 	}
 	if pv.Spec.StorageClassName != "" {
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "StorageClass",
 			Value: pv.Spec.StorageClassName,
 			Ref:   &RefTarget{Type: ResourceStorageClasses, Name: pv.Spec.StorageClassName},
@@ -475,16 +475,16 @@ func buildPVLinks(pv *corev1.PersistentVolume) []LinkSection {
 	if len(entries) == 0 {
 		return nil
 	}
-	return []LinkSection{{Entries: entries}}
+	return []RelativeSection{{Entries: entries}}
 }
 
-// buildEndpointSliceLinks: owning Service (via the well-known label) plus
+// buildEndpointSliceRelatives: owning Service (via the well-known label) plus
 // the per-endpoint Pod targets (deduped).
-func buildEndpointSliceLinks(es *discoveryv1.EndpointSlice) []LinkSection {
-	var sections []LinkSection
+func buildEndpointSliceRelatives(es *discoveryv1.EndpointSlice) []RelativeSection {
+	var sections []RelativeSection
 	if svc := es.Labels["kubernetes.io/service-name"]; svc != "" {
-		sections = append(sections, LinkSection{
-			Entries: []LinkRow{{
+		sections = append(sections, RelativeSection{
+			Entries: []RelativeRow{{
 				Label: "Service",
 				Value: svc,
 				Ref:   &RefTarget{Type: ResourceServices, Name: svc, Namespace: es.Namespace},
@@ -492,7 +492,7 @@ func buildEndpointSliceLinks(es *discoveryv1.EndpointSlice) []LinkSection {
 		})
 	}
 	seen := make(map[string]bool)
-	var podEntries []LinkRow
+	var podEntries []RelativeRow
 	for _, ep := range es.Endpoints {
 		if ep.TargetRef == nil || ep.TargetRef.Kind != "Pod" || ep.TargetRef.Name == "" {
 			continue
@@ -502,14 +502,14 @@ func buildEndpointSliceLinks(es *discoveryv1.EndpointSlice) []LinkSection {
 			continue
 		}
 		seen[key] = true
-		podEntries = append(podEntries, LinkRow{
+		podEntries = append(podEntries, RelativeRow{
 			Label: "  " + ep.TargetRef.Name,
 			Value: "pod",
 			Ref:   &RefTarget{Type: ResourcePods, Name: ep.TargetRef.Name, Namespace: ep.TargetRef.Namespace},
 		})
 	}
 	if len(podEntries) > 0 {
-		sections = append(sections, LinkSection{
+		sections = append(sections, RelativeSection{
 			Title:   fmt.Sprintf("Endpoints (%d)", len(podEntries)),
 			Entries: podEntries,
 		})
@@ -517,16 +517,16 @@ func buildEndpointSliceLinks(es *discoveryv1.EndpointSlice) []LinkSection {
 	return sections
 }
 
-// buildClusterRoleBindingLinks / buildRoleBindingLinks: RoleRef + Subjects.
+// buildClusterRoleBindingRelatives / buildRoleBindingRelatives: RoleRef + Subjects.
 // Subjects with Kind=ServiceAccount become drillable; Users/Groups remain
 // info-only since they're not km8 resources.
-func buildClusterRoleBindingLinks(crb *rbacv1.ClusterRoleBinding) []LinkSection {
+func buildClusterRoleBindingRelatives(crb *rbacv1.ClusterRoleBinding) []RelativeSection {
 	sections := roleRefSection(crb.RoleRef, "")
 	sections = appendSubjects(sections, crb.Subjects)
 	return sections
 }
 
-func buildRoleBindingLinks(rb *rbacv1.RoleBinding) []LinkSection {
+func buildRoleBindingRelatives(rb *rbacv1.RoleBinding) []RelativeSection {
 	// Role RoleRefs resolve to the RoleBinding's own namespace; ClusterRole
 	// RoleRefs are cluster-scoped.
 	sections := roleRefSection(rb.RoleRef, rb.Namespace)
@@ -534,7 +534,7 @@ func buildRoleBindingLinks(rb *rbacv1.RoleBinding) []LinkSection {
 	return sections
 }
 
-func roleRefSection(ref rbacv1.RoleRef, bindingNS string) []LinkSection {
+func roleRefSection(ref rbacv1.RoleRef, bindingNS string) []RelativeSection {
 	if ref.Name == "" {
 		return nil
 	}
@@ -549,8 +549,8 @@ func roleRefSection(ref rbacv1.RoleRef, bindingNS string) []LinkSection {
 	default:
 		return nil
 	}
-	return []LinkSection{{
-		Entries: []LinkRow{{
+	return []RelativeSection{{
+		Entries: []RelativeRow{{
 			Label: "RoleRef",
 			Value: fmt.Sprintf("%s/%s", ref.Kind, ref.Name),
 			Ref:   &RefTarget{Type: rt, Name: ref.Name, Namespace: ns},
@@ -558,21 +558,21 @@ func roleRefSection(ref rbacv1.RoleRef, bindingNS string) []LinkSection {
 	}}
 }
 
-func appendSubjects(sections []LinkSection, subjects []rbacv1.Subject) []LinkSection {
+func appendSubjects(sections []RelativeSection, subjects []rbacv1.Subject) []RelativeSection {
 	if len(subjects) == 0 {
 		return sections
 	}
-	entries := make([]LinkRow, 0, len(subjects))
+	entries := make([]RelativeRow, 0, len(subjects))
 	for _, s := range subjects {
-		entries = append(entries, subjectToLinkRow(s))
+		entries = append(entries, subjectToRelativeRow(s))
 	}
-	return append(sections, LinkSection{
+	return append(sections, RelativeSection{
 		Title:   fmt.Sprintf("Subjects (%d)", len(entries)),
 		Entries: entries,
 	})
 }
 
-func subjectToLinkRow(s rbacv1.Subject) LinkRow {
+func subjectToRelativeRow(s rbacv1.Subject) RelativeRow {
 	value := s.Kind
 	if s.Namespace != "" {
 		value = fmt.Sprintf("%s @ %s", s.Kind, s.Namespace)
@@ -581,37 +581,37 @@ func subjectToLinkRow(s rbacv1.Subject) LinkRow {
 	if s.Kind == "ServiceAccount" && s.Namespace != "" && s.Name != "" {
 		ref = &RefTarget{Type: ResourceServiceAccounts, Name: s.Name, Namespace: s.Namespace}
 	}
-	return LinkRow{Label: "  " + s.Name, Value: value, Ref: ref}
+	return RelativeRow{Label: "  " + s.Name, Value: value, Ref: ref}
 }
 
-// buildServiceAccountStaticLinks: the secrets explicitly attached to the SA
+// buildServiceAccountStaticRelatives: the secrets explicitly attached to the SA
 // + imagePullSecrets. Pods using this SA come from enrichServiceAccountConsumers.
-func buildServiceAccountStaticLinks(sa *corev1.ServiceAccount) []LinkSection {
-	var sections []LinkSection
+func buildServiceAccountStaticRelatives(sa *corev1.ServiceAccount) []RelativeSection {
+	var sections []RelativeSection
 	if len(sa.Secrets) > 0 {
-		entries := make([]LinkRow, 0, len(sa.Secrets))
+		entries := make([]RelativeRow, 0, len(sa.Secrets))
 		for _, ref := range sa.Secrets {
-			entries = append(entries, LinkRow{
+			entries = append(entries, RelativeRow{
 				Label: "  " + ref.Name,
 				Value: "Secret",
 				Ref:   &RefTarget{Type: ResourceSecrets, Name: ref.Name, Namespace: sa.Namespace},
 			})
 		}
-		sections = append(sections, LinkSection{
+		sections = append(sections, RelativeSection{
 			Title:   fmt.Sprintf("Secrets (%d)", len(entries)),
 			Entries: entries,
 		})
 	}
 	if len(sa.ImagePullSecrets) > 0 {
-		entries := make([]LinkRow, 0, len(sa.ImagePullSecrets))
+		entries := make([]RelativeRow, 0, len(sa.ImagePullSecrets))
 		for _, ref := range sa.ImagePullSecrets {
-			entries = append(entries, LinkRow{
+			entries = append(entries, RelativeRow{
 				Label: "  " + ref.Name,
 				Value: "Secret",
 				Ref:   &RefTarget{Type: ResourceSecrets, Name: ref.Name, Namespace: sa.Namespace},
 			})
 		}
-		sections = append(sections, LinkSection{
+		sections = append(sections, RelativeSection{
 			Title:   fmt.Sprintf("ImagePullSecrets (%d)", len(entries)),
 			Entries: entries,
 		})
@@ -638,13 +638,13 @@ func enrichNodePods(ctx context.Context, cs kubernetes.Interface, item ResourceI
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		p := &list.Items[i]
 		if p.Spec.NodeName != node.Name {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + p.Namespace + "/" + p.Name,
 			Value: string(p.Status.Phase),
 			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
@@ -653,7 +653,7 @@ func enrichNodePods(ctx context.Context, cs kubernetes.Interface, item ResourceI
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Pods (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -672,7 +672,7 @@ func enrichServiceAccountConsumers(ctx context.Context, cs kubernetes.Interface,
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		p := &list.Items[i]
 		podSA := p.Spec.ServiceAccountName
@@ -682,7 +682,7 @@ func enrichServiceAccountConsumers(ctx context.Context, cs kubernetes.Interface,
 		if podSA != sa.Name {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + p.Name,
 			Value: string(p.Status.Phase),
 			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
@@ -691,7 +691,7 @@ func enrichServiceAccountConsumers(ctx context.Context, cs kubernetes.Interface,
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Used by Pods (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -708,40 +708,40 @@ func enrichServiceAccountBindings(ctx context.Context, cs kubernetes.Interface, 
 		return
 	}
 	if rbList, err := cs.RbacV1().RoleBindings(sa.Namespace).List(ctx, metav1.ListOptions{}); err == nil {
-		var entries []LinkRow
+		var entries []RelativeRow
 		for i := range rbList.Items {
 			rb := &rbList.Items[i]
 			if !bindingHasSASubject(rb.Subjects, sa.Name, sa.Namespace) {
 				continue
 			}
-			entries = append(entries, LinkRow{
+			entries = append(entries, RelativeRow{
 				Label: "  " + rb.Name,
 				Value: "RoleBinding",
 				Ref:   &RefTarget{Type: ResourceRoleBindings, Name: rb.Name, Namespace: rb.Namespace},
 			})
 		}
 		if len(entries) > 0 {
-			detail.Links = append(detail.Links, LinkSection{
+			detail.Relatives = append(detail.Relatives, RelativeSection{
 				Title:   fmt.Sprintf("RoleBindings (%d)", len(entries)),
 				Entries: entries,
 			})
 		}
 	}
 	if crbList, err := cs.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{}); err == nil {
-		var entries []LinkRow
+		var entries []RelativeRow
 		for i := range crbList.Items {
 			crb := &crbList.Items[i]
 			if !bindingHasSASubject(crb.Subjects, sa.Name, sa.Namespace) {
 				continue
 			}
-			entries = append(entries, LinkRow{
+			entries = append(entries, RelativeRow{
 				Label: "  " + crb.Name,
 				Value: "ClusterRoleBinding",
 				Ref:   &RefTarget{Type: ResourceClusterRoleBindings, Name: crb.Name},
 			})
 		}
 		if len(entries) > 0 {
-			detail.Links = append(detail.Links, LinkSection{
+			detail.Relatives = append(detail.Relatives, RelativeSection{
 				Title:   fmt.Sprintf("ClusterRoleBindings (%d)", len(entries)),
 				Entries: entries,
 			})
@@ -773,13 +773,13 @@ func enrichServiceAccountTokenSecrets(ctx context.Context, cs kubernetes.Interfa
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		s := &list.Items[i]
 		if s.Annotations[saTokenAnnotationName] != sa.Name {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + s.Name,
 			Value: string(s.Type),
 			Ref:   &RefTarget{Type: ResourceSecrets, Name: s.Name, Namespace: s.Namespace},
@@ -788,7 +788,7 @@ func enrichServiceAccountTokenSecrets(ctx context.Context, cs kubernetes.Interfa
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Token Secrets (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -808,9 +808,9 @@ func enrichSecretServiceAccount(ctx context.Context, cs kubernetes.Interface, it
 	if saName == "" {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title: "ServiceAccount",
-		Entries: []LinkRow{{
+		Entries: []RelativeRow{{
 			Label: "  " + saName,
 			Value: "ServiceAccount",
 			Ref:   &RefTarget{Type: ResourceServiceAccounts, Name: saName, Namespace: s.Namespace},
@@ -854,13 +854,13 @@ func enrichRoleBindings(ctx context.Context, cs kubernetes.Interface, item Resou
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		rb := &list.Items[i]
 		if rb.RoleRef.Kind != "Role" || rb.RoleRef.Name != role.Name {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + rb.Name,
 			Value: "RoleBinding",
 			Ref:   &RefTarget{Type: ResourceRoleBindings, Name: rb.Name, Namespace: rb.Namespace},
@@ -869,7 +869,7 @@ func enrichRoleBindings(ctx context.Context, cs kubernetes.Interface, item Resou
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Bound by (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -878,7 +878,7 @@ func enrichRoleBindings(ctx context.Context, cs kubernetes.Interface, item Resou
 // enrichPodOwner resolves a Pod's owner past the ReplicaSet
 // implementation-detail layer. The Pod's OwnerReference points to a
 // ReplicaSet (K8s auto-creates one per Deployment revision), but
-// buildPodLinks already mapped Type to ResourceDeployments — leaving
+// buildPodRelatives already mapped Type to ResourceDeployments — leaving
 // Name pointing at the RS, which doesn't exist as a Deployment. Result:
 // drill into Owner errors with "deployment not found".
 //
@@ -888,7 +888,7 @@ func enrichRoleBindings(ctx context.Context, cs kubernetes.Interface, item Resou
 // RS lookup fails (RBAC, deleted mid-rollout, ...).
 func enrichPodOwner(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
 	p, ok := item.Raw.(*corev1.Pod)
-	if !ok || detail.PodLinks == nil || detail.PodLinks.Owner == nil {
+	if !ok || detail.PodRelatives == nil || detail.PodRelatives.Owner == nil {
 		return
 	}
 	if len(p.OwnerReferences) == 0 {
@@ -904,7 +904,7 @@ func enrichPodOwner(ctx context.Context, cs kubernetes.Interface, item ResourceI
 	}
 	for _, ref := range rs.OwnerReferences {
 		if ref.Kind == "Deployment" {
-			detail.PodLinks.Owner = &RefTarget{
+			detail.PodRelatives.Owner = &RefTarget{
 				Type:      ResourceDeployments,
 				Name:      ref.Name,
 				Namespace: p.Namespace,
@@ -925,20 +925,20 @@ func enrichClusterRoleBindings(ctx context.Context, cs kubernetes.Interface, ite
 
 	crbList, err := cs.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
 	if err == nil {
-		var entries []LinkRow
+		var entries []RelativeRow
 		for i := range crbList.Items {
 			b := &crbList.Items[i]
 			if b.RoleRef.Kind != "ClusterRole" || b.RoleRef.Name != cr.Name {
 				continue
 			}
-			entries = append(entries, LinkRow{
+			entries = append(entries, RelativeRow{
 				Label: "  " + b.Name,
 				Value: "ClusterRoleBinding",
 				Ref:   &RefTarget{Type: ResourceClusterRoleBindings, Name: b.Name},
 			})
 		}
 		if len(entries) > 0 {
-			detail.Links = append(detail.Links, LinkSection{
+			detail.Relatives = append(detail.Relatives, RelativeSection{
 				Title:   fmt.Sprintf("ClusterRoleBindings (%d)", len(entries)),
 				Entries: entries,
 			})
@@ -947,20 +947,20 @@ func enrichClusterRoleBindings(ctx context.Context, cs kubernetes.Interface, ite
 
 	rbList, err := cs.RbacV1().RoleBindings("").List(ctx, metav1.ListOptions{})
 	if err == nil {
-		var entries []LinkRow
+		var entries []RelativeRow
 		for i := range rbList.Items {
 			b := &rbList.Items[i]
 			if b.RoleRef.Kind != "ClusterRole" || b.RoleRef.Name != cr.Name {
 				continue
 			}
-			entries = append(entries, LinkRow{
+			entries = append(entries, RelativeRow{
 				Label: "  " + b.Namespace + "/" + b.Name,
 				Value: "RoleBinding",
 				Ref:   &RefTarget{Type: ResourceRoleBindings, Name: b.Name, Namespace: b.Namespace},
 			})
 		}
 		if len(entries) > 0 {
-			detail.Links = append(detail.Links, LinkSection{
+			detail.Relatives = append(detail.Relatives, RelativeSection{
 				Title:   fmt.Sprintf("RoleBindings (%d)", len(entries)),
 				Entries: entries,
 			})
@@ -981,7 +981,7 @@ func enrichStorageClassPVCs(ctx context.Context, cs kubernetes.Interface, item R
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		pvc := &list.Items[i]
 		name := ""
@@ -991,7 +991,7 @@ func enrichStorageClassPVCs(ctx context.Context, cs kubernetes.Interface, item R
 		if name != sc.Name {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + pvc.Namespace + "/" + pvc.Name,
 			Value: string(pvc.Status.Phase),
 			Ref: &RefTarget{
@@ -1004,7 +1004,7 @@ func enrichStorageClassPVCs(ctx context.Context, cs kubernetes.Interface, item R
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("PVCs (%d)", len(entries)),
 		Entries: entries,
 	})
@@ -1014,7 +1014,7 @@ func enrichStorageClassPVCs(ctx context.Context, cs kubernetes.Interface, item R
 // spec.ingressClassName == this class. Only the modern field is checked;
 // the deprecated `kubernetes.io/ingress.class` annotation is intentionally
 // ignored — clusters still on it can update the annotation to the field
-// or skip this Links entry.
+// or skip this Relatives entry.
 func enrichIngressClassIngresses(ctx context.Context, cs kubernetes.Interface, item ResourceItem, detail *ResourceDetail) {
 	ic, ok := item.Raw.(*networkingv1.IngressClass)
 	if !ok {
@@ -1024,7 +1024,7 @@ func enrichIngressClassIngresses(ctx context.Context, cs kubernetes.Interface, i
 	if err != nil {
 		return
 	}
-	var entries []LinkRow
+	var entries []RelativeRow
 	for i := range list.Items {
 		ing := &list.Items[i]
 		cls := ""
@@ -1034,7 +1034,7 @@ func enrichIngressClassIngresses(ctx context.Context, cs kubernetes.Interface, i
 		if cls != ic.Name {
 			continue
 		}
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + ing.Namespace + "/" + ing.Name,
 			Value: "Ingress",
 			Ref: &RefTarget{
@@ -1047,29 +1047,29 @@ func enrichIngressClassIngresses(ctx context.Context, cs kubernetes.Interface, i
 	if len(entries) == 0 {
 		return
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("Ingresses (%d)", len(entries)),
 		Entries: entries,
 	})
 }
 
 // appendSelectorPodSection lists pods matching `selector` in `ns` and adds
-// a section titled `title` to detail.Links. No-op when the list is empty.
+// a section titled `title` to detail.Relatives. No-op when the list is empty.
 func appendSelectorPodSection(ctx context.Context, cs kubernetes.Interface, ns, selector, title string, detail *ResourceDetail) {
 	list, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil || len(list.Items) == 0 {
 		return
 	}
-	entries := make([]LinkRow, 0, len(list.Items))
+	entries := make([]RelativeRow, 0, len(list.Items))
 	for i := range list.Items {
 		p := &list.Items[i]
-		entries = append(entries, LinkRow{
+		entries = append(entries, RelativeRow{
 			Label: "  " + p.Name,
 			Value: string(p.Status.Phase),
 			Ref:   &RefTarget{Type: ResourcePods, Name: p.Name, Namespace: p.Namespace},
 		})
 	}
-	detail.Links = append(detail.Links, LinkSection{
+	detail.Relatives = append(detail.Relatives, RelativeSection{
 		Title:   fmt.Sprintf("%s (%d)", title, len(entries)),
 		Entries: entries,
 	})

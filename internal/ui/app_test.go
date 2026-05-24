@@ -101,7 +101,7 @@ func TestAppModel_CurrentItemUID(t *testing.T) {
 
 // TestAppModel_ResourceDetailMsg_DropsStale verifies the UID guard rejects
 // a fetch result whose ItemUID doesn't match the currently selected row.
-// Without this, a slow EnrichLinks (e.g. ClusterRole's two cluster-wide
+// Without this, a slow EnrichRelatives (e.g. ClusterRole's two cluster-wide
 // List calls) finishing after the user moved on would overwrite the
 // freshly displayed detail.
 func TestAppModel_ResourceDetailMsg_DropsStale(t *testing.T) {
@@ -147,7 +147,7 @@ func TestAppModel_LinkPushMsg_CycleBlocked(t *testing.T) {
 	m.detail.SetDetail(k8s.ResourceDetail{Name: "nginx-x", Namespace: "default", Kind: "Pod"}, nil)
 
 	// Drilling into the SAME root pod is a cycle.
-	cycleMsg := LinkPushMsg{Ref: k8s.RefTarget{Type: k8s.ResourcePods, Name: "nginx-x", Namespace: "default"}}
+	cycleMsg := RelativePushMsg{Ref: k8s.RefTarget{Type: k8s.ResourcePods, Name: "nginx-x", Namespace: "default"}}
 	updated, cmd := m.Update(cycleMsg)
 	got := updated.(AppModel)
 	if got.detail.Depth() != 1 {
@@ -171,7 +171,7 @@ func TestAppModel_linkDrillFetchedMsg_PushesFrame(t *testing.T) {
 	m := appWithItems(items, 0)
 	m.detail.SetDetail(k8s.ResourceDetail{Name: "nginx-x", Namespace: "default", Kind: "Pod"}, nil)
 
-	msg := linkDrillFetchedMsg{
+	msg := relativeDrillFetchedMsg{
 		ref:       k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx", Namespace: "default"},
 		sourceUID: "uid-pod",
 		item:      k8s.ResourceItem{Name: "nginx", Namespace: "default", UID: "uid-dep"},
@@ -195,7 +195,7 @@ func TestAppModel_linkDrillFetchedMsg_StaleDrop(t *testing.T) {
 	m.detail.SetDetail(k8s.ResourceDetail{Name: "nginx-x", Namespace: "default", Kind: "Pod"}, nil)
 
 	// sourceUID points at a different pod the user has since left.
-	msg := linkDrillFetchedMsg{
+	msg := relativeDrillFetchedMsg{
 		ref:       k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		sourceUID: "uid-stale",
 		item:      k8s.ResourceItem{Name: "nginx", UID: "uid-dep"},
@@ -224,7 +224,7 @@ func TestAppModel_ResourceDetailMsg_DropsWhenNoSelection(t *testing.T) {
 }
 
 // TestAppModel_SwitchToResourceMsg_RoutesSidebarAndPending verifies the
-// confirmed Links-tab jump: sidebar selection updates synchronously,
+// confirmed Relatives-tab jump: sidebar selection updates synchronously,
 // pendingTableSelect captures the target ref for the next ResourceDataMsg,
 // and the cmd returned re-emits ResourceSelectedMsg so the watcher restarts.
 func TestAppModel_SwitchToResourceMsg_RoutesSidebarAndPending(t *testing.T) {
@@ -283,7 +283,7 @@ func TestAppModel_SwitchToResourceMsg_ClearsSearchFilters(t *testing.T) {
 }
 
 // TestAppModel_HonorPendingTableSelect_FindsRow verifies the cursor-snap
-// hook used by the Links-tab space hotkey: when items for the matching
+// hook used by the Relatives-tab space hotkey: when items for the matching
 // kind arrive, cursor jumps to the row whose name+namespace matches and
 // pending clears.
 func TestAppModel_HonorPendingTableSelect_FindsRow(t *testing.T) {

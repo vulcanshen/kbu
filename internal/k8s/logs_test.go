@@ -137,7 +137,7 @@ func TestPodsForDeployment_NoPods_EmptyResult(t *testing.T) {
 	}
 }
 
-// ── Pod Links parsing ──────────────────────────────────────────────────
+// ── Pod Relatives parsing ──────────────────────────────────────────────────
 
 func TestBuildPodLinks_ExtractsOwnerNodeServiceAccount(t *testing.T) {
 	pod := &corev1.Pod{
@@ -155,7 +155,7 @@ func TestBuildPodLinks_ExtractsOwnerNodeServiceAccount(t *testing.T) {
 			InitContainers:     []corev1.Container{{Name: "wait-db", Image: "busybox:latest"}},
 		},
 	}
-	po := buildPodLinks(pod)
+	po := buildPodRelatives(pod)
 	if po.Owner == nil || po.Owner.Name != "nginx-7f9c4d" {
 		t.Errorf("owner: expected nginx-7f9c4d, got %v", po.Owner)
 	}
@@ -184,7 +184,7 @@ func TestBuildPodLinks_SkipsDefaultServiceAccount(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "default"},
 		Spec:       corev1.PodSpec{ServiceAccountName: "default"},
 	}
-	po := buildPodLinks(pod)
+	po := buildPodRelatives(pod)
 	if po.ServiceAccount != nil {
 		t.Errorf("default SA should be elided, got %v", po.ServiceAccount)
 	}
@@ -212,7 +212,7 @@ func TestBuildPodLinks_VolumesMapToDrillRefs(t *testing.T) {
 			},
 		},
 	}
-	po := buildPodLinks(pod)
+	po := buildPodRelatives(pod)
 	if len(po.Volumes) != 4 {
 		t.Fatalf("expected 4 volume refs, got %d", len(po.Volumes))
 	}
@@ -244,7 +244,7 @@ func TestBuildPodLinks_UnknownOwnerKindOmits(t *testing.T) {
 			}},
 		},
 	}
-	po := buildPodLinks(pod)
+	po := buildPodRelatives(pod)
 	if po.Owner != nil {
 		t.Errorf("unknown owner kind should be omitted (not drillable), got %v", po.Owner)
 	}

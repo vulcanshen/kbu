@@ -86,7 +86,7 @@ type AppModel struct {
 	drillDownContainers []k8s.ContainerInfo
 
 	// pendingTableSelect holds the (kind, ns, name) of a resource the
-	// user asked to switch to via the Links-tab space hotkey. When the
+	// user asked to switch to via the Relatives-tab space hotkey. When the
 	// next ResourceDataMsg for the matching kind arrives, the table
 	// cursor jumps to the row whose name+namespace matches, and the
 	// pointer is cleared. nil otherwise.
@@ -449,8 +449,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "h":
 			// Tab switching via h/l is now scoped to the Table panel —
-			// on the Detail panel, h/l belong to the Links drill chain
-			// (handleLinkKey). To switch detail tabs while looking at
+			// on the Detail panel, h/l belong to the Relatives drill chain
+			// (handleRelativeKey). To switch detail tabs while looking at
 			// panel 3, the user moves focus to panel 2 first.
 			if m.activePanel == TablePanel {
 				m.detail = m.detail.PrevTab()
@@ -525,17 +525,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "y":
 			return m, copyToClipboardCmd(m.focusedPanelContent())
 		case "Y":
-			// Cursor-aware on the Links tab: if the cursor sits on a
+			// Cursor-aware on the Relatives tab: if the cursor sits on a
 			// drillable entry, fetch + popup THAT entry's YAML (via
-			// LinkDrillMsg). If no drillable cursor (empty / non-link
+			// RelativeDrillMsg). If no drillable cursor (empty / non-link
 			// row), fall through to the current level's own YAML — at
 			// depth 1 that's the table-selected resource's YAML
 			// (existing behavior), at deeper levels it's the resource
 			// the user has drilled into.
 			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Relatives" {
-				if ref := m.detail.SelectedLinkRef(); ref != nil {
+				if ref := m.detail.SelectedRelativeRef(); ref != nil {
 					target := *ref
-					return m, func() tea.Msg { return LinkDrillMsg{Ref: target} }
+					return m, func() tea.Msg { return RelativeDrillMsg{Ref: target} }
 				}
 			}
 			yaml := m.detail.CurrentLevelYAML()
@@ -565,7 +565,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel != DetailPanel || m.detail.ActiveTabName() != "Relatives" {
 				return m, nil
 			}
-			ref := m.detail.SelectedLinkRef()
+			ref := m.detail.SelectedRelativeRef()
 			if ref == nil {
 				return m, nil
 			}
@@ -725,7 +725,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Index >= 0 && msg.Index < len(m.items) && len(m.table.rows) > 0 {
 			item := m.items[msg.Index]
-			// Reset Links-tab drill chain immediately on row change so the
+			// Reset Relatives-tab drill chain immediately on row change so the
 			// user doesn't briefly see the previous row's drill state while
 			// the new detail fetch is in flight.
 			m.detail.ResetDrillStack()
@@ -754,8 +754,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
-	case LinkDrillMsg:
-		// User pressed Y on a drillable Links entry. Fetch the target
+	case RelativeDrillMsg:
+		// User pressed Y on a drillable Relatives entry. Fetch the target
 		// resource off the Update path and open its YAML in a popup.
 		ref := msg.Ref
 		client := m.k8sClient
@@ -769,7 +769,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 
-	case LinkPushMsg:
+	case RelativePushMsg:
 		// User pressed Enter / l on a drillable entry. Cycle-check
 		// against the existing chain (kind+ns+name — k8s makes this
 		// triple unique within a kind so it's effectively UID-equivalent
@@ -791,12 +791,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ctx := context.Background()
 			item, err := k8s.FetchResourceByRef(ctx, client.Clientset(), ref)
 			if err != nil {
-				return linkDrillFetchedMsg{ref: ref, sourceUID: sourceUID, err: err}
+				return relativeDrillFetchedMsg{ref: ref, sourceUID: sourceUID, err: err}
 			}
 			detail := k8s.GetResourceDetail(ref.Type, item)
 			detail.YAML = k8s.MarshalItemYAML(item)
-			k8s.EnrichLinks(ctx, client.Clientset(), ref.Type, item, &detail)
-			return linkDrillFetchedMsg{ref: ref, sourceUID: sourceUID, item: item, detail: detail}
+			k8s.EnrichRelatives(ctx, client.Clientset(), ref.Type, item, &detail)
+			return relativeDrillFetchedMsg{ref: ref, sourceUID: sourceUID, item: item, detail: detail}
 		}
 		batch := []tea.Cmd{fetchCmd}
 		if c := m.detail.BeginRefetch(); c != nil {
@@ -804,7 +804,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(batch...)
 
-	case linkDrillFetchedMsg:
+	case relativeDrillFetchedMsg:
 		if msg.sourceUID != m.currentItemUID() {
 			return m, nil // user moved on
 		}
@@ -815,14 +815,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail.PushDrillFrame(msg.ref, msg.item, msg.detail)
 		return m, nil
 
-	case LinkBreadcrumbMsg:
+	case RelativeBreadcrumbMsg:
 		if m.detail.Depth() <= 1 {
 			return m, nil
 		}
 		m.breadcrumbPopup.SetSize(m.width, m.height)
 		return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
 
-	case LinkJumpMsg:
+	case RelativeJumpMsg:
 		m.detail.JumpToDrillLevel(msg.Level)
 		return m, nil
 
@@ -870,7 +870,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ResourceDetailMsg:
 		// Drop stale results — a fetch that finished after the user moved
 		// on to a different row would otherwise overwrite the right detail
-		// with the wrong one. Critical for kinds whose EnrichLinks does a
+		// with the wrong one. Critical for kinds whose EnrichRelatives does a
 		// cluster-wide List (ClusterRole / StorageClass / IngressClass),
 		// where latency easily lets order get scrambled. Also drops when
 		// currentItemUID is empty (namespace/context change cleared the
@@ -1883,10 +1883,10 @@ func fetchResourceDetail(client *k8s.Client, rt k8s.ResourceType, item k8s.Resou
 		ctx := context.Background()
 		detail := k8s.GetResourceDetail(rt, item)
 		detail.YAML = k8s.MarshalItemYAML(item)
-		// Kind-specific Links data that needs an API call (Service →
+		// Kind-specific Relatives data that needs an API call (Service →
 		// selector→pods, ClusterRole → bindings, StorageClass → PVCs, ...).
-		// EnrichLinks is a no-op for kinds without extra resolution.
-		k8s.EnrichLinks(ctx, client.Clientset(), rt, item, &detail)
+		// EnrichRelatives is a no-op for kinds without extra resolution.
+		k8s.EnrichRelatives(ctx, client.Clientset(), rt, item, &detail)
 		events, _ := k8s.FetchResourceEvents(ctx, client.Clientset(), item.Name, item.Namespace)
 		return ResourceDetailMsg{ItemUID: item.UID, Detail: detail, Events: events}
 	}

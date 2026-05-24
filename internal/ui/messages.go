@@ -68,28 +68,28 @@ type NamespaceListMsg struct {
 	Namespaces []string
 }
 
-// LinkDrillMsg is emitted when the user presses Y on a Links-tab entry —
+// RelativeDrillMsg is emitted when the user presses Y on a Relatives-tab entry —
 // it asks AppModel to fetch the cursor-pointed resource and open its
 // YAML in a popup. (Y replaces the Enter-opens-YAML behavior that used to
-// exist before Enter was reassigned to drill-into-Links.)
-type LinkDrillMsg struct {
+// exist before Enter was reassigned to drill-into-Relatives.)
+type RelativeDrillMsg struct {
 	Ref k8s.RefTarget
 }
 
-// LinkPushMsg is emitted when the user presses Enter / l on a drillable
-// Links-tab entry — it asks AppModel to fetch the target and push it onto
-// the Links-tab drill chain (so the panel re-renders showing the target's
-// links). AppModel does a cycle pre-check (kind+ns+name against the
+// RelativePushMsg is emitted when the user presses Enter / l on a drillable
+// Relatives-tab entry — it asks AppModel to fetch the target and push it onto
+// the Relatives-tab drill chain (so the panel re-renders showing the target's
+// relatives). AppModel does a cycle pre-check (kind+ns+name against the
 // existing chain) before dispatching the fetch; cycle hit → toast + drop.
-type LinkPushMsg struct {
+type RelativePushMsg struct {
 	Ref k8s.RefTarget
 }
 
-// linkDrillFetchedMsg carries the fetched resource for a LinkPushMsg.
+// relativeDrillFetchedMsg carries the fetched resource for a RelativePushMsg.
 // SourceUID is the table-selected item's UID at dispatch time — the
 // handler drops the message when the table selection has moved on,
 // mirroring the stale-drop guard on ResourceDetailMsg.
-type linkDrillFetchedMsg struct {
+type relativeDrillFetchedMsg struct {
 	ref       k8s.RefTarget
 	sourceUID string
 	item      k8s.ResourceItem
@@ -97,10 +97,10 @@ type linkDrillFetchedMsg struct {
 	err       error
 }
 
-// LinkBreadcrumbMsg is emitted when the user presses `i` on the Links
+// RelativeBreadcrumbMsg is emitted when the user presses `i` on the Relatives
 // tab at depth>1 — opens the breadcrumb popup so they can jump back to
 // any ancestor level.
-type LinkBreadcrumbMsg struct{}
+type RelativeBreadcrumbMsg struct{}
 
 // SwitchToResourceMsg is emitted when the user confirms a Relatives-tab
 // "jump to this resource" action. AppModel routes it by updating sidebar
@@ -135,15 +135,15 @@ type FocusTableMsg struct{}
 // the row-selection effect that j/k already triggered.
 type FocusDetailMsg struct{}
 
-// LinkJumpMsg is emitted by the breadcrumb popup when the user picks a
+// RelativeJumpMsg is emitted by the breadcrumb popup when the user picks a
 // level to jump back to. Level=1 means root; values >Depth are clamped
 // by the handler.
-type LinkJumpMsg struct {
+type RelativeJumpMsg struct {
 	Level int
 }
 
 // resourceFetchedForDrillMsg carries a resource fetched in response to an
-// LinkDrillMsg, ready to populate a YamlPopup. err non-nil = fetch
+// RelativeDrillMsg, ready to populate a YamlPopup. err non-nil = fetch
 // failed; caller should toast + skip popup.
 type resourceFetchedForDrillMsg struct {
 	ref  k8s.RefTarget

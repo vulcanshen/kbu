@@ -10,23 +10,23 @@ import (
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
-// Nerd Font glyphs shared with the Links tab so the breadcrumb and the
+// Nerd Font glyphs shared with the Relatives tab so the breadcrumb and the
 // drill arrow read as the same vocabulary. Both markers are
 // "<glyph><space>" so visual width stays 2 cells, matching the existing
 // markerW=2 layout math. Width math will break if the user's terminal
 // font renders these glyphs as 2-cell — they're intended for single-
 // width Nerd Font / Nerd Font Mono variants.
 const (
-	breadcrumbChainMarker   = " " //  — step indicator (same as Links drill arrow)
+	breadcrumbChainMarker   = " " //  — step indicator (same as Relatives drill arrow)
 	breadcrumbCurrentMarker = "● " // ● — you-are-here dot; visually distinct from the chain glyph
-	linksDrillArrow         = " " //  — appears after each drillable Links entry
+	relativesDrillArrow     = " " //  — appears after each drillable Relatives entry
 )
 
-// BreadcrumbPopupModel lists the Links-tab drill chain and lets the user
+// BreadcrumbPopupModel lists the Relatives-tab drill chain and lets the user
 // jump back to any ancestor level via j/k + Enter. Opened by `b` on the
-// Links tab at depth > 1; closed by Esc / q / b.
+// Relatives tab at depth > 1; closed by Esc / q / b.
 //
-// On Enter the model emits LinkJumpMsg{Level: 1-indexed level} so
+// On Enter the model emits RelativeJumpMsg{Level: 1-indexed level} so
 // AppModel can call detail.JumpToDrillLevel — popping intermediate
 // frames in one step.
 type BreadcrumbPopupModel struct {
@@ -97,7 +97,7 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 		case "enter":
 			level := m.cursor + 1
 			closeCmd := m.animator.Close()
-			jumpCmd := func() tea.Msg { return LinkJumpMsg{Level: level} }
+			jumpCmd := func() tea.Msg { return RelativeJumpMsg{Level: level} }
 			return m, tea.Batch(closeCmd, jumpCmd)
 		case " ":
 			// Space — emit RequestSwitchToResourceMsg, leaving the
@@ -222,9 +222,9 @@ func (m BreadcrumbPopupModel) renderEntry(
 	labelPrefix := levelTag + " " // "2. "  (NO leading space — that's added once at line level below)
 	labelPrefixW := lipgloss.Width(labelPrefix)
 	const markerW = 2
-	// Every row carries a marker so the visual rhythm matches the Links
+	// Every row carries a marker so the visual rhythm matches the Relatives
 	// tab's drill arrow. Middle rows show the chain-step glyph (same as
-	// Links' drill indicator); the bottom row swaps to the
+	// Relatives. drill indicator); the bottom row swaps to the
 	// you-are-here glyph for unmistakable current-level affordance.
 	marker := breadcrumbChainMarker
 	if i == len(m.chain)-1 {

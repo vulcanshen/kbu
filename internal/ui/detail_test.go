@@ -62,7 +62,7 @@ func TestDetailModel_InitialState(t *testing.T) {
 		t.Errorf("expected 2 tabs (no Logs for non-Pod), got %d", len(m.tabs))
 	}
 	if m.tabs[0] != "Relatives" || m.tabs[1] != "Events" {
-		t.Errorf("expected tabs=[Links, Events], got %v", m.tabs)
+		t.Errorf("expected tabs=[Relatives, Events], got %v", m.tabs)
 	}
 	if m.scrollOffset != 0 {
 		t.Errorf("expected scrollOffset=0, got %d", m.scrollOffset)
@@ -296,14 +296,14 @@ func TestDetailModel_AppendLogLine_AggregatePrefix(t *testing.T) {
 	}
 }
 
-// ── Links tab + drill ─────────────────────────────────────────────────
+// ── Relatives tab + drill ─────────────────────────────────────────────────
 
-func samplePodLinksDetail() k8s.ResourceDetail {
+func samplePodRelativesDetail() k8s.ResourceDetail {
 	return k8s.ResourceDetail{
 		Name:      "nginx-7f9c4d-abc12",
 		Namespace: "default",
 		Kind:      "Pod",
-		PodLinks: &k8s.PodLinksData{
+		PodRelatives: &k8s.PodRelativesData{
 			Owner: &k8s.RefTarget{
 				Type: k8s.ResourceDeployments, Name: "nginx", Namespace: "default",
 			},
@@ -314,34 +314,34 @@ func samplePodLinksDetail() k8s.ResourceDetail {
 	}
 }
 
-func TestDetailModel_LinksTab_RendersDrillableRefs(t *testing.T) {
+func TestDetailModel_RelativesTab_RendersDrillableRefs(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 
 	joined := strings.Join(m.contentLines, "\n")
 	for _, want := range []string{"Owner", "Node", "ServiceAccount", "worker-3", "nginx-sa"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("Links must contain %q, got:\n%s", want, joined)
+			t.Errorf("Relatives must contain %q, got:\n%s", want, joined)
 		}
 	}
-	// Strict Links: container images are NOT included (not a K8s resource).
+	// Strict Relatives: container images are NOT included (not a K8s resource).
 	if strings.Contains(joined, "nginx:1.27.1") {
-		t.Errorf("Links must not include image strings (use Y popup for that), got:\n%s", joined)
+		t.Errorf("Relatives must not include image strings (use Y popup for that), got:\n%s", joined)
 	}
 }
 
 func TestDetailModel_LinksCursor_LandsOnFirstSelectable(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 
-	if m.linkCursor < 0 || m.linkCursor >= len(m.linkEntries) {
-		t.Fatalf("cursor out of bounds: %d (entries %d)", m.linkCursor, len(m.linkEntries))
+	if m.relativeCursor < 0 || m.relativeCursor >= len(m.relativeEntries) {
+		t.Fatalf("cursor out of bounds: %d (entries %d)", m.relativeCursor, len(m.relativeEntries))
 	}
-	got := m.linkEntries[m.linkCursor]
+	got := m.relativeEntries[m.relativeCursor]
 	if !got.isSelectable() {
 		t.Errorf("cursor must land on selectable entry, got section header %q", got.label)
 	}
@@ -353,34 +353,34 @@ func TestDetailModel_LinksCursor_LandsOnFirstSelectable(t *testing.T) {
 func TestDetailModel_LinksCursor_JKMovesBetweenSelectable(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 
 	// Initial: Owner
-	if m.linkEntries[m.linkCursor].label != "Owner" {
-		t.Fatalf("setup: cursor expected on Owner, got %q", m.linkEntries[m.linkCursor].label)
+	if m.relativeEntries[m.relativeCursor].label != "Owner" {
+		t.Fatalf("setup: cursor expected on Owner, got %q", m.relativeEntries[m.relativeCursor].label)
 	}
 	// j → Node
 	m, _ = m.Update(keyMsg('j'))
-	if m.linkEntries[m.linkCursor].label != "Node" {
-		t.Errorf("after j: expected Node, got %q", m.linkEntries[m.linkCursor].label)
+	if m.relativeEntries[m.relativeCursor].label != "Node" {
+		t.Errorf("after j: expected Node, got %q", m.relativeEntries[m.relativeCursor].label)
 	}
 	// j → ServiceAccount
 	m, _ = m.Update(keyMsg('j'))
-	if m.linkEntries[m.linkCursor].label != "ServiceAccount" {
-		t.Errorf("after j×2: expected ServiceAccount, got %q", m.linkEntries[m.linkCursor].label)
+	if m.relativeEntries[m.relativeCursor].label != "ServiceAccount" {
+		t.Errorf("after j×2: expected ServiceAccount, got %q", m.relativeEntries[m.relativeCursor].label)
 	}
 	// k → Node
 	m, _ = m.Update(keyMsg('k'))
-	if m.linkEntries[m.linkCursor].label != "Node" {
-		t.Errorf("after k: expected Node back, got %q", m.linkEntries[m.linkCursor].label)
+	if m.relativeEntries[m.relativeCursor].label != "Node" {
+		t.Errorf("after k: expected Node back, got %q", m.relativeEntries[m.relativeCursor].label)
 	}
 }
 
 func TestDetailModel_LinksEnter_EmitsPushMsg(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 
 	// Cursor on Owner; Enter now drills into the link chain (push), not the
@@ -389,9 +389,9 @@ func TestDetailModel_LinksEnter_EmitsPushMsg(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("Enter on drillable entry must return a Cmd")
 	}
-	push, ok := cmd().(LinkPushMsg)
+	push, ok := cmd().(RelativePushMsg)
 	if !ok {
-		t.Fatalf("expected LinkPushMsg, got %T", cmd())
+		t.Fatalf("expected RelativePushMsg, got %T", cmd())
 	}
 	if push.Ref.Type != k8s.ResourceDeployments || push.Ref.Name != "nginx" {
 		t.Errorf("expected push to deployment/nginx, got %v", push.Ref)
@@ -401,7 +401,7 @@ func TestDetailModel_LinksEnter_EmitsPushMsg(t *testing.T) {
 func TestDetailModel_DrillStack_PushPop(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	if m.Depth() != 1 {
 		t.Fatalf("initial depth should be 1, got %d", m.Depth())
 	}
@@ -433,7 +433,7 @@ func TestDetailModel_DrillStack_PushPop(t *testing.T) {
 func TestDetailModel_DrillStack_JumpToLevel(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	for _, name := range []string{"dep", "rs", "cfg"} {
 		m.PushDrillFrame(
 			k8s.RefTarget{Type: k8s.ResourceDeployments, Name: name, Namespace: "default"},
@@ -469,7 +469,7 @@ func TestDetailModel_DrillStack_JumpToLevel(t *testing.T) {
 func TestDetailModel_DrillStack_PreservedAcrossSetDetail(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
@@ -479,7 +479,7 @@ func TestDetailModel_DrillStack_PreservedAcrossSetDetail(t *testing.T) {
 	}
 	// Watcher-driven refresh delivers a new ResourceDetailMsg for the SAME
 	// root row. drillStack must survive.
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	if m.Depth() != 2 {
 		t.Errorf("SetDetail must preserve drillStack, got depth %d", m.Depth())
 	}
@@ -491,7 +491,7 @@ func TestDetailModel_DrillStack_PreservedAcrossSetDetail(t *testing.T) {
 func TestDetailModel_DrillStack_ClearedByClearDetail(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
@@ -506,12 +506,12 @@ func TestDetailModel_DrillStack_ClearedByClearDetail(t *testing.T) {
 }
 
 // TestDetailModel_CurrentLevelRef returns root at depth 1, drilled ref at
-// depth 2+. Used by the Links-tab space hotkey to identify the resource
+// depth 2+. Used by the Relatives-tab space hotkey to identify the resource
 // the user wants to promote to the table selection.
 func TestDetailModel_CurrentLevelRef(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	d := samplePodLinksDetail()
+	d := samplePodRelativesDetail()
 	d.Name = "pod-x"
 	d.Namespace = "ns-a"
 	m.SetDetail(d, nil)
@@ -530,34 +530,34 @@ func TestDetailModel_CurrentLevelRef(t *testing.T) {
 func TestDetailModel_TabTitle_ShowsLevelWhenDrilled(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 	if got := m.ActiveTabTitle(); got != "Relatives" {
-		t.Errorf("at root, ActiveTabTitle should be 'Links', got %q", got)
+		t.Errorf("at root, ActiveTabTitle should be 'Relatives', got %q", got)
 	}
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
 	)
-	want := "Relatives " + linksDrillArrow + "2"
+	want := "Relatives " + relativesDrillArrow + "2"
 	if got := m.ActiveTabTitle(); got != want {
 		t.Errorf("at depth 2, ActiveTabTitle should be %q, got %q", want, got)
 	}
 }
 
-// TestDetailModel_LinksTab_LongValueWrapsConsistently verifies a Links
+// TestDetailModel_RelativesTab_LongValueWrapsConsistently verifies a Relatives
 // row whose value (resource name) is too long for the row width wraps
 // to multiple display lines — and does so the same way for cursor and
 // non-cursor rows, fixing a previous inconsistency where the cursor
 // row wrapped (via lipgloss.Width) but non-cursor rows got truncated
 // by the outer panel render.
-func TestDetailModel_LinksTab_LongValueWrapsConsistently(t *testing.T) {
+func TestDetailModel_RelativesTab_LongValueWrapsConsistently(t *testing.T) {
 	longName := "harbor-registry-htpasswd-very-long-name-here"
 	detail := k8s.ResourceDetail{
 		Name:      "p",
 		Namespace: "ns",
 		Kind:      "Pod",
-		PodLinks: &k8s.PodLinksData{
+		PodRelatives: &k8s.PodRelativesData{
 			Volumes: []k8s.VolumeRef{
 				{
 					Name: "vol1",
@@ -587,7 +587,7 @@ func TestDetailModel_LinksTab_LongValueWrapsConsistently(t *testing.T) {
 		t.Errorf("end of long name (%q) missing — value was truncated, not wrapped:\n%s", tail, joined)
 	}
 	// Drill arrow must still render after wrap.
-	if !strings.Contains(joined, linksDrillArrow) {
+	if !strings.Contains(joined, relativesDrillArrow) {
 		t.Errorf("drill arrow lost after wrap, got:\n%s", joined)
 	}
 }
@@ -595,7 +595,7 @@ func TestDetailModel_LinksTab_LongValueWrapsConsistently(t *testing.T) {
 func TestDetailModel_BorderTopRightHint(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 
 	// Depth 1: no hint (b doesn't do anything useful).
@@ -603,16 +603,16 @@ func TestDetailModel_BorderTopRightHint(t *testing.T) {
 		t.Errorf("depth 1 should have no hint, got %q", got)
 	}
 
-	// Depth 2 on Links tab: hint surfaces b.
+	// Depth 2 on Relatives tab: hint surfaces b.
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
 	)
 	if got := m.BorderTopRightHint(); got != "[b]readcrumbs" {
-		t.Errorf("depth 2 Links should show '[b]readcrumbs', got %q", got)
+		t.Errorf("depth 2 Relatives should show '[b]readcrumbs', got %q", got)
 	}
 
-	// Same depth but Events tab: no hint (b only works on Links).
+	// Same depth but Events tab: no hint (b only works on Relatives).
 	m = m.switchToTab(2)
 	if got := m.BorderTopRightHint(); got != "" {
 		t.Errorf("Events tab should not show hint, got %q", got)
@@ -622,7 +622,7 @@ func TestDetailModel_BorderTopRightHint(t *testing.T) {
 func TestDetailModel_LinksH_PopsFrame(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
@@ -641,7 +641,7 @@ func TestDetailModel_LinksH_PopsFrame(t *testing.T) {
 func TestDetailModel_LinksB_EmitsBreadcrumbMsgAtDepthGT1(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 
 	// At depth 1, b is a no-op (no chain to display).
@@ -650,24 +650,24 @@ func TestDetailModel_LinksB_EmitsBreadcrumbMsgAtDepthGT1(t *testing.T) {
 		t.Errorf("b at depth 1 should not emit a Cmd, got %T", cmd())
 	}
 
-	// At depth 2, b emits LinkBreadcrumbMsg.
+	// At depth 2, b emits RelativeBreadcrumbMsg.
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
 	)
 	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
 	if cmd == nil {
-		t.Fatal("b at depth >1 must emit LinkBreadcrumbMsg")
+		t.Fatal("b at depth >1 must emit RelativeBreadcrumbMsg")
 	}
-	if _, ok := cmd().(LinkBreadcrumbMsg); !ok {
-		t.Errorf("expected LinkBreadcrumbMsg, got %T", cmd())
+	if _, ok := cmd().(RelativeBreadcrumbMsg); !ok {
+		t.Errorf("expected RelativeBreadcrumbMsg, got %T", cmd())
 	}
 }
 
 func TestDetailModel_DrillChain_RootFirst(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx", Namespace: "default"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
@@ -687,7 +687,7 @@ func TestDetailModel_DrillChain_RootFirst(t *testing.T) {
 func TestDetailModel_LinksL_EmitsPushMsg(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodLinksDetail(), nil)
+	m.SetDetail(samplePodRelativesDetail(), nil)
 	m = m.switchToTab(0) // Relatives
 
 	// `l` is the explicit drill-deeper key (vim right = into the chain).
@@ -695,30 +695,30 @@ func TestDetailModel_LinksL_EmitsPushMsg(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("l on drillable entry must return a Cmd")
 	}
-	if _, ok := cmd().(LinkPushMsg); !ok {
-		t.Fatalf("expected LinkPushMsg from l, got %T", cmd())
+	if _, ok := cmd().(RelativePushMsg); !ok {
+		t.Fatalf("expected RelativePushMsg from l, got %T", cmd())
 	}
 }
 
-// TestDetailModel_LinksTab_EmptyShowsPlaceholder verifies the "no links to
+// TestDetailModel_RelativesTab_EmptyShowsPlaceholder verifies the "no relatives to
 // show" placeholder renders for a supported kind whose specific instance
 // happens to have no link refs (e.g. ConfigMap with no consumer Pods).
-func TestDetailModel_LinksTab_EmptyShowsPlaceholder(t *testing.T) {
+func TestDetailModel_RelativesTab_EmptyShowsPlaceholder(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourceConfigMaps) // supported, but instance has no consumers
 	m.SetDetail(k8s.ResourceDetail{Name: "x", Namespace: "default", Kind: "ConfigMap"}, nil)
 	m = m.switchToTab(0) // Relatives
 
 	joined := strings.Join(m.contentLines, "\n")
-	if !strings.Contains(joined, "no links to show") {
-		t.Errorf("supported-but-empty Links must show 'no links to show' placeholder, got:\n%s", joined)
+	if !strings.Contains(joined, "no relatives to show") {
+		t.Errorf("supported-but-empty Relatives must show 'no relatives to show' placeholder, got:\n%s", joined)
 	}
 	if strings.Contains(joined, "not yet supported") {
 		t.Errorf("supported kind must not show 'not yet supported' placeholder")
 	}
 }
 
-// TestDetailModel_NamespaceHidesLinksTab verifies the Links tab is dropped
+// TestDetailModel_NamespaceHidesLinksTab verifies the Relatives tab is dropped
 // entirely for Namespace — there are no meaningful refs to surface, so the
 // tab strip skips straight to Events.
 func TestDetailModel_NamespaceHidesLinksTab(t *testing.T) {
@@ -727,7 +727,7 @@ func TestDetailModel_NamespaceHidesLinksTab(t *testing.T) {
 
 	for _, tab := range m.tabs {
 		if tab == "Relatives" {
-			t.Fatalf("Namespace should not show Links tab, got: %v", m.tabs)
+			t.Fatalf("Namespace should not show Relatives tab, got: %v", m.tabs)
 		}
 	}
 	if len(m.tabs) == 0 || m.tabs[0] != "Events" {
@@ -966,12 +966,12 @@ func TestDetailModel_SearchJKAreTypedNotNavigation(t *testing.T) {
 	}
 }
 
-// YAML-rendering tests were removed in the Links migration — YAML now
+// YAML-rendering tests were removed in the Relatives migration — YAML now
 // lives in the `Y` popup, covered by yamlpopup_test.go. CopyableContent's
 // YAML special-case is gone too; users copy raw YAML from inside the popup.
 
 func TestDetailModel_CopyableContent_StripsANSI(t *testing.T) {
-	// Use Events tab — generic Links tab returns a placeholder for non-Pod,
+	// Use Events tab — generic Relatives tab returns a placeholder for non-Pod,
 	// non-Deployment kinds; Events is a reliable source of styled content.
 	m := newTestDetail()
 	m.SetDetail(sampleDetail(), sampleEvents())

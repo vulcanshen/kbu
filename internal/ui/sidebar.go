@@ -565,7 +565,7 @@ func (m *SidebarModel) ClearSearch() {
 // separately if downstream side effects need to fire — SetSelected only
 // updates sidebar state, doesn't emit anything.
 //
-// Used by the Links-tab "space — jump to this resource" flow so panel 1
+// Used by the Relatives-tab "space — jump to this resource" flow so panel 1
 // highlight tracks the new resource type.
 func (m *SidebarModel) SetSelected(rt k8s.ResourceType) {
 	visible := m.visibleItems()

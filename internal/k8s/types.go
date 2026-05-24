@@ -67,42 +67,42 @@ type ResourceItem struct {
 // available. Structured fields are still used for synthetic detail views
 // (e.g. container drill-down) that have no native YAML.
 //
-// PodLinks / ServiceLinks are legacy typed payloads for the two kinds with
+// PodRelatives / ServiceRelatives are legacy typed payloads for the two kinds with
 // rich domain-specific structure. Every other kind populates the generic
-// Links slice instead — the UI dispatcher reads from the right field.
+// Relatives slice instead — the UI dispatcher reads from the right field.
 type ResourceDetail struct {
-	Name         string
-	Namespace    string
-	Kind         string
-	UID          string
-	CreatedAt    string
-	Labels       map[string]string
-	Annotations  map[string]string
-	Fields       []DetailField
-	Containers   []ContainerInfo
-	YAML         string
-	PodLinks     *PodLinksData
-	ServiceLinks *ServiceLinksData
-	Links        []LinkSection
+	Name             string
+	Namespace        string
+	Kind             string
+	UID              string
+	CreatedAt        string
+	Labels           map[string]string
+	Annotations      map[string]string
+	Fields           []DetailField
+	Containers       []ContainerInfo
+	YAML             string
+	PodRelatives     *PodRelativesData
+	ServiceRelatives *ServiceRelativesData
+	Relatives        []RelativeSection
 }
 
-// LinkSection is one labeled group of link rows on the Links tab. Title is
+// RelativeSection is one labeled group of link rows on the Relatives tab. Title is
 // the header label (empty title renders no header row). Entries with a
 // non-nil Ref are drillable; entries with Ref==nil are informational text.
-type LinkSection struct {
+type RelativeSection struct {
 	Title   string
-	Entries []LinkRow
+	Entries []RelativeRow
 }
 
-// LinkRow is one row inside a LinkSection. Display format is
+// RelativeRow is one row inside a RelativeSection. Display format is
 // "Label  Value [→]" — the arrow appears when Ref is non-nil.
-type LinkRow struct {
+type RelativeRow struct {
 	Label string
 	Value string
 	Ref   *RefTarget
 }
 
-// RefTarget identifies another Kubernetes resource that the Links tab can
+// RefTarget identifies another Kubernetes resource that the Relatives tab can
 // drill into. Type is the km8 ResourceType (Pod, Secret, ConfigMap, Node, ...);
 // Namespace is empty for cluster-scoped kinds.
 type RefTarget struct {
@@ -111,7 +111,7 @@ type RefTarget struct {
 	Namespace string
 }
 
-// PodLinksData is the structured "Links" content for a Pod.
+// PodRelativesData is the structured "Relatives" content for a Pod.
 //
 // Owner is the immediate K8s owner reference (ReplicaSet / DaemonSet /
 // StatefulSet / Job). Drilling further (RS → Deployment) is left to follow-up
@@ -123,7 +123,7 @@ type RefTarget struct {
 //
 // Images carries the rendered image strings (e.g. "nginx:1.27.1") for
 // informational display — there's no K8s resource to drill into for an image.
-type PodLinksData struct {
+type PodRelativesData struct {
 	Owner          *RefTarget
 	Node           *RefTarget // cluster-scoped
 	ServiceAccount *RefTarget
@@ -140,15 +140,15 @@ type VolumeRef struct {
 	Ref  *RefTarget
 }
 
-// ServiceLinksData is the navigable-refs payload for a Service detail.
+// ServiceRelativesData is the navigable-refs payload for a Service detail.
 // Pods is the workload selected by the Service's label selector — each one
 // is a drillable RefTarget so the user can answer "which pods does this
 // Service route to?" in one keystroke.
 //
-// Populated by EnrichLinks at fetch time (it issues a CoreV1().Pods().List
+// Populated by EnrichRelatives at fetch time (it issues a CoreV1().Pods().List
 // against the selector); the synchronous detailService can't do this
 // because it has no clientset.
-type ServiceLinksData struct {
+type ServiceRelativesData struct {
 	Pods []RefTarget
 }
 
