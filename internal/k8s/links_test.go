@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -426,6 +427,118 @@ func TestEnrichLinks_ServiceAccountConsumers_DefaultSADoesNotMatchEmpty(t *testi
 	EnrichLinks(context.Background(), cs, ResourceServiceAccounts, ResourceItem{Raw: sa}, detail)
 	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
 		t.Fatalf("want only 'user' pod, got %+v", detail.Links)
+	}
+}
+
+// TestEnrichLinks_ServiceAccountBindings verifies RoleBindings + ClusterRoleBindings
+// that name the SA as a subject surface as drillable sections.
+func TestEnrichLinks_ServiceAccountBindings(t *testing.T) {
+	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "my-sa", Namespace: "ns"}}
+	rbMatch := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "rb-match", Namespace: "ns"},
+		Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "my-sa", Namespace: "ns"}},
+	}
+	rbOther := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "rb-other", Namespace: "ns"},
+		Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "different", Namespace: "ns"}},
+	}
+	crbMatch := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "crb-match"},
+		Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "my-sa", Namespace: "ns"}},
+	}
+	crbOther := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "crb-user"},
+		Subjects:   []rbacv1.Subject{{Kind: "User", Name: "alice"}},
+	}
+	cs := fake.NewSimpleClientset(sa, rbMatch, rbOther, crbMatch, crbOther)
+
+	detail := &ResourceDetail{}
+	enrichServiceAccountBindings(context.Background(), cs, ResourceItem{Raw: sa}, detail)
+
+	var rbSection, crbSection *LinkSection
+	for i := range detail.Links {
+		switch {
+		case strings.HasPrefix(detail.Links[i].Title, "RoleBindings"):
+			rbSection = &detail.Links[i]
+		case strings.HasPrefix(detail.Links[i].Title, "ClusterRoleBindings"):
+			crbSection = &detail.Links[i]
+		}
+	}
+	if rbSection == nil || len(rbSection.Entries) != 1 || rbSection.Entries[0].Ref.Name != "rb-match" {
+		t.Errorf("expected exactly rb-match in RoleBindings section, got %+v", rbSection)
+	}
+	if crbSection == nil || len(crbSection.Entries) != 1 || crbSection.Entries[0].Ref.Name != "crb-match" {
+		t.Errorf("expected exactly crb-match in ClusterRoleBindings section, got %+v", crbSection)
+	}
+}
+
+// TestEnrichLinks_ServiceAccountTokenSecrets verifies Secrets carrying the
+// kubernetes.io/service-account.name annotation pointing at the SA show up
+// as a Token Secrets section.
+func TestEnrichLinks_ServiceAccountTokenSecrets(t *testing.T) {
+	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "my-sa", Namespace: "ns"}}
+	tokenSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "my-sa-token", Namespace: "ns",
+			Annotations: map[string]string{"kubernetes.io/service-account.name": "my-sa"},
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+	unrelated := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: "ns"},
+		Type:       corev1.SecretTypeOpaque,
+	}
+	cs := fake.NewSimpleClientset(sa, tokenSecret, unrelated)
+
+	detail := &ResourceDetail{}
+	enrichServiceAccountTokenSecrets(context.Background(), cs, ResourceItem{Raw: sa}, detail)
+
+	if len(detail.Links) != 1 || len(detail.Links[0].Entries) != 1 {
+		t.Fatalf("expected one Token Secrets section with one entry, got %+v", detail.Links)
+	}
+	if detail.Links[0].Entries[0].Ref.Name != "my-sa-token" {
+		t.Errorf("expected my-sa-token ref, got %+v", detail.Links[0].Entries[0])
+	}
+}
+
+// TestEnrichLinks_SecretServiceAccount verifies the reverse direction: a
+// Secret with the SA annotation surfaces the SA as a drillable section.
+func TestEnrichLinks_SecretServiceAccount(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "my-sa-token", Namespace: "ns",
+			Annotations: map[string]string{"kubernetes.io/service-account.name": "my-sa"},
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+	cs := fake.NewSimpleClientset(secret)
+
+	detail := &ResourceDetail{}
+	enrichSecretServiceAccount(context.Background(), cs, ResourceItem{Raw: secret}, detail)
+
+	if len(detail.Links) != 1 || detail.Links[0].Title != "ServiceAccount" {
+		t.Fatalf("expected one ServiceAccount section, got %+v", detail.Links)
+	}
+	entry := detail.Links[0].Entries[0]
+	if entry.Ref.Type != ResourceServiceAccounts || entry.Ref.Name != "my-sa" || entry.Ref.Namespace != "ns" {
+		t.Errorf("ref = %+v, want SA my-sa in ns", entry.Ref)
+	}
+}
+
+// TestEnrichLinks_SecretServiceAccount_AnnotationAbsent guards the no-op
+// path: regular Secrets without the SA annotation must not add a section.
+func TestEnrichLinks_SecretServiceAccount_AnnotationAbsent(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "plain", Namespace: "ns"},
+		Type:       corev1.SecretTypeOpaque,
+	}
+	cs := fake.NewSimpleClientset(secret)
+
+	detail := &ResourceDetail{}
+	enrichSecretServiceAccount(context.Background(), cs, ResourceItem{Raw: secret}, detail)
+
+	if len(detail.Links) != 0 {
+		t.Errorf("expected no section for non-SA Secret, got %+v", detail.Links)
 	}
 }
 

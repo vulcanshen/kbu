@@ -1230,10 +1230,13 @@ func EnrichLinks(ctx context.Context, cs kubernetes.Interface, rt ResourceType, 
 		enrichConfigMapConsumers(ctx, cs, item, detail)
 	case ResourceSecrets:
 		enrichSecretConsumers(ctx, cs, item, detail)
+		enrichSecretServiceAccount(ctx, cs, item, detail)
 	case ResourceNodes:
 		enrichNodePods(ctx, cs, item, detail)
 	case ResourceServiceAccounts:
 		enrichServiceAccountConsumers(ctx, cs, item, detail)
+		enrichServiceAccountBindings(ctx, cs, item, detail)
+		enrichServiceAccountTokenSecrets(ctx, cs, item, detail)
 	case ResourcePodDisruptionBudgets:
 		enrichPDBPods(ctx, cs, item, detail)
 	case ResourceNetworkPolicies:
