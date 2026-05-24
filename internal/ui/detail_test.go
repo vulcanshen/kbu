@@ -456,7 +456,17 @@ func TestDetailModel_DrillStack_JumpToLevel(t *testing.T) {
 	}
 }
 
-func TestDetailModel_DrillStack_ResetOnSetDetail(t *testing.T) {
+// TestDetailModel_DrillStack_PreservedAcrossSetDetail guards a regression
+// where the watcher's background refresh would dispatch a fresh
+// fetchResourceDetail for the still-selected root row while the user was
+// mid-drill. When the result arrived, SetDetail would wipe drillStack and
+// snap the user back to level 1 — exactly when their fetch finished, the
+// view jumped away from the level they just navigated into.
+//
+// The row-change path (RowSelectedMsg) handles reset explicitly via
+// ResetDrillStack; namespace/context switches go through ClearDetail.
+// SetDetail itself must NOT touch the chain.
+func TestDetailModel_DrillStack_PreservedAcrossSetDetail(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodLinksDetail(), nil)
@@ -467,10 +477,31 @@ func TestDetailModel_DrillStack_ResetOnSetDetail(t *testing.T) {
 	if m.Depth() != 2 {
 		t.Fatalf("setup failed: depth %d", m.Depth())
 	}
-	// Setting fresh detail (e.g. table cursor moved) must wipe the chain.
+	// Watcher-driven refresh delivers a new ResourceDetailMsg for the SAME
+	// root row. drillStack must survive.
 	m.SetDetail(samplePodLinksDetail(), nil)
+	if m.Depth() != 2 {
+		t.Errorf("SetDetail must preserve drillStack, got depth %d", m.Depth())
+	}
+}
+
+// TestDetailModel_DrillStack_ClearedByClearDetail covers the
+// namespace/context switch path — different cluster scope means the chain
+// no longer points at reachable resources, so it must be torn down.
+func TestDetailModel_DrillStack_ClearedByClearDetail(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(samplePodLinksDetail(), nil)
+	m.PushDrillFrame(
+		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
+		k8s.ResourceItem{}, k8s.ResourceDetail{},
+	)
+	if m.Depth() != 2 {
+		t.Fatalf("setup failed: depth %d", m.Depth())
+	}
+	m.ClearDetail()
 	if m.Depth() != 1 {
-		t.Errorf("SetDetail must reset drillStack, got depth %d", m.Depth())
+		t.Errorf("ClearDetail must reset drillStack, got depth %d", m.Depth())
 	}
 }
 
