@@ -564,7 +564,7 @@ func TestDetailModel_LinksTab_LongValueWrapsConsistently(t *testing.T) {
 		t.Errorf("end of long name (%q) missing — value was truncated, not wrapped:\n%s", tail, joined)
 	}
 	// Drill arrow must still render after wrap.
-	if !strings.Contains(joined, "→") {
+	if !strings.Contains(joined, linksDrillArrow) {
 		t.Errorf("drill arrow lost after wrap, got:\n%s", joined)
 	}
 }
