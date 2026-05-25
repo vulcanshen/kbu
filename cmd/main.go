@@ -52,6 +52,9 @@ func main() {
 		client.SetNamespace(cfg.DefaultNamespace)
 	}
 
+	// Optional Helm Releases category — only registered when `helm` is on PATH.
+	k8s.RegisterHelmIfAvailable()
+
 	app := ui.NewAppModel(t, client, cfg.Editor)
 
 	p := tea.NewProgram(app,

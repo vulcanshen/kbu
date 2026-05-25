@@ -60,6 +60,7 @@ type AppModel struct {
 	ptyView         *PtyView
 	yamlPopup       YamlPopupModel
 	breadcrumbPopup BreadcrumbPopupModel
+	helmDocMenu     HelmDocMenuPopupModel
 
 	activePanel     Panel
 	width           int
@@ -147,6 +148,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		ptyView:         NewPtyView(),
 		yamlPopup:       NewYamlPopupModel(t),
 		breadcrumbPopup: NewBreadcrumbPopupModel(t),
+		helmDocMenu:     NewHelmDocMenuPopupModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfgEditor:       cfgEditor,
@@ -244,6 +246,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.breadcrumbPopup.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.helmDocMenu.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
@@ -371,6 +376,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.helmDocMenu.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.helmDocMenu, cmd = m.helmDocMenu.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -481,18 +498,49 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "e":
 			if !m.editing && m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
 				idx := m.table.SelectedRow()
-				if idx >= 0 && idx < len(m.items) {
-					item := m.items[idx]
-					detail := fmt.Sprintf("kubectl edit %s/%s", m.currentResource.KubectlName(), item.Name)
-					if item.Namespace != "" {
-						detail += " -n " + item.Namespace
-					}
-					startCmd := func() tea.Msg {
-						return startEditMsg{resource: m.currentResource, item: item, contextName: m.k8sClient.ContextName()}
-					}
-					return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
+				if idx < 0 || idx >= len(m.items) {
+					return m, nil
 				}
+				item := m.items[idx]
+				// Rule A: any helm-managed resource — Release itself OR a
+				// K8s object Helm rendered (label
+				// app.kubernetes.io/managed-by=Helm or annotation
+				// meta.helm.sh/release-name) — is read-only. kubectl edit
+				// changes get overwritten on the next helm upgrade /
+				// rollback anyway. Use helm upgrade for those.
+				if m.currentResource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
+					m.appLog.Info("Helm-managed (read-only) — use helm upgrade / rollback")
+					return m, m.toast.Show("Helm-managed (read-only)")
+				}
+				detail := fmt.Sprintf("kubectl edit %s/%s", m.currentResource.KubectlName(), item.Name)
+				if item.Namespace != "" {
+					detail += " -n " + item.Namespace
+				}
+				startCmd := func() tea.Msg {
+					return startEditMsg{resource: m.currentResource, item: item, contextName: m.k8sClient.ContextName()}
+				}
+				return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
 			}
+		case ".":
+			// Toggle helm storage secret visibility (sh.helm.release.v1
+			// blobs). Default = hidden; `.` shows them, `.` again hides.
+			// Mimics unix dotfile convention. Force a re-list so the new
+			// filter takes effect immediately — watcher's cache is stale
+			// under the new predicate.
+			shown := k8s.ToggleHelmHideStorageSecrets()
+			// shown==false means filter active (hidden). For the toast
+			// message we describe the new VISIBILITY state since that's
+			// what changed on screen.
+			if !shown {
+				m.appLog.Info("helm storage secrets: showing")
+			} else {
+				m.appLog.Info("helm storage secrets: hidden")
+			}
+			if m.currentResource == k8s.ResourceSecrets {
+				m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
+				return m, waitForWatchUpdate(m.watcher, m.currentResource)
+			}
+			return m, nil
 		case "s":
 			if m.activePanel == TablePanel {
 				return m, m.execShell()
@@ -557,6 +605,33 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.yamlPopup.SetSize(m.width, m.height)
 			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
 		case " ":
+			// Panel 2 on a Helm Release row: Space opens the Helm doc
+			// menu popup (manifest / notes / values). Branched before
+			// the Relatives-tab logic because the activePanel guard
+			// below would otherwise reject it.
+			if m.activePanel == TablePanel && m.currentResource == k8s.ResourceReleases && !m.editing && m.drillDownPod == nil {
+				idx := m.table.SelectedRow()
+				if idx >= 0 && idx < len(m.items) {
+					item := m.items[idx]
+					m.helmDocMenu.SetSize(m.width, m.height)
+					return m, m.helmDocMenu.Open(item.Name, item.Namespace)
+				}
+				return m, nil
+			}
+			// Panel 3 History tab on a Helm Release: Space picks the
+			// cursor row as the rollback target and pops the confirm
+			// popup. Current (deployed) row returns nil via
+			// SelectedHistoryRevision — silent no-op, no surprise prompt.
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "History" {
+				if rev := m.detail.SelectedHistoryRevision(); rev != nil {
+					root := m.detail.RootRef()
+					msg := fmt.Sprintf("Rollback %s to revision %d?", root.Name, rev.Revision)
+					cmdStr := k8s.RollbackCommandString(root.Name, root.Namespace, rev.Revision)
+					rollback := rollbackReleaseCmd(root.Name, root.Namespace, rev.Revision)
+					return m, m.confirm.Show(ConfirmRollback, msg, cmdStr, rollback)
+				}
+				return m, nil
+			}
 			// Relatives tab "jump to this resource": promote the
 			// CURSOR-POINTED ref (what the user is highlighting).
 			// Routed through RequestSwitchToResourceMsg so both this
@@ -1007,6 +1082,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case appInitMsg:
 		m.appLog.Info("km8 started")
 		m.appLog.Info(fmt.Sprintf("connected to %s (%s)", msg.info.ContextName, msg.info.ServerURL))
+		if !k8s.HelmAvailable() {
+			m.appLog.Info("helm CLI not found — Helm Releases category hidden")
+		}
 		return m, nil
 
 	case ClipboardCopiedMsg:
@@ -1033,6 +1111,41 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sidebar.RefreshCategories(m.k8sClient.Registry())
 		}
 		return m, nil
+
+	case HelmDocRequestMsg:
+		// Menu picked a doc kind. Fire the helm CLI fetch asynchronously
+		// so a slow `helm get manifest` on a big chart doesn't freeze the
+		// UI; the result comes back as HelmDocReadyMsg.
+		return m, fetchHelmDocCmd(msg.DocKind, msg.ReleaseName, msg.Namespace)
+
+	case HelmDocReadyMsg:
+		if msg.Err != nil {
+			m.appLog.Error(fmt.Sprintf("helm get %s: %s", msg.DocKind, msg.Err.Error()))
+			return m, nil
+		}
+		// Open the YAML popup with the fetched text. notes is plain text
+		// rather than YAML, but the popup renders monospace either way
+		// and the user gets a uniform "press q / Esc to dismiss" UX.
+		item := k8s.ResourceItem{Name: msg.ReleaseName, Namespace: msg.Namespace}
+		m.yamlPopup.SetSize(m.width, m.height)
+		return m, m.yamlPopup.Open(msg.Content, k8s.ResourceReleases, item, m.k8sClient.ContextName())
+
+	case RollbackResultMsg:
+		if msg.Err != nil {
+			m.appLog.Error(fmt.Sprintf("rollback %s rev %d: %s", msg.ReleaseName, msg.Revision, msg.Err.Error()))
+			if msg.Output != "" {
+				m.appLog.Info(strings.TrimSpace(msg.Output))
+			}
+			return m, nil
+		}
+		// Success — helm's stdout is "Rollback was a success! Happy
+		// Helming!" but the user-facing toast is shorter. Drop the helm
+		// blurb into app log for the record.
+		m.appLog.Info(fmt.Sprintf("rolled back %s to revision %d", msg.ReleaseName, msg.Revision))
+		if msg.Output != "" {
+			m.appLog.Info(strings.TrimSpace(msg.Output))
+		}
+		return m, m.toast.Show(fmt.Sprintf("Rolled back to rev %d", msg.Revision))
 	}
 
 	switch m.activePanel {
@@ -1069,9 +1182,9 @@ func (m AppModel) View() string {
 	// shell is running, nothing to mark.
 	var ptyMarker *PtyMarker
 	if m.ptyView != nil && m.ptyView.IsAlive() && m.ptyView.Kind() == PtyKindShell && m.ptyView.IsHidden() {
-		ptyMarker = &PtyMarker{Visible: false, Label: " km8erm"}
+		ptyMarker = &PtyMarker{Visible: false, Label: " KM8erm"}
 	}
-	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker)
+	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker, !k8s.HelmHideStorageSecrets())
 	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage(), "")
 
 	var mainView string
@@ -1135,6 +1248,15 @@ func (m AppModel) View() string {
 
 	if m.namespacePicker.IsActive() {
 		mainView = overlay.Composite(m.namespacePicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	// helmDocMenu renders BEFORE yamlPopup so when the menu spawns a YAML
+	// view the YAML overlays the menu (matching the input-routing order:
+	// yamlPopup catches keys first while it's open, menu sits idle
+	// underneath, then takes input back when YAML closes).
+	if m.helmDocMenu.IsActive() {
+		m.helmDocMenu.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.helmDocMenu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.yamlPopup.IsActive() {

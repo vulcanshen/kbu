@@ -41,6 +41,12 @@ const (
 	ResourceNetworkPolicies ResourceType = "networkpolicies"
 	ResourceEndpointSlices  ResourceType = "endpointslices"
 	ResourceIngressClasses  ResourceType = "ingressclasses"
+
+	// ResourceReleases is the km8 27th ResourceType — Helm releases. Treated as
+	// a normal ResourceType so existing graph/drill machinery is reused, but the
+	// fetcher goes through `helm` CLI rather than client-go. Registered at
+	// runtime only when `helm` is found on PATH (see helm.go).
+	ResourceReleases ResourceType = "releases"
 )
 
 // String returns the human-readable name of the resource type.
@@ -84,6 +90,10 @@ type ResourceDetail struct {
 	PodRelatives     *PodRelativesData
 	ServiceRelatives *ServiceRelativesData
 	Relatives        []RelativeSection
+
+	// ReleaseHistory carries the `helm history` rows for a Helm Release.
+	// Populated by enrichReleaseHistory (Phase 2c). Nil for every other kind.
+	ReleaseHistory []ReleaseRevision
 }
 
 // RelativeSection is one labeled group of link rows on the Relatives tab. Title is
