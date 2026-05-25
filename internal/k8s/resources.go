@@ -518,6 +518,32 @@ func kindToResourceType(kind string) (ResourceType, bool) {
 		return ResourcePersistentVolumes, true
 	case "Service":
 		return ResourceServices, true
+	case "Namespace":
+		return ResourceNamespaces, true
+	case "Event":
+		return ResourceEvents, true
+	case "Role":
+		return ResourceRoles, true
+	case "RoleBinding":
+		return ResourceRoleBindings, true
+	case "ClusterRole":
+		return ResourceClusterRoles, true
+	case "ClusterRoleBinding":
+		return ResourceClusterRoleBindings, true
+	case "Ingress":
+		return ResourceIngresses, true
+	case "IngressClass":
+		return ResourceIngressClasses, true
+	case "NetworkPolicy":
+		return ResourceNetworkPolicies, true
+	case "EndpointSlice":
+		return ResourceEndpointSlices, true
+	case "StorageClass":
+		return ResourceStorageClasses, true
+	case "HorizontalPodAutoscaler":
+		return ResourceHorizontalPodAutoscalers, true
+	case "PodDisruptionBudget":
+		return ResourcePodDisruptionBudgets, true
 	}
 	return "", false
 }
@@ -1249,6 +1275,9 @@ func EnrichRelatives(ctx context.Context, cs kubernetes.Interface, rt ResourceTy
 		enrichStorageClassPVCs(ctx, cs, item, detail)
 	case ResourceIngressClasses:
 		enrichIngressClassIngresses(ctx, cs, item, detail)
+	case ResourceReleases:
+		enrichReleaseRelatives(ctx, cs, item, detail)
+		enrichReleaseHistory(ctx, cs, item, detail)
 	}
 }
 
@@ -1455,9 +1484,19 @@ func fetchSecrets(ctx context.Context, cs kubernetes.Interface, ns string) ([]Re
 	if err != nil {
 		return nil, fmt.Errorf("listing secrets: %w", err)
 	}
+	hideHelm := HelmHideStorageSecrets()
 	items := make([]ResourceItem, 0, len(list.Items))
 	for i := range list.Items {
 		s := &list.Items[i]
+		// Helm storage secrets (`type: helm.sh/release.v1`) are filtered by
+		// default — they're a per-revision blob, one per upgrade, and
+		// dwarf the workload secrets users actually want. `.` toggles via
+		// the UI layer (k8s.SetHelmHideStorageSecrets). Enrichers that
+		// look up specific secrets by name go through client-go directly
+		// so they're unaffected by this filter.
+		if hideHelm && string(s.Type) == "helm.sh/release.v1" {
+			continue
+		}
 		items = append(items, ResourceItem{
 			Name:      s.Name,
 			Namespace: s.Namespace,

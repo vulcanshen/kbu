@@ -16,6 +16,7 @@ const (
 	ConfirmQuit
 	ConfirmEdit
 	ConfirmSwitch
+	ConfirmRollback
 )
 
 type ConfirmModel struct {
@@ -74,7 +75,10 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 			m.onConfirm = nil
 			closeCmd := m.animator.Close()
 			return m, tea.Batch(cmd, closeCmd)
-		case "esc", "n", "q":
+		case "esc", "n", "q", " ":
+			// Space cancels too — the same key that opens the confirm
+			// (Relatives-tab space-jump) re-pressed by reflex should
+			// dismiss rather than re-trigger.
 			m.onConfirm = nil
 			return m, m.animator.Close()
 		}

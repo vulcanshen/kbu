@@ -66,6 +66,11 @@ type DetailModel struct {
 	relativeCursor     int
 	relativeCursorLine int // display-line index of cursor row; -1 when none
 
+	// History tab state (Helm releases only). historyCursor indexes into
+	// detail.ReleaseHistory. -1 means "no cursor" — set when there's no
+	// history loaded yet.
+	historyCursor int
+
 	// drillStack is the chain of resources the user has drilled into via
 	// the Relatives tab (level 2+). Empty = at level 1 (root = the
 	// table-selected resource, whose data is m.detail). When non-empty,
@@ -220,6 +225,15 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 	// through to the standard logic.
 	if m.ActiveTabName() == "Relatives" {
 		if newModel, handled, cmd := m.handleRelativeKey(msg); handled {
+			return newModel, cmd
+		}
+	}
+
+	// History tab (Helm) — j/k moves the revision cursor, Space is left
+	// to AppModel (which dispatches the rollback confirm popup) so this
+	// handler only owns navigation.
+	if m.ActiveTabName() == "History" {
+		if newModel, handled, cmd := m.handleHistoryKey(msg); handled {
 			return newModel, cmd
 		}
 	}
@@ -797,6 +811,10 @@ func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 		m.tabs = []string{"Relatives", "Logs", "Events"}
 	case rt == k8s.ResourceEvents:
 		m.tabs = []string{"Relatives"}
+	case rt == k8s.ResourceReleases:
+		// Helm releases aren't K8s objects themselves so kubectl-style
+		// events don't apply; History replaces Events as the second tab.
+		m.tabs = []string{"Relatives", "History"}
 	case !relativesApplicable(rt):
 		m.tabs = []string{"Events"}
 	default:
@@ -805,6 +823,7 @@ func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.activeTab = 0
 	m.scrollOffset = 0
 	m.relativeCursor = -1
+	m.historyCursor = -1
 	m.buildContentLines()
 }
 
@@ -858,6 +877,8 @@ func (m *DetailModel) buildContentLines() {
 		m.contentLines = m.buildLogLines()
 	case "Events":
 		m.contentLines = m.buildEventLines()
+	case "History":
+		m.contentLines = m.buildHistoryLines()
 	}
 }
 
@@ -1046,6 +1067,158 @@ func (m DetailModel) buildEventLines() []string {
 	}
 
 	return lines
+}
+
+// buildHistoryLines renders the Helm History tab (Phase 2c). Cursor-aware
+// (j/k moves historyCursor) and tags the current deployed revision with a
+// "●" marker so the user can tell rollback target from current state at a
+// glance. Inactive rows are dimmed; cursor row gets reverse video.
+func (m DetailModel) buildHistoryLines() []string {
+	if !m.hasData || len(m.detail.ReleaseHistory) == 0 {
+		return []string{"  " + m.theme.DetailValueStyle().Render("(no history)")}
+	}
+	revs := m.detail.ReleaseHistory
+
+	// Find the current revision — the latest entry whose status is
+	// "deployed". Usually the last row, but mid-rollback / mid-upgrade
+	// can leave a different rev as deployed.
+	currentRev := -1
+	for _, r := range revs {
+		if r.Status == "deployed" {
+			currentRev = r.Revision
+		}
+	}
+
+	revW := len("REV")
+	statusW := len("STATUS")
+	dateW := len("DATE")
+	chartW := len("CHART")
+	descW := len("DESCRIPTION")
+	for _, r := range revs {
+		if rs := fmt.Sprintf("%d", r.Revision); len(rs) > revW {
+			revW = len(rs)
+		}
+		if len(r.Status) > statusW {
+			statusW = len(r.Status)
+		}
+		if d := k8s.FormatHelmHistoryDate(r.Updated); len(d) > dateW {
+			dateW = len(d)
+		}
+		if len(r.Chart) > chartW {
+			chartW = len(r.Chart)
+		}
+		if len(r.Description) > descW {
+			descW = len(r.Description)
+		}
+	}
+
+	// Marker column = 2 cells; 4 inter-column gaps of 2 cells; leading 2
+	// + trailing 2 padding. Cap DESCRIPTION so the table fits.
+	const markerW = 2
+	maxDescW := m.width - markerW - revW - statusW - dateW - chartW - 12
+	if maxDescW < 10 {
+		maxDescW = 10
+	}
+	if descW > maxDescW {
+		descW = maxDescW
+	}
+
+	labelStyle := m.theme.DetailLabelStyle()
+	valueStyle := m.theme.DetailValueStyle()
+	cursorStyle := m.theme.TableSelectedRowStyle()
+	if !m.focused {
+		cursorStyle = m.theme.TableUnfocusedSelectedRowStyle()
+	}
+
+	formatRow := func(marker, rev, status, date, chart, desc string) string {
+		return fmt.Sprintf("  %-*s%-*s  %-*s  %-*s  %-*s  %-*s",
+			markerW, marker,
+			revW, rev,
+			statusW, status,
+			dateW, date,
+			chartW, chart,
+			descW, desc)
+	}
+
+	var lines []string
+	lines = append(lines, labelStyle.Render(formatRow("", "REV", "STATUS", "DATE", "CHART", "DESCRIPTION")))
+	for i, r := range revs {
+		marker := "  "
+		if r.Revision == currentRev {
+			marker = "● "
+		}
+		desc := r.Description
+		if len(desc) > descW {
+			desc = desc[:descW]
+		}
+		row := formatRow(marker, fmt.Sprintf("%d", r.Revision), r.Status, k8s.FormatHelmHistoryDate(r.Updated), r.Chart, desc)
+		if i == m.historyCursor {
+			lines = append(lines, cursorStyle.Render(row))
+		} else {
+			lines = append(lines, valueStyle.Render(row))
+		}
+	}
+	return lines
+}
+
+// handleHistoryKey owns cursor navigation on the History tab. Space is NOT
+// handled here — AppModel intercepts it to open the rollback confirm popup
+// so the cross-cutting confirm + subprocess flow stays in one place.
+// Returns (model, handled, cmd) so the caller's switch falls through when
+// the key isn't ours.
+func (m DetailModel) handleHistoryKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cmd) {
+	if msg.Type != tea.KeyRunes || len(msg.Runes) != 1 {
+		return m, false, nil
+	}
+	if len(m.detail.ReleaseHistory) == 0 {
+		return m, false, nil
+	}
+	switch msg.Runes[0] {
+	case 'j':
+		if m.historyCursor < 0 {
+			m.historyCursor = 0
+		} else if m.historyCursor < len(m.detail.ReleaseHistory)-1 {
+			m.historyCursor++
+		}
+		m.buildContentLines()
+		return m, true, nil
+	case 'k':
+		if m.historyCursor > 0 {
+			m.historyCursor--
+		}
+		m.buildContentLines()
+		return m, true, nil
+	case 'g':
+		m.historyCursor = 0
+		m.buildContentLines()
+		return m, true, nil
+	case 'G':
+		m.historyCursor = len(m.detail.ReleaseHistory) - 1
+		m.buildContentLines()
+		return m, true, nil
+	}
+	return m, false, nil
+}
+
+// SelectedHistoryRevision returns the ReleaseRevision under the History
+// cursor, or nil when the cursor is off the table / on the current
+// (deployed) row. AppModel uses this to decide whether Space triggers a
+// rollback confirm or stays silent.
+func (m DetailModel) SelectedHistoryRevision() *k8s.ReleaseRevision {
+	if m.ActiveTabName() != "History" {
+		return nil
+	}
+	if m.historyCursor < 0 || m.historyCursor >= len(m.detail.ReleaseHistory) {
+		return nil
+	}
+	r := m.detail.ReleaseHistory[m.historyCursor]
+	// Current row is no-op (can't roll back to where you already are).
+	for _, rev := range m.detail.ReleaseHistory {
+		if rev.Status == "deployed" && rev.Revision == r.Revision {
+			return nil
+		}
+	}
+	return &r
 }
 
 // wrapPlain wraps plain (no ANSI) text to the given width, breaking at word

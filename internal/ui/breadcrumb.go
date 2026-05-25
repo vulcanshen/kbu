@@ -184,9 +184,10 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 
 	left := bStyle.Render("│")
 	right := bStyle.Render("│")
-	// No top/bottom padding rows — borders alone separate content from
-	// the surrounding panel; the extra blank rows were wasted vertical
-	// space, matching the YAML-popup tightening.
+	// One row of top/bottom padding so the title/hint don't sit directly
+	// on the first/last content row — matches helmdocmenu styling.
+	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
+	b.WriteString(padRow)
 	for _, line := range rows {
 		lw := lipgloss.Width(line)
 		pad := ""
@@ -195,6 +196,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 		}
 		b.WriteString(left + line + pad + right + "\n")
 	}
+	b.WriteString(padRow)
 
 	bottomDashes := innerW - len(hint) - 1
 	if bottomDashes < 0 {
