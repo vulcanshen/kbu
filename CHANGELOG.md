@@ -4,6 +4,157 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.5.0] - 2026-05-26
+
+The Helm release. A Helm release becomes km8's 27th resource type and
+plugs into the same Relatives / drill / breadcrumb / Y popup machinery
+every other resource uses — the divergence is that the fetcher shells
+out to `helm` instead of going through client-go. Registered at startup
+only when `helm` is on `PATH`; otherwise the entire `Helm > Releases`
+sidebar category never renders and an app-log INFO surfaces.
+
+Beyond Helm, this release polishes search semantics across all three
+panels (only the source panel's filter clears on focus leave; cursors
+restore to last selection) and removes the panel-3 search entirely
+(cursor-driven tabs didn't tolerate filter; "find a string in logs"
+goes via `Y` + your editor).
+
+### Added
+
+- **Helm Releases category — `Helm > Releases` in the sidebar.** Lists
+  every release in the cluster via `helm list -o json`, polled every 3s
+  (no Helm watch API; the poller fakes a `watch.Modified` event into
+  the existing watcher loop so external `helm install` / `upgrade`
+  surfaces within seconds without busy-spinning the CLI). Columns:
+  `NAME / NAMESPACE / CHART / APP VER / REV / STATUS / UPDATED`. Follows
+  the current namespace selector — `helm list -n <ns>` when a ns is
+  picked, `-A` otherwise.
+- **Helm doc menu — `Space` on a Release row.** Pops a 5-item picker:
+  `Manifest` (rendered chart), `Creator Notes` (post-install
+  NOTES.txt), `User Values` (user-supplied), `Merged Values` (incl.
+  chart defaults), `Hooks` (install/upgrade hook resources).
+  `Enter`/`Space` fires the corresponding `helm get ...` asynchronously
+  (10s timeout) and routes the stdout into the YAML popup. The menu
+  stays open behind the YAML so consecutive picks flow without
+  re-opening — input routing checks `yamlPopup` first while open, the
+  menu sits idle underneath, then takes input back when YAML closes.
+  `Esc`/`q` dismisses the menu.
+- **Deployed Resources section in Release Relatives.** `helm get
+  manifest` parsed into per-document `{kind, name, namespace}` tuples;
+  each native K8s ref becomes a drillable RelativeRow under a
+  `Deployed Resources (N)` section. Drill / `Space` / `Y` all work
+  exactly as on any other Relatives row, so Release → Deployment →
+  Pod → ConfigMap is a continuous chain. CRD kinds the registry
+  doesn't recognize are dropped silently — every visible row stays
+  drillable. The chain[0] entry is the Release itself, so the
+  breadcrumb popup shows `Release/foo → Deployment/foo → Pod/foo-...`.
+- **History tab — Panel 3, Helm releases only.** Replaces Events for
+  releases (a release isn't a K8s object; kubectl events don't apply —
+  drill into a deployed resource if you want events). Table view:
+  `REV / STATUS / DATE / CHART / DESCRIPTION` from `helm history`. The
+  current deployed revision is marked with a `●` glyph. `j`/`k`/`g`/`G`
+  move the revision cursor; the cursor auto-lands on the deployed rev
+  the first time the tab loads.
+- **Rollback — `Space` on a History row.** On any non-current revision,
+  `Space` pops a confirm popup whose `detail` row prints the exact
+  `helm rollback <rel> <rev> -n <ns>` that will run. `Enter` runs it
+  asynchronously (30s timeout, `CombinedOutput` so stderr surfaces);
+  success fires a toast `Rolled back to rev N` plus an app-log info
+  line, failure routes to app-log error with helm's stderr. On the
+  current row, `Space` is a silent no-op (no surprise re-deploy of the
+  state you're already on).
+- **Rule A — helm-managed read-only guard.** Pressing `e` on any
+  resource carrying `app.kubernetes.io/managed-by: Helm` (label) or
+  `meta.helm.sh/release-name` (annotation) — or on a Release row
+  itself — surfaces a "Helm-managed (read-only) — use helm upgrade /
+  rollback" toast instead of opening `kubectl edit`. Stops users from
+  editing fields the next helm reconcile would overwrite.
+- **Helm storage secret filter — `.` on the Secrets panel.** The
+  per-revision `sh.helm.release.v1.*` Secrets that helm uses for
+  release storage are hidden from the Secrets list by default — they
+  dominate the list otherwise. `.` on the Secrets table flips
+  visibility; a `.helm` chip in the panel-2 bottom-left border
+  confirms when the filter is OFF (secrets shown). Enricher lookups
+  bypass the filter so SA → token-Secret links still work regardless.
+
+### Changed
+
+- **Confirm popup also dismisses on `Space`** (same as `Esc` / `n` /
+  `q`). The same key that opens the confirm (Relatives-tab space-jump,
+  History-tab rollback) re-pressed by reflex now cancels rather than
+  re-fires.
+- **Search clears only on the source panel when focus moves away** —
+  the panel you're leaving loses its filter, every other panel keeps
+  whatever filter it had. Sidebar / Table both restore the cursor to
+  `selected` after dropping the filter so the unfocus highlight lands
+  on the last picked item, not on whichever row the filtered index
+  happened to point at.
+- **`.helm` marker moved to panel-2 bottom-left border.** Earlier
+  iteration during 1.5 development surfaced helm-secret filter state
+  as `.hidden` in the status bar. Final form uses the unused
+  bottom-left corner of the affected panel + an unambiguous `.helm`
+  label, since the marker only matters while looking at the Secrets
+  list.
+- **Hidden KM8erm chip relabeled `KM8erm`** (was `km8erm` lowercase)
+  to match the popup border title.
+- **Breadcrumb + helm doc menu popups grew one row of top/bottom
+  padding** so title/hint don't sit flush against the first/last
+  content row.
+
+### Removed
+
+- **Panel 3 search.** The `/` hotkey on the detail panel and all
+  associated filter rendering are gone. Cursor-driven tabs (Relatives,
+  History) don't tolerate row filtering — the cursor index becomes
+  meaningless once rows are hidden. Logs follow-tail breaks under
+  filter (new lines that don't match silently vanish). Events are
+  short enough to scroll. For "find this string in logs", press `Y`
+  to copy the content and grep / search in your editor.
+
+### Fixed
+
+- **Helm watcher busy-spin.** The first cut returned a permanently-
+  closed `watch.Interface` for releases, which made the watcher's
+  outer loop reconnect-and-re-list as fast as the CPU could go — a
+  single km8 sitting on the Releases panel would have pegged the
+  helm CLI. Replaced with a polling `watch.Interface` that fires
+  one `watch.Modified` event per interval and properly blocks
+  between ticks.
+- **History tab cursor lit only on focus.** The cursor row picked
+  the focused/unfocused style at `buildContentLines` time but
+  `SetFocused` only rebuilt for the Relatives tab. Switching focus
+  to a panel-3 History view left the cursor in unfocused-dim style
+  until the next 3s poll forced a rebuild. Fixed by including
+  History in `SetFocused`'s rebuild list.
+- **History cursor stuck across releases.** Cursor-position state
+  travelled across `panel 2` row changes; switching from a release
+  with 5 revs to one with 2 left the cursor on a now-invisible
+  index. `SetDetail` now resets `historyCursor` when the underlying
+  UID changes (panel 2 row swap) but preserves it when the same UID
+  re-arrives via polling refresh (so user-typed `j`/`k` survives).
+- **Sidebar search list "1 of 1" but empty.** `resetCursorToFirstMatch`
+  set `m.cursor` to the first matching index but never reset
+  `scrollOffset` — a stale offset from the previous wider list
+  could push the only match off the visible window. Now resets to
+  0 and `ensureCursorVisible`s after.
+- **Table search filter survived focus leave.** Earlier ClearSearch
+  cleared the flags but didn't recompute `m.rows` from `m.allRows`,
+  so the panel could appear filtered after the search box was gone.
+  Now mirrors the in-panel Esc path: convert filtered cursor to its
+  unfiltered position, drop the filter, restore the cursor.
+- **Sidebar focus-leave parked the cursor on a stale row.** After
+  ClearSearch the filtered cursor index pointed at an unrelated
+  row in the now-larger visible list. ClearSearch now calls
+  `SetSelected(m.selected)` to put the cursor back on whatever the
+  user actually picked.
+- **Long Relatives value wrap lost arrow color.** A
+  `harbor-registry-htpasswd ↘` value that wrapped onto two lines
+  rendered the arrow as plain text on row 2 — `wrapPlain` trimmed
+  the leading space before `↘`, so the suffix-match that decided
+  which chunk owned the arrow style missed. Now the arrow is
+  stripped before wrapping and re-appended (styled) to the last
+  chunk, with reserved width in the wrap budget.
+
 ## [v1.4.0] - 2026-05-25
 
 The Relatives release. The graph navigation tab that v1.3.0 named "Links"
