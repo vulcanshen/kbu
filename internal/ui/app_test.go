@@ -256,15 +256,14 @@ func TestAppModel_SwitchToResourceMsg_RoutesSidebarAndPending(t *testing.T) {
 // TestAppModel_SwitchToResourceMsg_ClearsSearchFilters guards against a
 // stale search filter hiding the freshly switched-to resource. Before
 // the fix, an active sidebar filter like "svc" could survive the switch
-// and leave the new resource type invisible in panel 1.
+// and leave the new resource type invisible in panel 1. Detail-panel
+// search was removed in the post-v1.5 panel-3 simplification, so only
+// the sidebar still has search state to seed/assert.
 func TestAppModel_SwitchToResourceMsg_ClearsSearchFilters(t *testing.T) {
 	m := appWithItems(nil, 0)
 	m.sidebar = NewSidebarModel(theme.DefaultTheme())
-	// Seed all three panels with stale filters.
 	m.sidebar.searchQuery = "stale-sidebar-filter"
 	m.sidebar.searching = true
-	m.detail.searchQuery = "stale-detail-filter"
-	m.detail.searching = true
 
 	target := k8s.RefTarget{Type: k8s.ResourceServices, Name: "svc-a", Namespace: "ns-a"}
 	updated, _ := m.Update(SwitchToResourceMsg{Ref: target})
@@ -273,10 +272,6 @@ func TestAppModel_SwitchToResourceMsg_ClearsSearchFilters(t *testing.T) {
 	if got.sidebar.searchQuery != "" || got.sidebar.searching {
 		t.Errorf("sidebar search must be cleared, got query=%q searching=%v",
 			got.sidebar.searchQuery, got.sidebar.searching)
-	}
-	if got.detail.searchQuery != "" || got.detail.searching {
-		t.Errorf("detail search must be cleared, got query=%q searching=%v",
-			got.detail.searchQuery, got.detail.searching)
 	}
 	// Table search clears via the chained ResourceSelectedMsg handler —
 	// not directly here. Covered by table's own ResourceSelectedMsg tests.

@@ -236,27 +236,24 @@ func renderRelativeEntries(entries []relativeEntry, cursor int, width int, t *th
 		}
 		labelPrefix := "  " + labelText + " "
 		labelPrefixW := lipgloss.Width(labelPrefix)
-		valueAndArrow := e.value
+		// Wrap the value alone — DON'T glue the arrow on first. Pre-wrap
+		// concat ("value ↘") had wrapPlain trim the space at the break,
+		// producing a bare "↘" chunk that lost its drillStyle because
+		// the chunk content no longer carried the arrowSuffix marker.
+		// Reserving width for the arrow against the LAST chunk keeps the
+		// trailing arrow flush + properly styled.
+		arrowReserve := 0
 		if hasArrow {
-			valueAndArrow += arrowSuffix
+			arrowReserve = lipgloss.Width(arrowSuffix)
 		}
-		valueBudget := rowWidth - labelPrefixW
+		valueBudget := rowWidth - labelPrefixW - arrowReserve
 		if valueBudget < 10 {
 			valueBudget = 10
 		}
-		chunks := wrapPlain(valueAndArrow, valueBudget)
+		chunks := wrapPlain(e.value, valueBudget)
 		arrowChunkIdx := -1
 		if hasArrow && len(chunks) > 0 {
-			last := len(chunks) - 1
-			if strings.HasSuffix(chunks[last], arrowSuffix) {
-				chunks[last] = strings.TrimSuffix(chunks[last], arrowSuffix)
-				if chunks[last] == "" && last > 0 {
-					chunks = chunks[:last]
-					arrowChunkIdx = len(chunks) - 1
-				} else {
-					arrowChunkIdx = last
-				}
-			}
+			arrowChunkIdx = len(chunks) - 1
 		}
 		contIndent := strings.Repeat(" ", labelPrefixW)
 

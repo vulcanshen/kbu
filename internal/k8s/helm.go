@@ -465,10 +465,10 @@ func enrichReleaseRelatives(ctx context.Context, _ kubernetes.Interface, item Re
 }
 
 // helmPollInterval is how often helm releases get re-listed when sitting on
-// the Releases panel. Helm has no watch API, so the only refresh mechanism is
-// polling. 5s matches the scout workflow — external `helm install` shows up
-// within a few seconds, cost is one cheap exec per tick.
-const helmPollInterval = 5 * time.Second
+// the Releases panel. Helm has no watch API, so the only refresh mechanism
+// is polling. 3s matches the scout workflow — external `helm install`
+// shows up within a couple seconds, cost is one cheap exec per tick.
+const helmPollInterval = 3 * time.Second
 
 // helmPollWatch satisfies the WatchStarter signature for the Helm category.
 // It periodically fires a watch.Modified event, which makes the existing

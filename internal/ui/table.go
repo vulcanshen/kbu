@@ -648,6 +648,29 @@ func (m *TableModel) filterRows() {
 // HasActiveFilter returns true if a search filter is active.
 func (m TableModel) HasActiveFilter() bool { return m.searchQuery != "" }
 
+// ClearSearch drops any active table search filter + exits search-input
+// mode. Used by AppModel when focus leaves the table panel — search is a
+// transient navigation aid, not a persistent view state.
+//
+// Mirrors the in-panel Esc behavior: convert the filtered cursor back to
+// its position in the unfiltered list, drop the filter, then ensure the
+// cursor stays visible. Without filterRows() the rows slice would stay
+// stuck on the filtered subset even though searchQuery is cleared —
+// symptom is "search box gone but table still only shows 1 row".
+func (m *TableModel) ClearSearch() {
+	if m.searchQuery == "" && !m.searching {
+		return
+	}
+	orig := m.OriginalIndex(m.cursor)
+	m.searching = false
+	m.searchQuery = ""
+	m.filterRows()
+	if orig >= 0 && orig < len(m.rows) {
+		m.cursor = orig
+	}
+	m.ensureCursorVisible()
+}
+
 // When no filter is active, the display index equals the original index.
 func (m TableModel) OriginalIndex(displayIdx int) int {
 	if m.filteredIndices == nil {

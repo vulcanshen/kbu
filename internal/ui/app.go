@@ -523,24 +523,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case ".":
 			// Toggle helm storage secret visibility (sh.helm.release.v1
-			// blobs). Default = hidden; `.` shows them, `.` again hides.
-			// Mimics unix dotfile convention. Force a re-list so the new
-			// filter takes effect immediately — watcher's cache is stale
-			// under the new predicate.
-			shown := k8s.ToggleHelmHideStorageSecrets()
-			// shown==false means filter active (hidden). For the toast
-			// message we describe the new VISIBILITY state since that's
-			// what changed on screen.
-			if !shown {
-				m.appLog.Info("helm storage secrets: showing")
-			} else {
-				m.appLog.Info("helm storage secrets: hidden")
+			// blobs). Only meaningful on panel 2 viewing Secrets — `.`
+			// outside that context falls through so the table-panel
+			// handler can decide (most likely a no-op). Mimics unix
+			// dotfile convention. Force a re-list so the new filter
+			// takes effect immediately — watcher's cache is stale under
+			// the new predicate. Bottom-left panel border picks up
+			// `.helm` automatically via tablePanelBottomLeft().
+			if m.activePanel != TablePanel || m.currentResource != k8s.ResourceSecrets {
+				return m, nil
 			}
-			if m.currentResource == k8s.ResourceSecrets {
-				m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
-				return m, waitForWatchUpdate(m.watcher, m.currentResource)
-			}
-			return m, nil
+			k8s.ToggleHelmHideStorageSecrets()
+			m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
+			return m, waitForWatchUpdate(m.watcher, m.currentResource)
 		case "s":
 			if m.activePanel == TablePanel {
 				return m, m.execShell()
@@ -1184,7 +1179,7 @@ func (m AppModel) View() string {
 	if m.ptyView != nil && m.ptyView.IsAlive() && m.ptyView.Kind() == PtyKindShell && m.ptyView.IsHidden() {
 		ptyMarker = &PtyMarker{Visible: false, Label: " KM8erm"}
 	}
-	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker, !k8s.HelmHideStorageSecrets())
+	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker)
 	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage(), "")
 
 	var mainView string
@@ -1193,7 +1188,7 @@ func (m AppModel) View() string {
 		panelH := m.height - 1 - m.statusLine.LineCount()
 		panelW := m.width - 2*panelHMargin
 		m.detail.SetSize(panelW-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint())
+		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
 		hMargin := blankColumn(panelHMargin, panelH)
 		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, fullPanel, hMargin)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
@@ -1203,8 +1198,8 @@ func (m AppModel) View() string {
 		m.table.SetSize(panelW-2, upperH-2)
 		m.detail.SetSize(panelW-2, detailH-2)
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
-		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "")
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint())
+		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
 		middle := joinTableAndDetail(tablePanel, detailPanel, panelW)
 		fullH := upperH + panelVSpace + detailH
 		hMargin := blankColumn(panelHMargin, fullH)
@@ -1217,10 +1212,10 @@ func (m AppModel) View() string {
 		m.table.SetSize(rw-2, upperH-2)
 		m.detail.SetSize(rw-2, detailH-2)
 
-		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "")
+		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", "")
 		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
-		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "")
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint())
+		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
 
 		rightSide := joinTableAndDetail(tablePanel, detailPanel, rw)
 
@@ -1733,12 +1728,44 @@ func (m AppModel) focusedPanelContent() string {
 	return ""
 }
 
+// tablePanelBottomLeft returns the bottom-left border hint for panel 2.
+// Currently only used by the Secrets list to surface the `.helm` filter
+// state when the user has toggled helm storage secrets to be visible.
+// Empty when the filter is in its default (hidden) state — there's
+// nothing to remind the user about.
+func (m *AppModel) tablePanelBottomLeft() string {
+	if m.currentResource == k8s.ResourceSecrets && !k8s.HelmHideStorageSecrets() {
+		return ".helm"
+	}
+	return ""
+}
+
+// clearSearchOnLeave drops the search state of `from` when focus moves
+// away from it. Other panels' search states are untouched — only the
+// panel being left loses its filter, on the theory that search is a
+// short-lived nav aid the user has already finished using once they've
+// changed focus.
+func (m *AppModel) clearSearchOnLeave(from Panel) {
+	switch from {
+	case SidebarPanel:
+		m.sidebar.ClearSearch()
+	case TablePanel:
+		m.table.ClearSearch()
+	case DetailPanel:
+		m.detail.ClearSearch()
+	}
+}
+
 func (m *AppModel) setPanel(p Panel) {
+	if p != m.activePanel {
+		m.clearSearchOnLeave(m.activePanel)
+	}
 	m.activePanel = p
 	m.updateFocus()
 }
 
 func (m *AppModel) cyclePanel() {
+	from := m.activePanel
 	switch m.activePanel {
 	case SidebarPanel:
 		m.activePanel = TablePanel
@@ -1747,6 +1774,7 @@ func (m *AppModel) cyclePanel() {
 	case DetailPanel:
 		m.activePanel = SidebarPanel
 	}
+	m.clearSearchOnLeave(from)
 	m.updateFocus()
 }
 
@@ -1777,10 +1805,10 @@ type ScrollInfo struct {
 }
 
 func renderPanel(content, title string, width, height int, focused bool, t *theme.Theme) string {
-	return renderPanelWithScroll(content, title, width, height, focused, t, nil, "")
+	return renderPanelWithScroll(content, title, width, height, focused, t, nil, "", "")
 }
 
-func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo, topRight string) string {
+func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo, topRight, bottomLeft string) string {
 	if width < 4 || height < 3 {
 		return content
 	}
@@ -1852,15 +1880,39 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 		b.WriteString("\n")
 	}
 
+	// Bottom-left optional marker (used by panel 2 for `.helm` filter
+	// hint). Style matches the title — same color + bold, with a
+	// single dash either side as separator. Kept short by callers; if
+	// it doesn't fit alongside the scroll indicator we drop it silently.
+	leftHintRendered := ""
+	leftHintVis := 0
+	if bottomLeft != "" {
+		leftHintVis = lipgloss.Width(bottomLeft) + 2 // dash + content + dash
+		leftHintRendered = bStyle.Render("─") + tStyle.Render(bottomLeft) + bStyle.Render("─")
+	}
+
 	if scroll != nil && scroll.Total > 0 {
 		indicator := fmt.Sprintf(" %d of %d ", scroll.Position, scroll.Total)
-		dashes := innerW - len(indicator)
+		dashes := innerW - len(indicator) - leftHintVis
 		if dashes < 0 {
 			dashes = 0
+			// Indicator + leftHint overflowed innerW. Drop the hint
+			// rather than truncating the more-useful scroll indicator.
+			leftHintRendered = ""
+			dashes = innerW - len(indicator)
+			if dashes < 0 {
+				dashes = 0
+			}
 		}
-		b.WriteString(bStyle.Render("╰" + strings.Repeat("─", dashes) + indicator + "╯"))
+		b.WriteString(bStyle.Render("╰") + leftHintRendered + bStyle.Render(strings.Repeat("─", dashes)+indicator+"╯"))
 	} else {
-		b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
+		dashes := innerW - leftHintVis
+		if dashes < 0 {
+			dashes = 0
+			leftHintRendered = ""
+			dashes = innerW
+		}
+		b.WriteString(bStyle.Render("╰") + leftHintRendered + bStyle.Render(strings.Repeat("─", dashes)+"╯"))
 	}
 
 	return b.String()
