@@ -281,13 +281,24 @@ func (m *SidebarModel) restoreCursorToSelected() {
 
 func (m *SidebarModel) resetCursorToFirstMatch() {
 	visible := m.visibleItems()
+	// Reset the scroll window to the top so a stale scrollOffset from
+	// the previous (larger) list doesn't push the first match out of
+	// view — the symptom is an apparently empty panel with a "1 of 1"
+	// indicator at the bottom border.
+	m.scrollOffset = 0
 	for i, item := range visible {
 		if !item.isCategory {
 			m.cursor = i
-
 			m.selected = item.resourceType
+			m.ensureCursorVisible()
 			return
 		}
+	}
+	// No non-category match (e.g. user typed only "wo" matching the
+	// "Workloads" category label) — park the cursor on the first item
+	// so View has something to anchor on. selected is left unchanged.
+	if len(visible) > 0 {
+		m.cursor = 0
 	}
 }
 
@@ -551,11 +562,21 @@ func (m *SidebarModel) SetFocused(focused bool) {
 
 // Selected returns the currently selected resource type.
 // ClearSearch drops any active sidebar search filter and exits search
-// mode. Used by the Relatives-tab space hotkey so a stale filter from
-// before the switch doesn't hide the freshly-selected resource type.
+// mode. Used by the Relatives-tab space hotkey AND focus-leave so a
+// stale filter from before the switch doesn't hide the freshly-selected
+// resource type.
+//
+// Also repositions the cursor onto `selected` after the filter drops —
+// without this the cursor index from the filtered view falls onto the
+// wrong row in the now-larger visible list, which surfaces to the user
+// as "I picked Helm/Releases, focus moved to panel 2, but panel 1 now
+// shows the cursor on some unrelated entry".
 func (m *SidebarModel) ClearSearch() {
 	m.searching = false
 	m.searchQuery = ""
+	if m.selected != "" {
+		m.SetSelected(m.selected)
+	}
 }
 
 // SetSelected programmatically moves the sidebar cursor to the visible

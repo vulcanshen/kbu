@@ -56,16 +56,13 @@ func (m StatusBarModel) ViewWithErrors(unreadErrors int) string {
 }
 
 func (m StatusBarModel) ViewWithBadge(unreadErrors int, successNotice string) string {
-	return m.ViewFull(unreadErrors, successNotice, nil, false)
+	return m.ViewFull(unreadErrors, successNotice, nil)
 }
 
-// ViewFull renders the status bar with optional PTY marker + optional
-// "secrets hidden by helm filter" marker. Both markers sit in the LEFT
-// segment after `ns:` so they don't fight the error / success badge on the
-// right for space. `secretsShown` is the inverse of HelmHideStorageSecrets
-// state — true means user toggled the filter OFF (storage secrets now
-// VISIBLE) and we surface a hint so they remember.
-func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *PtyMarker, secretsShown bool) string {
+// ViewFull renders the status bar with optional PTY marker. The PTY marker
+// sits in the LEFT segment right after `ns:` so it doesn't fight the
+// error / success badge on the right for space.
+func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *PtyMarker) string {
 	ctx := m.theme.StatusBarContextStyle().Render(fmt.Sprintf("ctx: %s", m.clusterInfo.ContextName))
 	cluster := m.theme.StatusBarClusterStyle().Render(fmt.Sprintf("cluster: %s", m.clusterInfo.ClusterName))
 	ns := m.theme.StatusBarNamespaceStyle().Render(fmt.Sprintf("ns: %s", m.namespace))
@@ -88,13 +85,6 @@ func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *Pt
 		}
 		ptyChip := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true).Render(pty.Label)
 		left = left + "  " + ptyChip
-	}
-	if secretsShown {
-		// Peach again — same "warm reminder" semantics as the hidden
-		// KM8erm chip: a persistent affordance the user can dismiss by
-		// pressing `.` again, not an error.
-		chip := lipgloss.NewStyle().Foreground(lipgloss.Color("#fab387")).Bold(true).Render(" .hidden")
-		left = left + "  " + chip
 	}
 
 	var badgePart string

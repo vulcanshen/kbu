@@ -52,8 +52,6 @@ type DetailModel struct {
 	logLines     []logLine
 	maxLogLines  int
 	resourceType k8s.ResourceType
-	searching    bool
-	searchQuery  string
 	followTail   bool // Logs tab: stick to bottom on new lines until user scrolls up
 	refetching   bool // true while fetchResourceDetail is in-flight; drives spinner
 	spinnerFrame int
@@ -135,21 +133,18 @@ func (m *DetailModel) advanceSpinner() tea.Cmd {
 	})
 }
 
-// IsSearching returns true if the detail panel is in search mode.
-func (m DetailModel) IsSearching() bool { return m.searching }
+// IsSearching is kept as a no-op for cross-package API symmetry with
+// sidebar / table. Panel 3 has no search by design — cursor-driven tabs
+// (Relatives / History) don't tolerate row filtering, and the line-based
+// tabs (Logs / Events) read better as plain scrollable views.
+func (m DetailModel) IsSearching() bool { return false }
 
-// ClearSearch drops any active detail-panel search filter and exits
-// search mode. Used by the Relatives-tab space hotkey so the freshly
-// switched-to resource isn't hidden behind a stale filter inherited
-// from the previous selection.
-func (m *DetailModel) ClearSearch() {
-	m.searching = false
-	m.searchQuery = ""
-	m.scrollOffset = 0
-}
+// ClearSearch is a no-op for the same reason as IsSearching — kept so
+// AppModel's clearSearchOnLeave() can call it without a type switch.
+func (m *DetailModel) ClearSearch() {}
 
-// HasActiveFilter returns true if a search filter is active.
-func (m DetailModel) HasActiveFilter() bool { return m.searchQuery != "" }
+// HasActiveFilter is a no-op (same reason as above).
+func (m DetailModel) HasActiveFilter() bool { return false }
 
 // CurrentLevelYAML returns the YAML for the Relatives-tab drill level the
 // user is currently viewing — at depth 1 that's the table-selected
@@ -216,10 +211,6 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 }
 
 func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
-	if m.searching {
-		return m.handleSearchKey(msg)
-	}
-
 	// Relatives tab uses j/k for cursor navigation (not line scroll) and Enter
 	// to drill into the highlighted ref. Other tabs scroll by line — fall
 	// through to the standard logic.
@@ -285,22 +276,12 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 				m.scrollOffset = 0
 			}
 			m = m.disableFollowIfLogs()
-		case '/':
-			m.searching = true
-			m.searchQuery = ""
-			return m, nil
 		}
 
 	case tea.KeyDown:
 		m = m.scrollDown()
 	case tea.KeyUp:
 		m = m.scrollUp()
-	case tea.KeyEscape:
-		if m.searchQuery != "" {
-			m.searchQuery = ""
-			m.scrollOffset = 0
-			return m, nil
-		}
 	}
 
 	return m, nil
@@ -410,52 +391,6 @@ func (m DetailModel) scrollRelativeCursorIntoView() DetailModel {
 	return m
 }
 
-func (m DetailModel) handleSearchKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
-	switch {
-	case msg.Type == tea.KeyEscape:
-		m.searching = false
-		m.searchQuery = ""
-		m.scrollOffset = 0
-		return m, nil
-	case msg.Type == tea.KeyEnter:
-		m.searching = false
-		return m, nil
-	case msg.Type == tea.KeyBackspace:
-		if len(m.searchQuery) > 0 {
-			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
-			m.scrollOffset = 0
-		}
-		return m, nil
-	case msg.Type == tea.KeyDown:
-		m = m.scrollDown()
-		return m, nil
-	case msg.Type == tea.KeyUp:
-		m = m.scrollUp()
-		return m, nil
-	case msg.Type == tea.KeyRunes:
-		for _, r := range msg.Runes {
-			m.searchQuery += string(r)
-		}
-		m.scrollOffset = 0
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m DetailModel) filteredContentLines() []string {
-	if m.searchQuery == "" {
-		return m.contentLines
-	}
-	query := strings.ToLower(m.searchQuery)
-	var filtered []string
-	for _, line := range m.contentLines {
-		if strings.Contains(strings.ToLower(line), query) {
-			filtered = append(filtered, line)
-		}
-	}
-	return filtered
-}
-
 func (m DetailModel) handleMouse(msg tea.MouseMsg) (DetailModel, tea.Cmd) {
 	switch msg.Type {
 	case tea.MouseWheelUp:
@@ -547,16 +482,8 @@ func (m DetailModel) View() string {
 	var b strings.Builder
 
 	contentHeight := m.contentHeight()
-	if m.searching || m.searchQuery != "" {
-		contentHeight -= 3
-	}
 	if contentHeight <= 0 {
 		return ""
-	}
-
-	if m.searching || m.searchQuery != "" {
-		b.WriteString(renderSearchBox(m.searchQuery, m.searching, m.width, m.theme))
-		b.WriteString("\n")
 	}
 
 	if !m.hasData {
@@ -564,7 +491,7 @@ func (m DetailModel) View() string {
 		return b.String()
 	}
 
-	displayLines := m.filteredContentLines()
+	displayLines := m.contentLines
 
 	end := m.scrollOffset + contentHeight
 	if end > len(displayLines) {
@@ -596,15 +523,18 @@ func (m *DetailModel) SetSize(width, height int) {
 }
 
 // SetFocused sets whether the detail panel is focused. Rebuilds the
-// pre-rendered Relatives content so the cursor row picks the focused vs
-// unfocused style — without this, the panel would keep its previous
-// highlight color until the next data refresh.
+// pre-rendered content for any cursor-bearing tab (Relatives, History) so
+// the highlighted row picks the focused vs unfocused style immediately —
+// without this, the panel would keep its previous highlight color until
+// the next data refresh (3s for Helm releases, much longer for everything
+// else).
 func (m *DetailModel) SetFocused(focused bool) {
 	if m.focused == focused {
 		return
 	}
 	m.focused = focused
-	if m.ActiveTabName() == "Relatives" {
+	switch m.ActiveTabName() {
+	case "Relatives", "History":
 		m.buildContentLines()
 	}
 }
@@ -617,7 +547,7 @@ func (m DetailModel) CopyableContent() string {
 	if !m.hasData {
 		return ""
 	}
-	lines := m.filteredContentLines()
+	lines := m.contentLines
 	plain := make([]string, len(lines))
 	for i, l := range lines {
 		plain[i] = strings.TrimRight(ansi.Strip(l), " ")
@@ -627,7 +557,7 @@ func (m DetailModel) CopyableContent() string {
 
 // ScrollInfo returns scroll position for the detail panel.
 func (m DetailModel) ScrollInfo() *ScrollInfo {
-	lines := m.filteredContentLines()
+	lines := m.contentLines
 	if len(lines) == 0 {
 		return nil
 	}
@@ -647,6 +577,13 @@ func (m DetailModel) ScrollInfo() *ScrollInfo {
 // (RowSelectedMsg) calls ResetDrillStack() explicitly before dispatch;
 // namespace/context switches go through ClearDetail() which resets too.
 func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventItem) {
+	// Different underlying resource → reset per-tab cursors so the
+	// auto-land logic in buildContentLines re-fires for the new item.
+	// Same UID (polling refresh of the same release / pod / ...) keeps
+	// the cursor where the user put it.
+	if m.detail.UID != detail.UID {
+		m.historyCursor = -1
+	}
 	m.detail = detail
 	m.events = events
 	m.hasData = true
@@ -878,6 +815,23 @@ func (m *DetailModel) buildContentLines() {
 	case "Events":
 		m.contentLines = m.buildEventLines()
 	case "History":
+		// First entry into the History tab with data loaded: land the
+		// cursor on the current deployed revision so the user sees an
+		// immediate highlight rather than an unmarked table. Subsequent
+		// j/k movements are preserved (we only auto-land when cursor=-1).
+		if m.historyCursor < 0 && len(m.detail.ReleaseHistory) > 0 {
+			for i, r := range m.detail.ReleaseHistory {
+				if r.Status == "deployed" {
+					m.historyCursor = i
+					break
+				}
+			}
+			// Fall back to the last revision if no row reports deployed
+			// (mid-rollback states). Better than -1 invisible cursor.
+			if m.historyCursor < 0 {
+				m.historyCursor = len(m.detail.ReleaseHistory) - 1
+			}
+		}
 		m.contentLines = m.buildHistoryLines()
 	}
 }

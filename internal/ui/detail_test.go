@@ -944,27 +944,11 @@ func TestDetailModel_EventsMessage_Wraps_NotTruncates(t *testing.T) {
 	}
 }
 
-func TestDetailModel_SearchJKAreTypedNotNavigation(t *testing.T) {
-	m := newTestDetail()
-	detail := sampleDetail()
-	// Add enough labels to make content scrollable.
-	detail.Labels = make(map[string]string)
-	for i := 0; i < 30; i++ {
-		detail.Labels[fmt.Sprintf("label-%02d", i)] = fmt.Sprintf("value-%02d", i)
-	}
-	m.SetDetail(detail, sampleEvents())
-
-	m, _ = m.Update(keyMsg('/'))
-	m, _ = m.Update(keyMsg('j'))
-	m, _ = m.Update(keyMsg('k'))
-
-	if m.scrollOffset != 0 {
-		t.Errorf("j/k in search must not scroll, got scrollOffset=%d", m.scrollOffset)
-	}
-	if m.searchQuery != "jk" {
-		t.Errorf("j/k in search must be typed, got query %q", m.searchQuery)
-	}
-}
+// Panel-3 search was removed entirely in the v1.5 polish pass — cursor
+// tabs (Relatives / History) didn't tolerate filtering, and the line-
+// based tabs (Logs / Events) read better as plain scrollable views. The
+// previous TestDetailModel_SearchJKAreTypedNotNavigation test guarded a
+// behavior that no longer exists; deletion intentional, not a regression.
 
 // YAML-rendering tests were removed in the Relatives migration — YAML now
 // lives in the `Y` popup, covered by yamlpopup_test.go. CopyableContent's
