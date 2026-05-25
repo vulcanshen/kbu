@@ -12,7 +12,31 @@
 
 A terminal UI for Kubernetes, inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesseduffield/lazygit), [lazydocker](https://github.com/jesseduffield/lazydocker), and [k9s](https://github.com/derailed/k9s). Built with Go and [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
-![km8 screenshot](docs/screenshot.png)
+## Demo
+
+### Getting around km8
+
+![basics](docs/demo-basics.gif)
+
+Panel layout, vim navigation, namespace picker, search lock.
+
+### Navigate Kubernetes as a graph
+
+![relatives](docs/demo-relatives.gif)
+
+ServiceAccount fan-out (Pods / RoleBindings / ClusterRoleBindings / Token Secrets) → drill chain SA → Pod → Deployment → Pod → breadcrumb popup → `Space` jumps panels 1+2 back to a chain ancestor.
+
+### Edit live resources with your editor
+
+![yaml-edit](docs/demo-yaml-edit.gif)
+
+`e` launches `kubectl edit` inside the embedded PTY. Save and the watcher catches the change.
+
+### TUI + persistent shell in one window
+
+![km8erm](docs/demo-km8erm.gif)
+
+`Alt+t` opens KM8erm, a persistent embedded shell. Hide it, navigate km8 panels, reopen — scrollback and prompt intact.
 
 ## Features
 
