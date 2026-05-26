@@ -234,7 +234,7 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
 
-	title := " " + m.resource.KubectlName() + "/" + m.item.Name
+	title := "  " + m.resource.KubectlName() + "/" + m.item.Name
 	if m.helmManaged {
 		title += " [helm]"
 	}
