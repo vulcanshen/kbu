@@ -87,7 +87,10 @@ func ColumnsForResource(rt k8s.ResourceType) []Column {
 	}
 	out := make([]Column, 0, len(cols)+1)
 	out = append(out, cols[0])
-	out = append(out, Column{Title: "", MinWidth: 2})
+	// MinWidth=3 leaves slack for the Nerd Font helm glyph (PUA codepoint,
+	// runewidth treats as Ambiguous=1 but some terminals render 2). The
+	// extra cell absorbs the drift so neighbour columns stay aligned.
+	out = append(out, Column{Title: "", MinWidth: 3})
 	out = append(out, cols[1:]...)
 	return out
 }
