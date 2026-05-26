@@ -162,30 +162,24 @@ func TestHelmDocMenu_EnterEmitsRequestMsg(t *testing.T) {
 	}
 }
 
-func TestHelmDocMenu_SpaceAlsoCommits(t *testing.T) {
+func TestHelmDocMenu_SpaceCloses(t *testing.T) {
+	// New v1.5.x mental model: Space = mirror open, close the popup. Commit
+	// goes through Enter only. Verifies Space does NOT emit a doc request
+	// and does fire animator close.
 	m := newHelmDocMenu(t)
 	cmd := m.Open("nginx", "default")
 	drainAnimationToInteractive(t, &m, cmd)
 
-	_, batchCmd := m.Update(key(" "))
-	if batchCmd == nil {
-		t.Fatal("Space should commit like Enter")
+	_, closeCmd := m.Update(key(" "))
+	if closeCmd == nil {
+		t.Fatal("Space should fire animator close cmd")
 	}
-	found := false
-	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
-		req, ok := msg.(HelmDocRequestMsg)
-		if !ok {
-			return false
+	expectMsg(t, closeCmd, func(msg tea.Msg) bool {
+		if _, ok := msg.(HelmDocRequestMsg); ok {
+			t.Error("Space must not emit HelmDocRequestMsg under new mental model")
 		}
-		if req.DocKind != k8s.HelmDocManifest {
-			t.Errorf("default cursor should hit Manifest, got %q", req.DocKind)
-		}
-		found = true
-		return true
+		return false
 	})
-	if !found {
-		t.Error("Space did not emit HelmDocRequestMsg")
-	}
 }
 
 func TestHelmDocMenu_EscCloses(t *testing.T) {

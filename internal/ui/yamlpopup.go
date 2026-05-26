@@ -232,9 +232,9 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 			m.scrollToMatch()
 		}
 		m.pendingG = false
-	case "e":
+	case "E":
 		// Direct edit dispatch. User already inspected the YAML in this popup
-		// so we skip the confirm step that the table-level `e` uses.
+		// so we skip the confirm step that the table-level `E` uses.
 		if m.item.Name == "" {
 			return m, nil
 		}

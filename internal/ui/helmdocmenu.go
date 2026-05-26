@@ -172,7 +172,7 @@ func (m HelmDocMenuPopupModel) Update(msg tea.Msg) (HelmDocMenuPopupModel, tea.C
 	case "G":
 		m.cursor = len(m.items) - 1
 		return m, nil
-	case "enter", " ":
+	case "enter":
 		if m.cursor < 0 || m.cursor >= len(m.items) {
 			return m, nil
 		}
@@ -186,9 +186,10 @@ func (m HelmDocMenuPopupModel) Update(msg tea.Msg) (HelmDocMenuPopupModel, tea.C
 		// one session — YamlPopup stacks on top via render order, and
 		// input routing checks yamlPopup before helmDocMenu (see app.go
 		// Update routing). When the user closes the YAML view, the
-		// menu is still there to pick the next doc. Esc/q dismisses.
+		// menu is still there to pick the next doc. Esc/q/Space dismisses
+		// the menu itself (Space = mirror open).
 		return m, func() tea.Msg { return req }
-	case "esc", "q":
+	case "esc", "q", " ":
 		return m, m.animator.Close()
 	}
 	return m, nil

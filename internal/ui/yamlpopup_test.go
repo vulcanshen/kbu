@@ -195,12 +195,12 @@ func TestYamlPopup_EditEmitsStartEditMsg(t *testing.T) {
 	m := newTestYamlPopup()
 	m = openTestPopup(m, sampleYAML)
 
-	_, cmd := m.Update(keyMsg('e'))
+	_, cmd := m.Update(keyMsg('E'))
 	if cmd == nil {
-		t.Fatal("expected non-nil cmd from e key")
+		t.Fatal("expected non-nil cmd from E key")
 	}
 	msg := cmd()
-	// Cmd returns tea.Batch result — for the e path it returns nil due to
+	// Cmd returns tea.Batch result — for the E path it returns nil due to
 	// the closure firing both close + startEditMsg as a batch. Walk the batch.
 	// tea.Batch returns a tea.BatchMsg which is a slice of cmds — we need to
 	// find the inner startEditMsg.
@@ -260,7 +260,7 @@ func TestYamlPopup_EditNoOpWithoutItem(t *testing.T) {
 	m.Open(sampleYAML, k8s.ResourcePods, k8s.ResourceItem{}, "test-ctx")
 	m.animator.Finalize()
 
-	_, cmd := m.Update(keyMsg('e'))
+	_, cmd := m.Update(keyMsg('E'))
 	if cmd != nil {
 		t.Errorf("expected no cmd when item.Name empty, got %T", cmd())
 	}
