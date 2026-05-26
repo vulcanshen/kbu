@@ -242,7 +242,7 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 		icon = k8s.HelmIcon()
 	}
 	title := icon + " " + m.resource.KubectlName() + "/" + m.item.Name
-	hint := " enter / esc "
+	hint := " j/k: move  Enter: open  Esc/q/Space: close "
 
 	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.
 	// Row shape: " ▶ [K]rest   hint " — vim-help style hotkey bracketing,
