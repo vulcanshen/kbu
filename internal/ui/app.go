@@ -1272,7 +1272,7 @@ func (m AppModel) View() string {
 		panelH := m.height - 1 - m.statusLine.LineCount()
 		panelW := m.width - 2*panelHMargin
 		m.detail.SetSize(panelW-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
+		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle()+m.detail.SpinnerSuffix(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
 		hMargin := blankColumn(panelHMargin, panelH)
 		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, fullPanel, hMargin)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
@@ -1281,9 +1281,9 @@ func (m AppModel) View() string {
 		panelW := m.width - 2*panelHMargin
 		m.table.SetSize(panelW-2, upperH-2)
 		m.detail.SetSize(panelW-2, detailH-2)
-		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
+		tabTitle := "[2] " + m.breadcrumb()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
 		middle := joinTableAndDetail(tablePanel, detailPanel, panelW)
 		fullH := upperH + panelVSpace + detailH
 		hMargin := blankColumn(panelHMargin, fullH)
@@ -1297,9 +1297,9 @@ func (m AppModel) View() string {
 		m.detail.SetSize(rw-2, detailH-2)
 
 		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", "")
-		tabTitle := "[2] " + m.breadcrumb() + "─" + m.detail.TabTitle()
+		tabTitle := "[2] " + m.breadcrumb()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.ActiveTabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), "")
 
 		rightSide := joinTableAndDetail(tablePanel, detailPanel, rw)
 

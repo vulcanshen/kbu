@@ -195,17 +195,12 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	if m.helmManaged {
 		title += " [helm]"
 	}
-	hint := " j/k  Enter open  Y/E/S/D direct  Esc/Space cancel "
+	hint := " enter / esc "
 
-	// Width: rows have shape " ▶ Label(K)  " — small list, fixed format.
-	maxInnerW := 40
-	if m.screenW > 0 {
-		maxInnerW = m.screenW * 85 / 100
-		if maxInnerW < 30 {
-			maxInnerW = 30
-		}
-	}
-	innerW := lipgloss.Width(title) + 4
+	// Width: pick the widest of title / hint / rows, leave breathing room
+	// on each side. No max cap — items are short fixed strings, the
+	// natural max width fits easily inside any reasonable terminal.
+	innerW := lipgloss.Width(title) + 2
 	if w := lipgloss.Width(hint) + 2; w > innerW {
 		innerW = w
 	}
@@ -215,8 +210,12 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 			innerW = w
 		}
 	}
-	if innerW > maxInnerW {
-		innerW = maxInnerW
+	// Cap at terminal width minus margins so the popup never overflows.
+	if m.screenW > 0 {
+		cap := m.screenW * 85 / 100
+		if innerW > cap {
+			innerW = cap
+		}
 	}
 
 	var rows []string
