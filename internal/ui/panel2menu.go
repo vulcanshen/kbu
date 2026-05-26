@@ -234,10 +234,14 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
 
-	title := "  " + m.resource.KubectlName() + "/" + m.item.Name
+	// Title icon: helm glyph when cursor row is helm-managed (so the
+	// popup signals its provenance the same way the row's helm column
+	// does), else the default popup glyph.
+	icon := ""
 	if m.helmManaged {
-		title += " [helm]"
+		icon = k8s.HelmIcon()
 	}
+	title := icon + " " + m.resource.KubectlName() + "/" + m.item.Name
 	hint := " enter / esc "
 
 	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.

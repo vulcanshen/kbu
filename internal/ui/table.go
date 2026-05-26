@@ -75,9 +75,21 @@ func (m TableModel) CopyableContent() string {
 	return strings.Join(lines, "\n")
 }
 
-// ColumnsForResource returns the column definitions for a given resource type.
+// ColumnsForResource returns the column definitions for a given resource
+// type. Inserts an unlabeled "helm-marker" column right after Name on
+// every resource except Helm Releases (where every row is helm by
+// definition — the dedicated CHART / REV / STATUS columns carry the
+// release context already).
 func ColumnsForResource(rt k8s.ResourceType) []Column {
-	return k8s.DefaultRegistry.ColumnsFor(rt)
+	cols := k8s.DefaultRegistry.ColumnsFor(rt)
+	if rt == k8s.ResourceReleases || len(cols) == 0 {
+		return cols
+	}
+	out := make([]Column, 0, len(cols)+1)
+	out = append(out, cols[0])
+	out = append(out, Column{Title: "", MinWidth: 2})
+	out = append(out, cols[1:]...)
+	return out
 }
 
 // NewTableModel creates a new table model initialized with Pods columns.
