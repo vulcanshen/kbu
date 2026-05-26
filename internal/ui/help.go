@@ -179,7 +179,7 @@ func (m HelpModel) renderFullPopup() string {
 	}
 	bodyLines = append(bodyLines, "") // bottom breathing
 
-	title := " Keybindings"
+	title := "  Keybindings"
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
