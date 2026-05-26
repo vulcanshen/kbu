@@ -41,6 +41,7 @@ type Panel2MenuPopupModel struct {
 type panel2MenuItem struct {
 	label string // "YAML" / "Edit" / "Shell" / "Delete" (rendered + "(K)")
 	key   string // hotkey trigger letter "Y" / "E" / "S" / "D"
+	hint  string // short description shown next to the label, helmdocmenu-style
 }
 
 // Panel2MenuActionMsg is emitted when the user commits a menu item (cursor
@@ -55,7 +56,7 @@ type Panel2MenuActionMsg struct {
 func NewPanel2MenuPopupModel(t *theme.Theme) Panel2MenuPopupModel {
 	return Panel2MenuPopupModel{
 		theme:    t,
-		animator: NewPopupAnimator("panel2menu", lipgloss.Color("#a6e3a1")),
+		animator: NewPopupAnimator("panel2menu", lipgloss.Color("#cba6f7")),
 	}
 }
 
@@ -156,17 +157,20 @@ func (m Panel2MenuPopupModel) RenderPopup() string {
 
 // buildPanel2MenuItems builds the per-row menu. Rule A — helm-managed
 // resources are read-only — drops Edit and Delete. Shell only appears
-// for resource kinds that actually have containers.
+// for resource kinds that actually have containers (Pod only — see
+// resourceHasContainer).
 func buildPanel2MenuItems(rt k8s.ResourceType, helmManaged bool) []panel2MenuItem {
-	items := []panel2MenuItem{{label: "YAML", key: "Y"}}
+	items := []panel2MenuItem{
+		{label: "YAML", key: "Y", hint: "view resource manifest"},
+	}
 	if !helmManaged {
-		items = append(items, panel2MenuItem{label: "Edit", key: "E"})
+		items = append(items, panel2MenuItem{label: "Edit", key: "E", hint: "kubectl edit"})
 	}
 	if resourceHasContainer(rt) {
-		items = append(items, panel2MenuItem{label: "Shell", key: "S"})
+		items = append(items, panel2MenuItem{label: "Shell", key: "S", hint: "kubectl exec -it"})
 	}
 	if !helmManaged {
-		items = append(items, panel2MenuItem{label: "Delete", key: "D"})
+		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
 	}
 	return items
 }
@@ -181,9 +185,10 @@ func resourceHasContainer(rt k8s.ResourceType) bool {
 }
 
 func (m Panel2MenuPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color("#a6e3a1")
+	bc := lipgloss.Color("#cba6f7")
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fab387")).Bold(true)
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
 
@@ -193,25 +198,28 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	}
 	hint := " enter / esc "
 
-	// Width: pick the widest of title / hint / rows, leave breathing room
-	// on each side. No max cap — items are short fixed strings, the
-	// natural max width fits easily inside any reasonable terminal.
-	innerW := lipgloss.Width(title) + 2
-	if w := lipgloss.Width(hint) + 2; w > innerW {
+	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.
+	// Row shape: " ▶ Label(K)   hint " — mirrors helmdocmenu layout.
+	maxInnerW := 60
+	if m.screenW > 0 {
+		maxInnerW = m.screenW * 85 / 100
+		if maxInnerW < 40 {
+			maxInnerW = 40
+		}
+	}
+	innerW := lipgloss.Width(title) + 4
+	if w := lipgloss.Width(hint) + 4; w > innerW {
 		innerW = w
 	}
 	for _, it := range m.items {
-		w := 1 + 2 + lipgloss.Width(it.label) + 3 + 2 // " ▶ Label(K) "
+		labelPart := it.label + "(" + it.key + ")"
+		w := 1 + 2 + lipgloss.Width(labelPart) + 4 + lipgloss.Width(it.hint) + 1
 		if w > innerW {
 			innerW = w
 		}
 	}
-	// Cap at terminal width minus margins so the popup never overflows.
-	if m.screenW > 0 {
-		cap := m.screenW * 85 / 100
-		if innerW > cap {
-			innerW = cap
-		}
+	if innerW > maxInnerW {
+		innerW = maxInnerW
 	}
 
 	var rows []string
@@ -222,17 +230,23 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 			marker = "▶ "
 		}
 		keyPart := "(" + it.key + ")"
-		bodyW := 1 + 2 + lipgloss.Width(it.label) + lipgloss.Width(keyPart)
-		padW := innerW - bodyW
+		labelPart := it.label + keyPart
+		labelW := lipgloss.Width(labelPart)
+		gap := strings.Repeat(" ", max(2, 16-labelW))
+		bodyPlain := " " + marker + labelPart + gap + it.hint
+		padW := innerW - 1 - lipgloss.Width(bodyPlain)
 		if padW < 0 {
 			padW = 0
 		}
 		pad := strings.Repeat(" ", padW)
 		if isCursor {
-			rows = append(rows, cursorStyle.Render(" "+marker+it.label+keyPart+pad))
+			rows = append(rows, cursorStyle.Render(bodyPlain+pad))
 			continue
 		}
-		rows = append(rows, " "+marker+it.label+keyStyle.Render(keyPart)+pad)
+		// Non-cursor: dim the hint, highlight (K) in the label so the
+		// hotkey stands out without dominating.
+		rows = append(rows,
+			" "+marker+it.label+keyStyle.Render(keyPart)+gap+hintStyle.Render(it.hint)+pad)
 	}
 
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
