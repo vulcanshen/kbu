@@ -89,7 +89,7 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		}
 	case "enter":
 		return m.selectCurrent(items)
-	case "esc", "n", "N":
+	case "esc", "n", "N", " ":
 		if m.searchQuery != "" {
 			m.searchQuery = ""
 			m.cursor = 0
@@ -226,7 +226,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 		b.WriteString(leftBorder + line + pad + rightBorder + "\n")
 	}
 
-	hint := " Enter: select  /: search  Esc: cancel "
+	hint := " Enter: select  /: search  Esc/Space: cancel "
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0

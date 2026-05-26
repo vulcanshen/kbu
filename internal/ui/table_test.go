@@ -574,7 +574,10 @@ func TestColumnsForResource(t *testing.T) {
 			t.Errorf("ColumnsForResource(%v) returned empty columns", rt)
 		}
 		for i, col := range cols {
-			if col.Title == "" {
+			// v1.5.1: index 1 is the unlabeled helm-marker column for
+			// every kind except Helm Releases (where the column isn't
+			// inserted). Title intentionally empty.
+			if col.Title == "" && !(i == 1 && rt != k8s.ResourceReleases) {
 				t.Errorf("ColumnsForResource(%v) column %d has empty title", rt, i)
 			}
 			if col.MinWidth <= 0 {

@@ -545,18 +545,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
 			}
 		case ".":
-			// Toggle helm storage secret visibility (sh.helm.release.v1
-			// blobs). Only meaningful on panel 2 viewing Secrets — `.`
-			// outside that context falls through so the table-panel
-			// handler can decide (most likely a no-op). Mimics unix
-			// dotfile convention. Force a re-list so the new filter
-			// takes effect immediately — watcher's cache is stale under
-			// the new predicate. Bottom-left panel border picks up
-			// `.helm` automatically via tablePanelBottomLeft().
-			if m.activePanel != TablePanel || m.currentResource != k8s.ResourceSecrets {
+			// Toggle visibility of helm-managed items on any panel 2
+			// resource list. Helm Releases themselves are excluded (the
+			// category IS helm) — there `.` is a no-op. Re-start the
+			// watcher to re-emit the cached items so the new filter
+			// shows / hides them right away.
+			if m.activePanel != TablePanel || m.currentResource == k8s.ResourceReleases {
 				return m, nil
 			}
-			k8s.ToggleHelmHideStorageSecrets()
+			k8s.ToggleHelmHideManaged()
 			m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
 			return m, waitForWatchUpdate(m.watcher, m.currentResource)
 		case "S":
@@ -790,21 +787,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Type != m.currentResource {
 			return m, nil
 		}
-		m.items = msg.Items
+		m.items = filterHelmIfHidden(msg.Items, msg.Type)
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		if m.drillDownPod != nil {
 			return m, tea.Batch(cmds...)
 		}
-		rows := make([][]string, len(msg.Items))
-		for i, item := range msg.Items {
-			rows[i] = item.Row
-		}
+		rows := augmentRowsWithHelm(m.items, msg.Type)
 		m.table.SetRows(rows)
-		m.honorPendingTableSelect(msg.Type, msg.Items)
-		if len(msg.Items) > 0 {
+		m.honorPendingTableSelect(msg.Type, m.items)
+		if len(m.items) > 0 {
 			idx := m.table.SelectedRow()
-			if idx >= 0 && idx < len(msg.Items) {
-				item := msg.Items[idx]
+			if idx >= 0 && idx < len(m.items) {
+				item := m.items[idx]
 				cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.Type, item))
 				if c := m.detail.BeginRefetch(); c != nil {
 					cmds = append(cmds, c)
@@ -1065,25 +1059,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			parentItems: m.items,
 		})
 		m.currentResource = msg.childType
-		m.items = msg.children
+		m.items = filterHelmIfHidden(msg.children, msg.childType)
 		m.detail.SetResourceType(msg.childType)
 		m.table.SetColumns(ColumnsForResource(msg.childType))
-		rows := make([][]string, len(msg.children))
-		for i, item := range msg.children {
-			rows[i] = item.Row
-		}
-		m.table.SetRows(rows)
+		m.table.SetRows(augmentRowsWithHelm(m.items, msg.childType))
 		m.statusLine.SetDrillDown(true)
-		if len(msg.children) > 0 {
-			cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.childType, msg.children[0]))
+		if len(m.items) > 0 {
+			cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.childType, m.items[0]))
 			if c := m.detail.BeginRefetch(); c != nil {
 				cmds = append(cmds, c)
 			}
 			if msg.childType == k8s.ResourcePods {
-				containers := k8s.ContainerNames(msg.children[0].Raw)
+				containers := k8s.ContainerNames(m.items[0].Raw)
 				if len(containers) > 0 {
 					m.detail.logLines = nil
-					m.logStreamer.Start(msg.children[0].Name, msg.children[0].Namespace, containers)
+					m.logStreamer.Start(m.items[0].Name, m.items[0].Namespace, containers)
 					m.logsActive = true
 					cmds = append(cmds, waitForLogLine(m.logStreamer))
 				}
@@ -1835,10 +1825,51 @@ func (m AppModel) focusedPanelContent() string {
 // Empty when the filter is in its default (hidden) state — there's
 // nothing to remind the user about.
 func (m *AppModel) tablePanelBottomLeft() string {
-	if m.currentResource == k8s.ResourceSecrets && !k8s.HelmHideStorageSecrets() {
+	if m.currentResource != k8s.ResourceReleases && !k8s.HelmHideManaged() {
 		return ".helm"
 	}
 	return ""
+}
+
+// filterHelmIfHidden drops helm-managed items (and, for Secrets, also helm
+// storage blobs) from the slice when the global helm-hide toggle is on.
+// Helm Releases themselves are passed through untouched — the category
+// IS helm. Returns the original slice unmodified when nothing is hidden.
+func filterHelmIfHidden(items []k8s.ResourceItem, rt k8s.ResourceType) []k8s.ResourceItem {
+	if !k8s.HelmHideManaged() || rt == k8s.ResourceReleases {
+		return items
+	}
+	out := make([]k8s.ResourceItem, 0, len(items))
+	for _, item := range items {
+		if k8s.IsHelmManaged(item) {
+			continue
+		}
+		if rt == k8s.ResourceSecrets && k8s.IsHelmStorageSecret(item) {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+// augmentRowsWithHelm inserts the helm-marker cell right after Name on
+// every row. Helm Releases get pass-through rows — their column set is
+// already helm-specific (CHART / REV / STATUS / ...). Drill rows from
+// container lists etc. don't pass through here, so they're unaffected.
+func augmentRowsWithHelm(items []k8s.ResourceItem, rt k8s.ResourceType) [][]string {
+	rows := make([][]string, len(items))
+	for i, item := range items {
+		if rt == k8s.ResourceReleases || len(item.Row) == 0 {
+			rows[i] = item.Row
+			continue
+		}
+		out := make([]string, 0, len(item.Row)+1)
+		out = append(out, item.Row[0])
+		out = append(out, k8s.MarkHelm(item))
+		out = append(out, item.Row[1:]...)
+		rows[i] = out
+	}
+	return rows
 }
 
 // clearSearchOnLeave drops the search state of `from` when focus moves

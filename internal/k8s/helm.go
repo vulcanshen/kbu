@@ -182,31 +182,44 @@ func IsHelmStorageSecret(item ResourceItem) bool {
 	return string(sec.Type) == "helm.sh/release.v1"
 }
 
-// helmHideStorageSecrets is a session-local atomic toggle for "filter out
-// helm release storage secrets from sidebar Secrets list". Default true —
-// helm storage secrets are unwanted noise out of the box. `.` flips it
-// (see UI layer). Atomic so the watcher's fetcher goroutine and the UI
-// goroutine can read/write without a mutex.
-var helmHideStorageSecrets atomic.Bool
+// helmHideManaged is a session-local atomic toggle for "filter out
+// helm-managed items from any resource list". Default true — helm-managed
+// objects (and Secrets-list storage secrets, which are also helm-related)
+// are unwanted noise out of the box on a dev / scout workflow. `.` flips
+// it (see UI layer). Atomic so watcher fetcher goroutine and UI goroutine
+// can read/write without a mutex.
+var helmHideManaged atomic.Bool
 
 func init() {
-	helmHideStorageSecrets.Store(true)
+	helmHideManaged.Store(true)
 }
 
-// HelmHideStorageSecrets reports the current state of the helm storage
-// secret filter.
-func HelmHideStorageSecrets() bool { return helmHideStorageSecrets.Load() }
+// HelmHideManaged reports whether the global helm-managed filter is on.
+func HelmHideManaged() bool { return helmHideManaged.Load() }
 
-// SetHelmHideStorageSecrets toggles the helm storage secret filter and
-// returns the new state.
-func SetHelmHideStorageSecrets(v bool) { helmHideStorageSecrets.Store(v) }
+// SetHelmHideManaged sets the global filter state.
+func SetHelmHideManaged(v bool) { helmHideManaged.Store(v) }
 
-// ToggleHelmHideStorageSecrets flips the helm storage secret filter and
-// returns the new value.
-func ToggleHelmHideStorageSecrets() bool {
-	v := !helmHideStorageSecrets.Load()
-	helmHideStorageSecrets.Store(v)
+// ToggleHelmHideManaged flips the filter and returns the new value.
+func ToggleHelmHideManaged() bool {
+	v := !helmHideManaged.Load()
+	helmHideManaged.Store(v)
 	return v
+}
+
+// HelmIcon returns the Nerd Font glyph used to mark helm-managed items
+// (matches the icon on the Helm doc menu / Helm releases sidebar entry).
+func HelmIcon() string { return "" }
+
+// MarkHelm returns the helm icon when the item is helm-managed (either
+// by label/annotation, or — for Secrets — as a helm storage blob),
+// else "". Used as the value for the unlabeled marker column right
+// after Name on every resource type.
+func MarkHelm(item ResourceItem) string {
+	if IsHelmManaged(item) || IsHelmStorageSecret(item) {
+		return HelmIcon()
+	}
+	return ""
 }
 
 // FormatHelmHistoryDate converts the RFC3339 timestamp in

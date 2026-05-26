@@ -131,7 +131,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	currentMarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending)).Bold(true)
 
 	title := "󰍒 Breadcrumb"
-	hint := " j/k: move  Enter: jump  Space: switch  Esc/q/b: close "
+	hint := " j/k: move  Enter: switch  Esc/q/Space: close "
 
 	// Widened from 70% to 85% so long resource names (RS-hash suffixes,
 	// generated Job names, ...) get more horizontal room before the

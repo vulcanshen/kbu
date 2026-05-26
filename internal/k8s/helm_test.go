@@ -220,22 +220,34 @@ func TestIsHelmStorageSecret(t *testing.T) {
 	}
 }
 
-func TestToggleHelmHideStorageSecrets(t *testing.T) {
+func TestToggleHelmHideManaged(t *testing.T) {
 	// Save / restore so this test can run in any order without leaking
 	// state into the rest of the suite.
-	orig := HelmHideStorageSecrets()
-	defer SetHelmHideStorageSecrets(orig)
+	orig := HelmHideManaged()
+	defer SetHelmHideManaged(orig)
 
-	SetHelmHideStorageSecrets(true)
-	if v := ToggleHelmHideStorageSecrets(); v {
+	SetHelmHideManaged(true)
+	if v := ToggleHelmHideManaged(); v {
 		t.Errorf("toggle from true should yield false, got %v", v)
 	}
-	if !HelmHideStorageSecrets() {
-		// After toggle from true → false, then read should give false.
-		// (Failing this means atomic store didn't take.)
-	}
-	if v := ToggleHelmHideStorageSecrets(); !v {
+	if v := ToggleHelmHideManaged(); !v {
 		t.Errorf("toggle from false should yield true, got %v", v)
+	}
+}
+
+func TestMarkHelm(t *testing.T) {
+	managed := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "nginx",
+			Labels: map[string]string{"app.kubernetes.io/managed-by": "Helm"},
+		},
+	}
+	plain := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "raw"}}
+	if got := MarkHelm(ResourceItem{Raw: managed}); got == "" {
+		t.Error("helm-managed pod should return non-empty MarkHelm icon")
+	}
+	if got := MarkHelm(ResourceItem{Raw: plain}); got != "" {
+		t.Errorf("plain pod should return empty MarkHelm, got %q", got)
 	}
 }
 

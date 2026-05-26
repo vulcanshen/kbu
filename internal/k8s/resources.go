@@ -1484,19 +1484,15 @@ func fetchSecrets(ctx context.Context, cs kubernetes.Interface, ns string) ([]Re
 	if err != nil {
 		return nil, fmt.Errorf("listing secrets: %w", err)
 	}
-	hideHelm := HelmHideStorageSecrets()
 	items := make([]ResourceItem, 0, len(list.Items))
 	for i := range list.Items {
 		s := &list.Items[i]
-		// Helm storage secrets (`type: helm.sh/release.v1`) are filtered by
-		// default — they're a per-revision blob, one per upgrade, and
-		// dwarf the workload secrets users actually want. `.` toggles via
-		// the UI layer (k8s.SetHelmHideStorageSecrets). Enrichers that
-		// look up specific secrets by name go through client-go directly
-		// so they're unaffected by this filter.
-		if hideHelm && string(s.Type) == "helm.sh/release.v1" {
-			continue
-		}
+		// Helm storage / helm-managed filtering moved to the centralized
+		// post-fetch filter at the UI layer (filterHelmIfHidden in app.go)
+		// so the same `.` toggle hides helm-related items on every
+		// resource type, not just Secrets. Enrichers that look up secrets
+		// by name go through client-go directly — unaffected by display
+		// filters.
 		items = append(items, ResourceItem{
 			Name:      s.Name,
 			Namespace: s.Namespace,
