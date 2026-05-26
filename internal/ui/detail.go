@@ -650,15 +650,17 @@ func (m *DetailModel) ResetDrillStack() {
 }
 
 // TabTitle returns the tab bar string for embedding in the panel border.
-// Adds a `(N)` suffix to the Relatives tab when the user has drilled deeper
-// — N is the 1-indexed level (1=root, 2=first drill, ...). The
-// breadcrumb popup (`i` key) is the only way to see the full chain;
-// this number is the at-a-glance hint that you're not at root.
+// Active tab is bracketed; Logs gets a ▼ marker when follow-tail is engaged;
+// Relatives gets a chain-level suffix when drilled. Embed in Panel 3's
+// border title — Panel 2 stays clean with just its breadcrumb.
 func (m DetailModel) TabTitle() string {
 	var parts []string
 	for i, tab := range m.tabs {
 		label := m.tabLabel(tab)
 		if DetailTab(i) == m.activeTab {
+			if tab == "Logs" && m.followTail {
+				label += " ▼"
+			}
 			parts = append(parts, "["+label+"]")
 		} else {
 			parts = append(parts, " "+label+" ")
@@ -667,11 +669,9 @@ func (m DetailModel) TabTitle() string {
 	return strings.Join(parts, "─")
 }
 
-// ActiveTabTitle returns the active tab name with a state marker suffix when
-// applicable — currently used to surface follow-tail state on the Logs tab
-// and the drill level on the Relatives tab. Embed this in Panel 3's border title
-// (which scopes to the active tab only), rather than the full TabTitle bar
-// on Panel 2.
+// ActiveTabTitle is kept as a thin wrapper for callers that still expect
+// the single-tab-name format. v1.5.1 moved the full tab bar to Panel 3,
+// so most callers should use TabTitle() instead.
 func (m DetailModel) ActiveTabTitle() string {
 	name := m.ActiveTabName()
 	if name == "Logs" && m.followTail {
