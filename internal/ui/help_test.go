@@ -90,11 +90,12 @@ func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 
 	view := m.View()
 
-	// Check that key sections are present.
+	// v1.5.1 trimmed help is intentionally minimal — "Space opens the
+	// menu, 一看就懂" eliminates the need to spell out per-context
+	// triggers. Verify the universal mental-model + vim core keys.
 	expectedSections := []string{
 		"Navigation",
-		"Table",
-		"Detail",
+		"Vim",
 		"Global",
 	}
 	for _, section := range expectedSections {
@@ -104,12 +105,13 @@ func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 	}
 
 	expectedKeys := []string{
+		"Enter",
+		"Space",
+		"h / l",
+		"Esc",
 		"j / k",
 		"gg / G",
-		"/",
-		"h / l",
 		"?",
-		"c",
 	}
 	for _, key := range expectedKeys {
 		if !strings.Contains(view, key) {
