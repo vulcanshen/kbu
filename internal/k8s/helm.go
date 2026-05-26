@@ -207,9 +207,13 @@ func ToggleHelmHideManaged() bool {
 	return v
 }
 
-// HelmIcon returns the Nerd Font glyph used to mark helm-managed items
-// (matches the icon on the Helm doc menu / Helm releases sidebar entry).
-func HelmIcon() string { return "" }
+// HelmIcon returns the helm symbol used to mark helm-managed items.
+// Uses the standard Unicode helm symbol (U+2388, ⎈) rather than a Nerd
+// Font glyph because lipgloss table cells don't render PUA codepoints
+// reliably across all font configurations (the Nerd Font helm glyph
+// shows as ◇◇ tofu in some setups), while ⎈ is in the standard plane
+// and works everywhere.
+func HelmIcon() string { return "⎈" }
 
 // MarkHelm returns the helm icon when the item is helm-managed (either
 // by label/annotation, or — for Secrets — as a helm storage blob),
