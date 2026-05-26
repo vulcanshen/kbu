@@ -95,24 +95,21 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 			m.cursor = len(m.chain) - 1
 			return m, nil
 		case "enter":
-			level := m.cursor + 1
-			closeCmd := m.animator.Close()
-			jumpCmd := func() tea.Msg { return RelativeJumpMsg{Level: level} }
-			return m, tea.Batch(closeCmd, jumpCmd)
-		case " ":
-			// Space — emit RequestSwitchToResourceMsg, leaving the
-			// breadcrumb open underneath. AppModel opens confirm
-			// stacked on top (confirm gets input via the routing
-			// order, render order puts confirm above). If user
-			// cancels, breadcrumb is still there and they can pick
-			// another level. If they confirm, SwitchToResourceMsg's
-			// handler closes the now-stale breadcrumb.
+			// v1.5.x: Enter commits the cursor row as a panel 1+2 switch
+			// (matches the new mental model where Enter = "into / commit
+			// choice"). RequestSwitchToResourceMsg goes through the
+			// confirm-gate code path shared with other switch entries.
 			if m.cursor < 0 || m.cursor >= len(m.chain) {
 				return m, nil
 			}
 			ref := m.chain[m.cursor]
 			return m, func() tea.Msg { return RequestSwitchToResourceMsg{Ref: ref} }
-		case "esc", "q", "b":
+		case " ":
+			// v1.5.x: Space mirrors the open key — close the popup
+			// without committing. Aligns with the global rule "any menu
+			// popup Space = close".
+			return m, m.animator.Close()
+		case "esc", "q":
 			return m, m.animator.Close()
 		}
 	}

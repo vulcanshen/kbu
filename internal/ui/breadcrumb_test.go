@@ -12,35 +12,11 @@ func newTestBreadcrumb() BreadcrumbPopupModel {
 	return NewBreadcrumbPopupModel(theme.DefaultTheme())
 }
 
-// TestBreadcrumbPopup_EnterEmitsLinkJumpMsg confirms the existing
-// enter-to-jump behavior survives the space-hotkey addition.
-func TestBreadcrumbPopup_EnterEmitsLinkJumpMsg(t *testing.T) {
-	m := newTestBreadcrumb()
-	chain := []k8s.RefTarget{
-		{Type: k8s.ResourcePods, Name: "pod-a", Namespace: "ns-x"},
-		{Type: k8s.ResourceDeployments, Name: "dep-b", Namespace: "ns-x"},
-		{Type: k8s.ResourceConfigMaps, Name: "cfg-c", Namespace: "ns-x"},
-	}
-	m.Open(chain)
-	m.animator.State = PopupOpen
-	m.cursor = 1
-
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("Enter must return a Cmd (close + jump)")
-	}
-	// tea.Batch's exact shape isn't inspectable, but we can drive the cmd
-	// repeatedly and check the message types observed. For this we only
-	// check that the cmd is non-nil; the more specific test below covers
-	// Space's message routing.
-}
-
-// TestBreadcrumbPopup_SpaceEmitsRequestSwitchToResourceMsg verifies that
-// space on the cursor-selected level emits RequestSwitchToResourceMsg —
-// AppModel turns that into a confirm popup whose on-confirm fires the
-// actual SwitchToResourceMsg. Routing through the request type keeps
-// breadcrumb space and Relatives-tab space sharing one confirm gate.
-func TestBreadcrumbPopup_SpaceEmitsRequestSwitchToResourceMsg(t *testing.T) {
+// TestBreadcrumbPopup_EnterEmitsSwitchMsg — v1.5.x mental model: Enter
+// commits the cursor row as a panel 1+2 switch (replaces the previous
+// jump-to-drill-level behavior). RequestSwitchToResourceMsg goes through
+// the shared confirm gate at the AppModel layer.
+func TestBreadcrumbPopup_EnterEmitsSwitchMsg(t *testing.T) {
 	m := newTestBreadcrumb()
 	chain := []k8s.RefTarget{
 		{Type: k8s.ResourcePods, Name: "pod-a", Namespace: "ns-x"},
@@ -51,34 +27,52 @@ func TestBreadcrumbPopup_SpaceEmitsRequestSwitchToResourceMsg(t *testing.T) {
 	m.animator.State = PopupOpen
 	m.cursor = 1 // Deployment
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
-		t.Fatal("Space must return a Cmd")
+		t.Fatal("Enter must return a Cmd (switch)")
 	}
-
-	// Single cmd (no close-self) — breadcrumb stays open under the
-	// confirm popup. AppModel handles the cleanup if the user confirms.
 	rm, ok := cmd().(RequestSwitchToResourceMsg)
 	if !ok {
-		t.Fatalf("Space cmd output = %T, want RequestSwitchToResourceMsg", cmd())
+		t.Fatalf("Enter cmd output = %T, want RequestSwitchToResourceMsg", cmd())
 	}
-	want := chain[1]
-	if rm.Ref != want {
-		t.Errorf("RequestSwitchToResourceMsg.Ref = %+v, want %+v", rm.Ref, want)
+	if rm.Ref != chain[1] {
+		t.Errorf("RequestSwitchToResourceMsg.Ref = %+v, want %+v", rm.Ref, chain[1])
 	}
 }
 
-// TestBreadcrumbPopup_SpaceNoOpOnEmptyChain guards the bounds check —
-// space when the chain is empty or cursor is out of range must not
-// crash and must not emit a switch.
-func TestBreadcrumbPopup_SpaceNoOpOnEmptyChain(t *testing.T) {
+// TestBreadcrumbPopup_SpaceCloses — v1.5.x mental model: Space mirrors
+// open and closes the popup without committing. Aligns with the global
+// rule "any menu popup Space = close". Don't call cmd() — animator
+// close uses tea.Tick which would block under test harness.
+func TestBreadcrumbPopup_SpaceCloses(t *testing.T) {
+	m := newTestBreadcrumb()
+	chain := []k8s.RefTarget{
+		{Type: k8s.ResourcePods, Name: "pod-a", Namespace: "ns-x"},
+		{Type: k8s.ResourceDeployments, Name: "dep-b", Namespace: "ns-x"},
+	}
+	m.Open(chain)
+	m.animator.State = PopupOpen
+	m.cursor = 1
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if cmd == nil {
+		t.Fatal("Space must return a close Cmd")
+	}
+	// Type-level check would require invoking cmd(), which blocks on
+	// the animator tick. Non-nil is the contract — close cmd is an
+	// implementation detail of PopupAnimator.
+}
+
+// TestBreadcrumbPopup_EnterNoOpOnEmptyChain — bounds check still applies
+// to Enter (commit needs a valid cursor row).
+func TestBreadcrumbPopup_EnterNoOpOnEmptyChain(t *testing.T) {
 	m := newTestBreadcrumb()
 	m.Open(nil)
 	m.animator.State = PopupOpen
 	m.cursor = 0
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
-		t.Errorf("Space on empty chain should return nil cmd, got %T", cmd)
+		t.Errorf("Enter on empty chain should return nil cmd, got %T", cmd)
 	}
 }

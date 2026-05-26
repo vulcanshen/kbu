@@ -44,53 +44,28 @@ type hint struct {
 	desc string
 }
 
-// hints returns the panel-specific discoverable keys. Universal vim-style
-// navigation (j/k, u/d, gg/G) is intentionally omitted — users learn those
-// once, and the help popup (`?`) is the full reference. Status line surfaces
-// only the keys that change meaning by panel or aren't obvious from the
-// content itself.
+// hints returns the keys surfaced on the status line. v1.5.x mental model:
+// only the universal navigation keys live here — anything else is reachable
+// via Space (per-row context menu, popup self-documents) or `?` (full
+// reference). Trigger letters (E/S/D/Y) live in the per-row Space menu, so
+// they're not duplicated here.
+//
+// `/` filter only renders on panel 1/2 — panel 3 has no in-panel search
+// (retired in v1.5.0). Hiding it on panel 3 avoids the always-on hint
+// misleading users into trying.
 func (m StatusLineModel) hints() []hint {
-	always := []hint{
+	h := []hint{
 		{"?", "help"},
 		{"q", "quit"},
+		{"N", "ns"},
+		{"C", "ctx"},
+		{"space", "menu"},
+		{"enter", "into"},
 	}
-	var panel []hint
-	switch m.activePanel {
-	case SidebarPanel:
-		panel = []hint{
-			{"n", "ns"},
-			{"c", "ctx"},
-		}
-	case TablePanel:
-		if m.drillDown {
-			panel = []hint{
-				{"/", "filter"},
-				{"s", "shell"},
-				{"esc", "back"},
-			}
-		} else {
-			// No "Enter: focus detail" hint — moving between adjacent
-			// panels via Enter is the obvious vim-row-to-pane motion;
-			// reserving the slot for actually mnemonic actions.
-			panel = []hint{
-				{"/", "filter"},
-				{"e", "edit"},
-				{"s", "shell"},
-				{"D", "del"},
-			}
-		}
-	case DetailPanel:
-		panel = []hint{
-			{"/", "filter"},
-			{"h/l", "tab"},
-			{"=/-", "expand"},
-		}
+	if m.activePanel != DetailPanel {
+		h = append(h, hint{"/", "filter"})
 	}
-	right := []hint{
-		{"Y", "yaml"},
-		{"M-t", "term"},
-	}
-	return append(append(always, panel...), right...)
+	return h
 }
 
 func (m StatusLineModel) renderedHints() []string {

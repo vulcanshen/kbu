@@ -13,71 +13,63 @@ func newTestStatusLine() StatusLineModel {
 }
 
 // ── hints by panel ─────────────────────────────────────────────────────────
+//
+// v1.5.x status-line mental model: keep only universal navigation keys
+// (`?`/`q` + `N`/`C` + space/enter, plus panel-scoped `/` filter on panels
+// 1+2). Trigger letters (E/S/D/Y) live in the per-row Space context menu,
+// not on the status line — the menu surfaces them in context, the status
+// line doesn't duplicate.
 
-func TestStatusLineModel_Hints_Sidebar(t *testing.T) {
-	m := newTestStatusLine()
-	m.SetActivePanel(SidebarPanel)
-
-	keys := hintKeys(m.hints())
-	mustContain(t, keys, "n", "sidebar must have namespace hint")
-	mustContain(t, keys, "c", "sidebar must have context hint")
-}
-
-func TestStatusLineModel_Hints_GlobalsOnAllPanels(t *testing.T) {
-	// `?` (help), `q` (quit), `Y` (YAML popup), `M-t` (KM8erm) are global
-	// one-key actions that should be discoverable from any panel.
+func TestStatusLineModel_Hints_Universal(t *testing.T) {
+	// `?` help, `q` quit, `N` ns, `C` ctx, space menu, enter into —
+	// the always-on core, present on every panel.
 	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
 		m := newTestStatusLine()
 		m.SetActivePanel(p)
 		keys := hintKeys(m.hints())
 		mustContain(t, keys, "?", "panel must show help hint")
 		mustContain(t, keys, "q", "panel must show quit hint")
-		mustContain(t, keys, "Y", "panel must show YAML popup hint")
-		mustContain(t, keys, "M-t", "panel must show KM8erm hint")
+		mustContain(t, keys, "N", "panel must show namespace hint")
+		mustContain(t, keys, "C", "panel must show context hint")
+		mustContain(t, keys, "space", "panel must show space (menu) hint")
+		mustContain(t, keys, "enter", "panel must show enter (into) hint")
 	}
 }
 
-func TestStatusLineModel_Hints_TablePanel(t *testing.T) {
-	m := newTestStatusLine()
-	m.SetActivePanel(TablePanel)
-
-	keys := hintKeys(m.hints())
-	mustContain(t, keys, "e", "table panel must have edit hint")
-	mustContain(t, keys, "D", "table panel must have delete hint")
-	mustContain(t, keys, "/", "table panel must have filter hint")
-	// Enter (focus → detail) is omitted intentionally — it's the obvious
-	// adjacent-panel motion and not worth a slot in the hints bar.
-	for _, k := range keys {
-		if k == "Enter" {
-			t.Errorf("Enter hint should be hidden on table panel (focus-shift is obvious), got hints=%v", keys)
-		}
+func TestStatusLineModel_Hints_FilterOnPanels12Only(t *testing.T) {
+	// `/` filter only renders on panel 1 and panel 2 — panel 3's in-panel
+	// search was retired in v1.5.0, so showing the hint on panel 3 would
+	// mislead users.
+	for _, p := range []Panel{SidebarPanel, TablePanel} {
+		m := newTestStatusLine()
+		m.SetActivePanel(p)
+		keys := hintKeys(m.hints())
+		mustContain(t, keys, "/", "panel 1/2 must show filter hint")
 	}
-}
-
-func TestStatusLineModel_Hints_TablePanel_DrillDown(t *testing.T) {
-	m := newTestStatusLine()
-	m.SetActivePanel(TablePanel)
-	m.SetDrillDown(true)
-
-	keys := hintKeys(m.hints())
-	mustContain(t, keys, "esc", "drill-down must have esc hint")
-	for _, k := range keys {
-		if k == "e" {
-			t.Error("drill-down table must not show edit hint")
-		}
-		if k == "D" {
-			t.Error("drill-down table must not show delete hint")
-		}
-	}
-}
-
-func TestStatusLineModel_Hints_DetailPanel(t *testing.T) {
 	m := newTestStatusLine()
 	m.SetActivePanel(DetailPanel)
-
 	keys := hintKeys(m.hints())
-	mustContain(t, keys, "h/l", "detail panel must have tab hint")
-	mustContain(t, keys, "=/-", "detail panel must have expand hint")
+	for _, k := range keys {
+		if k == "/" {
+			t.Errorf("panel 3 must NOT show filter hint (search retired in v1.5.0), got hints=%v", keys)
+		}
+	}
+}
+
+func TestStatusLineModel_Hints_TriggerLettersHiddenFromStatusLine(t *testing.T) {
+	// Trigger letters (E edit, S shell, D delete, Y yaml) are surfaced
+	// via the per-row Space context menu — the status line no longer
+	// duplicates them. Same for h/l (tab switch) and =/- (now z).
+	m := newTestStatusLine()
+	m.SetActivePanel(TablePanel)
+	keys := hintKeys(m.hints())
+	for _, banned := range []string{"E", "S", "D", "Y", "h/l", "=/-", "z", "M-t"} {
+		for _, k := range keys {
+			if k == banned {
+				t.Errorf("status line must NOT show %q (lives in context menu / ? help), got hints=%v", banned, keys)
+			}
+		}
+	}
 }
 
 // ── LineCount ─────────────────────────────────────────────────────────────

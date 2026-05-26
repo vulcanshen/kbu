@@ -592,75 +592,64 @@ func TestDetailModel_RelativesTab_LongValueWrapsConsistently(t *testing.T) {
 	}
 }
 
+// TestDetailModel_BorderTopRightHint — v1.5.x: hint always returns "".
+// `[b]readcrumbs` retired alongside the `b` key.
 func TestDetailModel_BorderTopRightHint(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(0)
 
-	// Depth 1: no hint (b doesn't do anything useful).
 	if got := m.BorderTopRightHint(); got != "" {
 		t.Errorf("depth 1 should have no hint, got %q", got)
 	}
-
-	// Depth 2 on Relatives tab: hint surfaces b.
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
 	)
-	if got := m.BorderTopRightHint(); got != "[b]readcrumbs" {
-		t.Errorf("depth 2 Relatives should show '[b]readcrumbs', got %q", got)
-	}
-
-	// Same depth but Events tab: no hint (b only works on Relatives).
-	m = m.switchToTab(2)
 	if got := m.BorderTopRightHint(); got != "" {
-		t.Errorf("Events tab should not show hint, got %q", got)
+		t.Errorf("depth 2 must also have no hint (retired in v1.5.x), got %q", got)
 	}
 }
 
-func TestDetailModel_LinksH_PopsFrame(t *testing.T) {
+// TestDetailModel_RelativesH_Retired — v1.5.x: `h` no longer pops drill
+// frame. `Esc` owns pop; `h`/`l` are panel-3 tab switches (handled at
+// app.go layer).
+func TestDetailModel_RelativesH_Retired(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(0)
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
 	)
-	// h must pop one level.
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
-	if cmd != nil {
-		t.Errorf("h should not emit a Cmd, got %T", cmd)
-	}
-	if updated.Depth() != 1 {
-		t.Errorf("after h, depth should be 1, got %d", updated.Depth())
+
+	initialDepth := m.Depth()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if updated.Depth() != initialDepth {
+		t.Errorf("h must not pop frame (retired), depth changed %d→%d", initialDepth, updated.Depth())
 	}
 }
 
-func TestDetailModel_LinksB_EmitsBreadcrumbMsgAtDepthGT1(t *testing.T) {
+// TestDetailModel_RelativesB_Retired — v1.5.x: `b` retired. Space opens
+// the breadcrumb popup at the app layer; this handler should not emit
+// RelativeBreadcrumbMsg from `b` anymore.
+func TestDetailModel_RelativesB_Retired(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(0)
+	m.PushDrillFrame(
+		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
+		k8s.ResourceItem{}, k8s.ResourceDetail{},
+	)
 
-	// At depth 1, b is a no-op (no chain to display).
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
 	if cmd != nil {
-		t.Errorf("b at depth 1 should not emit a Cmd, got %T", cmd())
-	}
-
-	// At depth 2, b emits RelativeBreadcrumbMsg.
-	m.PushDrillFrame(
-		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
-		k8s.ResourceItem{}, k8s.ResourceDetail{},
-	)
-	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
-	if cmd == nil {
-		t.Fatal("b at depth >1 must emit RelativeBreadcrumbMsg")
-	}
-	if _, ok := cmd().(RelativeBreadcrumbMsg); !ok {
-		t.Errorf("expected RelativeBreadcrumbMsg, got %T", cmd())
+		if _, ok := cmd().(RelativeBreadcrumbMsg); ok {
+			t.Errorf("b must NOT emit RelativeBreadcrumbMsg anymore (retired in v1.5.x)")
+		}
 	}
 }
 
@@ -684,19 +673,21 @@ func TestDetailModel_DrillChain_RootFirst(t *testing.T) {
 	}
 }
 
-func TestDetailModel_LinksL_EmitsPushMsg(t *testing.T) {
+// TestDetailModel_RelativesL_Retired — v1.5.x: `l` no longer drills.
+// Enter is the sole drill / focus key under the new mental model.
+// `l` now means "next tab" but only when panel 3 is the active panel
+// (handled at app.go layer, not detail.Update).
+func TestDetailModel_RelativesL_Retired(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(0)
 
-	// `l` is the explicit drill-deeper key (vim right = into the chain).
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	if cmd == nil {
-		t.Fatal("l on drillable entry must return a Cmd")
-	}
-	if _, ok := cmd().(RelativePushMsg); !ok {
-		t.Fatalf("expected RelativePushMsg from l, got %T", cmd())
+	if cmd != nil {
+		if _, ok := cmd().(RelativePushMsg); ok {
+			t.Errorf("l must NOT emit RelativePushMsg anymore (Enter is sole drill key)")
+		}
 	}
 }
 
