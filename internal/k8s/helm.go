@@ -207,13 +207,11 @@ func ToggleHelmHideManaged() bool {
 	return v
 }
 
-// HelmIcon returns the marker used in the table-row helm column.
-// ASCII "H" rather than a Nerd Font glyph or ⎈ (U+2388) because both
-// have East-Asian-ambiguous width — runewidth reports 1, some terminal
-// fonts render 2, the column alignment then drifts row-by-row (worst
-// case: tofu ◇◇ once the column gets squeezed). Plain "H" sidesteps
-// the ambiguity entirely.
-func HelmIcon() string { return "H" }
+// HelmIcon returns the helm wheel glyph (Nerd Font nf-dev-helm, U+E7FB)
+// used in both popup titles and the row marker column. The row column
+// widens to MinWidth=3 (see ColumnsForResource) to absorb any cell
+// padding drift from runewidth ambiguity on this PUA codepoint.
+func HelmIcon() string { return "" }
 
 // MarkHelm returns the helm icon when the item is helm-managed (either
 // by label/annotation, or — for Secrets — as a helm storage blob),
