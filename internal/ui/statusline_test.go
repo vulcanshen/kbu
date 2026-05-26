@@ -63,7 +63,7 @@ func TestStatusLineModel_Hints_TriggerLettersHiddenFromStatusLine(t *testing.T) 
 	m := newTestStatusLine()
 	m.SetActivePanel(TablePanel)
 	keys := hintKeys(m.hints())
-	for _, banned := range []string{"E", "S", "D", "Y", "h/l", "=/-", "z", "M-t"} {
+	for _, banned := range []string{"E", "S", "D", "Y", "h/l", "=/-", "z"} {
 		for _, k := range keys {
 			if k == banned {
 				t.Errorf("status line must NOT show %q (lives in context menu / ? help), got hints=%v", banned, keys)

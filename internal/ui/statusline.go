@@ -61,6 +61,7 @@ func (m StatusLineModel) hints() []hint {
 		{"C", "ctx"},
 		{"space", "menu"},
 		{"enter", "into"},
+		{"Alt-t", "KM8erm"},
 	}
 	if m.activePanel != DetailPanel {
 		h = append(h, hint{"/", "filter"})
