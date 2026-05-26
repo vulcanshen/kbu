@@ -61,6 +61,7 @@ type AppModel struct {
 	yamlPopup       YamlPopupModel
 	breadcrumbPopup BreadcrumbPopupModel
 	helmDocMenu     HelmDocMenuPopupModel
+	panel2Menu      Panel2MenuPopupModel
 
 	activePanel     Panel
 	width           int
@@ -149,6 +150,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		yamlPopup:       NewYamlPopupModel(t),
 		breadcrumbPopup: NewBreadcrumbPopupModel(t),
 		helmDocMenu:     NewHelmDocMenuPopupModel(t),
+		panel2Menu:      NewPanel2MenuPopupModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfgEditor:       cfgEditor,
@@ -249,6 +251,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.helmDocMenu.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.panel2Menu.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
@@ -381,6 +386,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			var cmd tea.Cmd
 			m.helmDocMenu, cmd = m.helmDocMenu.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
+	if m.panel2Menu.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.panel2Menu, cmd = m.panel2Menu.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -621,6 +638,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					item := m.items[idx]
 					m.helmDocMenu.SetSize(m.width, m.height)
 					return m, m.helmDocMenu.Open(item.Name, item.Namespace)
+				}
+				return m, nil
+			}
+			// Panel 2 on a regular (non-Helm-Release) row: Space opens
+			// the per-row context menu — YAML/Edit/Shell/Delete items
+			// shaped by the resource kind and helm-managed status. The
+			// menu surfaces what trigger letters do on this row instead
+			// of relying on the user to remember Y/E/S/D in context.
+			if m.activePanel == TablePanel && !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
+				idx := m.table.SelectedRow()
+				if idx >= 0 && idx < len(m.items) {
+					item := m.items[idx]
+					m.panel2Menu.SetSize(m.width, m.height)
+					return m, m.panel2Menu.Open(m.currentResource, item)
 				}
 				return m, nil
 			}
@@ -1118,6 +1149,48 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case Panel2MenuActionMsg:
+		// Panel 2 context menu committed an item (cursor + Enter or
+		// direct hotkey). Each action mirrors the corresponding direct
+		// keypress on the panel 2 row — kept inline so the trigger-key
+		// correspondence stays visible. Rule A guards (helm-managed
+		// read-only) match the E/D case statements above.
+		resource := msg.Resource
+		item := msg.Item
+		switch msg.Action {
+		case "Y":
+			yaml := m.detail.CurrentLevelYAML()
+			if yaml == "" {
+				return m, nil
+			}
+			m.yamlPopup.SetSize(m.width, m.height)
+			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
+		case "E":
+			if resource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
+				m.appLog.Info("Helm-managed (read-only) — use helm upgrade / rollback")
+				return m, m.toast.Show("Helm-managed (read-only)")
+			}
+			detail := fmt.Sprintf("kubectl edit %s/%s", resource.KubectlName(), item.Name)
+			if item.Namespace != "" {
+				detail += " -n " + item.Namespace
+			}
+			startCmd := func() tea.Msg {
+				return startEditMsg{resource: resource, item: item, contextName: m.k8sClient.ContextName()}
+			}
+			return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
+		case "S":
+			return m, m.execShell()
+		case "D":
+			if resource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
+				m.appLog.Info("Helm-managed (read-only) — use helm uninstall")
+				return m, m.toast.Show("Helm-managed (read-only)")
+			}
+			detail := fmt.Sprintf("kubectl delete %s %s -n %s", resource.KubectlName(), item.Name, item.Namespace)
+			return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
+				deleteResource(resource, item.Name, item.Namespace, m.k8sClient.ContextName()))
+		}
+		return m, nil
+
 	case HelmDocRequestMsg:
 		// Menu picked a doc kind. Fire the helm CLI fetch asynchronously
 		// so a slow `helm get manifest` on a big chart doesn't freeze the
@@ -1263,6 +1336,11 @@ func (m AppModel) View() string {
 	if m.helmDocMenu.IsActive() {
 		m.helmDocMenu.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.helmDocMenu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.panel2Menu.IsActive() {
+		m.panel2Menu.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.panel2Menu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.yamlPopup.IsActive() {
