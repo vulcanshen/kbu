@@ -491,11 +491,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
 				return m, m.exitDrillDown()
 			}
-		case "n", "N":
+		case "N":
 			return m, fetchNamespaces(m.k8sClient)
-		case "c", "C":
+		case "C":
 			return m, fetchContexts(m.k8sClient)
-		case "e":
+		case "E":
 			if !m.editing && m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
 				idx := m.table.SelectedRow()
 				if idx < 0 || idx >= len(m.items) {
@@ -536,7 +536,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			k8s.ToggleHelmHideStorageSecrets()
 			m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
 			return m, waitForWatchUpdate(m.watcher, m.currentResource)
-		case "s":
+		case "S":
 			if m.activePanel == TablePanel {
 				return m, m.execShell()
 			}
@@ -545,24 +545,34 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				idx := m.table.SelectedRow()
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
+					// Rule A: Helm-managed resources are read-only — delete
+					// here would be overwritten on next helm upgrade anyway.
+					// Mirrors the `E` edit guard above.
+					if m.currentResource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
+						m.appLog.Info("Helm-managed (read-only) — use helm uninstall")
+						return m, m.toast.Show("Helm-managed (read-only)")
+					}
 					detail := fmt.Sprintf("kubectl delete %s %s -n %s", m.currentResource.KubectlName(), item.Name, item.Namespace)
 					return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
 						deleteResource(m.currentResource, item.Name, item.Namespace, m.k8sClient.ContextName()))
 				}
 			}
-		case "=":
+		case "z":
+			// Toggle expand on the focused panel. If anything is expanded
+			// already, restore. Otherwise expand whichever panel (Table or
+			// Detail) currently has focus. Single-key toggle replaces the
+			// old `=`/`-` pair.
+			if m.detailExpanded || m.tableExpanded {
+				m.detailExpanded = false
+				m.tableExpanded = false
+				return m, nil
+			}
 			if m.activePanel == DetailPanel {
 				m.detailExpanded = true
 				return m, nil
 			}
 			if m.activePanel == TablePanel {
 				m.tableExpanded = true
-				return m, nil
-			}
-		case "-":
-			if m.detailExpanded || m.tableExpanded {
-				m.detailExpanded = false
-				m.tableExpanded = false
 				return m, nil
 			}
 		case "y":
