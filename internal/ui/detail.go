@@ -290,11 +290,14 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 // handleRelativeKey intercepts the keys with Relatives-tab-specific semantics:
 //   - j/k (or arrow keys): move the cursor between drillable entries,
 //     auto-scrolling the viewport so the cursor stays visible.
-//   - Enter / l: drill into the highlighted ref (push a frame onto the
-//     Relatives chain — emits RelativePushMsg, AppModel handles cycle check + fetch).
-//   - h / Esc: pop one level off the chain. No-op at root level.
-//   - b: open the breadcrumb popup so the user can jump back to any
-//     ancestor level. No-op at root (nothing to navigate).
+//   - Enter: drill into the highlighted ref (push a frame onto the Relatives
+//     chain — emits RelativePushMsg, AppModel handles cycle check + fetch).
+//   - Esc: pop one level off the chain. No-op at root level.
+//
+// v1.5.x mental model: `l` no longer drills (Enter is the sole drill key);
+// `h` no longer pops (Esc owns that); `b` retired (Space opens the breadcrumb
+// popup at the AppModel layer). `h`/`l` mean panel-3 tab switch and are
+// handled in app.go before this routine ever sees them.
 //
 // Returns handled=false to let the caller fall back to the generic per-line
 // scroll handlers for everything else.
@@ -315,15 +318,6 @@ func (m DetailModel) handleRelativeKey(msg tea.KeyMsg) (DetailModel, bool, tea.C
 			m.buildContentLines()
 			m = m.scrollRelativeCursorIntoView()
 			return m, true, nil
-		case 'l':
-			return m.dispatchRelativePush()
-		case 'h':
-			return m.dispatchRelativePop()
-		case 'b':
-			if m.Depth() <= 1 {
-				return m, true, nil
-			}
-			return m, true, func() tea.Msg { return RelativeBreadcrumbMsg{} }
 		}
 	case tea.KeyDown:
 		m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, +1)
@@ -699,15 +693,13 @@ func (m DetailModel) tabLabel(name string) string {
 }
 
 // BorderTopRightHint returns a short string to render at the top-right
-// of panel 3's border, or "" when no hint applies. Currently used to
-// surface the breadcrumb key when the user is in a drill chain on the
-// Relatives tab — discoverable affordance for "press b to see where you've
-// been". The chosen format keeps the hotkey in brackets so the user
-// can pattern-match it against `b` in the help screen.
+// of panel 3's border, or "" when no hint applies.
+//
+// v1.5.x: now always returns "". Inline `[b]readcrumbs` hint was retired
+// alongside the `b` key — Space is the single menu entry point under the
+// new mental model, and the help popup (`?`) carries the full reference.
+// Kept as a method so callers don't break.
 func (m DetailModel) BorderTopRightHint() string {
-	if m.ActiveTabName() == "Relatives" && m.Depth() > 1 {
-		return "[b]readcrumbs"
-	}
 	return ""
 }
 

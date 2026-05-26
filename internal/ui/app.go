@@ -465,16 +465,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cyclePanelReverse()
 			return m, nil
 		case "h":
-			// Tab switching via h/l is now scoped to the Table panel —
-			// on the Detail panel, h/l belong to the Relatives drill chain
-			// (handleRelativeKey). To switch detail tabs while looking at
-			// panel 3, the user moves focus to panel 2 first.
-			if m.activePanel == TablePanel {
+			// v1.5.x: h/l switch the panel 3 detail tab ONLY when panel 3
+			// is the active panel. Panel 1/2 = no-op (panel 2 was the
+			// previous owner — moved to panel 3 so tab nav and list nav
+			// live on different panels). `l` is no longer a drill key
+			// either; Enter is the sole drill / focus path.
+			if m.activePanel == DetailPanel {
 				m.detail = m.detail.PrevTab()
 				return m, nil
 			}
 		case "l":
-			if m.activePanel == TablePanel {
+			if m.activePanel == DetailPanel {
 				m.detail = m.detail.NextTab()
 				return m, nil
 			}
@@ -637,20 +638,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			// Relatives tab "jump to this resource": promote the
-			// CURSOR-POINTED ref (what the user is highlighting).
-			// Routed through RequestSwitchToResourceMsg so both this
-			// hotkey and the breadcrumb-popup space share one
-			// confirm-gate code path.
+			// v1.5.x: Relatives tab Space opens the breadcrumb popup
+			// (replaces both the old direct switch-to-cursor behavior
+			// AND the retired `b` key). User then picks a level + Enter
+			// to commit the switch. Mirrors the "Space = right-click
+			// menu" mental model: surface options, don't mutate state
+			// directly. No-op at root (nothing to navigate).
 			if m.activePanel != DetailPanel || m.detail.ActiveTabName() != "Relatives" {
 				return m, nil
 			}
-			ref := m.detail.SelectedRelativeRef()
-			if ref == nil {
+			if m.detail.Depth() <= 1 {
 				return m, nil
 			}
-			target := *ref
-			return m, func() tea.Msg { return RequestSwitchToResourceMsg{Ref: target} }
+			m.breadcrumbPopup.SetSize(m.width, m.height)
+			return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
 		}
 
 	case FocusTableMsg:

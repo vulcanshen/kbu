@@ -319,18 +319,17 @@ func TestSidebarModel_EnterEmitsFocusTableMsg(t *testing.T) {
 	}
 }
 
-// TestSidebarModel_LEmitsFocusTableMsg mirrors the Enter test for 'l'.
-func TestSidebarModel_LEmitsFocusTableMsg(t *testing.T) {
+// TestSidebarModel_LRetired — `l` no longer focuses the table panel.
+// v1.5.x: Enter is the sole drill / focus-next-panel key; `l` retired.
+func TestSidebarModel_LRetired(t *testing.T) {
 	m := newTestSidebar()
 
-	var cmd tea.Cmd
-	m, cmd = m.Update(keyMsg('l'))
-
+	_, cmd := m.Update(keyMsg('l'))
 	if cmd == nil {
-		t.Fatal("l must return a Cmd")
+		return // no-op is fine
 	}
-	if _, ok := cmd().(FocusTableMsg); !ok {
-		t.Fatalf("expected FocusTableMsg, got %T", cmd())
+	if _, ok := cmd().(FocusTableMsg); ok {
+		t.Fatalf("l must NOT emit FocusTableMsg anymore (Enter is sole focus-next key)")
 	}
 }
 

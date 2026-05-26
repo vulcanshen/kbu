@@ -184,11 +184,6 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 			return m.moveDown(visible)
 		case 'k':
 			return m.moveUp(visible)
-		case 'l':
-			// j/k already auto-selects the cursor row, so l/Enter has
-			// no resource-switch work to do — promote it to "move me
-			// into the table" instead of re-firing ResourceSelectedMsg.
-			return m, func() tea.Msg { return FocusTableMsg{} }
 		case 'g':
 			m.pendingG = true
 			return m, nil
