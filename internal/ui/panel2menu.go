@@ -175,6 +175,23 @@ func buildPanel2MenuItems(rt k8s.ResourceType, helmManaged bool) []panel2MenuIte
 	return items
 }
 
+// bracketHotkey wraps the hotkey letter inside the label with square
+// brackets (vim-help convention). "YAML" + "Y" → "[Y]AML". Falls back
+// to the unmodified label when the hotkey isn't a substring (case-
+// insensitive match), preserving label readability over hint correctness.
+func bracketHotkey(label, key string) string {
+	if label == "" || key == "" {
+		return label
+	}
+	upperLabel := strings.ToUpper(label)
+	upperKey := strings.ToUpper(key)
+	idx := strings.Index(upperLabel, upperKey)
+	if idx < 0 {
+		return label
+	}
+	return label[:idx] + "[" + string(label[idx]) + "]" + label[idx+1:]
+}
+
 // resourceHasContainer returns true for kinds where `kubectl exec` is
 // directly meaningful on the row. Currently only Pod — Deployment / STS /
 // DS / Job / CronJob require a pod-selection step that execShell doesn't
@@ -189,7 +206,6 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fab387")).Bold(true)
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
 
 	title := " " + m.resource.KubectlName() + "/" + m.item.Name
@@ -199,7 +215,8 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	hint := " enter / esc "
 
 	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.
-	// Row shape: " ▶ Label(K)   hint " — mirrors helmdocmenu layout.
+	// Row shape: " ▶ [K]rest   hint " — vim-help style hotkey bracketing,
+	// no separate color since the [] already marks the key.
 	maxInnerW := 60
 	if m.screenW > 0 {
 		maxInnerW = m.screenW * 85 / 100
@@ -211,9 +228,14 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	if w := lipgloss.Width(hint) + 4; w > innerW {
 		innerW = w
 	}
+	// Calc must match render's gap formula (max(2, 16-labelW)) — using a
+	// fixed gap=4 here used to under-count innerW and cause hint text to
+	// punch through the right border.
 	for _, it := range m.items {
-		labelPart := it.label + "(" + it.key + ")"
-		w := 1 + 2 + lipgloss.Width(labelPart) + 4 + lipgloss.Width(it.hint) + 1
+		labelDisplay := bracketHotkey(it.label, it.key)
+		labelW := lipgloss.Width(labelDisplay)
+		gap := max(2, 16-labelW)
+		w := 1 + 2 + labelW + gap + lipgloss.Width(it.hint) + 1
 		if w > innerW {
 			innerW = w
 		}
@@ -229,11 +251,10 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 		if isCursor {
 			marker = "▶ "
 		}
-		keyPart := "(" + it.key + ")"
-		labelPart := it.label + keyPart
-		labelW := lipgloss.Width(labelPart)
+		labelDisplay := bracketHotkey(it.label, it.key)
+		labelW := lipgloss.Width(labelDisplay)
 		gap := strings.Repeat(" ", max(2, 16-labelW))
-		bodyPlain := " " + marker + labelPart + gap + it.hint
+		bodyPlain := " " + marker + labelDisplay + gap + it.hint
 		padW := innerW - 1 - lipgloss.Width(bodyPlain)
 		if padW < 0 {
 			padW = 0
@@ -243,10 +264,9 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 			rows = append(rows, cursorStyle.Render(bodyPlain+pad))
 			continue
 		}
-		// Non-cursor: dim the hint, highlight (K) in the label so the
-		// hotkey stands out without dominating.
+		// Non-cursor: label keeps default color, hint dimmed.
 		rows = append(rows,
-			" "+marker+it.label+keyStyle.Render(keyPart)+gap+hintStyle.Render(it.hint)+pad)
+			" "+marker+labelDisplay+gap+hintStyle.Render(it.hint)+pad)
 	}
 
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
