@@ -4,6 +4,89 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.5.1] - 2026-05-26
+
+The keybinding UX pass. v1.5.0 shipped Helm; v1.5.1 steps back and
+collapses the accumulated key-binding choices into one consistent mental
+model. Four navigation keys with disjoint meanings:
+
+- **`Enter` = into** — the sole drill / focus / commit-popup key
+- **`Space` = right-click menu** — opens contextual menus, mirror-closes popups
+- **`h`/`l` = panel 3 tab switch** — only when panel 3 is active
+- **`Esc` = back** — pop drill frame / close popup (LIFO)
+
+Trigger letters (`Y`/`E`/`S`/`D`/`N`/`C`) are uppercase so they require
+Shift — the modifier exists to prevent accidental key presses, not to
+signal danger. The mental-model anchor is a desktop GUI analogue: Enter
+= double-click, Space = right-click.
+
+### Added
+
+- **Per-row context menu on panel 2.** Press `Space` on a regular row
+  to open a menu listing `YAML(Y)` / `Edit(E)` / `Shell(S)` / `Delete(D)`.
+  Items are resource-aware: Shell is hidden for resources without
+  containers (Service / ConfigMap / Secret / ...). Items can be committed
+  via cursor + `Enter` or by hitting the letter directly while the menu
+  is open. Trigger closes the menu either way — three paths (direct
+  hotkey at row / menu + cursor / menu + hotkey) reach the same final
+  state.
+- **Rule A read-only — Helm-managed Delete.** Pressing `D` on a Helm-
+  managed K8s resource (label `app.kubernetes.io/managed-by=Helm` or
+  annotation `meta.helm.sh/release-name`) now surfaces a "Helm-managed
+  (read-only)" toast and refuses, matching `E` edit. Closes the v1.5.0
+  leak where `D` skipped the guard.
+- **`z` toggle expand panel.** Single key toggles the focused panel
+  (table or detail) between expanded and normal — replaces the
+  `=`/`-` pair, which were ergonomically awkward (different keys for
+  open vs close).
+
+### Changed
+
+- **Trigger letters uppercase across the board.** `e` → `E` (edit),
+  `s` → `S` (shell). Aligns with `D`/`Y`/`N`/`C` and the Shift = anti-
+  accidental modifier rule. Also affects the YAML popup's edit hotkey
+  (now `E`).
+- **`n`/`c` lowercase aliases removed.** Namespace / context pickers
+  only respond to `N` / `C` now — the lowercase aliases were a leak
+  in the Shift = intentional rule.
+- **`h`/`l` purely panel 3 tab switch.** Previously `h`/`l` switched
+  the panel 3 tab while panel 2 was focused; now they only fire when
+  panel 3 is the active panel. Panel 2 = pure list (cursor + Enter +
+  Space). Panel 3 = tab navigation (`h`/`l`).
+- **`l` retired as a drill key.** Enter is now the sole drill / focus-
+  next-panel key throughout km8 (sidebar `l`/`Enter` → `Enter` only;
+  Relatives tab `Enter`/`l` → `Enter` only).
+- **`h` retired as drill-frame pop.** `Esc` was always an alias; now
+  it's the only key for back-out.
+- **`b` key retired.** The breadcrumb popup is now reachable via
+  `Space` on the Relatives tab — folds into the universal "Space =
+  open menu" rule. The `[b]readcrumbs` panel-border hint is removed.
+- **Breadcrumb popup: `Enter` commits, `Space` closes.** Inside the
+  popup, `Enter` now commits the cursor row as a panel 1+2 switch
+  (replaces the old jump-to-drill-level behavior). `Space` mirrors
+  open and closes the popup without committing.
+- **Any menu popup: `Space` = close** (mirror open). Breadcrumb popup,
+  Helm doc menu, per-row context menu — uniform rule. Confirm dialogs
+  already accepted Space as cancel; behavior unchanged.
+- **Status line trimmed.** Now shows only `?` / `q` / `N` / `C` /
+  `space` / `enter` — plus `/` filter when panel 1/2 is active
+  (hidden on panel 3 since in-panel search was retired in v1.5.0).
+  Trigger letters (`Y`/`E`/`S`/`D`) live in the per-row context menu
+  instead of being duplicated on the status bar.
+- **Help popup (`?`) rewritten** as the single source of truth for the
+  full key map under the new mental model.
+
+### Mental model summary
+
+| Key | Meaning |
+|---|---|
+| `Enter` | Into — drill / focus next / commit popup |
+| `Space` | Right-click menu — open context menu / mirror-close popup |
+| `h`/`l` | Tab switch (panel 3 active only) |
+| `Esc` | Back — pop drill / close popup |
+| `Y`/`E`/`S`/`D`/`N`/`C` | Triggers, uppercase = needs Shift = anti-accidental |
+| `j`/`k`/`u`/`d`/`gg`/`G` | Vim navigation (unchanged baseline) |
+
 ## [v1.5.0] - 2026-05-26
 
 The Helm release. A Helm release becomes km8's 27th resource type and

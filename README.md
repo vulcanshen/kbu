@@ -141,6 +141,8 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 
 ## Key Bindings
 
+km8 v1.5.1 navigation 用 4 個 disjoint 鍵語意：**`Enter` = into**（drill / focus / commit）、**`Space` = context menu**（彈出對應動作 popup）、**`h`/`l` = panel 3 tab switch**、**`Esc` = back / close**。Trigger action 一律大寫（防誤觸）— `Y`/`E`/`S`/`D`/`N`/`C`。
+
 ### Navigation
 
 | Key | Action |
@@ -150,59 +152,61 @@ Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` t
 | `gg` / `G` | Jump to top / bottom |
 | `1` / `2` / `3` | Switch panel |
 | `Tab` | Cycle panels |
+| `Enter` | **Into** — drill / focus next panel / commit popup choice |
+| `Esc` | **Back** — pop drill frame / close popup |
 
 ### Sidebar (Panel 1)
 
 | Key | Action |
 |---|---|
 | `j` / `k` | Move cursor (auto-selects the resource and restarts the watcher) |
-| `l` / `Enter` | Move focus to Panel 2 (resource already selected by `j`/`k`, no reload) |
+| `Enter` | Move focus to Panel 2 (resource already selected by `j`/`k`, no reload) |
 | `/` | Search / filter resource names + category names |
 
 ### Table (Panel 2)
 
+`Space` opens a per-row **context menu** with resource-aware items — `YAML(Y)` / `Edit(E)` / `Shell(S)` / `Delete(D)`. Use `j`/`k` + `Enter` or hit the letter directly. Helm-managed rows hide `Edit` / `Delete` (Rule A read-only); resources without containers hide `Shell`. Menu closes on any commit.
+
 | Key | Action |
 |---|---|
 | `/` | Search / filter |
-| `Enter` | Drill into children (Pods → Containers, HPA → workload, ...) **or** move focus to Panel 3 when the resource has nothing to drill into |
-| `Space` | On a Helm Release row: open the doc menu (Manifest / Notes / User Values / Merged Values / Hooks) |
-| `e` | Edit resource via `kubectl edit` (asks for confirmation). Helm-managed resources show a toast instead — use `helm upgrade` / `rollback` |
-| `D` | Delete resource (asks for confirmation) |
-| `s` | Shell into container via `kubectl exec -it` (asks for confirmation) |
-| `.` | On the Secrets list: toggle visibility of `sh.helm.release.v1.*` storage secrets (hidden by default; `.helm` chip on the panel border confirms when shown) |
+| `Enter` | Drill into children (Pods → Containers, HPA → workload, ...) **or** focus Panel 3 when the resource has nothing to drill into |
+| `Space` | Open per-row context menu (regular row) **or** Helm doc menu (Release row) |
+| `Y` | YAML of selected row (popup) |
+| `E` | Edit (`kubectl edit`, asks for confirmation). Helm-managed → read-only toast |
+| `S` | Shell into container (`kubectl exec -it`, container kinds only) |
+| `D` | Delete resource (asks for confirmation). Helm-managed → read-only toast |
+| `.` | On Secrets list: toggle visibility of `sh.helm.release.v1.*` storage secrets |
 
 ### Detail (Panel 3)
 
 | Key | Action |
 |---|---|
-| `h` / `l` | Switch tab (only from Panel 2 — on Panel 3 these belong to the Relatives chain) |
-| `[` / `]` | Previous / next tab |
-| `=` / `-` | Expand / restore panel |
+| `h` / `l` | Previous / next tab |
+| `[` / `]` | Previous / next tab (alias) |
+| `z` | Toggle expand panel |
 | `G` | Jump to bottom (on Logs: also resumes follow-tail) |
 | `k` / `↑` / `u` / `gg` | Scroll up (on Logs: pauses follow-tail) |
+| `Y` | YAML popup of current resource (drill chain — current level) |
 
 ### Relatives tab (drill chain)
 
-`Enter` and `l` push a frame onto the chain; `h` / `Esc` pop. `Space` jumps the table to whatever ref the cursor is on (confirms first). The tab label shows depth as `Relatives N` once you've drilled, and the panel border carries a `[b]readcrumbs` hint at the top-right.
+`Enter` pushes a frame onto the chain; `Esc` pops. `Space` opens the **breadcrumb popup** — pick any ancestor level, `Enter` to switch panels 1+2 to it (confirms first).
 
 | Key | Action |
 |---|---|
 | `j` / `k` | Move cursor between drillable refs |
-| `Enter` / `l` | Drill into the cursor's ref (push frame) |
-| `h` / `Esc` | Back one level (pop frame). No-op at root |
-| `b` | Open the breadcrumb popup — `j`/`k` to pick a level, `Enter` to jump back, `Space` to switch panels to that level, `Esc`/`q`/`b` to close |
-| `Space` | Switch panels 1+2 to the cursor's ref (asks for confirmation). Drill chain resets afterwards |
-| `Y` | Open the YAML popup of the cursor's ref |
+| `Enter` | Drill into the cursor's ref (push frame) |
+| `Esc` | Back one level (pop frame). No-op at root |
+| `Space` | Open breadcrumb popup. Inside: `j`/`k` pick level, `Enter` commit switch, `Space`/`Esc` close (mirror) |
+| `Y` | YAML popup of cursor ref |
 
 ### Helm Releases panel + History tab
 
-Panel 2 + Panel 3 hotkeys specific to the Helm `Releases` list.
-
 | Key | Where | Action |
 |---|---|---|
-| `Space` | Panel 2, Release row | Open the doc menu — pick `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks`, view via `helm get ...` in the YAML popup |
-| `Enter` / `Space` | Inside the doc menu | Fetch the selected doc; menu stays open behind the YAML so consecutive picks flow |
-| `Esc` / `q` | Inside the doc menu | Close the menu |
+| `Space` | Panel 2, Release row | Open the doc menu — pick `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks` with `j`/`k` + `Enter`, view via `helm get ...` in the YAML popup |
+| `Esc` / `q` / `Space` | Inside the doc menu | Close the menu (Space = mirror open) |
 | `j` / `k` / `g` / `G` | Panel 3, History tab | Move the revision cursor (lands on the current deployed rev when the tab opens) |
 | `Space` | Panel 3, History tab, non-current row | Roll back to that revision — confirm popup shows the exact `helm rollback` command |
 
@@ -210,16 +214,32 @@ Panel 2 + Panel 3 hotkeys specific to the Helm `Releases` list.
 
 | Key | Action |
 |---|---|
-| `n` / `N` | Switch namespace (`/` to filter inside the popup) |
-| `c` / `C` | Switch context (`/` to filter inside the popup) |
+| `N` | Switch namespace (`/` to filter inside the popup) |
+| `C` | Switch context (`/` to filter inside the popup) |
 | `Alt+t` | Toggle KM8erm (spawn / show / hide; shell stays alive across hide) |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
-| `Y` | Open YAML popup (`j/k/u/d/gg/G` scroll, `/` search, `y` copy, `e` edit, `Esc` close) |
 | `!` | App log |
 | `?` | Toggle help |
 | `q` | Quit km8 (asks for confirmation) |
 | `Ctrl+C` | Quit km8 immediately (no confirm) |
-| `Esc` | Close current modal / overlay |
+
+### YAML popup
+
+| Key | Action |
+|---|---|
+| `j`/`k`/`u`/`d`/`gg`/`G` | Scroll |
+| `/` | Search inside YAML |
+| `y` | Copy full YAML |
+| `E` | Edit (`kubectl edit`) |
+| `Esc` | Close |
+
+### Popup menus (breadcrumb / context menu / helm doc menu)
+
+| Key | Action |
+|---|---|
+| `j` / `k` | Move cursor |
+| `Enter` | Commit choice |
+| `Space` / `Esc` / `q` | Close popup (mirror open) |
 
 ### PTY popups (KM8erm, edit, shell exec)
 
