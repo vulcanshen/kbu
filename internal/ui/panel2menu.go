@@ -172,16 +172,12 @@ func buildPanel2MenuItems(rt k8s.ResourceType, helmManaged bool) []panel2MenuIte
 }
 
 // resourceHasContainer returns true for kinds where `kubectl exec` is
-// meaningful — i.e. they manage pods with containers. Service / ConfigMap
-// / Secret etc. would just return an error if `S` were available.
+// directly meaningful on the row. Currently only Pod — Deployment / STS /
+// DS / Job / CronJob require a pod-selection step that execShell doesn't
+// yet support. Users wanting a shell into a Deployment's pod drill in
+// (Enter on the row) to the pod list, then S there.
 func resourceHasContainer(rt k8s.ResourceType) bool {
-	switch rt {
-	case k8s.ResourcePods, k8s.ResourceDeployments,
-		k8s.ResourceStatefulSets, k8s.ResourceDaemonSets,
-		k8s.ResourceJobs, k8s.ResourceCronJobs:
-		return true
-	}
-	return false
+	return rt == k8s.ResourcePods
 }
 
 func (m Panel2MenuPopupModel) renderFullPopup() string {
