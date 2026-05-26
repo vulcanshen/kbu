@@ -440,18 +440,18 @@ type helpEntry struct {
 }
 
 func (m HelpModel) helpContent() []helpEntry {
-	// Minimal help — the design 哲學 is "Space opens the menu, 一看就懂",
-	// so per-context trigger letters (Y/E/S/D) aren't listed: hit Space
-	// on the cursor row and the popup self-documents what's available.
-	// Same for popup menus — j/k Enter Esc Space are universal across
-	// every popup, no need to repeat per-popup.
+	// Minimal help — design 哲學: Space opens the menu, one look and
+	// you get it. Per-context trigger letters (Y/E/S/D) aren't listed:
+	// hit Space on the cursor row and the popup self-documents what's
+	// available. Same for popup menus — j/k Enter Esc Space are
+	// universal across every popup, no need to repeat per-popup.
 	return []helpEntry{
-		{isSection: true, text: "Navigation 4 鍵"},
+		{isSection: true, text: "Core Navigation"},
 		{key: "Enter", desc: "Into — drill / focus / commit"},
 		{key: "Space", desc: "Open menu / close popup"},
 		{key: "h / l", desc: "Switch tab (panel 3)"},
 		{key: "Esc", desc: "Back / close"},
-		{isSection: true, text: "Vim navigation"},
+		{isSection: true, text: "Vim Navigation"},
 		{key: "j / k", desc: "Up / down"},
 		{key: "u / d", desc: "Page up / down"},
 		{key: "gg / G", desc: "Top / bottom"},
@@ -466,7 +466,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{key: "!", desc: "App log"},
 		{key: "?", desc: "Toggle help"},
 		{key: "q", desc: "Quit km8"},
-		{isSection: true, text: "PTY popup"},
+		{isSection: true, text: "KM8erm (embedded shell)"},
 		{key: "PgUp / PgDn", desc: "Scroll history"},
 		{key: "Home / End", desc: "Top / back to live"},
 	}
