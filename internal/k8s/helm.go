@@ -208,18 +208,25 @@ func ToggleHelmHideManaged() bool {
 }
 
 // HelmIcon returns the helm wheel glyph (Nerd Font nf-dev-helm, U+E7FB)
-// used in both popup titles and the row marker column. The row column
-// widens to MinWidth=3 (see ColumnsForResource) to absorb any cell
-// padding drift from runewidth ambiguity on this PUA codepoint.
+// used in popup titles. Popup titles are styled strings rendered in a
+// fixed-width context where Nerd Font PUA codepoints display reliably.
 func HelmIcon() string { return "" }
 
-// MarkHelm returns the helm icon when the item is helm-managed (either
-// by label/annotation, or — for Secrets — as a helm storage blob),
-// else "". Used as the value for the unlabeled marker column right
-// after Name on every resource type.
+// HelmRowMark returns the per-row helm-column marker. ASCII "H" rather
+// than HelmIcon() because the table cell layout needs unambiguous
+// visual width: runewidth treats PUA as ambiguous=1 while some
+// terminals render Nerd Font glyphs as 2 cells, which drifts adjacent
+// columns out of alignment row-by-row.
+func HelmRowMark() string { return "H" }
+
+// MarkHelm returns the helm row marker when the item is helm-managed
+// (either by label/annotation, or — for Secrets — as a helm storage
+// blob), else "". Used as the cell value for the unlabeled marker
+// column right after Name on every resource type. Uses HelmRowMark
+// (ASCII) to keep column alignment safe across terminals.
 func MarkHelm(item ResourceItem) string {
 	if IsHelmManaged(item) || IsHelmStorageSecret(item) {
-		return HelmIcon()
+		return HelmRowMark()
 	}
 	return ""
 }
