@@ -94,6 +94,40 @@ func TestPanel2Menu_Items_HelmManagedRuleA(t *testing.T) {
 	}
 }
 
+func TestPanel2Menu_Items_EventsNoEditNoDelete(t *testing.T) {
+	// Events: system-generated immutable, both E and D are dropped.
+	items := buildPanel2MenuItems(k8s.ResourceEvents, false)
+	keys := itemKeys(items)
+	if len(keys) != 1 || keys[0] != "Y" {
+		t.Errorf("Events menu should be YAML only, got %v", keys)
+	}
+}
+
+func TestPanel2Menu_Items_NodesEditNoDelete(t *testing.T) {
+	// Nodes: Edit kept (admin label/taint changes), Delete blocked.
+	items := buildPanel2MenuItems(k8s.ResourceNodes, false)
+	keys := itemKeys(items)
+	if !contains(keys, "Y") || !contains(keys, "E") {
+		t.Errorf("Nodes menu missing YAML or Edit, got %v", keys)
+	}
+	if contains(keys, "D") {
+		t.Errorf("Nodes menu must not have Delete (admin infra action), got %v", keys)
+	}
+}
+
+func TestPanel2Menu_Items_NamespacesEditNoDelete(t *testing.T) {
+	// Namespaces: Edit kept (labels/annotations), Delete blocked
+	// (cascades into every workload — too destructive for a list hotkey).
+	items := buildPanel2MenuItems(k8s.ResourceNamespaces, false)
+	keys := itemKeys(items)
+	if !contains(keys, "Y") || !contains(keys, "E") {
+		t.Errorf("Namespaces menu missing YAML or Edit, got %v", keys)
+	}
+	if contains(keys, "D") {
+		t.Errorf("Namespaces menu must not have Delete (cascades to all workloads), got %v", keys)
+	}
+}
+
 func TestPanel2Menu_Items_HelmManagedNoContainer(t *testing.T) {
 	// Helm-managed Service: only YAML remains (no E/D from Rule A,
 	// no S because Service has no containers).

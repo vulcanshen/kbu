@@ -155,24 +155,50 @@ func (m Panel2MenuPopupModel) RenderPopup() string {
 	return m.animator.RenderFrame(m.renderFullPopup())
 }
 
-// buildPanel2MenuItems builds the per-row menu. Rule A — helm-managed
-// resources are read-only — drops Edit and Delete. Shell only appears
-// for resource kinds that actually have containers (Pod only — see
-// resourceHasContainer).
+// buildPanel2MenuItems builds the per-row menu. Three layers of gating:
+//
+//  1. Rule A — helm-managed resources are read-only — drops Edit and Delete.
+//  2. resourceAllowsEdit / resourceAllowsDelete — opinionated dev-workflow
+//     gates that hide kubectl actions which technically work but have no
+//     practical purpose for a scout tool (e.g. Events can't be edited
+//     meaningfully; Node deletion is admin-scope, not km8's audience).
+//  3. resourceHasContainer — Shell only on kinds with containers (Pod).
 func buildPanel2MenuItems(rt k8s.ResourceType, helmManaged bool) []panel2MenuItem {
+	canEdit := !helmManaged && resourceAllowsEdit(rt)
+	canDelete := !helmManaged && resourceAllowsDelete(rt)
+
 	items := []panel2MenuItem{
 		{label: "YAML", key: "Y", hint: "view resource manifest"},
 	}
-	if !helmManaged {
+	if canEdit {
 		items = append(items, panel2MenuItem{label: "Edit", key: "E", hint: "kubectl edit"})
 	}
 	if resourceHasContainer(rt) {
 		items = append(items, panel2MenuItem{label: "Shell", key: "S", hint: "kubectl exec -it"})
 	}
-	if !helmManaged {
+	if canDelete {
 		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
 	}
 	return items
+}
+
+// resourceAllowsEdit returns false for kinds where `kubectl edit` is
+// technically allowed but has no dev-workflow value. Currently only
+// Events — they're system-generated immutable records.
+func resourceAllowsEdit(rt k8s.ResourceType) bool {
+	return rt != k8s.ResourceEvents
+}
+
+// resourceAllowsDelete returns false for kinds where `kubectl delete` is
+// blocked by km8's scout-tool stance. Events (no point), Nodes (admin
+// infra action), Namespaces (cascades to every workload in the ns — too
+// destructive for a list-row hotkey).
+func resourceAllowsDelete(rt k8s.ResourceType) bool {
+	switch rt {
+	case k8s.ResourceEvents, k8s.ResourceNodes, k8s.ResourceNamespaces:
+		return false
+	}
+	return true
 }
 
 // bracketHotkey wraps the hotkey letter inside the label with square

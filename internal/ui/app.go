@@ -530,6 +530,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.appLog.Info("Helm-managed (read-only) — use helm upgrade / rollback")
 					return m, m.toast.Show("Helm-managed (read-only)")
 				}
+				// Kind-level gate (mirrors panel 2 menu): Events have no
+				// editable surface, so E is a silent no-op + toast.
+				if !resourceAllowsEdit(m.currentResource) {
+					return m, m.toast.Show("Edit not supported on " + m.currentResource.KubectlName())
+				}
 				detail := fmt.Sprintf("kubectl edit %s/%s", m.currentResource.KubectlName(), item.Name)
 				if item.Namespace != "" {
 					detail += " -n " + item.Namespace
@@ -569,6 +574,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.currentResource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
 						m.appLog.Info("Helm-managed (read-only) — use helm uninstall")
 						return m, m.toast.Show("Helm-managed (read-only)")
+					}
+					// Kind-level gate (mirrors panel 2 menu): Events / Nodes /
+					// Namespaces are blocked from delete here too — too far
+					// from km8's scout-tool scope to gate via "asks for
+					// confirmation" alone.
+					if !resourceAllowsDelete(m.currentResource) {
+						return m, m.toast.Show("Delete not supported on " + m.currentResource.KubectlName())
 					}
 					detail := fmt.Sprintf("kubectl delete %s %s -n %s", m.currentResource.KubectlName(), item.Name, item.Namespace)
 					return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
