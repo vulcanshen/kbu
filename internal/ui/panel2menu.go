@@ -244,17 +244,17 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 		innerW = maxInnerW
 	}
 
+	// Constant 2-space gutter on every row — cursor row is differentiated
+	// by reverse-highlight alone (no leading arrow), so non-cursor rows
+	// align cleanly without a phantom marker column.
+	const gutter = "  "
 	var rows []string
 	for i, it := range m.items {
 		isCursor := i == m.cursor
-		marker := "  "
-		if isCursor {
-			marker = "▶ "
-		}
 		labelDisplay := bracketHotkey(it.label, it.key)
 		labelW := lipgloss.Width(labelDisplay)
 		gap := strings.Repeat(" ", max(2, 16-labelW))
-		bodyPlain := " " + marker + labelDisplay + gap + it.hint
+		bodyPlain := " " + gutter + labelDisplay + gap + it.hint
 		padW := innerW - 1 - lipgloss.Width(bodyPlain)
 		if padW < 0 {
 			padW = 0
@@ -266,7 +266,7 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 		}
 		// Non-cursor: label keeps default color, hint dimmed.
 		rows = append(rows,
-			" "+marker+labelDisplay+gap+hintStyle.Render(it.hint)+pad)
+			" "+gutter+labelDisplay+gap+hintStyle.Render(it.hint)+pad)
 	}
 
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
