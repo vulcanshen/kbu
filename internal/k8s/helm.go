@@ -207,13 +207,13 @@ func ToggleHelmHideManaged() bool {
 	return v
 }
 
-// HelmIcon returns the helm symbol used to mark helm-managed items.
-// Uses the standard Unicode helm symbol (U+2388, ⎈) rather than a Nerd
-// Font glyph because lipgloss table cells don't render PUA codepoints
-// reliably across all font configurations (the Nerd Font helm glyph
-// shows as ◇◇ tofu in some setups), while ⎈ is in the standard plane
-// and works everywhere.
-func HelmIcon() string { return "⎈" }
+// HelmIcon returns the marker used in the table-row helm column.
+// ASCII "H" rather than a Nerd Font glyph or ⎈ (U+2388) because both
+// have East-Asian-ambiguous width — runewidth reports 1, some terminal
+// fonts render 2, the column alignment then drifts row-by-row (worst
+// case: tofu ◇◇ once the column gets squeezed). Plain "H" sidesteps
+// the ambiguity entirely.
+func HelmIcon() string { return "H" }
 
 // MarkHelm returns the helm icon when the item is helm-managed (either
 // by label/annotation, or — for Secrets — as a helm storage blob),

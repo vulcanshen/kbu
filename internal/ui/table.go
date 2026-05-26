@@ -515,7 +515,21 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 // "CrashLoopBackOff" → "CrashL…") still gets coloured — the visible
 // (possibly truncated) text gets the ANSI wrap, not the original.
 func (m TableModel) stylizeCell(colIdx int, padded, raw string, base lipgloss.Style, onLightBg bool) string {
-	if m.resourceType != k8s.ResourcePods || colIdx != 2 {
+	// Dynamic Status-column lookup so the inserted helm-marker column
+	// (post-v1.5.1) doesn't statically shift the index. Was hard-coded
+	// to colIdx==2 before — now it's whichever index actually carries
+	// the "Status" title.
+	if m.resourceType != k8s.ResourcePods {
+		return base.Render(padded)
+	}
+	statusIdx := -1
+	for i, col := range m.columns {
+		if col.Title == "Status" {
+			statusIdx = i
+			break
+		}
+	}
+	if colIdx != statusIdx {
 		return base.Render(padded)
 	}
 	color := podStatusColor(strings.TrimSpace(raw), m.theme)
