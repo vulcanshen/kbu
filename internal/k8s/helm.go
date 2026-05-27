@@ -183,15 +183,15 @@ func IsHelmStorageSecret(item ResourceItem) bool {
 }
 
 // helmHideManaged is a session-local atomic toggle for "filter out
-// helm-managed items from any resource list". Default true — helm-managed
-// objects (and Secrets-list storage secrets, which are also helm-related)
-// are unwanted noise out of the box on a dev / scout workflow. `.` flips
-// it (see UI layer). Atomic so watcher fetcher goroutine and UI goroutine
+// helm-managed items from any resource list". Default false — surface
+// every resource the cluster actually holds; users running helm-heavy
+// workloads explicitly toggle hide via `.` when they want to focus on
+// non-helm objects. Atomic so watcher fetcher goroutine and UI goroutine
 // can read/write without a mutex.
 var helmHideManaged atomic.Bool
 
 func init() {
-	helmHideManaged.Store(true)
+	helmHideManaged.Store(false)
 }
 
 // HelmHideManaged reports whether the global helm-managed filter is on.
@@ -213,19 +213,15 @@ func ToggleHelmHideManaged() bool {
 // requiring NF coverage.
 func HelmIcon() string { return "⎈" }
 
-// HelmRowMark returns the per-row helm-column marker — Nerd Font
-// nf-dev-helm (U+E7FB). Width is reliable now that the table renderer
-// uses visual-width truncation (see renderRow in internal/ui/table.go);
-// on the rare terminal where PUA is rendered as 2 cells, runewidth's
-// 1-cell measurement may drift adjacent columns by one cell per
-// helm-managed row — acceptable for the visual distinctness gained.
-func HelmRowMark() string { return "" }
+// HelmRowMark returns the per-row helm-column marker (U+2388 ⎈,
+// matching HelmIcon — same glyph for popup title and row marker so
+// the helm-managed signal is visually consistent across panels).
+func HelmRowMark() string { return "⎈" }
 
 // MarkHelm returns the helm row marker when the item is helm-managed
 // (either by label/annotation, or — for Secrets — as a helm storage
 // blob), else "". Used as the cell value for the unlabeled marker
-// column right after Name on every resource type. Uses HelmRowMark
-// (Nerd Font nf-dev-helm).
+// column right after Name on every resource type.
 func MarkHelm(item ResourceItem) string {
 	if IsHelmManaged(item) || IsHelmStorageSecret(item) {
 		return HelmRowMark()
