@@ -28,19 +28,19 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 
 ![basics](docs/demo-basics.gif)
 
-Panel layout, vim navigation, namespace picker, search lock.
+Three keys carry the whole interaction: `Enter` drills, `Space` opens the contextual menu (Y/E/S/D on any row), `Esc` backs out. Add `N` for the namespace picker.
 
 ### Navigate Kubernetes as a graph
 
 ![relatives](docs/demo-relatives.gif)
 
-ServiceAccount fan-out (Pods / RoleBindings / ClusterRoleBindings / Token Secrets) → drill chain SA → Pod → Deployment → Pod → breadcrumb popup → `Space` jumps panels 1+2 back to a chain ancestor.
+ServiceAccount fan-out (Pods / RoleBindings / ClusterRoleBindings / Token Secret) → drill chain SA → Pod → Deployment → Pod → `Space` opens the breadcrumb popup → `Enter` jumps panels 1+2 back to a chain ancestor.
 
-### Edit live resources with your editor
+### Helm as a first-class resource
 
-![yaml-edit](docs/demo-yaml-edit.gif)
+![helm](docs/demo-helm.gif)
 
-`E` launches `kubectl edit` inside the embedded PTY (or pick it from the `Space` menu on the row). Save and the watcher catches the change.
+`Space` on a release row opens the doc menu (Manifest / Notes / User Values / Merged Values / Hooks). Switch to the History tab and `Space` on an older revision shows the exact `helm rollback` command — confirm to run it.
 
 ### TUI + persistent shell in one window
 
