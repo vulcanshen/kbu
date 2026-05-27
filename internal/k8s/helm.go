@@ -207,16 +207,18 @@ func ToggleHelmHideManaged() bool {
 	return v
 }
 
-// HelmIcon returns the helm wheel glyph (U+2388 ⎈, the official
-// Unicode helm symbol) used in popup titles. Plain Unicode rather than
-// a Nerd Font codepoint so the popup renders on any system font without
-// requiring NF coverage.
-func HelmIcon() string { return "⎈" }
+// HelmIcon returns the helm wheel glyph — Nerd Font nf-dev-helm
+// (U+E7FB). Used as the popup title icon and the panel 2 row marker,
+// unified so the helm-managed signal is visually consistent across
+// panels. Renders large in patched Nerd Fonts; on terminals without
+// NF coverage the glyph falls back to a tofu / replacement char
+// (acceptable trade-off — km8 already assumes NF in many places).
+func HelmIcon() string { return "" }
 
-// HelmRowMark returns the per-row helm-column marker (U+2388 ⎈,
-// matching HelmIcon — same glyph for popup title and row marker so
-// the helm-managed signal is visually consistent across panels).
-func HelmRowMark() string { return "⎈" }
+// HelmRowMark returns the same glyph as HelmIcon. Kept as a separate
+// function so the popup vs row call sites can diverge later without
+// touching every consumer.
+func HelmRowMark() string { return "" }
 
 // MarkHelm returns the helm row marker when the item is helm-managed
 // (either by label/annotation, or — for Secrets — as a helm storage
