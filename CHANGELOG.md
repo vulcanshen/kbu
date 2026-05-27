@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [v1.5.1] - 2026-05-26
+## [v1.5.1] - 2026-05-27
 
 The keybinding UX pass. v1.5.0 shipped Helm; v1.5.1 steps back and
 collapses the accumulated key-binding choices into one consistent mental
@@ -86,6 +86,56 @@ signal danger. The mental-model anchor is a desktop GUI analogue: Enter
 | `Esc` | Back — pop drill / close popup |
 | `Y`/`E`/`S`/`D`/`N`/`C` | Triggers, uppercase = needs Shift = anti-accidental |
 | `j`/`k`/`u`/`d`/`gg`/`G` | Vim navigation (unchanged baseline) |
+
+### Fixed
+
+- **Table cell truncation no longer slices UTF-8 mid-codepoint.** The
+  table renderer used byte-length truncation (`val[:w-1]`), which broke
+  any multi-byte cell whose byte count exceeded the column width — the
+  Nerd Font helm glyph (3 bytes / 1 cell) rendered as `◇◇` in a 2-cell
+  column. Now uses visual-width truncation via `ansi.Truncate` +
+  `lipgloss.Width`, so any multi-byte content survives narrow columns
+  intact.
+- **Pod STATUS color column-index lookup is dynamic.** The hard-coded
+  `colIdx == 2` check broke when the helm-marker column was inserted at
+  index 1; STATUS color stopped applying. Status column lookup is now
+  by column title, not position.
+
+### Changed (polish)
+
+- **Helm-managed visibility defaults to shown.** Previously hidden by
+  default with the rationale that helm objects are "noise" on a scout
+  workflow. Reverted — the cluster's actual contents should be the
+  default surface. `.` on any non-Releases panel 2 list toggles hide.
+- **Helm marker column on every resource type.** A dedicated unlabeled
+  column right after Name shows the `` (Nerd Font nf-dev-helm) glyph
+  on helm-managed rows, blank otherwise. Same glyph used for popup
+  title icons. Previously only Secrets list filtered helm storage blobs;
+  this universalizes the visual signal across all 26 resource types.
+- **Panel 2 bottom-left always shows the `.: toggle helm` hotkey hint.**
+  Previously the chip only appeared when helm filter was off, as a
+  state indicator. Now it's a permanent hotkey advert (Releases panel
+  is the only exception — toggle is a no-op there).
+- **Space closes every popup uniformly.** YAML popup, Help popup, App
+  log popup, Splash screen all now accept `Space` to close, matching
+  the universal "Space mirror-closes the popup that opened" rule from
+  the v1.5.1 mental model.
+- **README rewritten around zero-learning-curve framing.** Three keys
+  (`Enter` / `Space` / `Esc`) cover the primary interaction; layout
+  navigation (`1`/`2`/`3`, `h`/`l`) and accelerators (`Y`/`E`/`S`/`D`/...)
+  are framed as optional. Honest about where `Space` works vs not
+  (sidebar has no per-row menu — every row is itself a navigation
+  target).
+
+### Demo
+
+- 5 demo gifs re-recorded against the v1.5.1 mental model:
+  `demo-basics` (three-key tour + Space menu → Y → YAML),
+  `demo-relatives` (chain drill + Space breadcrumb popup + confirm
+  switch), `demo-yaml-edit` (Space menu → Edit → confirm → vim, the
+  v1.5.1-correct path to `kubectl edit`), `demo-helm` (new — Space
+  doc menu → Manifest YAML popup), `demo-km8erm` (two scale cycles
+  showing hide/show persistence).
 
 ## [v1.5.0] - 2026-05-26
 
