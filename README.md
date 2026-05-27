@@ -12,7 +12,8 @@
 
 A scout-style Kubernetes TUI built around **Relatives navigation** — trace ownership and references between your resources. Pop in, follow the chain, close the terminal.
 
-- **Relatives graph navigation** — every resource lists its navigable refs (owners, selector-matched pods, mount-by, RBAC subjects, helm-deployed children, ...). `Enter` walks the chain, `b` shows the breadcrumb, `Space` jumps panels 1+2 to any chain ancestor. Cycle detection built in.
+- **Zero learning curve** — `Enter` drills, `Space` opens the contextual menu / breadcrumb, `Esc` backs out. 三個鍵貫穿整個 app；不知道能做什麼就按 `Space`，menu 永遠拉得出。Power-user 鍵 (`Y` YAML / `E` edit / `S` shell / `D` delete) 都是 menu 裡的捷徑，記不記都行。
+- **Relatives graph navigation** — every resource lists its navigable refs (owners, selector-matched pods, mount-by, RBAC subjects, helm-deployed children, ...). `Enter` walks the chain, `Space` opens a breadcrumb popup to jump back to any chain ancestor. Cycle detection built in.
 - **Helm releases as a first-class resource** — list / history / rollback / `Deployed Resources` drillable into native objects. Auto-discovered when `helm` is on `PATH`; hidden when it isn't.
 - **KM8erm — persistent embedded shell** — `Alt+t` toggles an in-app terminal that keeps cwd / env / history across hides. Run `kubectl apply -f`, `helm`, anything, without leaving km8.
 - **Session-local context** — switching context in km8 doesn't touch `~/.kube/config`. Run `kubectl` in another terminal in parallel without interference.
@@ -39,7 +40,7 @@ ServiceAccount fan-out (Pods / RoleBindings / ClusterRoleBindings / Token Secret
 
 ![yaml-edit](docs/demo-yaml-edit.gif)
 
-`e` launches `kubectl edit` inside the embedded PTY. Save and the watcher catches the change.
+`E` launches `kubectl edit` inside the embedded PTY (or pick it from the `Space` menu on the row). Save and the watcher catches the change.
 
 ### TUI + persistent shell in one window
 
@@ -54,21 +55,21 @@ ServiceAccount fan-out (Pods / RoleBindings / ClusterRoleBindings / Token Secret
 - **Vim-style navigation** -- `j`/`k`, `u`/`d` page scroll, `gg`/`G`, `/` search
 - **3-panel lazygit-style layout** -- numbered sidebar, list, and detail panels with scroll indicator
 - **Drill-down navigation** -- Deployment / DaemonSet / StatefulSet / Job → Pods → Containers; CronJob → Jobs; HPA → target workload; PVC → mounting Pods; PDB → protected Pods; Helm Release → each native K8s object the chart deployed
-- **Relatives tab — Lens-style navigation** -- every detail panel (except Namespaces) lists the resource's navigable references (owners, selected pods, scaleTargetRef, mounted-by pods, ...). `Enter`/`l` drills into the cursor's ref — the panel re-renders showing *that* resource's Relatives, building a chain (Deployment → Pod → ConfigMap → consumer Pods, ...). `h`/`Esc` pops one level. `b` opens a breadcrumb popup so you can jump back to any ancestor in one step. `Space` jumps panels 1+2 to the cursor's ref (confirms first) — so a chain you walked into can become the new primary view. Tab label shows `Relatives N` at depth>1. `Y` opens the YAML of whichever entry the cursor is on. Cycle detection blocks revisiting an ancestor; fetch failures toast and stay put. 26 of 27 resource kinds covered — ConfigMaps / Secrets / ServiceAccounts surface *reverse* refs (which Pods use me, which RoleBindings name this SA as a subject, ...); Helm releases surface their `Deployed Resources` so each chart-deployed K8s object is one drill away
-- **Helm releases (when `helm` is on `PATH`)** -- a dedicated `Helm > Releases` sidebar category lists every release in the cluster (`helm list -A` polled every 3s; no Helm watch API). Panel 2 columns: `NAME / NAMESPACE / CHART / APP VER / REV / STATUS / UPDATED`. Press `Space` on a release row to open a doc menu (Manifest / Creator Notes / User Values / Merged Values / Hooks); pick one with `Enter`/`Space` to fetch via `helm get ...` and view the result in the YAML popup. The menu stays open behind the YAML so consecutive docs flow without re-opening. Panel 3 carries a `History` tab in place of Events — table view of every revision (REV / STATUS / DATE / CHART / DESCRIPTION) with the current deployed rev marked `●`. `Space` on a non-current row asks to roll back; confirm shows the exact `helm rollback` command and runs it asynchronously, with the result surfaced as a toast. Helm-managed K8s objects (label `app.kubernetes.io/managed-by: Helm` or annotation `meta.helm.sh/release-name`) block `e` (kubectl edit) with a "Helm-managed (read-only)" toast — use `helm upgrade` / `rollback` instead. The per-revision `sh.helm.release.v1.*` storage Secrets are filtered out of the Secrets list by default; press `.` while on the Secrets table to toggle them on (a `.helm` chip in the panel-2 bottom-left border confirms the state)
-- **YAML popup (`Y`)** -- raw `kubectl get -o yaml` of the selected resource in a full-screen overlay with `j/k/u/d/gg/G` scroll, `/` search (`n`/`N` step through matches with full-row highlight), `y` to copy the full YAML to your clipboard, and `e` to dispatch `kubectl edit` directly from the popup. YAML lives in the popup, not the detail panel, so vertical layout no longer wraps long YAML lines awkwardly
+- **Relatives tab — Lens-style navigation** -- every detail panel (except Namespaces) lists the resource's navigable references (owners, selected pods, scaleTargetRef, mounted-by pods, ...). `Enter` drills into the cursor's ref — the panel re-renders showing *that* resource's Relatives, building a chain (Deployment → Pod → ConfigMap → consumer Pods, ...). `Esc` pops one level. `Space` opens a breadcrumb popup so you can jump panels 1+2 back to any chain ancestor (confirms first). Tab label shows `Relatives N` at depth>1. `Y` opens the YAML of whichever entry the cursor is on. Cycle detection blocks revisiting an ancestor; fetch failures toast and stay put. 26 of 27 resource kinds covered — ConfigMaps / Secrets / ServiceAccounts surface *reverse* refs (which Pods use me, which RoleBindings name this SA as a subject, ...); Helm releases surface their `Deployed Resources` so each chart-deployed K8s object is one drill away
+- **Helm releases (when `helm` is on `PATH`)** -- a dedicated `Helm > Releases` sidebar category lists every release in the cluster (`helm list -A` polled every 3s; no Helm watch API). Panel 2 columns: `NAME / NAMESPACE / CHART / APP VER / REV / STATUS / UPDATED`. Press `Space` on a release row to open a doc menu (Manifest / Creator Notes / User Values / Merged Values / Hooks); pick one with `Enter` to fetch via `helm get ...` and view the result in the YAML popup. The menu stays open behind the YAML so consecutive docs flow without re-opening. Panel 3 carries a `History` tab in place of Events — table view of every revision (REV / STATUS / DATE / CHART / DESCRIPTION) with the current deployed rev marked `●`. `Space` on a non-current row asks to roll back; confirm shows the exact `helm rollback` command and runs it asynchronously, with the result surfaced as a toast. Helm-managed K8s objects (label `app.kubernetes.io/managed-by: Helm` or annotation `meta.helm.sh/release-name`) are marked with a `` glyph in panel 2 and block `E` (kubectl edit) with a "Helm-managed (read-only)" toast — use `helm upgrade` / `rollback` instead. Press `.` on any non-Releases list to hide all helm-managed objects (panel 2 bottom-left always shows the `.: toggle helm` hint)
+- **YAML popup (`Y`)** -- raw `kubectl get -o yaml` of the selected resource in a full-screen overlay with `j/k/u/d/gg/G` scroll, `/` search (`n`/`N` step through matches with full-row highlight), `y` to copy the full YAML to your clipboard, and `E` to dispatch `kubectl edit` directly from the popup. YAML lives in the popup, not the detail panel, so vertical layout no longer wraps long YAML lines awkwardly
 - **Pod log streaming with auto-follow** -- multi-container support with `<container>|<log>` format; the Logs tab sticks to the tail by default (a `▼` marker in `[3] Logs ▼` shows follow is active). Scroll up (`k`/`↑`/`u`/`gg`) to pause and read history; press `G` to catch up and resume following
 - **Aggregate logs for Deployments** -- selecting a Deployment streams logs from **every pod in the current ReplicaSet** into a single Logs tab (also the default tab for Deployment detail). Lines are prefixed `<pod-hash>│<container>│<text>` with each segment in its own stable color, so during a rollout you can spot at a glance which pod is throwing errors without drill-down. Pods churning during rollout: the stream snapshots at row-select; re-select the Deployment row to refresh. Falls back to Deployment selector when current-ReplicaSet lookup fails (e.g. missing RBAC on ReplicaSet)
-- **Edit & shell exec via embedded PTY** -- `e` runs `kubectl edit` and `s` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
+- **Edit & shell exec via embedded PTY** -- `E` runs `kubectl edit` and `S` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
 - **KM8erm internal terminal** -- `Alt+t` toggles an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do. The shell is **persistent**: pressing `Alt+t` while the popup is visible hides it without killing the shell; pressing it again reattaches (cwd, history, env, background jobs all preserved). A green `attached` / amber `KM8erm` chip in the status bar (right after `ns:`) shows which state you're in
 - **PTY scrollback** -- 10k-line history for all PTY popups (KM8erm, shell exec, edit). `PgUp` / `PgDn` page, `Home` / `End` jump to top / live. Disabled in alt-screen apps (vim, less, htop) so they keep their own paging
 - **Colored Pod status** -- `Running` green, `Pending` yellow, `CrashLoopBackOff` / `ImagePullBackOff` / `OOMKilled` red, `Terminating` gray. STATUS column shows the kubectl-equivalent reason, not raw `Pod.Status.Phase`
 - **Per-container colored log labels** -- multi-container pods are visually distinguishable line-by-line; stable color per container name
-- **Resource deletion** -- `D` with confirmation dialog
+- **Resource deletion** -- `D` (uppercase, both as a hotkey and via the `Space` menu) with confirmation dialog
 - **Search/filter** -- `/` to search in the sidebar and table panels, and in the namespace/context picker popups. Sidebar search also matches category names (e.g. "cluster" expands the Cluster category). Search clears automatically when focus moves to another panel — selection persists, the filter doesn't
 - **Clipboard copy (`y`)** -- copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required). Inside the App Log popup (`!`), `y` copies the full log; inside the YAML popup, `y` copies the full YAML
 - **Toast notifications with levels** -- info-level (1s sky-blue) for confirmations like "Copied!"; warning-level (2s peach with `󰀦`) for blocked actions like Relatives cycle detection or drill failures
-- **Namespace and context switching** -- `n`/`N` for namespace, `c`/`C` for context (uppercase aliases for users who prefer them; both open the same picker)
+- **Namespace and context switching** -- `N` for namespace, `C` for context (uppercase — trigger keys are uppercase to avoid mis-triggering while typing search queries)
 - **Panel-aware selection styling** -- the focused panel's cursor row gets a bright reverse-video highlight; the *unfocused* panel's selected row keeps a softer bg + bold so you can always see which resource each panel "remembers" while you work in another. Pod STATUS uses a darker palette variant when it lands on a light-bg highlighted row so the green/yellow/red stays readable
 - **Detail tabs** -- `Relatives` / `Logs` (Pods + Deployments) / `Events` for K8s resources; `Relatives` / `History` for Helm releases. Relatives is always first when present, so `Space` jumps land on the same tab you came from. Panel 3 has no `/` search — cursor tabs (Relatives / History) don't tolerate row filtering, and Logs read better as a plain follow-tail view; use `Y` + your editor to grep large content
 - **Long values wrap, never truncate** -- applies to YAML, Events, and Logs; wrap points reflow on panel resize
@@ -137,109 +138,57 @@ go build -o km8 ./cmd/
 km8
 ```
 
-Connects to your current kubeconfig context. Use `n` to switch namespaces, `c` to switch contexts.
+Connects to your current kubeconfig context. Use `N` to switch namespaces, `C` to switch contexts. Press `Enter` to drill, `Space` for the contextual menu, `Esc` to back out.
 
 ## Key Bindings
 
-km8 v1.5.1 navigation 用 4 個 disjoint 鍵語意：**`Enter` = into**（drill / focus / commit）、**`Space` = context menu**（彈出對應動作 popup）、**`h`/`l` = panel 3 tab switch**、**`Esc` = back / close**。Trigger action 一律大寫（防誤觸）— `Y`/`E`/`S`/`D`/`N`/`C`。
+### Zero learning curve
 
-### Navigation
+km8 navigation 只用三個鍵：
 
-| Key | Action |
+| Key | Meaning |
 |---|---|
-| `j` / `k` | Move cursor up / down |
-| `u` / `d` | Page up / down |
-| `gg` / `G` | Jump to top / bottom |
-| `1` / `2` / `3` | Switch panel |
-| `Tab` | Cycle panels |
-| `Enter` | **Into** — drill / focus next panel / commit popup choice |
-| `Esc` | **Back** — pop drill frame / close popup |
+| **`Enter`** | **Into** — drill into the selected resource / focus the next panel / commit popup choice |
+| **`Space`** | **Menu / breadcrumb** — opens the contextual menu on panel 2, the breadcrumb on a Relatives chain, and closes any popup (mirror open) |
+| **`Esc`** | **Back** — pop one drill frame, close any popup |
 
-### Sidebar (Panel 1)
+不知道接下來能做什麼，就按 `Space`，menu 永遠拉得出。Power-user 鍵 (`Y`/`E`/`S`/`D`...) 都是 menu 上的捷徑——記不記都行，全部都可以從 menu 點到。
 
-| Key | Action |
-|---|---|
-| `j` / `k` | Move cursor (auto-selects the resource and restarts the watcher) |
-| `Enter` | Move focus to Panel 2 (resource already selected by `j`/`k`, no reload) |
-| `/` | Search / filter resource names + category names |
+加上一個 `h`/`l` 切 panel 3 tab，就涵蓋 100% 的 navigation。其餘 keys 都是加速器。
 
-### Table (Panel 2)
+### 加速器：cursor + power triggers
 
-`Space` opens a per-row **context menu** with resource-aware items — `YAML(Y)` / `Edit(E)` / `Shell(S)` / `Delete(D)`. Use `j`/`k` + `Enter` or hit the letter directly. Helm-managed rows hide `Edit` / `Delete` (Rule A read-only); resources without containers hide `Shell`. Menu closes on any commit.
+```
+ cursor      j k        u d        gg G        / (search)        1 2 3 / Tab (panel)
+ trigger     Y YAML     E edit     S shell     D delete          N ns    C context
+ expand      z          z toggles full-screen on current panel
+ helm        .          . toggles helm-managed visibility on panel 2
+```
 
-| Key | Action |
-|---|---|
-| `/` | Search / filter |
-| `Enter` | Drill into children (Pods → Containers, HPA → workload, ...) **or** focus Panel 3 when the resource has nothing to drill into |
-| `Space` | Open per-row context menu (regular row) **or** Helm doc menu (Release row) |
-| `Y` | YAML of selected row (popup) |
-| `E` | Edit (`kubectl edit`, asks for confirmation). Helm-managed → read-only toast |
-| `S` | Shell into container (`kubectl exec -it`, container kinds only) |
-| `D` | Delete resource (asks for confirmation). Helm-managed → read-only toast |
-| `.` | On Secrets list: toggle visibility of `sh.helm.release.v1.*` storage secrets |
-
-### Detail (Panel 3)
-
-| Key | Action |
-|---|---|
-| `h` / `l` | Previous / next tab |
-| `[` / `]` | Previous / next tab (alias) |
-| `z` | Toggle expand panel |
-| `G` | Jump to bottom (on Logs: also resumes follow-tail) |
-| `k` / `↑` / `u` / `gg` | Scroll up (on Logs: pauses follow-tail) |
-| `Y` | YAML popup of current resource (drill chain — current level) |
-
-### Relatives tab (drill chain)
-
-`Enter` pushes a frame onto the chain; `Esc` pops. `Space` opens the **breadcrumb popup** — pick any ancestor level, `Enter` to switch panels 1+2 to it (confirms first).
-
-| Key | Action |
-|---|---|
-| `j` / `k` | Move cursor between drillable refs |
-| `Enter` | Drill into the cursor's ref (push frame) |
-| `Esc` | Back one level (pop frame). No-op at root |
-| `Space` | Open breadcrumb popup. Inside: `j`/`k` pick level, `Enter` commit switch, `Space`/`Esc` close (mirror) |
-| `Y` | YAML popup of cursor ref |
-
-### Helm Releases panel + History tab
-
-| Key | Where | Action |
-|---|---|---|
-| `Space` | Panel 2, Release row | Open the doc menu — pick `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks` with `j`/`k` + `Enter`, view via `helm get ...` in the YAML popup |
-| `Esc` / `q` / `Space` | Inside the doc menu | Close the menu (Space = mirror open) |
-| `j` / `k` / `g` / `G` | Panel 3, History tab | Move the revision cursor (lands on the current deployed rev when the tab opens) |
-| `Space` | Panel 3, History tab, non-current row | Roll back to that revision — confirm popup shows the exact `helm rollback` command |
+Trigger 鍵刻意用大寫——避免在 `/` 搜尋打字時誤觸。
 
 ### Global
 
 | Key | Action |
 |---|---|
-| `N` | Switch namespace (`/` to filter inside the popup) |
-| `C` | Switch context (`/` to filter inside the popup) |
 | `Alt+t` | Toggle KM8erm (spawn / show / hide; shell stays alive across hide) |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
 | `!` | App log |
-| `?` | Toggle help |
+| `?` | Help |
 | `q` | Quit km8 (asks for confirmation) |
 | `Ctrl+C` | Quit km8 immediately (no confirm) |
 
-### YAML popup
+### Panel 2 context menu (`Space` on any row)
 
-| Key | Action |
-|---|---|
-| `j`/`k`/`u`/`d`/`gg`/`G` | Scroll |
-| `/` | Search inside YAML |
-| `y` | Copy full YAML |
-| `E` | Edit (`kubectl edit`) |
-| `Esc` | Close |
+Per-row menu with resource-aware items — `Y` YAML / `E` Edit / `S` Shell / `D` Delete. Use `j`/`k` + `Enter` or hit the letter directly. Helm-managed rows hide `E`/`D` (Rule A: read-only — edits would be overwritten by `helm upgrade`/`rollback`); resources without containers hide `S`.
 
-### Popup menus (breadcrumb / context menu / helm doc menu)
+### Helm-specific
 
-| Key | Action |
-|---|---|
-| `j` / `k` | Move cursor |
-| `Enter` | Commit choice |
-| `Space` / `Esc` / `q` | Close popup (mirror open) |
+| Key | Where | Action |
+|---|---|---|
+| `Space` | Panel 2, Release row | Open the doc menu — pick `Manifest` / `Notes` / `User Values` / `Merged Values` / `Hooks` |
+| `Space` | Panel 3, History tab, non-current row | Roll back to that revision (confirm popup shows the exact `helm rollback` command) |
+| `.` | Any non-Releases panel 2 list | Toggle visibility of helm-managed objects |
 
 ### PTY popups (KM8erm, edit, shell exec)
 
@@ -253,7 +202,7 @@ Scrollback is disabled when a full-screen app (vim, less, htop) takes over the P
 
 ## Editing Resources
 
-Pressing `e` on a resource runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.
+Pressing `E` on a resource (or picking `Edit` from the `Space` menu) runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.
 
 The editor is resolved by kubectl itself in this priority order:
 
