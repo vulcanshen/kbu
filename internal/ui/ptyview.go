@@ -301,7 +301,10 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 		// Edit/Exec popups pass it through (transient — no hide concept).
 		if p.kind == PtyKindShell {
 			switch msg.String() {
-			case "alt+t", "alt+T":
+			case "alt+t", "alt+T", "ctrl+t":
+				// ctrl+t is a hidden alias for the demo recorder (see
+				// app.go for rationale). Trade-off: zsh's transpose-chars
+				// binding inside KM8erm becomes unreachable.
 				p.hidden = true
 				return p, nil
 			}
