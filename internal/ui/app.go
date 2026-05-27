@@ -57,7 +57,13 @@ type AppModel struct {
 	confirm         ConfirmModel
 	splash          SplashModel
 	toast           ToastModel
-	ptyView         *PtyView
+	// Dual-slot PTY: the persistent KM8erm shell (shellPty) and any
+	// transient PTY for kubectl edit / exec (txPty) live independently so
+	// the user can keep a long-running shell hidden in the background while
+	// editing or exec'ing into a container. tx-on-top is enforced at render
+	// + input routing time so only one popup is visible at a time.
+	shellPty *PtyView
+	txPty    *PtyView
 	yamlPopup       YamlPopupModel
 	breadcrumbPopup BreadcrumbPopupModel
 	helmDocMenu     HelmDocMenuPopupModel
@@ -146,7 +152,8 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		confirm:         NewConfirmModel(t),
 		splash:          NewSplashModel(),
 		toast:           NewToastModel(t),
-		ptyView:         NewPtyView(),
+		shellPty:        NewPtyView(),
+		txPty:           NewPtyView(),
 		yamlPopup:       NewYamlPopupModel(t),
 		breadcrumbPopup: NewBreadcrumbPopupModel(t),
 		helmDocMenu:     NewHelmDocMenuPopupModel(t),
@@ -195,8 +202,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logStreamer.Stop()
 		// Kill any persistent PTY (hidden KM8erm shell, mid-edit, mid-exec)
 		// so we don't orphan the subprocess after km8 exits.
-		if m.ptyView != nil && m.ptyView.IsAlive() {
-			m.ptyView.Stop()
+		if m.shellPty != nil && m.shellPty.IsAlive() {
+			m.shellPty.Stop()
+		}
+		if m.txPty != nil && m.txPty.IsAlive() {
+			m.txPty.Stop()
 		}
 		return m, tea.Quit
 	}
@@ -214,7 +224,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// handler lives outside the IsActive() guard — it cleans up app-level
 	// state when the subprocess finishes.
 	if exit, ok := msg.(PtyExitMsg); ok {
-		m.editing = false
+		// Only clear the editing flag when the Edit slot exited — Shell /
+		// Exec exits don't touch it. With dual-slot routing in place, an
+		// exec exit while edit is alive (or vice-versa) shouldn't drop
+		// the unrelated state.
+		if exit.Kind == PtyKindEdit {
+			m.editing = false
+		}
 		if exit.ExitCode != 0 {
 			m.appLog.Warn(fmt.Sprintf("subprocess exited with code %d", exit.ExitCode))
 		}
@@ -259,41 +275,63 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(animCmds...)
 	}
 
-	// PtyView intercepts keys / ticks / resizes while a subprocess is running.
-	// Other messages (watch updates, detail fetches, animation ticks) fall
-	// through to the normal handlers — they update underlying state silently
-	// behind the PTY popup so that when the subprocess exits, the table /
-	// detail panels are already current.
-	//
-	// When the popup is *hidden* (alive KM8erm shell after Alt+T), ticks still
-	// route into PtyView so exit detection keeps polling, but key input falls
-	// through to the top-level handlers so the user can navigate km8 panels
-	// without typing characters into the backgrounded shell.
-	if m.ptyView.IsAlive() {
+	// PTY intercepts keys / ticks / resizes while a subprocess is running.
+	// Dual-slot routing rules:
+	//   - WindowSizeMsg: both slots get the new size; visible popup short-
+	//     circuits (no fall-through to underlying panels).
+	//   - ptyTickMsg: dispatch to whichever slot is alive (each PtyView's
+	//     tick is idempotent: it polls only its own done flag).
+	//   - tea.KeyMsg: txPty wins over shellPty (transient on top). If
+	//     neither has a visible popup, keys fall through to top-level
+	//     routing — KM8erm-hidden keeps the shell alive in background.
+	anyAlive := m.shellPty.IsAlive() || m.txPty.IsAlive()
+	if anyAlive {
 		switch msg := msg.(type) {
 		case tea.WindowSizeMsg:
 			m.width = msg.Width
 			m.height = msg.Height
 			m.ready = true
 			m.layout()
-			m.ptyView.SetSize(m.width, m.height)
-			if m.ptyView.IsActive() {
+			m.shellPty.SetSize(m.width, m.height)
+			m.txPty.SetSize(m.width, m.height)
+			if m.txPty.IsActive() || m.shellPty.IsActive() {
 				return m, nil
 			}
-			// Hidden: also let the underlying panels see the new size.
-			// Fall through.
+			// Both hidden / inactive: fall through so underlying panels
+			// also see the new size.
 		case ptyTickMsg:
-			var cmd tea.Cmd
-			m.ptyView, cmd = m.ptyView.Update(msg)
-			return m, cmd
+			// Route each tick to ONLY the slot whose Kind it carries.
+			// Double-dispatch caused an exponential tick explosion
+			// (each slot returned a new tick cmd, both got re-dispatched
+			// next cycle → 2× per tick → visible input lag within seconds).
+			tickMsg := msg
+			if tickMsg.kind == PtyKindShell {
+				if m.shellPty.IsAlive() {
+					var c tea.Cmd
+					m.shellPty, c = m.shellPty.Update(msg)
+					return m, c
+				}
+				return m, nil
+			}
+			// PtyKindEdit / PtyKindExec → txPty
+			if m.txPty.IsAlive() {
+				var c tea.Cmd
+				m.txPty, c = m.txPty.Update(msg)
+				return m, c
+			}
+			return m, nil
 		case tea.KeyMsg:
-			if m.ptyView.IsActive() {
+			if m.txPty.IsActive() {
 				var cmd tea.Cmd
-				m.ptyView, cmd = m.ptyView.Update(msg)
+				m.txPty, cmd = m.txPty.Update(msg)
 				return m, cmd
 			}
-			// Hidden: fall through to top-level key routing (T re-shows,
-			// q quits, n/c open pickers, etc.)
+			if m.shellPty.IsActive() {
+				var cmd tea.Cmd
+				m.shellPty, cmd = m.shellPty.Update(msg)
+				return m, cmd
+			}
+			// All hidden: fall through (Alt+T re-shows KM8erm, etc.)
 		}
 	}
 
@@ -455,16 +493,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// hints — the cost of accepting it is that pressing Ctrl+T
 			// while a KM8erm shell is visible will hide the shell instead
 			// of forwarding to zsh's transpose-chars binding.
-			if m.ptyView.IsAlive() {
-				if m.ptyView.Kind() != PtyKindShell {
-					m.appLog.Warn("close active PTY before opening KM8erm")
-					return m, m.toast.Show("Close PTY (exit to close)")
-				}
-				m.ptyView.Show(m.width, m.height)
+			// Dual-slot: KM8erm lives in shellPty only. txPty (edit/exec)
+			// being alive does NOT block KM8erm — they can coexist; tx
+			// visibility takes precedence so we just hide tx? No — tx is
+			// transient and the user explicitly launched it; better to
+			// surface KM8erm under it. Currently: if tx visible, KM8erm
+			// hide/show is harmless (render still picks tx on top).
+			if m.shellPty.IsAlive() {
+				m.shellPty.Show(m.width, m.height)
 				return m, nil
 			}
 			cmd := buildShellTerminalCmd()
-			return m, m.ptyView.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell)
+			return m, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell)
 		case "?":
 			m.help.SetSize(m.width, m.height)
 			return m, m.help.Toggle()
@@ -645,6 +685,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.yamlPopup.SetSize(m.width, m.height)
 			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
 		case " ":
+			// Container drill view: panel 2 is showing the containers of
+			// the pod we drilled into. Space opens a minimal menu carrying
+			// only Shell — containers aren't standalone API objects so
+			// YAML/Edit/Delete don't apply. execShell() (driven by the "S"
+			// commit) already reads drillDownContainers[cursor], so the
+			// menu just needs to surface the action.
+			if m.activePanel == TablePanel && m.drillDownPod != nil && len(m.drillDownContainers) > 0 {
+				idx := m.table.SelectedRow()
+				if idx >= 0 && idx < len(m.drillDownContainers) {
+					c := m.drillDownContainers[idx]
+					m.panel2Menu.SetSize(m.width, m.height)
+					return m, m.panel2Menu.OpenForContainer(m.drillDownPod.Name, m.drillDownPod.Namespace, c.Name)
+				}
+				return m, nil
+			}
 			// Panel 2 on a Helm Release row: Space opens the Helm doc
 			// menu popup (manifest / notes / values). Branched before
 			// the Relatives-tab logic because the activePanel guard
@@ -1090,18 +1145,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case startShellExecMsg:
-		if m.ptyView.IsAlive() {
-			m.appLog.Warn("close active PTY before opening shell")
-			return m, m.toast.Show("Close PTY (Alt+T to show, exit to close)")
+		// Only txPty being alive blocks a new exec — shellPty (KM8erm) is
+		// independent and may be hidden in the background.
+		if m.txPty.IsAlive() {
+			m.appLog.Warn("close active edit/exec PTY before opening shell")
+			return m, m.toast.Show("Close current edit/exec PTY first")
 		}
 		cmd := buildKubectlExecCmd(msg.podName, msg.namespace, msg.container, msg.contextName)
 		title := fmt.Sprintf("Shell: pod/%s → %s", msg.podName, msg.container)
-		return m, m.ptyView.Start(cmd, title, m.width, m.height, PtyKindExec)
+		return m, m.txPty.Start(cmd, title, m.width, m.height, PtyKindExec)
 
 	case startEditMsg:
-		if m.ptyView.IsAlive() {
-			m.appLog.Warn("close active PTY before editing")
-			return m, m.toast.Show("Close PTY (Alt+T to show, exit to close)")
+		if m.txPty.IsAlive() {
+			m.appLog.Warn("close active edit/exec PTY before editing")
+			return m, m.toast.Show("Close current edit/exec PTY first")
 		}
 		m.editing = true
 		title := fmt.Sprintf("Edit: %s/%s", msg.resource.KubectlName(), msg.item.Name)
@@ -1111,7 +1168,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := buildKubectlEditCmd(msg.resource, msg.item, msg.contextName, m.cfgEditor)
 		config.WriteAuditEntry("edit", msg.resource.KubectlName()+"/"+msg.item.Name, msg.item.Namespace, "started") //nolint
 		m.appLog.Info("edit: " + msg.resource.KubectlName() + "/" + msg.item.Name)
-		return m, m.ptyView.Start(cmd, title, m.width, m.height, PtyKindEdit)
+		return m, m.txPty.Start(cmd, title, m.width, m.height, PtyKindEdit)
 
 	case DeleteDoneMsg:
 		out := strings.TrimSpace(msg.Output)
@@ -1270,7 +1327,7 @@ func (m AppModel) View() string {
 	// "KM8erm: hostname" so a status-bar duplicate just adds noise; when no
 	// shell is running, nothing to mark.
 	var ptyMarker *PtyMarker
-	if m.ptyView != nil && m.ptyView.IsAlive() && m.ptyView.Kind() == PtyKindShell && m.ptyView.IsHidden() {
+	if m.shellPty != nil && m.shellPty.IsAlive() && m.shellPty.IsHidden() {
 		ptyMarker = &PtyMarker{Visible: false, Label: " KM8erm"}
 	}
 	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker)
@@ -1377,8 +1434,13 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
-	if m.ptyView.IsActive() {
-		mainView = overlay.Composite(m.ptyView.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	// Composite shellPty under txPty: KM8erm renders first so a visible
+	// edit/exec popup overlays it. Hidden shellPty contributes nothing.
+	if m.shellPty.IsActive() {
+		mainView = overlay.Composite(m.shellPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+	if m.txPty.IsActive() {
+		mainView = overlay.Composite(m.txPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	return mainView

@@ -259,6 +259,46 @@ func TestPanel2Menu_EscCloses(t *testing.T) {
 	}
 }
 
+// ── container drill (OpenForContainer) ─────────────────────────────────────
+
+func TestPanel2Menu_OpenForContainer_ShellOnly(t *testing.T) {
+	// Container drill view: only Shell — containers aren't standalone
+	// API objects so YAML/Edit/Delete don't apply.
+	m := newPanel2Menu(t)
+	cmd := m.OpenForContainer("nginx-pod", "default", "nginx")
+	drainPanel2MenuToInteractive(t, &m, cmd)
+
+	if len(m.items) != 1 || m.items[0].key != "S" {
+		t.Fatalf("container menu items=%v, want single Shell entry", itemKeys(m.items))
+	}
+}
+
+func TestPanel2Menu_OpenForContainer_EnterCommitsShell(t *testing.T) {
+	m := newPanel2Menu(t)
+	cmd := m.OpenForContainer("nginx-pod", "default", "nginx")
+	drainPanel2MenuToInteractive(t, &m, cmd)
+
+	_, batchCmd := m.Update(key("enter"))
+	if batchCmd == nil {
+		t.Fatal("Enter must return a commit cmd")
+	}
+	found := false
+	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
+		am, ok := msg.(Panel2MenuActionMsg)
+		if !ok {
+			return false
+		}
+		if am.Action != "S" {
+			t.Errorf("container Enter must commit S (Shell), got %q", am.Action)
+		}
+		found = true
+		return true
+	})
+	if !found {
+		t.Error("container Enter did not emit Panel2MenuActionMsg")
+	}
+}
+
 // ── helpers ────────────────────────────────────────────────────────────────
 
 func itemKeys(items []panel2MenuItem) []string {
