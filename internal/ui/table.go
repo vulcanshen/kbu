@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -477,16 +478,25 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 			val = values[i]
 		}
 		raw := val // pre-truncation value — stylizeCell uses this for the color lookup
-		if len(val) > w {
-			if w > 1 {
-				val = val[:w-1] + "…"
-			} else if w > 0 {
-				val = val[:w]
+		// Visual-width-aware truncation. The old code used byte-based
+		// len(val) and val[:w-1], which sliced UTF-8 mid-codepoint for any
+		// multi-byte content — e.g. the Nerd Font helm glyph "" is
+		// 3 bytes / 1 cell, so a 2-cell column would slice the first byte
+		// and render \xee as ◇. ansi.Truncate is grapheme- and ANSI-aware
+		// and accounts for wide characters; visual width comes from
+		// lipgloss.Width for the padding side.
+		if vw := lipgloss.Width(val); vw > w {
+			if w >= 1 {
+				val = ansi.Truncate(val, w, "…")
 			} else {
 				val = ""
 			}
+			vw = lipgloss.Width(val)
+			if vw < w {
+				val = val + strings.Repeat(" ", w-vw)
+			}
 		} else {
-			val = val + strings.Repeat(" ", w-len(val))
+			val = val + strings.Repeat(" ", w-vw)
 		}
 		// stylizeCell wraps a span of the cell with a per-cell fg
 		// override (e.g. Pod STATUS color). It composes ON TOP of the
