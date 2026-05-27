@@ -439,7 +439,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confirm.Show(ConfirmQuit, "Quit km8?", "", quitCmd)
 		case "V":
 			return m, m.splash.Show()
-		case "alt+t", "alt+T":
+		case "alt+t", "alt+T", "ctrl+t":
 			// Alt+T is the single KM8erm toggle:
 			//   - no shell alive   → spawn KM8erm
 			//   - alive, hidden    → reattach (show)
@@ -447,6 +447,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The "visible" branch never reaches here because PtyView
 			// intercepts keys when IsActive() is true. Edit/Exec PTYs alive:
 			// refuse, same as table-level edit/shell guard.
+			//
+			// Ctrl+T is a hidden alias for the demo recorder only: vhs 0.11
+			// drops the Alt modifier between Chrome and the PTY (logged
+			// keypress = `t` or `ctrl+t`, never `alt+t`), so demo tapes
+			// emit Ctrl+T instead. Humans never see this alias in help/UI
+			// hints — the cost of accepting it is that pressing Ctrl+T
+			// while a KM8erm shell is visible will hide the shell instead
+			// of forwarding to zsh's transpose-chars binding.
 			if m.ptyView.IsAlive() {
 				if m.ptyView.Kind() != PtyKindShell {
 					m.appLog.Warn("close active PTY before opening KM8erm")
