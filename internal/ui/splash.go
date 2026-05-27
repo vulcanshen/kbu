@@ -140,7 +140,7 @@ func (m SplashModel) Update(msg tea.Msg) (SplashModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc", "q":
+		case "esc", "q", "enter", " ":
 			m.active = false
 			m.revealedCount = 0
 			m.pixelOrder = nil
