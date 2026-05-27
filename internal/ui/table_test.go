@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vulcanshen/km8/internal/k8s"
@@ -654,4 +655,64 @@ func TestTableModel_SetCursor_MapsThroughFilter(t *testing.T) {
 	if got := m.SelectedRow(); got != 3 {
 		t.Errorf("SelectedRow() = %d, want 3 (original idx)", got)
 	}
+}
+
+// TestTableModel_RenderRow_VisualWidthTruncation locks in the fix for the
+// byte-vs-visual-width truncation bug. The Nerd Font helm glyph "" is
+// 3 bytes / 1 cell wide; pre-fix, a 2-cell column ran val[:1] and produced
+// an invalid UTF-8 byte (\xee), rendering as ◇ in terminals. Now the
+// renderer uses ansi.Truncate + lipgloss.Width so any multi-byte cell
+// content survives a narrow column intact.
+func TestTableModel_RenderRow_VisualWidthTruncation(t *testing.T) {
+	m := newTestTable()
+	style := m.theme.TableRowStyle()
+	helmGlyph := "" // Nerd Font nf-dev-helm — 3 bytes, 1 cell
+
+	cases := []struct {
+		name       string
+		val        string
+		w          int
+		wantInLine string // raw substring that must be present
+	}{
+		{"helm glyph fits in width 2", helmGlyph, 2, helmGlyph},
+		{"helm glyph fits exact width 1", helmGlyph, 1, helmGlyph},
+		{"ascii truncates with ellipsis", "CrashLoopBackOff", 8, "CrashLo…"},
+		{"ascii short pads to width", "abc", 6, "abc"},
+		{"empty cell pads to width", "", 4, ""},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			line := m.renderRow([]int{c.w}, []string{c.val}, style, false)
+			plain := ansiStrip(line)
+			if !utf8.ValidString(plain) {
+				t.Errorf("rendered cell is not valid UTF-8: %q", plain)
+			}
+			if c.wantInLine != "" && !strings.Contains(plain, c.wantInLine) {
+				t.Errorf("rendered cell missing %q in %q", c.wantInLine, plain)
+			}
+		})
+	}
+}
+
+// ansiStrip removes ANSI escape sequences so substring checks aren't
+// brittle to style codes. Minimal implementation — just enough for the
+// tests in this file.
+func ansiStrip(s string) string {
+	var b strings.Builder
+	inEsc := false
+	for _, r := range s {
+		if r == 0x1b {
+			inEsc = true
+			continue
+		}
+		if inEsc {
+			if r == 'm' {
+				inEsc = false
+			}
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
