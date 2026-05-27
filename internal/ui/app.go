@@ -1819,16 +1819,15 @@ func (m AppModel) focusedPanelContent() string {
 	return ""
 }
 
-// tablePanelBottomLeft returns the bottom-left border hint for panel 2.
-// Currently only used by the Secrets list to surface the `.helm` filter
-// state when the user has toggled helm storage secrets to be visible.
-// Empty when the filter is in its default (hidden) state — there's
-// nothing to remind the user about.
+// tablePanelBottomLeft returns the bottom-left border hint for panel 2 —
+// a hotkey hint advertising the `.` toggle for helm-managed visibility.
+// Hidden on the Releases category since the entire list is helm-managed
+// there, so the toggle is a no-op.
 func (m *AppModel) tablePanelBottomLeft() string {
-	if m.currentResource != k8s.ResourceReleases && !k8s.HelmHideManaged() {
-		return ".helm"
+	if m.currentResource == k8s.ResourceReleases {
+		return ""
 	}
-	return ""
+	return ".: toggle helm"
 }
 
 // filterHelmIfHidden drops helm-managed items (and, for Secrets, also helm
