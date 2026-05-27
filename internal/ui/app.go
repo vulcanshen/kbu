@@ -68,6 +68,7 @@ type AppModel struct {
 	breadcrumbPopup BreadcrumbPopupModel
 	helmDocMenu     HelmDocMenuPopupModel
 	panel2Menu      Panel2MenuPopupModel
+	sidebarHelp     SidebarHelpPopupModel
 
 	activePanel     Panel
 	width           int
@@ -158,6 +159,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		breadcrumbPopup: NewBreadcrumbPopupModel(t),
 		helmDocMenu:     NewHelmDocMenuPopupModel(t),
 		panel2Menu:      NewPanel2MenuPopupModel(t),
+		sidebarHelp:     NewSidebarHelpPopupModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfgEditor:       cfgEditor,
@@ -270,6 +272,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.panel2Menu.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.sidebarHelp.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
@@ -424,6 +429,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			var cmd tea.Cmd
 			m.helmDocMenu, cmd = m.helmDocMenu.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
+	if m.sidebarHelp.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.sidebarHelp, cmd = m.sidebarHelp.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -685,6 +702,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.yamlPopup.SetSize(m.width, m.height)
 			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
 		case " ":
+			// Sidebar (panel 1): rows are nav targets, not action targets.
+			// Open a read-only cheatsheet popup explaining what the user
+			// can do here (j/k move, Enter focus, / search, etc.). Mirrors
+			// the panel 2/3 "Space surfaces what's possible" affordance —
+			// but informational rather than committable.
+			if m.activePanel == SidebarPanel && !m.sidebar.IsSearching() {
+				m.sidebarHelp.SetSize(m.width, m.height)
+				return m, m.sidebarHelp.Open()
+			}
 			// Container drill view: panel 2 is showing the containers of
 			// the pod we drilled into. Space opens a minimal menu carrying
 			// only Shell — containers aren't standalone API objects so
@@ -1408,6 +1434,11 @@ func (m AppModel) View() string {
 	if m.panel2Menu.IsActive() {
 		m.panel2Menu.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.panel2Menu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.sidebarHelp.IsActive() {
+		m.sidebarHelp.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.sidebarHelp.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.yamlPopup.IsActive() {

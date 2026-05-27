@@ -12,7 +12,7 @@
 
 A scout-style Kubernetes TUI built around **Relatives navigation** — trace ownership and references between your resources. Pop in, follow the chain, close the terminal.
 
-- **Three-key primary interaction** — `Enter` drills, `Space` opens the contextual menu wherever one exists (panel 2 rows, Relatives chain), `Esc` backs out. Power-user shortcuts (`Y` YAML / `E` edit / `S` shell / `D` delete) exist for speed but every one is also reachable through the `Space` menu — nothing to memorize unless you want it.
+- **Three-key primary interaction** — `Enter` drills, `Space` opens a contextual popup on every panel (sidebar cheatsheet, panel 2 per-row menu, Relatives breadcrumb), `Esc` backs out. Power-user shortcuts (`Y` YAML / `E` edit / `S` shell / `D` delete) exist for speed but every one is also reachable through the `Space` menu — nothing to memorize unless you want it.
 - **Relatives graph navigation** — every resource lists its navigable refs (owners, selector-matched pods, mount-by, RBAC subjects, helm-deployed children, ...). `Enter` walks the chain, `Space` opens a breadcrumb popup to jump back to any chain ancestor. Cycle detection built in.
 - **Helm releases as a first-class resource** — list / history / rollback / `Deployed Resources` drillable into native objects. Auto-discovered when `helm` is on `PATH`; hidden when it isn't.
 - **KM8erm — persistent embedded shell** — `Alt+t` toggles an in-app terminal that keeps cwd / env / history across hides. Run `kubectl apply -f`, `helm`, anything, without leaving km8.
@@ -156,7 +156,7 @@ Most of the time you're driving km8 with just three keys:
 | Key | Behavior |
 |---|---|
 | **`Enter`** | **Into** — drill into the selected resource / focus the next panel / commit a popup choice |
-| **`Space`** | **Menu** — open the contextual menu where one exists (panel 2 rows, Relatives chain). Also closes any open popup (mirror open) |
+| **`Space`** | **Menu** — open a contextual popup: sidebar cheatsheet (panel 1), per-row action menu (panel 2), Relatives breadcrumb (panel 3). Also closes any open popup (mirror open) |
 | **`Esc`** | **Back** — pop one drill level / close any popup |
 
 Where a contextual menu exists, `Space` is enough — you don't need to memorize the per-action keys. The sidebar (panel 1) doesn't have a menu because every row is itself a navigation target; `j`/`k` to move, `Enter` to focus into the table.
