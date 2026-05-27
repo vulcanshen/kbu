@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.5.2] - 2026-05-27
+
+Dual-slot PTY + status bar styling pass. The headline fix: KM8erm
+(persistent embedded shell) can now coexist with `kubectl exec` /
+`kubectl edit` — previously a hidden KM8erm shell blocked any new PTY,
+forcing the user to exit it. Container drill gets a Space menu too, so
+the v1.5.1 "Space = right-click menu" model now reaches the bottom of
+the drill chain.
+
+### Added
+
+- **Dual-slot PTY architecture.** Split the single `m.ptyView` into
+  `m.shellPty` (KM8erm, persistent) and `m.txPty` (kubectl edit / exec,
+  transient). They run independently — hide KM8erm in the background,
+  then exec into a container without closing the shell session. Render
+  layers tx on top of shell; input routing prefers tx; tick + exit
+  messages carry `Kind` so the right slot cleans up.
+- **Container drill Space menu.** Pressing `Space` while drilled into a
+  pod's container list now opens a single-item menu (`Shell`) instead
+  of doing nothing. `S` direct hotkey on the container row still works
+  the same way — the menu just surfaces it so the v1.5.1 "Space =
+  contextual menu" rule applies at every drill depth.
+
+### Changed
+
+- **Status bar text labels → Nerd Font icons.** `ctx:` / `cluster:` /
+  `ns:` replaced with `\U+F0237` / `\U+F1856` / `\U+F51E` — more compact,
+  matches the KM8erm chip style. Hidden KM8erm chip color synced to
+  the popup border (`#F0AE49`).
+- **PTY popup borders tri-color.** With two PTYs able to coexist, each
+  kind needs its own border so the active popup's provenance is
+  unambiguous: KM8erm shell stays Catppuccin peach `#F0AE49`, `kubectl
+  exec` switches to green `#a6e3a1`, `kubectl edit` keeps sky blue
+  `#74c7ec`. Title (bold) shares each popup's border color.
+
+### Fixed
+
+- **Hidden KM8erm no longer blocks edit/exec.** Old single-slot guard
+  refused `startShellExecMsg` and `startEditMsg` whenever any PTY was
+  alive — including a backgrounded KM8erm shell. Guards now check only
+  the txPty slot, so the persistent shell stays out of the way.
+
 ## [v1.5.1] - 2026-05-27
 
 The keybinding UX pass. v1.5.0 shipped Helm; v1.5.1 steps back and
