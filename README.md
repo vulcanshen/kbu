@@ -12,7 +12,7 @@
 
 A scout-style Kubernetes TUI built around **Relatives navigation** — trace ownership and references between your resources. Pop in, follow the chain, close the terminal.
 
-- **Zero learning curve** — `Enter` drills, `Space` opens the contextual menu / breadcrumb, `Esc` backs out. 三個鍵貫穿整個 app；不知道能做什麼就按 `Space`，menu 永遠拉得出。Power-user 鍵 (`Y` YAML / `E` edit / `S` shell / `D` delete) 都是 menu 裡的捷徑，記不記都行。
+- **Zero learning curve** — three keys cover the whole app: `Enter` drills, `Space` opens the contextual menu / breadcrumb, `Esc` backs out. Don't know what's available next? Hit `Space` — the menu always pops. Power-user keys (`Y` YAML / `E` edit / `S` shell / `D` delete) are just shortcuts to the same menu items, so nothing to memorize unless you want speed.
 - **Relatives graph navigation** — every resource lists its navigable refs (owners, selector-matched pods, mount-by, RBAC subjects, helm-deployed children, ...). `Enter` walks the chain, `Space` opens a breadcrumb popup to jump back to any chain ancestor. Cycle detection built in.
 - **Helm releases as a first-class resource** — list / history / rollback / `Deployed Resources` drillable into native objects. Auto-discovered when `helm` is on `PATH`; hidden when it isn't.
 - **KM8erm — persistent embedded shell** — `Alt+t` toggles an in-app terminal that keeps cwd / env / history across hides. Run `kubectl apply -f`, `helm`, anything, without leaving km8.
@@ -144,7 +144,7 @@ Connects to your current kubeconfig context. Use `N` to switch namespaces, `C` t
 
 ### Zero learning curve
 
-km8 navigation 只用三個鍵：
+Three keys cover the whole app:
 
 | Key | Meaning |
 |---|---|
@@ -152,11 +152,11 @@ km8 navigation 只用三個鍵：
 | **`Space`** | **Menu / breadcrumb** — opens the contextual menu on panel 2, the breadcrumb on a Relatives chain, and closes any popup (mirror open) |
 | **`Esc`** | **Back** — pop one drill frame, close any popup |
 
-不知道接下來能做什麼，就按 `Space`，menu 永遠拉得出。Power-user 鍵 (`Y`/`E`/`S`/`D`...) 都是 menu 上的捷徑——記不記都行，全部都可以從 menu 點到。
+When you don't know what's available next, just hit `Space`. The menu always pops. Power-user keys (`Y`/`E`/`S`/`D`/...) are just shortcuts to items in that same menu — nothing to memorize unless you want speed.
 
-加上一個 `h`/`l` 切 panel 3 tab，就涵蓋 100% 的 navigation。其餘 keys 都是加速器。
+Add `h`/`l` to switch panel 3 tabs and you have 100% of the navigation. Everything else is an accelerator.
 
-### 加速器：cursor + power triggers
+### Accelerators — cursor + power triggers
 
 ```
  cursor      j k        u d        gg G        / (search)        1 2 3 / Tab (panel)
@@ -165,7 +165,7 @@ km8 navigation 只用三個鍵：
  helm        .          . toggles helm-managed visibility on panel 2
 ```
 
-Trigger 鍵刻意用大寫——避免在 `/` 搜尋打字時誤觸。
+Trigger keys are deliberately uppercase to avoid misfiring while typing in a `/` search field.
 
 ### Global
 
