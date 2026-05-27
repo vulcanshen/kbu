@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.5.3] - 2026-05-27
+
+Closes the "Space surfaces what's possible here" loop. v1.5.1 wired it
+on panel 2 and panel 3; v1.5.2 added it on container drill; v1.5.3
+brings it to panel 1 too, so the rule is now universal: anywhere the
+user can land focus, `Space` shows what they can do.
+
+### Added
+
+- **Panel 1 (sidebar) Space cheatsheet.** Sidebar rows are nav targets,
+  not action targets — so a per-row menu wouldn't make sense. Instead
+  Space opens a read-only popup listing the keys that drive the sidebar
+  (j/k move, Enter focus, / search, search-mode Enter to lock, Esc to
+  clear, N/C global pickers). Search-mode Enter/Esc are visually nested
+  under `/` with the same drill-into arrow used in the Relatives tab.
+  Esc/q/Space/Enter all close. Long hints wrap onto continuation lines
+  with the key column left empty.
+
+### Changed
+
+- **`Space` scope in README now spelled out per panel.** Three-key blurb
+  + Key Bindings table both updated to enumerate which popup opens on
+  which panel (sidebar cheatsheet / panel 2 menu / Relatives breadcrumb).
+
 ## [v1.5.2] - 2026-05-27
 
 Dual-slot PTY + status bar styling pass. The headline fix: KM8erm
