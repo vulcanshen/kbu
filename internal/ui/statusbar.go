@@ -63,23 +63,28 @@ func (m StatusBarModel) ViewWithBadge(unreadErrors int, successNotice string) st
 // sits in the LEFT segment right after `ns:` so it doesn't fight the
 // error / success badge on the right for space.
 func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *PtyMarker) string {
-	ctx := m.theme.StatusBarContextStyle().Render(fmt.Sprintf("ctx: %s", m.clusterInfo.ContextName))
-	cluster := m.theme.StatusBarClusterStyle().Render(fmt.Sprintf("cluster: %s", m.clusterInfo.ClusterName))
-	ns := m.theme.StatusBarNamespaceStyle().Render(fmt.Sprintf("ns: %s", m.namespace))
+	// Nerd Font glyphs replace "ctx:" / "cluster:" / "ns:" labels for a
+	// compact status bar consistent with the KM8erm marker style.
+	//   U+F0237 — context
+	//   U+F1856 — cluster
+	//   U+F51E — namespace
+	ctx := m.theme.StatusBarContextStyle().Render(fmt.Sprintf("󰈷 %s", m.clusterInfo.ContextName))
+	cluster := m.theme.StatusBarClusterStyle().Render(fmt.Sprintf("󱡖 %s", m.clusterInfo.ClusterName))
+	ns := m.theme.StatusBarNamespaceStyle().Render(fmt.Sprintf(" %s", m.namespace))
 
 	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
 	badgeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Bold(true)
 
 	left := fmt.Sprintf(" %s  %s  %s", ctx, cluster, ns)
 	if pty != nil {
-		// Hidden KM8erm: Catppuccin peach (#fab387). Status.Pending defaults
-		// to yellow — same hue as ns: in the status bar, so the marker
-		// blended in. Peach reads as a distinct "warm reminder" without
-		// stealing attention the way an error/red would.
+		// Hidden KM8erm: same orange (#F0AE49) as the KM8erm popup border so
+		// the user can visually link "this chip" to "that popup". Used to be
+		// Catppuccin peach (#fab387) — close enough that it blended in;
+		// matching the border is unambiguous.
 		// Attached (popup visible): green via Status.Running, kept for the
 		// rare cases ViewFull is called with Visible=true (current call
 		// site only sets pty when hidden).
-		color := "#fab387"
+		color := "#F0AE49"
 		if pty.Visible {
 			color = m.theme.Status.Running
 		}
