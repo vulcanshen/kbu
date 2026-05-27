@@ -68,7 +68,7 @@ func (m HelpModel) Update(msg tea.Msg) (HelpModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc", "q", "?":
+		case "esc", "q", "?", " ":
 			return m, m.animator.Close()
 		case "j", "down":
 			content := m.helpContent()
@@ -213,7 +213,7 @@ func (m HelpModel) renderFullPopup() string {
 		}
 		b.WriteString("\n")
 	}
-	hint := " Esc/?:close j/k:scroll "
+	hint := " Esc/?/Space:close j/k:scroll "
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0

@@ -131,7 +131,7 @@ func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc", "!", "q":
+		case "esc", "!", "q", " ":
 			return m, m.animator.Close()
 		case "j", "down":
 			if m.scrollOffset < m.maxScrollOffset() {
@@ -380,7 +380,7 @@ func (m AppLogModel) renderFullPopup() string {
 		}
 		b.WriteString("\n")
 	}
-	hint := " !:close j/k u/d y:copy D:clear "
+	hint := " !/Esc/Space:close j/k u/d y:copy D:clear "
 	indicator := ""
 	if totalLines := len(allLines); totalLines > 0 {
 		indicator = fmt.Sprintf(" %d of %d ", m.scrollOffset+1, totalLines)
