@@ -17,12 +17,21 @@ import (
 	"github.com/hinshun/vt10x"
 )
 
-type ptyTickMsg struct{}
+// ptyTickMsg is the 50ms heartbeat each PtyView uses to poll its done flag
+// and refresh the screen. Carries Kind so dual-slot routing dispatches the
+// tick to only the matching slot — otherwise both slots would double-tick
+// each cycle, doubling every tick (exponential explosion = visible lag).
+type ptyTickMsg struct {
+	kind PtyKind
+}
 
 // PtyExitMsg is emitted when the PTY subprocess exits. ExitCode 0 means
 // success; non-zero means the subprocess failed (kubectl's error text is
-// already visible in the PTY buffer up until the moment it closes).
+// already visible in the PTY buffer up until the moment it closes). Kind
+// identifies which slot the exit belongs to (Shell vs Edit/Exec) so the
+// app's dual-slot model can route cleanup to the right slot.
 type PtyExitMsg struct {
+	Kind     PtyKind
 	ExitCode int
 }
 
@@ -142,8 +151,9 @@ func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int, kind PtyK
 	})
 	if err != nil {
 		p.active = false
+		kind := p.kind
 		return func() tea.Msg {
-			return PtyExitMsg{ExitCode: -1}
+			return PtyExitMsg{Kind: kind, ExitCode: -1}
 		}
 	}
 	p.ptmx = ptmx
@@ -153,8 +163,9 @@ func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int, kind PtyK
 }
 
 func (p *PtyView) tick() tea.Cmd {
+	kind := p.kind
 	return tea.Tick(50*time.Millisecond, func(time.Time) tea.Msg {
-		return ptyTickMsg{}
+		return ptyTickMsg{kind: kind}
 	})
 }
 
@@ -286,9 +297,10 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 			if p.cmd != nil && p.cmd.ProcessState != nil {
 				exitCode = p.cmd.ProcessState.ExitCode()
 			}
+			kind := p.kind
 			p.Stop()
 			return p, func() tea.Msg {
-				return PtyExitMsg{ExitCode: exitCode}
+				return PtyExitMsg{Kind: kind, ExitCode: exitCode}
 			}
 		}
 		return p, p.tick()
@@ -511,8 +523,24 @@ func (p *PtyView) RenderPopup() string {
 	}
 	p.mu.Unlock()
 
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#74c7ec"))
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F0AE49")).Bold(true)
+	// Three-color scheme — with dual-slot PTY (KM8erm shell + transient
+	// edit/exec can coexist), each kind needs its own border color so the
+	// active popup's provenance is unambiguous:
+	//   - PtyKindShell (KM8erm)    : Catppuccin peach #F0AE49
+	//   - PtyKindExec  (kubectl exec) : Catppuccin green #a6e3a1
+	//   - PtyKindEdit  (kubectl edit) : Catppuccin sky #74c7ec
+	// Border and title share one color (title is bold) for a consistent frame.
+	var borderColor lipgloss.Color
+	switch p.kind {
+	case PtyKindShell:
+		borderColor = lipgloss.Color("#F0AE49")
+	case PtyKindExec:
+		borderColor = lipgloss.Color("#a6e3a1")
+	default: // PtyKindEdit
+		borderColor = lipgloss.Color("#74c7ec")
+	}
+	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+	titleStyle := borderStyle.Bold(true)
 
 	// Title gains a [SCROLLED N] marker while the user is viewing history so
 	// the state is unmistakable. Cleared the moment scrollOffset returns to 0

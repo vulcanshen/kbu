@@ -36,6 +36,11 @@ type Panel2MenuPopupModel struct {
 	resource    k8s.ResourceType
 	item        k8s.ResourceItem
 	helmManaged bool
+
+	// Title override — set by OpenForContainer so the popup header reads
+	// "container/<name>" instead of the default "pod/<name>". Empty string
+	// falls back to the default rendering.
+	titleOverride string
 }
 
 type panel2MenuItem struct {
@@ -67,6 +72,25 @@ func (m *Panel2MenuPopupModel) Open(rt k8s.ResourceType, item k8s.ResourceItem) 
 	m.item = item
 	m.helmManaged = k8s.IsHelmManaged(item)
 	m.items = buildPanel2MenuItems(rt, m.helmManaged)
+	m.cursor = 0
+	m.titleOverride = ""
+	return m.animator.Open()
+}
+
+// OpenForContainer is the variant used when the user has drilled into a Pod
+// and pressed Space on a container row. Surfaces only the Shell action —
+// containers aren't standalone API objects, so YAML / Edit / Delete don't
+// apply. AppModel.execShell() reads m.drillDownContainers[cursor] to resolve
+// which container actually gets the exec, so the Item carried here is the
+// parent pod for record-keeping only.
+func (m *Panel2MenuPopupModel) OpenForContainer(podName, namespace, containerName string) tea.Cmd {
+	m.resource = k8s.ResourcePods
+	m.item = k8s.ResourceItem{Name: podName, Namespace: namespace}
+	m.helmManaged = false
+	m.titleOverride = " container/" + containerName
+	m.items = []panel2MenuItem{
+		{label: "Shell", key: "S", hint: "kubectl exec -it"},
+	}
 	m.cursor = 0
 	return m.animator.Open()
 }
@@ -242,6 +266,9 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 		icon = k8s.HelmIcon()
 	}
 	title := icon + " " + m.resource.KubectlName() + "/" + m.item.Name
+	if m.titleOverride != "" {
+		title = m.titleOverride
+	}
 	hint := " j/k: move  Enter: open  Esc/q/Space: close "
 
 	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.

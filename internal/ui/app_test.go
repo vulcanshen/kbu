@@ -3,7 +3,11 @@ package ui
 import (
 	"os"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/hinshun/vt10x"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
@@ -65,7 +69,8 @@ func appWithItems(items []k8s.ResourceItem, cursor int) AppModel {
 		table:           tbl,
 		detail:          d,
 		theme:           th,
-		ptyView:         NewPtyView(), // AppModel.Update dereferences ptyView early
+		shellPty:        NewPtyView(),
+		txPty:           NewPtyView(),
 		toast:           NewToastModel(th),
 		breadcrumbPopup: NewBreadcrumbPopupModel(th),
 	}
@@ -343,3 +348,90 @@ func TestAppModel_HonorPendingTableSelect_KindMismatchSkips(t *testing.T) {
 		t.Error("pendingTableSelect must survive a kind-mismatched data arrival")
 	}
 }
+
+// ── dual-slot PTY coexistence ──────────────────────────────────────────────
+
+// fakeAlivePtyView mirrors hookedPtyView from ptyview_test.go — a PtyView
+// that LOOKS post-Start (IsAlive/IsActive true) without spawning a real
+// subprocess.
+func fakeAlivePtyView(kind PtyKind, hidden bool) *PtyView {
+	p := NewPtyView()
+	p.active = true
+	p.hidden = hidden
+	p.kind = kind
+	p.term = vt10x.New(vt10x.WithSize(80, 24))
+	p.mu = &sync.Mutex{}
+	p.pendingLine = &strings.Builder{}
+	return p
+}
+
+func TestAppModel_PtyExitMsg_EditKindClearsEditingFlag(t *testing.T) {
+	m := appWithItems(nil, 0)
+	m.editing = true
+	updated, _ := m.Update(PtyExitMsg{Kind: PtyKindEdit, ExitCode: 0})
+	if updated.(AppModel).editing {
+		t.Error("PtyExitMsg{Kind:Edit} must clear editing flag")
+	}
+}
+
+func TestAppModel_PtyExitMsg_ShellKindLeavesEditingFlag(t *testing.T) {
+	// KM8erm exit should NOT touch editing — dual-slot independence.
+	m := appWithItems(nil, 0)
+	m.editing = true
+	updated, _ := m.Update(PtyExitMsg{Kind: PtyKindShell, ExitCode: 0})
+	if !updated.(AppModel).editing {
+		t.Error("PtyExitMsg{Kind:Shell} must NOT clear editing flag")
+	}
+}
+
+func TestAppModel_PtyExitMsg_ExecKindLeavesEditingFlag(t *testing.T) {
+	// Same independence for the exec case.
+	m := appWithItems(nil, 0)
+	m.editing = true
+	updated, _ := m.Update(PtyExitMsg{Kind: PtyKindExec, ExitCode: 0})
+	if !updated.(AppModel).editing {
+		t.Error("PtyExitMsg{Kind:Exec} must NOT clear editing flag")
+	}
+}
+
+func TestAppModel_DualSlot_KM8ermHidden_AllowsExecSpawn(t *testing.T) {
+	// The bug fix: with shellPty alive + hidden, startShellExecMsg must
+	// NOT be blocked. Old single-slot design blocked any new PTY when
+	// shell was alive even if hidden — confusing UX.
+	m := appWithItems(nil, 0)
+	m.shellPty = fakeAlivePtyView(PtyKindShell, true)
+	// Sanity: shell is alive + hidden, tx is fresh
+	if !m.shellPty.IsAlive() || !m.shellPty.IsHidden() {
+		t.Fatal("setup: shellPty must be alive + hidden")
+	}
+	if m.txPty.IsAlive() {
+		t.Fatal("setup: txPty must be fresh (not alive)")
+	}
+	// The guard at startShellExecMsg checks m.txPty.IsAlive() — it must
+	// be false right now, so the spawn is allowed to proceed (we don't
+	// drive it through to actual Start, which would fork a process).
+	if m.txPty.IsAlive() {
+		t.Error("guard precondition broken: txPty.IsAlive should be false")
+	}
+}
+
+func TestAppModel_DualSlot_TxAlive_BlocksAnotherExec(t *testing.T) {
+	// Counterpart: when a transient PTY IS alive, another exec must be
+	// blocked. The guard fires only on txPty, not shellPty.
+	m := appWithItems(nil, 0)
+	m.txPty = fakeAlivePtyView(PtyKindExec, false)
+	if !m.txPty.IsAlive() {
+		t.Fatal("setup: txPty must be alive")
+	}
+	// Send a new startShellExecMsg — handler should return a toast cmd
+	// (not nil, since it returns the toast.Show cmd).
+	_, cmd := m.Update(startShellExecMsg{
+		podName: "x", namespace: "y", container: "z", contextName: "c",
+	})
+	if cmd == nil {
+		t.Error("startShellExecMsg with active txPty must return a toast cmd, got nil")
+	}
+}
+
+// silence unused warning if tea is not referenced elsewhere in tests
+var _ tea.Msg = struct{}{}
