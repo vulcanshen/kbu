@@ -28,25 +28,31 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 
 ![basics](docs/demo-basics.gif)
 
-Three keys carry the whole interaction: `Enter` drills, `Space` opens the contextual menu (Y/E/S/D on any row), `Esc` backs out. Add `N` for the namespace picker.
+Three keys carry the whole interaction: `Enter` drills, `Space` opens the per-row menu (Y/E/S/D), `Esc` backs out. `N` switches namespace; on the menu, `Y` shortcuts straight to the YAML popup.
 
 ### Navigate Kubernetes as a graph
 
 ![relatives](docs/demo-relatives.gif)
 
-ServiceAccount fan-out (Pods / RoleBindings / ClusterRoleBindings / Token Secret) → drill chain SA → Pod → Deployment → Pod → `Space` opens the breadcrumb popup → `Enter` jumps panels 1+2 back to a chain ancestor.
+ServiceAccount fan-out (Pods / RoleBindings / ClusterRoleBindings / Token Secret) → `Enter` chain-drills SA → Pod → Deployment → Pod → `Space` opens the breadcrumb popup → pick an ancestor → `Enter` + confirm jumps panels 1+2 to it.
+
+### Edit live resources via the Space menu
+
+![yaml-edit](docs/demo-yaml-edit.gif)
+
+Land on a Deployment row → `Space` → `j` to Edit → `Enter` + confirm → `kubectl edit` launches your `$EDITOR` inside the embedded PTY. Save and the watcher picks up the change (READY climbs in panel 2).
 
 ### Helm as a first-class resource
 
 ![helm](docs/demo-helm.gif)
 
-`Space` on a release row opens the doc menu (Manifest / Notes / User Values / Merged Values / Hooks). Switch to the History tab and `Space` on an older revision shows the exact `helm rollback` command — confirm to run it.
+Switch to the helm namespace, lock the sidebar to Releases, `Space` on the release row opens the doc menu (Manifest / Notes / User Values / Merged Values / Hooks). `Enter` renders the chosen doc into the YAML popup.
 
 ### TUI + persistent shell in one window
 
 ![km8erm](docs/demo-km8erm.gif)
 
-`Alt+t` opens KM8erm, a persistent embedded shell. Hide it, navigate km8 panels, reopen — scrollback and prompt intact.
+`Alt+t` opens KM8erm — a persistent embedded shell. Run `kubectl scale` inside it, hide with `Alt+t`, watch panel 2 react, reopen — scrollback intact, ready for the next command.
 
 ## Features
 
