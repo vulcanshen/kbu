@@ -68,7 +68,7 @@ type AppModel struct {
 	breadcrumbPopup BreadcrumbPopupModel
 	helmDocMenu     HelmDocMenuPopupModel
 	panel2Menu      Panel2MenuPopupModel
-	sidebarHelp     SidebarHelpPopupModel
+	hintPopup       HintPopupModel
 
 	activePanel     Panel
 	width           int
@@ -159,7 +159,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		breadcrumbPopup: NewBreadcrumbPopupModel(t),
 		helmDocMenu:     NewHelmDocMenuPopupModel(t),
 		panel2Menu:      NewPanel2MenuPopupModel(t),
-		sidebarHelp:     NewSidebarHelpPopupModel(t),
+		hintPopup:       NewHintPopupModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfgEditor:       cfgEditor,
@@ -274,7 +274,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.panel2Menu.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
-		if c := m.sidebarHelp.HandleTick(tickMsg); c != nil {
+		if c := m.hintPopup.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
@@ -436,11 +436,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.sidebarHelp.IsActive() {
+	if m.hintPopup.IsActive() {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			var cmd tea.Cmd
-			m.sidebarHelp, cmd = m.sidebarHelp.Update(msg)
+			m.hintPopup, cmd = m.hintPopup.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -708,8 +708,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the panel 2/3 "Space surfaces what's possible" affordance —
 			// but informational rather than committable.
 			if m.activePanel == SidebarPanel && !m.sidebar.IsSearching() {
-				m.sidebarHelp.SetSize(m.width, m.height)
-				return m, m.sidebarHelp.Open()
+				m.hintPopup.SetSize(m.width, m.height)
+				title, rows := sidebarHintContent()
+				return m, m.hintPopup.Open(title, rows)
 			}
 			// Container drill view: panel 2 is showing the containers of
 			// the pod we drilled into. Space opens a minimal menu carrying
@@ -753,6 +754,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+			// Panel 2 empty list: surface an explainer popup ("no items —
+			// try N to switch ns, / clears filter, . toggles helm hide").
+			// Without this Space was a silent no-op when the table happened
+			// to be empty, breaking the "Space surfaces what's possible"
+			// promise.
+			if m.activePanel == TablePanel && !m.editing && m.drillDownPod == nil && len(m.items) == 0 {
+				m.hintPopup.SetSize(m.width, m.height)
+				title, rows := panel2EmptyHintContent()
+				return m, m.hintPopup.Open(title, rows)
+			}
 			// Panel 3 History tab on a Helm Release: Space picks the
 			// cursor row as the rollback target and pops the confirm
 			// popup. Current (deployed) row returns nil via
@@ -767,20 +778,35 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			// v1.5.x: Relatives tab Space opens the breadcrumb popup
-			// (replaces both the old direct switch-to-cursor behavior
-			// AND the retired `b` key). User then picks a level + Enter
-			// to commit the switch. Mirrors the "Space = right-click
-			// menu" mental model: surface options, don't mutate state
-			// directly. No-op at root (nothing to navigate).
-			if m.activePanel != DetailPanel || m.detail.ActiveTabName() != "Relatives" {
-				return m, nil
+			// Panel 3 Logs tab: read-only cheatsheet (j/k/u/d/G/y/z).
+			// No per-row menu — Logs is a scrollable text buffer, not a
+			// list of action targets.
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Logs" {
+				m.hintPopup.SetSize(m.width, m.height)
+				title, rows := logsHintContent()
+				return m, m.hintPopup.Open(title, rows)
 			}
-			if m.detail.Depth() <= 1 {
-				return m, nil
+			// Panel 3 Events tab: same idea — read-only cheatsheet for the
+			// scrollable event list.
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Events" {
+				m.hintPopup.SetSize(m.width, m.height)
+				title, rows := eventsHintContent()
+				return m, m.hintPopup.Open(title, rows)
 			}
-			m.breadcrumbPopup.SetSize(m.width, m.height)
-			return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
+			// v1.5.x: Relatives tab Space splits by drill depth.
+			//   depth>1 → open breadcrumb popup (chain navigator).
+			//   depth=1 → no chain to walk, show the drill cheatsheet
+			//             instead (Enter to drill, Y for YAML, etc.).
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Relatives" {
+				if m.detail.Depth() <= 1 {
+					m.hintPopup.SetSize(m.width, m.height)
+					title, rows := relativesDrillHintContent()
+					return m, m.hintPopup.Open(title, rows)
+				}
+				m.breadcrumbPopup.SetSize(m.width, m.height)
+				return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
+			}
+			return m, nil
 		}
 
 	case FocusTableMsg:
@@ -1436,9 +1462,9 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.panel2Menu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
-	if m.sidebarHelp.IsActive() {
-		m.sidebarHelp.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.sidebarHelp.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	if m.hintPopup.IsActive() {
+		m.hintPopup.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.hintPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.yamlPopup.IsActive() {
