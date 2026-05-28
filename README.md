@@ -20,7 +20,7 @@ A scout-style Kubernetes TUI built around **Relatives navigation**.
 
 ![basics](docs/demo-basics.gif)
 
-### Navigate Kubernetes as a graph
+### Navigate Kubernetes by relatives
 
 ![relatives](docs/demo-relatives.gif)
 
