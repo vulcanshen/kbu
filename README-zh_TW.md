@@ -20,7 +20,7 @@
 
 ![basics](docs/demo-basics.gif)
 
-### 把 Kubernetes 當作一張關聯圖來逛
+### 順著 Relatives 走訪 Kubernetes
 
 ![relatives](docs/demo-relatives.gif)
 
