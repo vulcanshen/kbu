@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.5.4] - 2026-05-28
+
+Universal Space coverage. v1.5.3 closed panel 1; v1.5.4 closes the
+remaining no-op corners: panel 3 Logs / Events / Relatives-at-depth-1
+tabs each get their own cheatsheet, and empty panel 2 surfaces an
+explainer instead of swallowing the keypress.
+
+### Added
+
+- **Panel 3 tab cheatsheets via Space.** Logs / Events tabs each get a
+  read-only popup listing j/k/u/d/G/y/z (scroll, copy, full-screen).
+  Relatives tab at depth=1 (no drill chain yet) shows a drill-into
+  cheatsheet (Enter to drill, Y for YAML, Esc to pop). At depth>1 the
+  existing breadcrumb popup still opens.
+- **Empty panel 2 Space hint.** When the table is empty (e.g., a
+  namespace with no Deployments), Space no longer no-ops — it opens a
+  popup naming the likely cause (filter on, helm-managed hidden, wrong
+  ns/context) and the keys that fix each.
+
+### Changed
+
+- **SidebarHelpPopupModel → HintPopupModel.** Refactored the v1.5.3
+  sidebar-only popup into a generic title + rows model. One instance
+  serves all six call sites (sidebar, container drill — via separate
+  panel 2 menu — Logs / Events / Relatives-depth-1 / empty panel 2).
+  No user-visible change beyond more places Space works.
+
 ## [v1.5.3] - 2026-05-27
 
 Closes the "Space surfaces what's possible here" loop. v1.5.1 wired it
