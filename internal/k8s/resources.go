@@ -34,24 +34,70 @@ func GetResourceDetail(rt ResourceType, item ResourceItem) ResourceDetail {
 // optionally filtering by namespace. Events are returned sorted by last
 // timestamp, newest first.
 func FetchResourceEvents(ctx context.Context, clientset kubernetes.Interface, name, namespace string) ([]EventItem, error) {
-	selector := fmt.Sprintf("involvedObject.name=%s", name)
-	opts := metav1.ListOptions{FieldSelector: selector}
+	raw, err := fetchEventsRaw(ctx, clientset, name, namespace)
+	if err != nil {
+		return nil, err
+	}
+	sortEventsByTime(raw)
+	return eventsToItems(raw), nil
+}
 
-	list, err := clientset.CoreV1().Events(namespace).List(ctx, opts)
+// FetchResourceEventsAggregated returns events for the resource AND its child
+// pods when the resource is a workload that PodsForWorkload supports
+// (Deployment today). For other kinds it falls back to single-object behavior
+// (parent events only). All events are merged and sorted by timestamp,
+// newest first.
+//
+// Rationale: kubectl describe of a Deployment shows only the Deployment's own
+// events, which are sparse (ScalingReplicaSet only). The interesting events
+// during a rollout / outage are on the child Pods (BackOff, ImagePullBackOff,
+// Killing). km8 aggregates them so the Events tab is useful one level up,
+// mirroring the aggregate-logs pattern.
+func FetchResourceEventsAggregated(ctx context.Context, clientset kubernetes.Interface, item ResourceItem) ([]EventItem, error) {
+	raw, err := fetchEventsRaw(ctx, clientset, item.Name, item.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	pods, perr := PodsForWorkload(ctx, clientset, item, true)
+	if perr == nil {
+		for _, pod := range pods {
+			podRaw, err := fetchEventsRaw(ctx, clientset, pod.Name, pod.Namespace)
+			if err != nil {
+				continue
+			}
+			raw = append(raw, podRaw...)
+		}
+	}
+
+	sortEventsByTime(raw)
+	return eventsToItems(raw), nil
+}
+
+// fetchEventsRaw lists raw corev1.Events for one involvedObject name in one
+// namespace. No sort, no conversion — callers handle merge / sort / display.
+func fetchEventsRaw(ctx context.Context, clientset kubernetes.Interface, name, namespace string) ([]corev1.Event, error) {
+	selector := fmt.Sprintf("involvedObject.name=%s", name)
+	list, err := clientset.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{FieldSelector: selector})
 	if err != nil {
 		return nil, fmt.Errorf("listing events for %s: %w", name, err)
 	}
+	return list.Items, nil
+}
 
-	// Sort by last timestamp, newest first.
-	sort.Slice(list.Items, func(i, j int) bool {
-		ti := eventTime(list.Items[i])
-		tj := eventTime(list.Items[j])
-		return ti.After(tj)
+// sortEventsByTime sorts events by last timestamp, newest first. In-place.
+func sortEventsByTime(events []corev1.Event) {
+	sort.Slice(events, func(i, j int) bool {
+		return eventTime(events[i]).After(eventTime(events[j]))
 	})
+}
 
-	items := make([]EventItem, 0, len(list.Items))
-	for i := range list.Items {
-		e := &list.Items[i]
+// eventsToItems converts raw events to display-ready EventItems. Assumes the
+// caller has already sorted.
+func eventsToItems(events []corev1.Event) []EventItem {
+	items := make([]EventItem, 0, len(events))
+	for i := range events {
+		e := &events[i]
 		items = append(items, EventItem{
 			Type:    e.Type,
 			Reason:  e.Reason,
@@ -60,7 +106,7 @@ func FetchResourceEvents(ctx context.Context, clientset kubernetes.Interface, na
 			Age:     formatAge(eventTime(*e)),
 		})
 	}
-	return items, nil
+	return items
 }
 
 // FetchChildResources fetches child resources for a parent via the registry's DrillDown config.
