@@ -192,6 +192,109 @@ func TestFetchResourceEventsAggregated_StatefulSetMergesPodEvents(t *testing.T) 
 	}
 }
 
+// TestPodsForCronJob_WalksOwnedJobsToPods covers the 2-hop chain — CronJob
+// owns multiple Jobs (history), each Job has Pods. PodsForCronJob should
+// return all Pods across all owned Jobs.
+func TestPodsForCronJob_WalksOwnedJobsToPods(t *testing.T) {
+	cj := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "cleanup", Namespace: "ns", UID: "cj-uid"},
+	}
+	jobA := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cleanup-1", Namespace: "ns",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cleanup", UID: "cj-uid"}},
+		},
+	}
+	jobB := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cleanup-2", Namespace: "ns",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cleanup", UID: "cj-uid"}},
+		},
+	}
+	jobUnrelated := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "other-job", Namespace: "ns"},
+	}
+	podA := podWithLabels("cleanup-1-xyz", "ns", map[string]string{"job-name": "cleanup-1"})
+	podB := podWithLabels("cleanup-2-abc", "ns", map[string]string{"job-name": "cleanup-2"})
+	podUnrelated := podWithLabels("other-job-pod", "ns", map[string]string{"job-name": "other-job"})
+
+	cs := fake.NewSimpleClientset(cj, jobA, jobB, jobUnrelated, podA, podB, podUnrelated)
+
+	targets, err := PodsForCronJob(context.Background(), cs, cj)
+	if err != nil {
+		t.Fatalf("PodsForCronJob: %v", err)
+	}
+	if len(targets) != 2 {
+		t.Fatalf("expected 2 pods across 2 owned jobs, got %d: %+v", len(targets), targets)
+	}
+	names := map[string]bool{targets[0].Name: true, targets[1].Name: true}
+	if !names["cleanup-1-xyz"] || !names["cleanup-2-abc"] {
+		t.Errorf("expected cleanup-1-xyz + cleanup-2-abc, got %+v", targets)
+	}
+}
+
+// TestFetchResourceEventsAggregated_CronJobMergesJobAndPodEvents covers the
+// full 3-tier merge: CronJob's own events + each owned Job's events + each
+// child Pod's events. CronJob's value is high here because Job-level events
+// (BackoffLimitExceeded, Completed) carry distinct debug info from Pod-level
+// events.
+func TestFetchResourceEventsAggregated_CronJobMergesJobAndPodEvents(t *testing.T) {
+	now := time.Now()
+	cj := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "cleanup", Namespace: "ns", UID: "cj-uid"},
+	}
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cleanup-1", Namespace: "ns",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "cleanup", UID: "cj-uid"}},
+		},
+	}
+	pod := podWithLabels("cleanup-1-xyz", "ns", map[string]string{"job-name": "cleanup-1"})
+
+	cjEvent := &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "cj-evt", Namespace: "ns"},
+		InvolvedObject: corev1.ObjectReference{Kind: "CronJob", Name: "cleanup", Namespace: "ns"},
+		Reason:         "SuccessfulCreate",
+		LastTimestamp:  metav1.NewTime(now.Add(-15 * time.Minute)),
+	}
+	jobEvent := &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "job-evt", Namespace: "ns"},
+		InvolvedObject: corev1.ObjectReference{Kind: "Job", Name: "cleanup-1", Namespace: "ns"},
+		Reason:         "Completed",
+		LastTimestamp:  metav1.NewTime(now.Add(-10 * time.Minute)),
+	}
+	podEvent := &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "pod-evt", Namespace: "ns"},
+		InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "cleanup-1-xyz", Namespace: "ns"},
+		Reason:         "Started",
+		LastTimestamp:  metav1.NewTime(now.Add(-12 * time.Minute)),
+	}
+
+	cs := fake.NewSimpleClientset(cj, job, pod, cjEvent, jobEvent, podEvent)
+	events, err := FetchResourceEventsAggregated(context.Background(), cs, ResourceItem{Name: "cleanup", Namespace: "ns", Raw: cj})
+	if err != nil {
+		t.Fatalf("FetchResourceEventsAggregated: %v", err)
+	}
+
+	hasReason := func(r string) bool {
+		for _, e := range events {
+			if e.Reason == r {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasReason("SuccessfulCreate") {
+		t.Errorf("missing CronJob's own event: %+v", events)
+	}
+	if !hasReason("Completed") {
+		t.Errorf("missing intermediate Job event (the killer feature): %+v", events)
+	}
+	if !hasReason("Started") {
+		t.Errorf("missing child Pod event: %+v", events)
+	}
+}
+
 // TestFetchResourceEventsAggregated_JobMergesPodEvents covers the Job →
 // job-name label → Pods path.
 func TestFetchResourceEventsAggregated_JobMergesPodEvents(t *testing.T) {

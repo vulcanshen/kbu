@@ -70,6 +70,24 @@ func FetchResourceEventsAggregated(ctx context.Context, clientset kubernetes.Int
 		}
 	}
 
+	// CronJob's intermediate layer: each owned Job emits its own
+	// SuccessfulCreate / BackoffLimitExceeded / Completed events that are
+	// distinct from Pod events and worth surfacing. (Deployment's
+	// intermediate ReplicaSet is skipped — its events are redundant with
+	// Pod events.)
+	if cj, ok := item.Raw.(*batchv1.CronJob); ok {
+		jobs, jerr := cronJobOwnedJobs(ctx, clientset, cj)
+		if jerr == nil {
+			for i := range jobs {
+				jobRaw, err := fetchEventsRaw(ctx, clientset, jobs[i].Name, jobs[i].Namespace)
+				if err != nil {
+					continue
+				}
+				raw = append(raw, jobRaw...)
+			}
+		}
+	}
+
 	sortEventsByTime(raw)
 	return eventsToItems(raw), nil
 }
@@ -828,13 +846,14 @@ func fetchDeployments(ctx context.Context, cs kubernetes.Interface, ns string) (
 // PodsForWorkload dispatches to the right kind-specific resolver for the
 // workload's live Pods. Used by both aggregate logs and aggregate events.
 //
-// Supported kinds: Deployment, StatefulSet, DaemonSet, Job, ReplicaSet.
-// CronJob isn't supported (2-hop CronJob → Jobs → Pods, with "which Job is
-// current" needing extra logic).
+// Supported kinds: Deployment, StatefulSet, DaemonSet, Job, ReplicaSet,
+// CronJob.
 //
 // currentOnly only applies to Deployment (filters to its current ReplicaSet's
 // Pods, ignoring rollout leftovers). Other kinds don't have a revision model,
-// so currentOnly is ignored and all matching Pods are returned.
+// so currentOnly is ignored and all matching Pods are returned. CronJob
+// returns Pods from all currently-retained Jobs (bounded by K8s history
+// limits, typically ≤4).
 //
 // Keeps the ui package free of apps/v1 / batchv1 imports.
 func PodsForWorkload(ctx context.Context, cs kubernetes.Interface, item ResourceItem, currentOnly bool) ([]PodTarget, error) {
@@ -849,6 +868,8 @@ func PodsForWorkload(ctx context.Context, cs kubernetes.Interface, item Resource
 		return PodsForReplicaSet(ctx, cs, raw)
 	case *batchv1.Job:
 		return PodsForJob(ctx, cs, raw)
+	case *batchv1.CronJob:
+		return PodsForCronJob(ctx, cs, raw)
 	}
 	return nil, fmt.Errorf("aggregate not supported for %T", item.Raw)
 }
@@ -903,6 +924,52 @@ func PodsForJob(ctx context.Context, cs kubernetes.Interface, job *batchv1.Job) 
 		return nil, fmt.Errorf("nil job")
 	}
 	return podTargetsFromSelector(ctx, cs, job.Namespace, "job-name="+job.Name)
+}
+
+// PodsForCronJob walks the 2-hop chain CronJob → Jobs → Pods. Returns Pods
+// from every Job currently retained by the CronJob (K8s history limits
+// usually keep ≤4 Jobs: successfulJobsHistoryLimit default 3 + active +
+// failedJobsHistoryLimit default 1). All retained Jobs' Pods are included so
+// past runs are visible for "why did last night's job fail" debug.
+func PodsForCronJob(ctx context.Context, cs kubernetes.Interface, cj *batchv1.CronJob) ([]PodTarget, error) {
+	if cj == nil {
+		return nil, fmt.Errorf("nil cronjob")
+	}
+	jobs, err := cronJobOwnedJobs(ctx, cs, cj)
+	if err != nil {
+		return nil, err
+	}
+	var pods []PodTarget
+	for i := range jobs {
+		jobPods, err := PodsForJob(ctx, cs, &jobs[i])
+		if err != nil {
+			continue
+		}
+		pods = append(pods, jobPods...)
+	}
+	return pods, nil
+}
+
+// cronJobOwnedJobs lists Jobs in the CronJob's namespace and filters to
+// those whose OwnerReferences point back at this CronJob's UID. Used by
+// PodsForCronJob (for the Pod walk) and by FetchResourceEventsAggregated
+// (to surface Job-level events like SuccessfulCreate / BackoffLimitExceeded).
+func cronJobOwnedJobs(ctx context.Context, cs kubernetes.Interface, cj *batchv1.CronJob) ([]batchv1.Job, error) {
+	list, err := cs.BatchV1().Jobs(cj.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing jobs for cronjob %s: %w", cj.Name, err)
+	}
+	var owned []batchv1.Job
+	for i := range list.Items {
+		job := list.Items[i]
+		for _, ref := range job.OwnerReferences {
+			if ref.UID == cj.UID && ref.Kind == "CronJob" {
+				owned = append(owned, job)
+				break
+			}
+		}
+	}
+	return owned, nil
 }
 
 // PodsForDeployment resolves a Deployment to the list of pod targets whose
