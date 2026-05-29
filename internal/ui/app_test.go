@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hinshun/vt10x"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hinshun/vt10x"
 
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"

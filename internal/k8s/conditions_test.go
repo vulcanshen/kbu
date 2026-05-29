@@ -15,7 +15,7 @@ func TestExtractConditions_Pod(t *testing.T) {
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{
 				{Type: corev1.PodScheduled, Status: corev1.ConditionFalse, Reason: "Unschedulable",
-					Message: "0/3 nodes are available: 3 Insufficient cpu",
+					Message:            "0/3 nodes are available: 3 Insufficient cpu",
 					LastTransitionTime: metav1.NewTime(now)},
 				{Type: corev1.PodReady, Status: corev1.ConditionFalse,
 					LastTransitionTime: metav1.NewTime(now)},

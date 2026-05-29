@@ -534,5 +534,5 @@ func newPollWatch(parent context.Context, interval time.Duration) *pollWatch {
 	return pw
 }
 
-func (w *pollWatch) Stop()                            { w.cancel() }
-func (w *pollWatch) ResultChan() <-chan watch.Event   { return w.ch }
+func (w *pollWatch) Stop()                          { w.cancel() }
+func (w *pollWatch) ResultChan() <-chan watch.Event { return w.ch }
