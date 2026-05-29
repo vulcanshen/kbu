@@ -2319,6 +2319,7 @@ func fetchResourceDetail(client *k8s.Client, rt k8s.ResourceType, item k8s.Resou
 		// selector→pods, ClusterRole → bindings, StorageClass → PVCs, ...).
 		// EnrichRelatives is a no-op for kinds without extra resolution.
 		k8s.EnrichRelatives(ctx, client.Clientset(), rt, item, &detail)
+		detail.Conditions = k8s.ExtractConditions(item)
 		events, _ := k8s.FetchResourceEventsAggregated(ctx, client.Clientset(), item)
 		return ResourceDetailMsg{ItemUID: item.UID, Detail: detail, Events: events}
 	}

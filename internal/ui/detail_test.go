@@ -90,7 +90,7 @@ func TestDetailModel_SetDetail(t *testing.T) {
 
 func TestDetailModel_SwitchTab(t *testing.T) {
 	m := newTestDetail()
-	m.SetResourceType(k8s.ResourcePods) // 3 tabs: Relatives, Logs, Events
+	m.SetResourceType(k8s.ResourcePods) // 4 tabs: Relatives, Logs, Events, Conditions
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	if m.activeTab != 0 {
@@ -112,16 +112,22 @@ func TestDetailModel_SwitchTab(t *testing.T) {
 		t.Errorf("expected Events after second ']', got %s", m.ActiveTabName())
 	}
 
-	// ']' wraps Events → Relatives
+	// ']' cycles Events → Conditions
+	m, _ = m.Update(keyMsg(']'))
+	if m.ActiveTabName() != "Conditions" {
+		t.Errorf("expected Conditions after third ']', got %s", m.ActiveTabName())
+	}
+
+	// ']' wraps Conditions → Relatives
 	m, _ = m.Update(keyMsg(']'))
 	if m.ActiveTabName() != "Relatives" {
 		t.Errorf("expected Relatives after wrap ']', got %s", m.ActiveTabName())
 	}
 
-	// '[' wraps Relatives → Events (backward)
+	// '[' wraps Relatives → Conditions (backward to last tab)
 	m, _ = m.Update(keyMsg('['))
-	if m.ActiveTabName() != "Events" {
-		t.Errorf("expected Events after '[' from Relatives, got %s", m.ActiveTabName())
+	if m.ActiveTabName() != "Conditions" {
+		t.Errorf("expected Conditions after '[' from Relatives, got %s", m.ActiveTabName())
 	}
 }
 
@@ -263,17 +269,17 @@ func TestDetailModel_LogsTab_NonPodResource(t *testing.T) {
 func TestDetailModel_Deployment_TabOrderLogsFirst(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourceDeployments)
-	if len(m.tabs) != 3 {
-		t.Fatalf("expected 3 tabs for Deployment, got %d (%v)", len(m.tabs), m.tabs)
+	if len(m.tabs) != 4 {
+		t.Fatalf("expected 4 tabs for Deployment (Relatives/Logs/Events/Conditions), got %d (%v)", len(m.tabs), m.tabs)
 	}
-	wantOrder := []string{"Relatives", "Logs", "Events"}
+	wantOrder := []string{"Relatives", "Logs", "Events", "Conditions"}
 	for i, want := range wantOrder {
 		if m.tabs[i] != want {
 			t.Errorf("tab %d: expected %q, got %q", i, want, m.tabs[i])
 		}
 	}
 	if m.activeTab != 0 {
-		t.Errorf("Deployment default activeTab must be 0 (Logs), got %d", m.activeTab)
+		t.Errorf("Deployment default activeTab must be 0 (Relatives), got %d", m.activeTab)
 	}
 }
 

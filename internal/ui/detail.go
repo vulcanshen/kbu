@@ -749,11 +749,38 @@ func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	default:
 		m.tabs = []string{"Relatives", "Events"}
 	}
+	// Conditions tab is appended for kinds that carry .status.conditions —
+	// diagnostic view answering "why is this Pending / NotReady / Unavailable".
+	// Type-driven (not data-driven) so the tab stays put across refreshes; an
+	// empty conditions slice renders "No conditions" rather than removing the
+	// tab.
+	if resourceHasConditions(rt) {
+		m.tabs = append(m.tabs, "Conditions")
+	}
 	m.activeTab = 0
 	m.scrollOffset = 0
 	m.relativeCursor = -1
 	m.historyCursor = -1
 	m.buildContentLines()
+}
+
+// resourceHasConditions reports whether kind kind exposes .status.conditions
+// worth a tab. Matches the set ExtractConditions handles. CRDs and other
+// kinds may have conditions but km8 doesn't surface them here.
+func resourceHasConditions(rt k8s.ResourceType) bool {
+	switch rt {
+	case k8s.ResourcePods,
+		k8s.ResourceNodes,
+		k8s.ResourcePersistentVolumeClaims,
+		k8s.ResourceDeployments,
+		k8s.ResourceStatefulSets,
+		k8s.ResourceDaemonSets,
+		k8s.ResourceJobs,
+		k8s.ResourceHorizontalPodAutoscalers,
+		k8s.ResourceIngresses:
+		return true
+	}
+	return false
 }
 
 // NextTab switches to the next tab.
@@ -806,6 +833,8 @@ func (m *DetailModel) buildContentLines() {
 		m.contentLines = m.buildLogLines()
 	case "Events":
 		m.contentLines = m.buildEventLines()
+	case "Conditions":
+		m.contentLines = m.buildConditionsLines()
 	case "History":
 		// First entry into the History tab with data loaded: land the
 		// cursor on the current deployed revision so the user sees an
@@ -1009,6 +1038,86 @@ func (m DetailModel) buildEventLines() []string {
 	for _, e := range m.events {
 		for _, row := range formatRows(e.Type, e.Reason, e.Object, e.Message, e.Age) {
 			lines = append(lines, valueStyle.Render(row))
+		}
+	}
+
+	return lines
+}
+
+// buildConditionsLines renders the Conditions tab as a TYPE/STATUS/REASON/
+// MESSAGE/AGE table, mirroring kubectl describe's Conditions section. Status
+// "False" is highlighted to draw the eye to the failing condition that's
+// usually the diagnostic answer.
+func (m DetailModel) buildConditionsLines() []string {
+	if !m.hasData || len(m.detail.Conditions) == 0 {
+		return []string{"  " + m.theme.DetailValueStyle().Render("No conditions")}
+	}
+
+	typeW := len("TYPE")
+	statusW := len("STATUS")
+	reasonW := len("REASON")
+	messageW := len("MESSAGE")
+	ageW := len("AGE")
+
+	for _, c := range m.detail.Conditions {
+		if len(c.Type) > typeW {
+			typeW = len(c.Type)
+		}
+		if len(c.Status) > statusW {
+			statusW = len(c.Status)
+		}
+		if len(c.Reason) > reasonW {
+			reasonW = len(c.Reason)
+		}
+		if len(c.Message) > messageW {
+			messageW = len(c.Message)
+		}
+		if len(c.Age) > ageW {
+			ageW = len(c.Age)
+		}
+	}
+
+	maxMsgW := m.width - typeW - statusW - reasonW - ageW - 12
+	if maxMsgW < 10 {
+		maxMsgW = 10
+	}
+	if messageW > maxMsgW {
+		messageW = maxMsgW
+	}
+
+	labelStyle := m.theme.DetailLabelStyle()
+	valueStyle := m.theme.DetailValueStyle()
+
+	msgIndent := strings.Repeat(" ", 2+typeW+2+statusW+2+reasonW+2)
+
+	formatRows := func(t, s, r, msg, age string) []string {
+		msgLines := wrapPlain(msg, messageW)
+		if len(msgLines) == 0 {
+			msgLines = []string{""}
+		}
+		first := fmt.Sprintf("  %-*s  %-*s  %-*s  %-*s  %-*s",
+			typeW, t, statusW, s, reasonW, r, messageW, msgLines[0], ageW, age)
+		out := []string{first}
+		for _, cont := range msgLines[1:] {
+			out = append(out, msgIndent+cont)
+		}
+		return out
+	}
+
+	var lines []string
+	for _, row := range formatRows("TYPE", "STATUS", "REASON", "MESSAGE", "AGE") {
+		lines = append(lines, labelStyle.Render(row))
+	}
+
+	for _, c := range m.detail.Conditions {
+		rendered := valueStyle
+		if c.Status == "False" {
+			// Failing condition is usually the diagnostic answer — highlight
+			// with the same Error palette used for status badges.
+			rendered = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Error))
+		}
+		for _, row := range formatRows(c.Type, c.Status, c.Reason, c.Message, c.Age) {
+			lines = append(lines, rendered.Render(row))
 		}
 	}
 

@@ -94,6 +94,12 @@ type ResourceDetail struct {
 	// ReleaseHistory carries the `helm history` rows for a Helm Release.
 	// Populated by enrichReleaseHistory (Phase 2c). Nil for every other kind.
 	ReleaseHistory []ReleaseRevision
+
+	// Conditions carries the resource's .status.conditions for display on the
+	// Conditions tab. Populated by ExtractConditions; nil for kinds without
+	// conditions (ConfigMap, Secret, Service, ServiceAccount, ...). The
+	// Conditions tab is hidden when this slice is empty.
+	Conditions []ConditionItem
 }
 
 // RelativeSection is one labeled group of link rows on the Relatives tab. Title is
@@ -186,6 +192,20 @@ type EventItem struct {
 	Object  string
 	Message string
 	Age     string
+}
+
+// ConditionItem holds one row of a resource's .status.conditions for display
+// on the Conditions tab. Mirrors what `kubectl describe` shows in its
+// Conditions section: type / status / reason / message + age since last
+// transition. Populated by ExtractConditions for kinds that carry conditions
+// (Pod, Deployment, StatefulSet, ...); nil for kinds without (ConfigMap,
+// Secret, etc.) — the Conditions tab is hidden when this slice is empty.
+type ConditionItem struct {
+	Type    string // e.g. "Ready", "PodScheduled", "Available"
+	Status  string // "True" | "False" | "Unknown"
+	Reason  string // brief CamelCase reason
+	Message string // human-readable message
+	Age     string // since LastTransitionTime
 }
 
 // SupportsDrillDown returns true if this resource type can drill down to children.
