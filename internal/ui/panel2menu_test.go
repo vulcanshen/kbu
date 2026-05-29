@@ -172,13 +172,45 @@ func TestPanel2Menu_Items_PodDrillsToContainers(t *testing.T) {
 	}
 }
 
+func TestPanel2Menu_Open_CanPopAppendsEsc(t *testing.T) {
+	// When user has drilled into a parent's children (e.g. Deployment →
+	// Pods via Enter on the Deployment row), Open(...canPop=true) appends
+	// an "Esc" entry so users see they can pop back to the parent list.
+	m := newPanel2Menu(t)
+	item := k8s.ResourceItem{Name: "nginx-abc-xyz", Namespace: "default"}
+	cmd := m.Open(k8s.ResourcePods, item, true) // canPop=true → from drill
+	drainPanel2MenuToInteractive(t, &m, cmd)
+
+	last := m.items[len(m.items)-1]
+	if last.key != "Esc" {
+		t.Fatalf("when canPop=true, last item must be Esc, got %q (full=%v)", last.key, itemKeys(m.items))
+	}
+	if last.hint != "back to parent list" {
+		t.Errorf("Esc hint = %q, want %q", last.hint, "back to parent list")
+	}
+}
+
+func TestPanel2Menu_Open_NoCanPopOmitsEsc(t *testing.T) {
+	// Root list (not drilled): canPop=false → no Esc entry.
+	m := newPanel2Menu(t)
+	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
+	cmd := m.Open(k8s.ResourcePods, item, false)
+	drainPanel2MenuToInteractive(t, &m, cmd)
+
+	for _, it := range m.items {
+		if it.key == "Esc" {
+			t.Errorf("canPop=false must not produce an Esc entry, got %v", itemKeys(m.items))
+		}
+	}
+}
+
 // ── commit paths ───────────────────────────────────────────────────────────
 
 func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 	// Cursor starts at 0 = YAML. Pressing Enter commits Y.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
-	cmd := m.Open(k8s.ResourcePods, item)
+	cmd := m.Open(k8s.ResourcePods, item, false)
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, batchCmd := m.Update(key("enter"))
@@ -211,7 +243,7 @@ func TestPanel2Menu_EnterOnDrillRowEmitsEnter(t *testing.T) {
 	// maps to enterDrillDown.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
-	cmd := m.Open(k8s.ResourcePods, item)
+	cmd := m.Open(k8s.ResourcePods, item, false)
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	m, _ = m.Update(key("G"))
@@ -240,7 +272,7 @@ func TestPanel2Menu_HotkeyDirectTrigger(t *testing.T) {
 	// Pressing "E" while menu is open commits Edit without cursor move.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
-	cmd := m.Open(k8s.ResourcePods, item)
+	cmd := m.Open(k8s.ResourcePods, item, false)
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, batchCmd := m.Update(key("E"))
@@ -270,7 +302,7 @@ func TestPanel2Menu_HotkeyNotInMenuIsNoOp(t *testing.T) {
 	// gates via hotkey.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "my-svc", Namespace: "default"}
-	cmd := m.Open(k8s.ResourceServices, item)
+	cmd := m.Open(k8s.ResourceServices, item, false)
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, cmd2 := m.Update(key("S"))
@@ -289,7 +321,7 @@ func TestPanel2Menu_HotkeyBlockedByRuleA(t *testing.T) {
 		},
 	}
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default", Raw: pod}
-	cmd := m.Open(k8s.ResourcePods, item)
+	cmd := m.Open(k8s.ResourcePods, item, false)
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, cmd2 := m.Update(key("E"))
@@ -302,7 +334,7 @@ func TestPanel2Menu_HotkeyBlockedByRuleA(t *testing.T) {
 
 func TestPanel2Menu_SpaceCloses(t *testing.T) {
 	m := newPanel2Menu(t)
-	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"})
+	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false)
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, closeCmd := m.Update(key(" "))
@@ -313,7 +345,7 @@ func TestPanel2Menu_SpaceCloses(t *testing.T) {
 
 func TestPanel2Menu_EscCloses(t *testing.T) {
 	m := newPanel2Menu(t)
-	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"})
+	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false)
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, closeCmd := m.Update(key("esc"))
@@ -371,7 +403,7 @@ func TestPanel2Menu_OpenForContainer_EnterCommitsShell(t *testing.T) {
 
 func TestPanel2Menu_OpenForContainer_EscRowEmitsEsc(t *testing.T) {
 	// Cursor j to the Esc row, then Enter commits Action="Esc" — app.go
-	// maps this to exitDrillDown (pop back to pod's container list).
+	// maps this to exitDrillDown (pop back to pod list).
 	m := newPanel2Menu(t)
 	cmd := m.OpenForContainer("nginx-pod", "default", "nginx")
 	drainPanel2MenuToInteractive(t, &m, cmd)

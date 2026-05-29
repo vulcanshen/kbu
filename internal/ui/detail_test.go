@@ -1135,14 +1135,24 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 	}
 }
 
-func TestDetailModel_ActiveTabTitle_FollowMarker(t *testing.T) {
+func TestDetailModel_TabTitle_LogsFollowNoArrowMarker(t *testing.T) {
+	// v1.5.x+: active Logs tab with auto-follow uses green color (rendered
+	// in production terminal) instead of the old ▼ marker. ANSI color
+	// emission is profile-dependent and stripped in tests, so we only
+	// assert the ▼ marker is gone — visual green verification is manual.
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs, followTail=true
+	m = m.switchToTab(1) // Logs, followTail starts true
 
-	if got := m.ActiveTabTitle(); got != "Logs ▼" {
-		t.Errorf("expected active tab title 'Logs ▼' when following, got %q", got)
+	if !m.FollowTail() {
+		t.Fatal("setup: expected followTail=true initially after switching to Logs")
+	}
+	if strings.Contains(m.TabTitle(), "▼") {
+		t.Errorf("TabTitle must not carry ▼ marker any more, got %q", m.TabTitle())
+	}
+	if strings.Contains(m.ActiveTabTitle(), "▼") {
+		t.Errorf("ActiveTabTitle must not carry ▼ marker any more, got %q", m.ActiveTabTitle())
 	}
 
 	// Pause via scroll up.
@@ -1150,14 +1160,38 @@ func TestDetailModel_ActiveTabTitle_FollowMarker(t *testing.T) {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
 	m, _ = m.Update(keyMsg('k'))
-	if got := m.ActiveTabTitle(); got != "Logs" {
-		t.Errorf("expected active tab title 'Logs' when paused, got %q", got)
+	if m.FollowTail() {
+		t.Fatal("expected followTail=false after k scroll")
+	}
+	if strings.Contains(m.TabTitle(), "▼") {
+		t.Errorf("TabTitle must not carry ▼ marker when paused either, got %q", m.TabTitle())
+	}
+}
+
+func TestDetailModel_BorderBottomLeftHint_RelativesDrillDepth(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+
+	// depth=1 on Relatives → no hint (nothing to pop).
+	if got := m.BorderBottomLeftHint(); got != "" {
+		t.Errorf("depth=1: expected empty hint, got %q", got)
 	}
 
-	// The multi-tab bar (TabTitle, Panel 2) must NOT carry the marker —
-	// it now only reflects which tab is active, not Logs state.
-	if strings.Contains(m.TabTitle(), "▼") {
-		t.Errorf("TabTitle (Panel 2 tab bar) must not carry follow marker, got %q", m.TabTitle())
+	// Push a fake drill frame → depth becomes 2 → hint should appear.
+	m.drillStack = append(m.drillStack, drillFrame{
+		ref:  k8s.RefTarget{Type: k8s.ResourcePods, Name: "x"},
+		item: k8s.ResourceItem{Name: "x"},
+	})
+	if got := m.BorderBottomLeftHint(); got != "esc: back" {
+		t.Errorf("depth>1: expected 'esc: back', got %q", got)
+	}
+
+	// Switch to a non-Relatives tab → hint must clear even at depth>1
+	// (Esc semantics only apply on Relatives).
+	m = m.switchToTab(2) // Events
+	if got := m.BorderBottomLeftHint(); got != "" {
+		t.Errorf("non-Relatives tab: expected empty hint, got %q", got)
 	}
 }
 

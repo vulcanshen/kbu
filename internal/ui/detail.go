@@ -650,18 +650,24 @@ func (m *DetailModel) ResetDrillStack() {
 }
 
 // TabTitle returns the tab bar string for embedding in the panel border.
-// Active tab is bracketed; Logs gets a ▼ marker when follow-tail is engaged;
-// Relatives gets a chain-level suffix when drilled. Embed in Panel 3's
-// border title — Panel 2 stays clean with just its breadcrumb.
+// Active tab is bracketed; the active Logs tab is rendered in green when
+// auto-follow is engaged (replaces the earlier ▼ marker); Relatives gets a
+// chain-level suffix when drilled. Embed in Panel 3's border title — Panel 2
+// stays clean with just its breadcrumb.
 func (m DetailModel) TabTitle() string {
 	var parts []string
 	for i, tab := range m.tabs {
 		label := m.tabLabel(tab)
 		if DetailTab(i) == m.activeTab {
+			bracketed := "[" + label + "]"
 			if tab == "Logs" && m.followTail {
-				label += " ▼"
+				// Color the whole [Logs] block — same Running-green as
+				// healthy Pod status, since auto-follow == "alive stream".
+				bracketed = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(m.theme.Status.Running)).
+					Render(bracketed)
 			}
-			parts = append(parts, "["+label+"]")
+			parts = append(parts, bracketed)
 		} else {
 			parts = append(parts, " "+label+" ")
 		}
@@ -673,11 +679,7 @@ func (m DetailModel) TabTitle() string {
 // the single-tab-name format. v1.5.1 moved the full tab bar to Panel 3,
 // so most callers should use TabTitle() instead.
 func (m DetailModel) ActiveTabTitle() string {
-	name := m.ActiveTabName()
-	if name == "Logs" && m.followTail {
-		return name + " ▼"
-	}
-	return m.tabLabel(name)
+	return m.tabLabel(m.ActiveTabName())
 }
 
 // tabLabel returns the per-tab label as it should appear in the tab bar,
@@ -700,6 +702,19 @@ func (m DetailModel) tabLabel(name string) string {
 // new mental model, and the help popup (`?`) carries the full reference.
 // Kept as a method so callers don't break.
 func (m DetailModel) BorderTopRightHint() string {
+	return ""
+}
+
+// BorderBottomLeftHint returns a short hotkey hint for the bottom-left of
+// panel 3's border, or "" when no hint applies. Currently surfaces "esc:
+// back" on the Relatives tab at depth > 1 so users discover that Esc
+// pops one drill level back up the chain (mirrors panel 2's ".: toggle
+// helm" pattern, and matches the "Back" verb used in km8's Key Bindings
+// docs for Esc).
+func (m DetailModel) BorderBottomLeftHint() string {
+	if m.ActiveTabName() == "Relatives" && m.Depth() > 1 {
+		return "esc: back"
+	}
 	return ""
 }
 
