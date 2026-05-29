@@ -102,7 +102,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
 
 	title := "󰦕 Confirm"
-	hint := " Enter/y: confirm  Esc/Space/n/q: cancel "
+	hint := " Enter/y: confirm  Space: cancel "
 
 	// Cap inner width at 70% of screen (or 80 chars if no screen size).
 	maxInnerW := 80

@@ -46,9 +46,11 @@ func drainPanel2MenuToInteractive(t *testing.T, m *Panel2MenuPopupModel, openCmd
 // ── items shape ────────────────────────────────────────────────────────────
 
 func TestPanel2Menu_Items_PodHasShell(t *testing.T) {
-	// Pod has containers — Shell must appear, full set.
-	items := buildPanel2MenuItems(k8s.ResourcePods, false)
-	wantKeys := []string{"Y", "E", "S", "D"}
+	// Pod has containers — Shell must appear. Pod also drills (→ containers)
+	// so Enter entry is appended at the END (with separator). Full set:
+	// Y / E / S / D / Enter, Enter has groupBreak=true.
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false)
+	wantKeys := []string{"Y", "E", "S", "D", "Enter"}
 	if len(items) != len(wantKeys) {
 		t.Fatalf("Pod menu len=%d, want %d (keys=%v)", len(items), len(wantKeys), wantKeys)
 	}
@@ -60,14 +62,17 @@ func TestPanel2Menu_Items_PodHasShell(t *testing.T) {
 }
 
 func TestPanel2Menu_Items_ServiceNoShell(t *testing.T) {
-	// Service has no containers — Shell must be omitted.
-	items := buildPanel2MenuItems(k8s.ResourceServices, false)
+	// Service has no containers — Shell must be omitted. Service also
+	// doesn't drill — no Enter entry.
+	items := buildPanel2MenuItems(k8s.ResourceServices, k8s.ResourceItem{}, false)
 	for _, it := range items {
 		if it.key == "S" {
 			t.Errorf("Service menu must not have Shell, got items=%v", items)
 		}
+		if it.key == "Enter" {
+			t.Errorf("Service menu must not have Enter entry (no drill), got items=%v", items)
+		}
 	}
-	// Y/E/D should be present.
 	keys := itemKeys(items)
 	for _, want := range []string{"Y", "E", "D"} {
 		if !contains(keys, want) {
@@ -78,16 +83,15 @@ func TestPanel2Menu_Items_ServiceNoShell(t *testing.T) {
 
 func TestPanel2Menu_Items_HelmManagedRuleA(t *testing.T) {
 	// Helm-managed pod: Edit and Delete dropped (Rule A read-only).
-	// Shell still present because the resource has containers and shell
-	// is a read action.
-	items := buildPanel2MenuItems(k8s.ResourcePods, true)
+	// Shell + Enter still present (read actions).
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, true)
 	keys := itemKeys(items)
 	for _, banned := range []string{"E", "D"} {
 		if contains(keys, banned) {
 			t.Errorf("helm-managed Pod must not show %q (Rule A read-only), got %v", banned, keys)
 		}
 	}
-	for _, want := range []string{"Y", "S"} {
+	for _, want := range []string{"Enter", "Y", "S"} {
 		if !contains(keys, want) {
 			t.Errorf("helm-managed Pod missing %q, got %v", want, keys)
 		}
@@ -95,8 +99,9 @@ func TestPanel2Menu_Items_HelmManagedRuleA(t *testing.T) {
 }
 
 func TestPanel2Menu_Items_EventsNoEditNoDelete(t *testing.T) {
-	// Events: system-generated immutable, both E and D are dropped.
-	items := buildPanel2MenuItems(k8s.ResourceEvents, false)
+	// Events: system-generated immutable — E, D dropped. Events don't drill
+	// either, so no Enter entry. Result: YAML only.
+	items := buildPanel2MenuItems(k8s.ResourceEvents, k8s.ResourceItem{}, false)
 	keys := itemKeys(items)
 	if len(keys) != 1 || keys[0] != "Y" {
 		t.Errorf("Events menu should be YAML only, got %v", keys)
@@ -105,7 +110,8 @@ func TestPanel2Menu_Items_EventsNoEditNoDelete(t *testing.T) {
 
 func TestPanel2Menu_Items_NodesEditNoDelete(t *testing.T) {
 	// Nodes: Edit kept (admin label/taint changes), Delete blocked.
-	items := buildPanel2MenuItems(k8s.ResourceNodes, false)
+	// Nodes don't drill — no Enter entry.
+	items := buildPanel2MenuItems(k8s.ResourceNodes, k8s.ResourceItem{}, false)
 	keys := itemKeys(items)
 	if !contains(keys, "Y") || !contains(keys, "E") {
 		t.Errorf("Nodes menu missing YAML or Edit, got %v", keys)
@@ -113,12 +119,15 @@ func TestPanel2Menu_Items_NodesEditNoDelete(t *testing.T) {
 	if contains(keys, "D") {
 		t.Errorf("Nodes menu must not have Delete (admin infra action), got %v", keys)
 	}
+	if contains(keys, "Enter") {
+		t.Errorf("Nodes menu must not have Enter (no drill), got %v", keys)
+	}
 }
 
 func TestPanel2Menu_Items_NamespacesEditNoDelete(t *testing.T) {
-	// Namespaces: Edit kept (labels/annotations), Delete blocked
-	// (cascades into every workload — too destructive for a list hotkey).
-	items := buildPanel2MenuItems(k8s.ResourceNamespaces, false)
+	// Namespaces: Edit kept (labels/annotations), Delete blocked.
+	// Namespaces don't drill — no Enter entry.
+	items := buildPanel2MenuItems(k8s.ResourceNamespaces, k8s.ResourceItem{}, false)
 	keys := itemKeys(items)
 	if !contains(keys, "Y") || !contains(keys, "E") {
 		t.Errorf("Namespaces menu missing YAML or Edit, got %v", keys)
@@ -129,30 +138,53 @@ func TestPanel2Menu_Items_NamespacesEditNoDelete(t *testing.T) {
 }
 
 func TestPanel2Menu_Items_HelmManagedNoContainer(t *testing.T) {
-	// Helm-managed Service: only YAML remains (no E/D from Rule A,
-	// no S because Service has no containers).
-	items := buildPanel2MenuItems(k8s.ResourceServices, true)
+	// Helm-managed Service: only YAML remains.
+	items := buildPanel2MenuItems(k8s.ResourceServices, k8s.ResourceItem{}, true)
 	keys := itemKeys(items)
 	if len(keys) != 1 || keys[0] != "Y" {
 		t.Errorf("helm-managed Service should only have YAML, got %v", keys)
 	}
 }
 
+func TestPanel2Menu_Items_DeploymentDrillsToPods(t *testing.T) {
+	// Deployment drills to Pods — Enter entry is last with groupBreak,
+	// hint should say "drill into pods" (KubectlName "pod" + "s").
+	items := buildPanel2MenuItems(k8s.ResourceDeployments, k8s.ResourceItem{}, false)
+	last := items[len(items)-1]
+	if last.key != "Enter" {
+		t.Fatalf("Deployment last item must be Enter (drill), got %q", last.key)
+	}
+	if last.hint != "drill into pods" {
+		t.Errorf("Deployment Enter hint = %q, want %q", last.hint, "drill into pods")
+	}
+}
+
+func TestPanel2Menu_Items_PodDrillsToContainers(t *testing.T) {
+	// Pod drills to containers (special-cased — containers aren't a K8s
+	// API resource so we don't go through the registry's KubectlName).
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false)
+	last := items[len(items)-1]
+	if last.key != "Enter" {
+		t.Fatalf("Pod last item must be Enter, got %q", last.key)
+	}
+	if last.hint != "drill into containers" {
+		t.Errorf("Pod Enter hint = %q, want %q", last.hint, "drill into containers")
+	}
+}
+
 // ── commit paths ───────────────────────────────────────────────────────────
 
 func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
+	// Cursor starts at 0 = YAML. Pressing Enter commits Y.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
 	cmd := m.Open(k8s.ResourcePods, item)
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
-	// cursor starts at 0 = YAML
 	_, batchCmd := m.Update(key("enter"))
 	if batchCmd == nil {
 		t.Fatal("Enter must return a Cmd (close + action)")
 	}
-	// Drive the batch to find the action msg — close cmd may emit
-	// AnimTickMsg, action cmd emits Panel2MenuActionMsg.
 	found := false
 	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
 		am, ok := msg.(Panel2MenuActionMsg)
@@ -170,6 +202,37 @@ func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 	})
 	if !found {
 		t.Error("Enter did not emit Panel2MenuActionMsg")
+	}
+}
+
+func TestPanel2Menu_EnterOnDrillRowEmitsEnter(t *testing.T) {
+	// Pod menu ends with Enter (drill) at the last index. G jumps cursor
+	// to the last item; pressing Enter commits Action="Enter" → app.go
+	// maps to enterDrillDown.
+	m := newPanel2Menu(t)
+	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
+	cmd := m.Open(k8s.ResourcePods, item)
+	drainPanel2MenuToInteractive(t, &m, cmd)
+
+	m, _ = m.Update(key("G"))
+	_, batchCmd := m.Update(key("enter"))
+	if batchCmd == nil {
+		t.Fatal("Enter must return a Cmd")
+	}
+	found := false
+	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
+		am, ok := msg.(Panel2MenuActionMsg)
+		if !ok {
+			return false
+		}
+		if am.Action != "Enter" {
+			t.Errorf("last cursor (drill row) should commit Enter, got %q", am.Action)
+		}
+		found = true
+		return true
+	})
+	if !found {
+		t.Error("Enter on drill row did not emit Panel2MenuActionMsg")
 	}
 }
 
@@ -261,15 +324,22 @@ func TestPanel2Menu_EscCloses(t *testing.T) {
 
 // ── container drill (OpenForContainer) ─────────────────────────────────────
 
-func TestPanel2Menu_OpenForContainer_ShellOnly(t *testing.T) {
-	// Container drill view: only Shell — containers aren't standalone
-	// API objects so YAML/Edit/Delete don't apply.
+func TestPanel2Menu_OpenForContainer_ShellAndBack(t *testing.T) {
+	// Container drill view: Shell (containers aren't standalone API objects
+	// so YAML/Edit/Delete don't apply) + Esc back row (with separator) so
+	// users discover they can pop back up.
 	m := newPanel2Menu(t)
 	cmd := m.OpenForContainer("nginx-pod", "default", "nginx")
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
-	if len(m.items) != 1 || m.items[0].key != "S" {
-		t.Fatalf("container menu items=%v, want single Shell entry", itemKeys(m.items))
+	wantKeys := []string{"S", "Esc"}
+	if len(m.items) != len(wantKeys) {
+		t.Fatalf("container menu len=%d, want %d (keys=%v)", len(m.items), len(wantKeys), itemKeys(m.items))
+	}
+	for i, want := range wantKeys {
+		if m.items[i].key != want {
+			t.Errorf("container menu item[%d].key=%q, want %q", i, m.items[i].key, want)
+		}
 	}
 }
 
@@ -296,6 +366,35 @@ func TestPanel2Menu_OpenForContainer_EnterCommitsShell(t *testing.T) {
 	})
 	if !found {
 		t.Error("container Enter did not emit Panel2MenuActionMsg")
+	}
+}
+
+func TestPanel2Menu_OpenForContainer_EscRowEmitsEsc(t *testing.T) {
+	// Cursor j to the Esc row, then Enter commits Action="Esc" — app.go
+	// maps this to exitDrillDown (pop back to pod's container list).
+	m := newPanel2Menu(t)
+	cmd := m.OpenForContainer("nginx-pod", "default", "nginx")
+	drainPanel2MenuToInteractive(t, &m, cmd)
+
+	m, _ = m.Update(key("j"))
+	_, batchCmd := m.Update(key("enter"))
+	if batchCmd == nil {
+		t.Fatal("Enter on Esc row must return a commit cmd")
+	}
+	found := false
+	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
+		am, ok := msg.(Panel2MenuActionMsg)
+		if !ok {
+			return false
+		}
+		if am.Action != "Esc" {
+			t.Errorf("container Esc row must commit Esc, got %q", am.Action)
+		}
+		found = true
+		return true
+	})
+	if !found {
+		t.Error("container Esc row did not emit Panel2MenuActionMsg")
 	}
 }
 

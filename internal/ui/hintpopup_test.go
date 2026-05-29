@@ -83,6 +83,20 @@ func TestHintPopup_Events_RendersAllRows(t *testing.T) {
 	}
 }
 
+func TestHintPopup_Conditions_RendersAllRows(t *testing.T) {
+	m := newHintPopup(t)
+	title, rows := conditionsHintContent()
+	cmd := m.Open(title, rows)
+	drainHintToInteractive(t, &m, cmd)
+
+	view := m.RenderPopup()
+	for _, want := range []string{"Conditions", "j/k", "u/d", "gg/G", "y", "z"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("conditions hint missing %q", want)
+		}
+	}
+}
+
 func TestHintPopup_RelativesDrill_RendersAllRows(t *testing.T) {
 	m := newHintPopup(t)
 	title, rows := relativesDrillHintContent()
@@ -90,10 +104,17 @@ func TestHintPopup_RelativesDrill_RendersAllRows(t *testing.T) {
 	drainHintToInteractive(t, &m, cmd)
 
 	view := m.RenderPopup()
-	for _, want := range []string{"j/k", "Enter", "Y", "Esc", "drill"} {
+	for _, want := range []string{"j/k", "Y", "Enter", "drill"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("relatives-drill hint missing key %q", want)
 		}
+	}
+	// Depth=1 hint should NOT show the drill-up icon (which only the Esc
+	// row uses) — there's no parent in the chain to pop back to. The
+	// popup's bottom border legend mentions "Esc/q/Space: close" so we
+	// can't just grep for "Esc" — checking the unique icon is safer.
+	if strings.Contains(view, drillUpIcon) {
+		t.Errorf("depth=1 relatives hint must not show the Esc row (nothing to pop)")
 	}
 }
 

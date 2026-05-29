@@ -520,8 +520,8 @@ func (m YamlPopupModel) renderFullPopup() string {
 // hint. Falls back to a short hint and finally drops the indicator if the
 // popup width is too tight.
 func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicator string) {
-	const hintFull = " E:edit  y:copy  /:search  Esc/Space:close "
-	const hintShort = " E  y  /  Esc/Space "
+	const hintFull = " E:edit  y:copy  /:search  Space:close "
+	const hintShort = " E  y  /  Space "
 	hint = hintFull
 
 	total := len(m.contentLines)

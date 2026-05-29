@@ -49,6 +49,7 @@ type panel2MenuItem struct {
 	hint  string // short description shown next to the label, helmdocmenu-style
 }
 
+
 // Panel2MenuActionMsg is emitted when the user commits a menu item (cursor
 // + Enter or direct hotkey letter). AppModel maps the Action key to the
 // same code path as the direct keypress on the underlying panel 2 row.
@@ -71,7 +72,7 @@ func (m *Panel2MenuPopupModel) Open(rt k8s.ResourceType, item k8s.ResourceItem) 
 	m.resource = rt
 	m.item = item
 	m.helmManaged = k8s.IsHelmManaged(item)
-	m.items = buildPanel2MenuItems(rt, m.helmManaged)
+	m.items = buildPanel2MenuItems(rt, item, m.helmManaged)
 	m.cursor = 0
 	m.titleOverride = ""
 	return m.animator.Open()
@@ -90,6 +91,7 @@ func (m *Panel2MenuPopupModel) OpenForContainer(podName, namespace, containerNam
 	m.titleOverride = " container/" + containerName
 	m.items = []panel2MenuItem{
 		{label: "Shell", key: "S", hint: "kubectl exec -it"},
+		{label: "Esc " + drillUpIcon, key: "Esc", hint: "back to pod's container list"},
 	}
 	m.cursor = 0
 	return m.animator.Open()
@@ -187,7 +189,15 @@ func (m Panel2MenuPopupModel) RenderPopup() string {
 //     practical purpose for a scout tool (e.g. Events can't be edited
 //     meaningfully; Node deletion is admin-scope, not km8's audience).
 //  3. resourceHasContainer — Shell only on kinds with containers (Pod).
-func buildPanel2MenuItems(rt k8s.ResourceType, helmManaged bool) []panel2MenuItem {
+//
+// The Enter entry is appended at the END (with a separator above) when the
+// kind supports drill-down — surfaces the drill action for discoverability,
+// visually separated from the hotkey-driven Y/E/S/D group since Enter has
+// no single-letter hotkey. Multi-char key "Enter" skips bracketHotkey
+// (no false "[E]nter" rendering) and bypasses direct-hotkey dispatch
+// (cursor+Enter only — direct Enter from elsewhere in the menu commits
+// the cursor's own item, not the drill entry).
+func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool) []panel2MenuItem {
 	canEdit := !helmManaged && resourceAllowsEdit(rt)
 	canDelete := !helmManaged && resourceAllowsDelete(rt)
 
@@ -203,7 +213,38 @@ func buildPanel2MenuItems(rt k8s.ResourceType, helmManaged bool) []panel2MenuIte
 	if canDelete {
 		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
 	}
+	if rt.SupportsDrillDown() {
+		target := panel2DrillLabel(rt, item)
+		hint := "drill into " + target
+		if target == "" {
+			hint = "drill into children"
+		}
+		items = append(items, panel2MenuItem{
+			label: "Enter " + drillDownIcon,
+			key:   "Enter",
+			hint:  hint,
+		})
+	}
 	return items
+}
+
+// panel2DrillLabel returns the human-readable plural for what Enter drills
+// into. Pod → "containers" (special-cased: containers aren't a K8s API
+// resource, just a Pod sub-component). Other kinds resolve via registry's
+// ChildTypeFor + KubectlName + "s".
+func panel2DrillLabel(rt k8s.ResourceType, item k8s.ResourceItem) string {
+	if rt == k8s.ResourcePods {
+		return "containers"
+	}
+	def := k8s.DefaultRegistry.Get(rt)
+	if def == nil || def.DrillDown == nil {
+		return ""
+	}
+	childType := def.DrillDown.ChildTypeFor(item)
+	if childType == "" {
+		return ""
+	}
+	return childType.KubectlName() + "s"
 }
 
 // resourceAllowsEdit returns false for kinds where `kubectl edit` is
@@ -228,9 +269,11 @@ func resourceAllowsDelete(rt k8s.ResourceType) bool {
 // bracketHotkey wraps the hotkey letter inside the label with square
 // brackets (vim-help convention). "YAML" + "Y" → "[Y]AML". Falls back
 // to the unmodified label when the hotkey isn't a substring (case-
-// insensitive match), preserving label readability over hint correctness.
+// insensitive match) or when the key is multi-character (e.g. "Enter" —
+// bracketing would be misleading since Enter isn't a single-letter
+// shortcut), preserving label readability over hint correctness.
 func bracketHotkey(label, key string) string {
-	if label == "" || key == "" {
+	if label == "" || key == "" || len(key) > 1 {
 		return label
 	}
 	upperLabel := strings.ToUpper(label)
@@ -269,7 +312,7 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	if m.titleOverride != "" {
 		title = m.titleOverride
 	}
-	hint := " j/k: move  Enter: open  Esc/q/Space: close "
+	hint := " j/k: move  Space: close "
 
 	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.
 	// Row shape: " ▶ [K]rest   hint " — vim-help style hotkey bracketing,

@@ -793,6 +793,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				title, rows := eventsHintContent()
 				return m, m.hintPopup.Open(title, rows)
 			}
+			// Panel 3 Conditions tab: scrollable table like Events, same nav
+			// hint set — Space pops the read-only cheatsheet so user knows
+			// j/k/u/d/gg/G/y/z apply here too.
+			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Conditions" {
+				m.hintPopup.SetSize(m.width, m.height)
+				title, rows := conditionsHintContent()
+				return m, m.hintPopup.Open(title, rows)
+			}
 			// v1.5.x: Relatives tab Space splits by drill depth.
 			//   depth>1 → open breadcrumb popup (chain navigator).
 			//   depth=1 → no chain to walk, show the drill cheatsheet
@@ -1277,6 +1285,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		resource := msg.Resource
 		item := msg.Item
 		switch msg.Action {
+		case "Enter":
+			// Same code path as pressing Enter on the row directly — the
+			// menu entry is purely a discoverability surface.
+			return m, m.enterDrillDown()
+		case "Esc":
+			// Mirror of the global Esc behavior — pop one drill level.
+			// Surfaced in the container menu so users know they can back
+			// out the same way other popups close.
+			return m, m.exitDrillDown()
 		case "Y":
 			yaml := m.detail.CurrentLevelYAML()
 			if yaml == "" {

@@ -76,6 +76,14 @@ func (m HintPopupModel) View() string { return "" }
 
 // ── content builders ──────────────────────────────────────────────────────
 
+// drillDownIcon (U+F0FC4) and drillUpIcon (U+F0FC5) are the directionally-
+// symmetric glyphs paired with the "Enter" (drill in) and "Esc" (drill out
+// / pop level) actions across menus and hint popups. Used by both panel 2's
+// per-row context menu and panel 3's Relatives hint to give those two
+// actions a consistent visual identity.
+const drillDownIcon = "\U000f0fc4"
+const drillUpIcon = "\U000f0fc5"
+
 // drillArrow (\U000f060d) is the southeast/right arrow used in the Relatives
 // tab. We embed it before sub-mode keys to mark visual nesting — without it,
 // search-mode Enter looked like a duplicate of normal-mode Enter.
@@ -88,13 +96,13 @@ const titleIcon = "\U000f094b"
 func sidebarHintContent() (string, []hintRow) {
 	title := " " + titleIcon + " km8 — what can I do here?"
 	rows := []hintRow{
-		{"j/k", "move cursor (also ↓/↑)"},
-		{"Enter", "into — focus the selected resource into panel 2"},
-		{"/", "search by name; type to filter"},
-		{drillArrow + " Enter", "while searching: lock the filter and exit search mode"},
-		{drillArrow + " Esc", "clear search / exit search mode"},
-		{"N", "switch namespace (global)"},
-		{"C", "switch context (global)"},
+		{keys: "j/k", hint: "move cursor (also ↓/↑)"},
+		{keys: "Enter", hint: "into — focus the selected resource into panel 2"},
+		{keys: "/", hint: "search by name; type to filter"},
+		{keys: drillArrow + " Enter", hint: "while searching: lock the filter and exit search mode"},
+		{keys: drillArrow + " Esc", hint: "clear search / exit search mode"},
+		{keys: "N", hint: "switch namespace (global)"},
+		{keys: "C", hint: "switch context (global)"},
 	}
 	return title, rows
 }
@@ -102,12 +110,12 @@ func sidebarHintContent() (string, []hintRow) {
 func logsHintContent() (string, []hintRow) {
 	title := " " + titleIcon + " Logs — what can I do here?"
 	rows := []hintRow{
-		{"j/k", "scroll one line (also ↓/↑)"},
-		{"u/d", "scroll half a page"},
-		{"gg", "jump to top — pauses auto-follow"},
-		{"G", "jump to live tail — resumes auto-follow"},
-		{"y", "copy entire log buffer to clipboard"},
-		{"z", "toggle full-screen panel"},
+		{keys: "j/k", hint: "scroll one line (also ↓/↑)"},
+		{keys: "u/d", hint: "scroll half a page"},
+		{keys: "gg", hint: "jump to top — pauses auto-follow"},
+		{keys: "G", hint: "jump to live tail — resumes auto-follow"},
+		{keys: "y", hint: "copy entire log buffer to clipboard"},
+		{keys: "z", hint: "toggle full-screen panel"},
 	}
 	return title, rows
 }
@@ -115,11 +123,23 @@ func logsHintContent() (string, []hintRow) {
 func eventsHintContent() (string, []hintRow) {
 	title := " " + titleIcon + " Events — what can I do here?"
 	rows := []hintRow{
-		{"j/k", "scroll one line (also ↓/↑)"},
-		{"u/d", "scroll half a page"},
-		{"gg/G", "jump to top / bottom"},
-		{"y", "copy events to clipboard"},
-		{"z", "toggle full-screen panel"},
+		{keys: "j/k", hint: "scroll one line (also ↓/↑)"},
+		{keys: "u/d", hint: "scroll half a page"},
+		{keys: "gg/G", hint: "jump to top / bottom"},
+		{keys: "y", hint: "copy events to clipboard"},
+		{keys: "z", hint: "toggle full-screen panel"},
+	}
+	return title, rows
+}
+
+func conditionsHintContent() (string, []hintRow) {
+	title := " " + titleIcon + " Conditions — what can I do here?"
+	rows := []hintRow{
+		{keys: "j/k", hint: "scroll one line (also ↓/↑)"},
+		{keys: "u/d", hint: "scroll half a page"},
+		{keys: "gg/G", hint: "jump to top / bottom"},
+		{keys: "y", hint: "copy conditions to clipboard"},
+		{keys: "z", hint: "toggle full-screen panel"},
 	}
 	return title, rows
 }
@@ -127,21 +147,22 @@ func eventsHintContent() (string, []hintRow) {
 func panel2EmptyHintContent() (string, []hintRow) {
 	title := " " + titleIcon + " No items here — try"
 	rows := []hintRow{
-		{"N", "switch to a different namespace"},
-		{"/", "current filter might be hiding rows"},
-		{".", "toggle helm-managed visibility — items may be hidden"},
-		{"C", "switch to a different context"},
+		{keys: "N", hint: "switch to a different namespace"},
+		{keys: "/", hint: "current filter might be hiding rows"},
+		{keys: ".", hint: "toggle helm-managed visibility — items may be hidden"},
+		{keys: "C", hint: "switch to a different context"},
 	}
 	return title, rows
 }
 
 func relativesDrillHintContent() (string, []hintRow) {
 	title := " " + titleIcon + " Relatives — what can I do here?"
+	// Depth=1 only — no parent in the chain to pop back to, so no Esc row.
+	// At depth>1 the Space handler opens the breadcrumb popup instead.
 	rows := []hintRow{
-		{"j/k", "move cursor over related refs"},
-		{"Enter", "drill into the cursor's resource — chain extends"},
-		{"Y", "open the cursor row's YAML in a popup"},
-		{"Esc", "pop back one drill level"},
+		{keys: "j/k", hint: "move cursor over related refs"},
+		{keys: "Y", hint: "open the cursor row's YAML in a popup"},
+		{keys: "Enter " + drillDownIcon, hint: "drill into the cursor's resource — chain extends"},
 	}
 	return title, rows
 }
@@ -195,7 +216,7 @@ func (m HintPopupModel) renderFullPopup() string {
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	title := m.title
-	bottomHint := " Esc/q/Space: close "
+	bottomHint := " Space: close "
 
 	const keyColW = 10
 	innerW := 60

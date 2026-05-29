@@ -380,7 +380,7 @@ func (m AppLogModel) renderFullPopup() string {
 		}
 		b.WriteString("\n")
 	}
-	hint := " !/Esc/Space:close j/k u/d y:copy D:clear "
+	hint := " Space:close j/k u/d y:copy D:clear "
 	indicator := ""
 	if totalLines := len(allLines); totalLines > 0 {
 		indicator = fmt.Sprintf(" %d of %d ", m.scrollOffset+1, totalLines)
