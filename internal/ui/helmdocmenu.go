@@ -214,7 +214,7 @@ func (m HelmDocMenuPopupModel) renderFullPopup() string {
 	if m.releaseNS != "" {
 		title += " (" + m.releaseNS + ")"
 	}
-	hint := " j/k: move  Enter: open  Esc/q/Space: close "
+	hint := " j/k: move  Enter: open  Space: close "
 
 	// Width: pick the widest of title, hint, and rows; clamp to 85% screen.
 	maxInnerW := 60

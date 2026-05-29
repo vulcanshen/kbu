@@ -226,7 +226,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 		b.WriteString(leftBorder + line + pad + rightBorder + "\n")
 	}
 
-	hint := " Enter: select  /: search  Esc/Space: cancel "
+	hint := " Enter: select  /: search  Space: cancel "
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
