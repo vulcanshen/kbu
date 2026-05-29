@@ -650,29 +650,45 @@ func (m *DetailModel) ResetDrillStack() {
 }
 
 // TabTitle returns the tab bar string for embedding in the panel border.
-// Active tab is bracketed; the active Logs tab is rendered in green when
-// auto-follow is engaged (replaces the earlier ▼ marker); Relatives gets a
-// chain-level suffix when drilled. Embed in Panel 3's border title — Panel 2
-// stays clean with just its breadcrumb.
+// Active tab is bracketed; the active Logs tab's label is rendered in green
+// when auto-follow is engaged (replaces the earlier ▼ marker); Relatives
+// gets a chain-level suffix when drilled. Embed in Panel 3's border title —
+// Panel 2 stays clean with just its breadcrumb.
+//
+// Each piece is rendered with its own complete style (border-color for
+// separators/inactive, border-color+bold for active brackets, green for the
+// Logs label). The outer caller's title style would otherwise reset to
+// terminal default after the green's ANSI reset and lose the border color
+// for everything after [Logs] — pre-styling every piece keeps the colors
+// stable across that boundary.
 func (m DetailModel) TabTitle() string {
+	borderHex := m.theme.Detail.BorderColor
+	if m.focused {
+		borderHex = m.theme.Sidebar.CategoryFg
+	}
+	bStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderHex))
+	tStyle := bStyle.Bold(true)
+
 	var parts []string
 	for i, tab := range m.tabs {
 		label := m.tabLabel(tab)
 		if DetailTab(i) == m.activeTab {
-			bracketed := "[" + label + "]"
 			if tab == "Logs" && m.followTail {
-				// Color the whole [Logs] block — same Running-green as
-				// healthy Pod status, since auto-follow == "alive stream".
-				bracketed = lipgloss.NewStyle().
+				// Brackets keep the active tab styling (border-color +
+				// bold); only the inner label switches to green.
+				greenLabel := lipgloss.NewStyle().
 					Foreground(lipgloss.Color(m.theme.Status.Running)).
-					Render(bracketed)
+					Bold(true).
+					Render(label)
+				parts = append(parts, tStyle.Render("[")+greenLabel+tStyle.Render("]"))
+			} else {
+				parts = append(parts, tStyle.Render("["+label+"]"))
 			}
-			parts = append(parts, bracketed)
 		} else {
-			parts = append(parts, " "+label+" ")
+			parts = append(parts, bStyle.Render(" "+label+" "))
 		}
 	}
-	return strings.Join(parts, "─")
+	return strings.Join(parts, bStyle.Render("─"))
 }
 
 // ActiveTabTitle is kept as a thin wrapper for callers that still expect
