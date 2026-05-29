@@ -68,11 +68,21 @@ func NewPanel2MenuPopupModel(t *theme.Theme) Panel2MenuPopupModel {
 
 // Open shows the menu for the given row. Items are computed at Open so
 // the same cursor item produces a stable menu (no rebuild on rerender).
-func (m *Panel2MenuPopupModel) Open(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+// canPop=true appends the "Esc ↖" back entry — used when the table is
+// inside a drill chain (e.g. user pressed Enter on a Deployment row and
+// is now viewing its Pods, so Esc pops back to the Deployment list).
+func (m *Panel2MenuPopupModel) Open(rt k8s.ResourceType, item k8s.ResourceItem, canPop bool) tea.Cmd {
 	m.resource = rt
 	m.item = item
 	m.helmManaged = k8s.IsHelmManaged(item)
 	m.items = buildPanel2MenuItems(rt, item, m.helmManaged)
+	if canPop {
+		m.items = append(m.items, panel2MenuItem{
+			label: "Esc " + drillUpIcon,
+			key:   "Esc",
+			hint:  "back to parent list",
+		})
+	}
 	m.cursor = 0
 	m.titleOverride = ""
 	return m.animator.Open()
@@ -91,7 +101,7 @@ func (m *Panel2MenuPopupModel) OpenForContainer(podName, namespace, containerNam
 	m.titleOverride = " container/" + containerName
 	m.items = []panel2MenuItem{
 		{label: "Shell", key: "S", hint: "kubectl exec -it"},
-		{label: "Esc " + drillUpIcon, key: "Esc", hint: "back to pod's container list"},
+		{label: "Esc " + drillUpIcon, key: "Esc", hint: "back to pod list"},
 	}
 	m.cursor = 0
 	return m.animator.Open()
