@@ -4,6 +4,84 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.5.5] - 2026-05-29
+
+Debug visibility. Events tab and a new Conditions tab carry the
+"why is this resource sad" story for every workload kind — no more
+jumping back to `kubectl describe`. Events aggregation now walks the
+full controller chain (CronJob → Jobs → Pods, Deployment → current
+ReplicaSet → Pods, StatefulSet/DaemonSet/Job → Pods). Panel 2 menu
+gains Enter (drill) and Esc (back) entries for discoverability. Logs
+auto-follow indicator switched from a ▼ marker to coloring the active
+`[Logs]` label green.
+
+### Added
+
+- **Conditions tab.** New detail-panel tab showing the resource's
+  `.status.conditions` as a `TYPE / STATUS / REASON / MESSAGE / AGE`
+  table — same content as the Conditions section of `kubectl describe`.
+  Status `False` rows highlighted in red. Tab appears for kinds that
+  populate conditions: Pod / Node / PVC / Deployment / StatefulSet /
+  DaemonSet / Job / HorizontalPodAutoscaler / Ingress. Hidden for
+  kinds without conditions (ConfigMap, Secret, Service, ServiceAccount,
+  etc.). Why it matters: events expire after the cluster's TTL
+  (default 1h), but conditions reflect the resource's current state
+  — `PodScheduled: False, Insufficient cpu` stays visible until the
+  Pod is actually scheduled.
+- **Aggregate child events for all workload kinds.** Selecting a
+  workload's row and switching to the Events tab now merges events
+  from the workload itself AND its child Pods, sorted newest first.
+  The Object column distinguishes source kind so you see the chain
+  inline. Covers Deployment (via current ReplicaSet), StatefulSet,
+  DaemonSet, Job, ReplicaSet, CronJob. Mirrors the existing aggregate-
+  logs pattern; same `PodsForWorkload` helper drives both.
+- **CronJob 3-tier aggregate.** CronJob's Events tab additionally
+  pulls in events from every owned Job (so you see Job-level
+  `SuccessfulCreate` / `BackoffLimitExceeded` / `Completed` alongside
+  the CronJob's `SuccessfulCreate` / `MissingJob` and the Pods'
+  `Scheduled` / `Pulled` / `Started`). Three layers in one view —
+  the killer feature for "why did last night's cron fail" debug.
+- **Conditions tab Space hint.** Same cheatsheet pattern as Logs /
+  Events tabs — `j/k/u/d/gg/G/y/z` for scroll/copy/expand.
+- **Panel 2 menu Enter (drill) entry.** When the selected kind
+  supports drill-down, the per-row `Space` menu now ends with an
+  `Enter ↘` row whose hint names the child kind ("drill into pods" /
+  "drill into containers" / etc.). Cursor + Enter on it triggers
+  the same drill as pressing Enter on the row directly — visible
+  in the menu for discoverability.
+- **Panel 2 menu Esc (back) entry.** When the table is inside a drill
+  chain (e.g. you pressed Enter on a Deployment and are now viewing
+  its Pods), the menu appends an `Esc ↖ back to parent list` row.
+  Cursor + Enter triggers `exitDrillDown`.
+- **Container menu Esc entry.** Same back row appended to the Pod →
+  containers context menu (Shell + Esc).
+- **Panel 3 bottom-left hint.** On the Relatives tab at depth > 1,
+  panel 3's border shows `esc: back` in the bottom-left, mirroring
+  panel 2's `.: toggle helm` pattern. Surfaces the pop-one-level
+  shortcut without requiring the help popup.
+
+### Changed
+
+- **Logs follow indicator.** Active `[Logs]` tab label rendered in
+  Status.Running green when auto-follow is engaged. Replaces the
+  prior `▼` text marker. Same semantic ("alive stream") expressed
+  visually instead of textually.
+- **Popup bottom hints trimmed.** All popup border bottom legends
+  (panel 2 menu, helm doc menu, breadcrumb, hint popup, app log,
+  YAML popup, confirm, namespace picker, context picker) now show
+  just `Space: close` / `Space: cancel`. The Esc / q / n / ! keys
+  still work, just no longer advertised. Reflects the v1.5.x
+  mental model: Space is the primary popup verb.
+- **CronJob added to demo fixtures.** `.local/demos/demo-app.yaml`
+  now includes a `demo-cron` CronJob firing every minute (busybox
+  heartbeat) for verifying the 3-tier aggregate path locally.
+
+### Fixed
+
+- **Stale-events workaround framing.** Empty Events tab on a healthy
+  resource is no longer the only signal — the new Conditions tab
+  fills the diagnostic gap when events have expired past TTL.
+
 ## [v1.5.4] - 2026-05-28
 
 Universal Space coverage. v1.5.3 closed panel 1; v1.5.4 closes the
