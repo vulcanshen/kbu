@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.5.6] - 2026-05-29
+
+Bugfix patch — single UI alignment fix, no feature change.
+
+### Fixed
+
+- **Pod status color disappeared after exiting a Pod → containers
+  drill-down.** Exiting container view rebuilt the pod table from raw
+  `item.Row` instead of the helm-augmented form. `ColumnsForResource(Pods)`
+  reserves index 1 for the helm marker, so raw rows shifted Status one
+  column left — `stylizeCell` then read the wrong cell and the
+  `Running` / `Pending` / `Error` coloring fell silent until the user
+  switched resources. Both exit branches (container-level pop, resource
+  drill-stack pop) now go through `augmentRowsWithHelm`. Regression
+  guarded by `TestAppModel_ExitDrillDownFromContainers_RowsStayHelmAligned`.
+
+### Changed
+
+- README license badge pinned to a static `GPL-3.0` shield instead of
+  shields.io's dynamic `github/license/*` endpoint, which has been
+  intermittently returning "Unable to select next GitHub token from pool"
+  for the past week. No user-visible change when shields.io is healthy.
+
 ## [v1.5.5] - 2026-05-29
 
 Debug visibility. Events tab and a new Conditions tab carry the
