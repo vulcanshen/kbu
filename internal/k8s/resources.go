@@ -825,16 +825,84 @@ func fetchDeployments(ctx context.Context, cs kubernetes.Interface, ns string) (
 	return items, nil
 }
 
-// PodsForWorkload dispatches to the right kind-specific resolver. Returns an
-// error when item.Raw isn't a supported workload type (Deployment for now;
-// StatefulSet / DaemonSet / Job to follow once their aggregate-log story is
-// scoped). Keeps the ui package free of apps/v1 imports.
+// PodsForWorkload dispatches to the right kind-specific resolver for the
+// workload's live Pods. Used by both aggregate logs and aggregate events.
+//
+// Supported kinds: Deployment, StatefulSet, DaemonSet, Job, ReplicaSet.
+// CronJob isn't supported (2-hop CronJob → Jobs → Pods, with "which Job is
+// current" needing extra logic).
+//
+// currentOnly only applies to Deployment (filters to its current ReplicaSet's
+// Pods, ignoring rollout leftovers). Other kinds don't have a revision model,
+// so currentOnly is ignored and all matching Pods are returned.
+//
+// Keeps the ui package free of apps/v1 / batchv1 imports.
 func PodsForWorkload(ctx context.Context, cs kubernetes.Interface, item ResourceItem, currentOnly bool) ([]PodTarget, error) {
 	switch raw := item.Raw.(type) {
 	case *appsv1.Deployment:
 		return PodsForDeployment(ctx, cs, raw, currentOnly)
+	case *appsv1.StatefulSet:
+		return PodsForStatefulSet(ctx, cs, raw)
+	case *appsv1.DaemonSet:
+		return PodsForDaemonSet(ctx, cs, raw)
+	case *appsv1.ReplicaSet:
+		return PodsForReplicaSet(ctx, cs, raw)
+	case *batchv1.Job:
+		return PodsForJob(ctx, cs, raw)
 	}
-	return nil, fmt.Errorf("aggregate logs not supported for %T", item.Raw)
+	return nil, fmt.Errorf("aggregate not supported for %T", item.Raw)
+}
+
+// PodsForStatefulSet returns Pods matching the StatefulSet's selector.
+// No revision filter — StatefulSets don't track revisions on Pods at the
+// selector level. Returns empty slice when no Pods match (not an error).
+func PodsForStatefulSet(ctx context.Context, cs kubernetes.Interface, ss *appsv1.StatefulSet) ([]PodTarget, error) {
+	if ss == nil || ss.Spec.Selector == nil {
+		return nil, fmt.Errorf("statefulset has no selector")
+	}
+	sel, err := metav1.LabelSelectorAsSelector(ss.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("invalid statefulset selector: %w", err)
+	}
+	return podTargetsFromSelector(ctx, cs, ss.Namespace, sel.String())
+}
+
+// PodsForDaemonSet returns Pods matching the DaemonSet's selector (one Pod
+// per matching Node). Returns empty slice when no Pods match.
+func PodsForDaemonSet(ctx context.Context, cs kubernetes.Interface, ds *appsv1.DaemonSet) ([]PodTarget, error) {
+	if ds == nil || ds.Spec.Selector == nil {
+		return nil, fmt.Errorf("daemonset has no selector")
+	}
+	sel, err := metav1.LabelSelectorAsSelector(ds.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("invalid daemonset selector: %w", err)
+	}
+	return podTargetsFromSelector(ctx, cs, ds.Namespace, sel.String())
+}
+
+// PodsForReplicaSet returns Pods matching the ReplicaSet's selector. Used
+// when the user drills into an RS from Deployment's Relatives — surfacing
+// just this RS's Pods (vs. all of the Deployment's selector).
+func PodsForReplicaSet(ctx context.Context, cs kubernetes.Interface, rs *appsv1.ReplicaSet) ([]PodTarget, error) {
+	if rs == nil || rs.Spec.Selector == nil {
+		return nil, fmt.Errorf("replicaset has no selector")
+	}
+	sel, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("invalid replicaset selector: %w", err)
+	}
+	return podTargetsFromSelector(ctx, cs, rs.Namespace, sel.String())
+}
+
+// PodsForJob returns Pods owned by the Job. Uses the `job-name=<jobName>`
+// label rather than spec.Selector because Job's auto-generated selector
+// (with controller-uid) is opaque and the job-name label is the standard
+// kubectl idiom (`kubectl logs job/X` works the same way).
+func PodsForJob(ctx context.Context, cs kubernetes.Interface, job *batchv1.Job) ([]PodTarget, error) {
+	if job == nil {
+		return nil, fmt.Errorf("nil job")
+	}
+	return podTargetsFromSelector(ctx, cs, job.Namespace, "job-name="+job.Name)
 }
 
 // PodsForDeployment resolves a Deployment to the list of pod targets whose
