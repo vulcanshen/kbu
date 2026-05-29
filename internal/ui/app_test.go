@@ -433,5 +433,64 @@ func TestAppModel_DualSlot_TxAlive_BlocksAnotherExec(t *testing.T) {
 	}
 }
 
+// TestAppModel_ExitDrillDownFromContainers_RowsStayHelmAligned guards the
+// v1.5.5-era regression where exiting the container drill-down (Pod →
+// containers → back) repopulated the table with raw item.Row instead of
+// augmentRowsWithHelm. ColumnsForResource(Pods) always reserves index 1
+// for the helm marker, so raw rows shifted Status one column left and
+// stylizeCell — which colors by the column whose Title=="Status" —
+// looked at the wrong cell, killing the Running green until the user
+// switched resources.
+func TestAppModel_ExitDrillDownFromContainers_RowsStayHelmAligned(t *testing.T) {
+	// Real Pod rows are 6 cells (Name/Ready/Status/Restarts/Age/Node) per
+	// the Pod ResourceDefinition's Columns slice. Match that shape exactly
+	// so column index 3 (Status, post-helm-augment) lines up with the
+	// "Running" / "Pending" cell.
+	items := []k8s.ResourceItem{
+		{Name: "nginx-a", UID: "uid-a", Row: []string{"nginx-a", "1/1", "Running", "0", "5m", "node-1"}},
+		{Name: "nginx-b", UID: "uid-b", Row: []string{"nginx-b", "0/1", "Pending", "0", "1m", "node-2"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+	m.statusLine = NewStatusLineModel(m.theme)
+	m.logStreamer = k8s.NewLogStreamer(nil)
+
+	// Simulate being in container view: drillDownPod set, columns swapped
+	// to containerColumns (no Status column). This is the state we exit
+	// from.
+	pod := items[0]
+	m.drillDownPod = &pod
+	m.table.SetColumns(containerColumns())
+	m.table.SetRows(containerRows(nil))
+
+	_ = m.exitDrillDown() // returned Cmd is a fetch closure — never executed
+
+	wantRows := augmentRowsWithHelm(items, k8s.ResourcePods)
+	if len(m.table.rows) != len(wantRows) {
+		t.Fatalf("row count = %d, want %d", len(m.table.rows), len(wantRows))
+	}
+	for i := range wantRows {
+		if len(m.table.rows[i]) != len(wantRows[i]) {
+			t.Errorf("row[%d] width = %d, want %d (raw item.Row leaked back into the table — Status column is now mis-aligned)", i, len(m.table.rows[i]), len(wantRows[i]))
+		}
+	}
+	// Belt-and-braces: the cell under the Status column must read
+	// "Running" / "Pending", not the Name. If this fails, podStatusColor
+	// would have no chance of matching and the row would render plain.
+	statusIdx := -1
+	for i, col := range m.table.columns {
+		if col.Title == "Status" {
+			statusIdx = i
+			break
+		}
+	}
+	if statusIdx < 0 {
+		t.Fatal("Pod columns have no Status column — test setup broken")
+	}
+	if m.table.rows[0][statusIdx] != "Running" {
+		t.Errorf("row[0] Status cell = %q, want %q (column/row mis-alignment after exitDrillDown)", m.table.rows[0][statusIdx], "Running")
+	}
+}
+
 // silence unused warning if tea is not referenced elsewhere in tests
 var _ tea.Msg = struct{}{}

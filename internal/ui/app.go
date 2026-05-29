@@ -1671,13 +1671,14 @@ func (m *AppModel) exitDrillDown() tea.Cmd {
 	if m.drillDownPod != nil {
 		m.drillDownPod = nil
 		m.drillDownContainers = nil
-		// Restore current resource's table
+		// Restore current resource's table. Rows MUST be helm-augmented to
+		// stay in lockstep with ColumnsForResource (which always reserves
+		// an index-1 helm marker column for non-Releases kinds). Using raw
+		// item.Row here shifts Status one column left, so stylizeCell —
+		// which colors by column title — reads the wrong cell and the
+		// Running green disappears until the next resource switch.
 		m.table.SetColumns(ColumnsForResource(m.currentResource))
-		rows := make([][]string, len(m.items))
-		for i, item := range m.items {
-			rows[i] = item.Row
-		}
-		m.table.SetRows(rows)
+		m.table.SetRows(augmentRowsWithHelm(m.items, m.currentResource))
 		m.statusLine.SetDrillDown(len(m.drillDownStack) > 0)
 		return m.refreshDetailForCurrent()
 	}
@@ -1690,11 +1691,7 @@ func (m *AppModel) exitDrillDown() tea.Cmd {
 		m.items = entry.parentItems
 		m.detail.SetResourceType(m.currentResource)
 		m.table.SetColumns(ColumnsForResource(m.currentResource))
-		rows := make([][]string, len(m.items))
-		for i, item := range m.items {
-			rows[i] = item.Row
-		}
-		m.table.SetRows(rows)
+		m.table.SetRows(augmentRowsWithHelm(m.items, m.currentResource))
 		m.statusLine.SetDrillDown(len(m.drillDownStack) > 0)
 		return m.refreshDetailForCurrent()
 	}
