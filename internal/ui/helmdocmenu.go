@@ -67,7 +67,7 @@ func (m *HelmDocMenuPopupModel) Open(releaseName, releaseNS string) tea.Cmd {
 	return m.animator.Open()
 }
 
-func (m *HelmDocMenuPopupModel) Close() tea.Cmd  { return m.animator.Close() }
+func (m *HelmDocMenuPopupModel) Close() tea.Cmd   { return m.animator.Close() }
 func (m *HelmDocMenuPopupModel) SetSize(w, _ int) { m.screenW = w }
 
 func (m HelmDocMenuPopupModel) IsActive() bool      { return m.animator.IsActive() }
@@ -289,4 +289,3 @@ func (m HelmDocMenuPopupModel) renderFullPopup() string {
 	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 	return b.String()
 }
-

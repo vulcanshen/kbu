@@ -49,7 +49,6 @@ type panel2MenuItem struct {
 	hint  string // short description shown next to the label, helmdocmenu-style
 }
 
-
 // Panel2MenuActionMsg is emitted when the user commits a menu item (cursor
 // + Enter or direct hotkey letter). AppModel maps the Action key to the
 // same code path as the direct keypress on the underlying panel 2 row.

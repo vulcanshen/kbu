@@ -62,8 +62,8 @@ type AppModel struct {
 	// the user can keep a long-running shell hidden in the background while
 	// editing or exec'ing into a container. tx-on-top is enforced at render
 	// + input routing time so only one popup is visible at a time.
-	shellPty *PtyView
-	txPty    *PtyView
+	shellPty        *PtyView
+	txPty           *PtyView
 	yamlPopup       YamlPopupModel
 	breadcrumbPopup BreadcrumbPopupModel
 	helmDocMenu     HelmDocMenuPopupModel
