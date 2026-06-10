@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.5.7] - 2026-06-10
+
+Two small `kubectl`-parity additions to the panel-2 list view: Pods
+gain the `IP` column from `kubectl get pods -o wide`, and Ingresses
+gain the `Address` column that `kubectl get ingress` shows by default
+but km8 was previously dropping.
+
+### Added
+
+- **Pod IP column.** New `IP` cell between `Age` and `Node` carrying
+  `.status.podIP`, matching the `kubectl get pods -o wide` layout.
+  Shows `<none>` while the kubelet hasn't reported one, again matching
+  kubectl. All three Pod row producers (`fetchPods`,
+  `fetchPodsWithSelector`, `fetchPodsForPVC`) were updated so
+  drill-downs from Deployments / ReplicaSets / Jobs / PVCs render the
+  IP column too — not just the top-level Pods view.
+- **Ingress Address column.** New `Address` cell between `Hosts` and
+  `Ports` carrying `.status.loadBalancer.ingress[*].ip|hostname`,
+  joined by commas when multiple entries exist (same as kubectl's
+  default). Empty when no ingress controller has written status —
+  clusters without a controller will see the same empty cell that
+  `kubectl get ingress` shows.
+
 ## [v1.5.6] - 2026-05-29
 
 Bugfix patch — single UI alignment fix, no feature change.
