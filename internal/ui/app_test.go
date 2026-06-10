@@ -442,13 +442,13 @@ func TestAppModel_DualSlot_TxAlive_BlocksAnotherExec(t *testing.T) {
 // looked at the wrong cell, killing the Running green until the user
 // switched resources.
 func TestAppModel_ExitDrillDownFromContainers_RowsStayHelmAligned(t *testing.T) {
-	// Real Pod rows are 6 cells (Name/Ready/Status/Restarts/Age/Node) per
-	// the Pod ResourceDefinition's Columns slice. Match that shape exactly
-	// so column index 3 (Status, post-helm-augment) lines up with the
-	// "Running" / "Pending" cell.
+	// Real Pod rows are 7 cells (Name/Ready/Status/Restarts/Age/IP/Node)
+	// per the Pod ResourceDefinition's Columns slice. Match that shape
+	// exactly so column index 3 (Status, post-helm-augment) lines up
+	// with the "Running" / "Pending" cell.
 	items := []k8s.ResourceItem{
-		{Name: "nginx-a", UID: "uid-a", Row: []string{"nginx-a", "1/1", "Running", "0", "5m", "node-1"}},
-		{Name: "nginx-b", UID: "uid-b", Row: []string{"nginx-b", "0/1", "Pending", "0", "1m", "node-2"}},
+		{Name: "nginx-a", UID: "uid-a", Row: []string{"nginx-a", "1/1", "Running", "0", "5m", "10.244.0.5", "node-1"}},
+		{Name: "nginx-b", UID: "uid-b", Row: []string{"nginx-b", "0/1", "Pending", "0", "1m", "<none>", "node-2"}},
 	}
 	m := appWithItems(items, 0)
 	m.currentResource = k8s.ResourcePods

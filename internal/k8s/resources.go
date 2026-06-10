@@ -158,6 +158,7 @@ func fetchPodsWithSelector(ctx context.Context, cs kubernetes.Interface, namespa
 				string(p.Status.Phase),
 				fmt.Sprintf("%d", podRestarts(p)),
 				formatAge(p.CreationTimestamp.Time),
+				podIP(p),
 				p.Spec.NodeName,
 			},
 		})
@@ -387,11 +388,21 @@ func fetchPods(ctx context.Context, cs kubernetes.Interface, ns string) ([]Resou
 				PodStatus(p),
 				fmt.Sprintf("%d", restarts),
 				formatAge(p.CreationTimestamp.Time),
+				podIP(p),
 				p.Spec.NodeName,
 			},
 		})
 	}
 	return items, nil
+}
+
+// podIP returns the Pod's primary IP, or "<none>" when the kubelet hasn't
+// reported one yet (matches `kubectl get pods -o wide` IP column display).
+func podIP(p *corev1.Pod) string {
+	if p.Status.PodIP == "" {
+		return "<none>"
+	}
+	return p.Status.PodIP
 }
 
 // PodStatus returns the human-visible status string for a pod — matching the
@@ -1528,12 +1539,31 @@ func fetchIngresses(ctx context.Context, cs kubernetes.Interface, ns string) ([]
 				ing.Name,
 				ingressClass(ing),
 				ingressHosts(ing),
+				ingressAddress(ing),
 				ingressPorts(ing),
 				formatAge(ing.CreationTimestamp.Time),
 			},
 		})
 	}
 	return items, nil
+}
+
+// ingressAddress collects the LoadBalancer-assigned address(es) the way
+// `kubectl get ingress` does — first all IPs, then all hostnames, joined
+// by commas. Empty when the controller hasn't populated status.
+func ingressAddress(ing *networkingv1.Ingress) string {
+	var parts []string
+	for _, lb := range ing.Status.LoadBalancer.Ingress {
+		if lb.IP != "" {
+			parts = append(parts, lb.IP)
+		}
+	}
+	for _, lb := range ing.Status.LoadBalancer.Ingress {
+		if lb.Hostname != "" {
+			parts = append(parts, lb.Hostname)
+		}
+	}
+	return strings.Join(parts, ",")
 }
 
 func ingressClass(ing *networkingv1.Ingress) string {
@@ -2105,6 +2135,7 @@ func fetchPodsForPVC(ctx context.Context, cs kubernetes.Interface, item Resource
 				string(p.Status.Phase),
 				fmt.Sprintf("%d", podRestarts(p)),
 				formatAge(p.CreationTimestamp.Time),
+				podIP(p),
 				p.Spec.NodeName,
 			},
 		})
