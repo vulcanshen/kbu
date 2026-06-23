@@ -47,6 +47,13 @@ type PtyMarker struct {
 	Label   string // "attached" / "KM8erm" / ... — caller controls
 }
 
+// CompareMarker is the indicator that compare mode is active. Label
+// follows the icon+text status-bar convention; AppModel fills it with
+// "󰕜 kind/name" so the user can see at a glance which row is locked.
+type CompareMarker struct {
+	Label string
+}
+
 func (m StatusBarModel) View() string {
 	return m.ViewWithErrors(0)
 }
@@ -56,13 +63,13 @@ func (m StatusBarModel) ViewWithErrors(unreadErrors int) string {
 }
 
 func (m StatusBarModel) ViewWithBadge(unreadErrors int, successNotice string) string {
-	return m.ViewFull(unreadErrors, successNotice, nil)
+	return m.ViewFull(unreadErrors, successNotice, nil, nil)
 }
 
-// ViewFull renders the status bar with optional PTY marker. The PTY marker
-// sits in the LEFT segment right after `ns:` so it doesn't fight the
+// ViewFull renders the status bar with optional PTY + compare markers.
+// Markers sit in the LEFT segment after `ns:` so they don't fight the
 // error / success badge on the right for space.
-func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *PtyMarker) string {
+func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *PtyMarker, compare *CompareMarker) string {
 	// Nerd Font glyphs replace "ctx:" / "cluster:" / "ns:" labels for a
 	// compact status bar consistent with the KM8erm marker style.
 	//   U+F0237 — context
@@ -90,6 +97,13 @@ func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *Pt
 		}
 		ptyChip := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true).Render(pty.Label)
 		left = left + "  " + ptyChip
+	}
+	if compare != nil && compare.Label != "" {
+		// Compare-mode chip: same #9DDAEA cyan that highlights the
+		// locked row in panel 2 so the status-bar marker and the
+		// row glow read as one signal.
+		compareChip := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA")).Bold(true).Render(compare.Label)
+		left = left + "  " + compareChip
 	}
 
 	var badgePart string

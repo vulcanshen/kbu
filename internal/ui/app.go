@@ -65,6 +65,7 @@ type AppModel struct {
 	shellPty        *PtyView
 	txPty           *PtyView
 	yamlPopup       YamlPopupModel
+	comparePopup    CompareYamlPopupModel
 	breadcrumbPopup BreadcrumbPopupModel
 	helmDocMenu     HelmDocMenuPopupModel
 	panel2Menu      Panel2MenuPopupModel
@@ -100,6 +101,87 @@ type AppModel struct {
 	// cursor jumps to the row whose name+namespace matches, and the
 	// pointer is cleared. nil otherwise.
 	pendingTableSelect *k8s.RefTarget
+
+	// Compare mode state. compareLock holds the baseline row the user
+	// picked via panel-2 Space → "Lock to compare". Subsequent "Compare
+	// to this" picks open the diff popup between the locked item and
+	// the new cursor row (same resource type required). Cleared on Exit
+	// compare / panel focus leaving panel 2 / locked item disappearing
+	// from the watcher stream. Nil = not in compare mode.
+	compareLock *compareLockedRef
+}
+
+// compareLockedRef identifies the panel-2 row currently locked as the
+// comparison baseline. UID is the authoritative identity (survives
+// renames + per-watcher restarts); type/name/namespace are stamped at
+// lock time for status-bar label rendering without re-looking-up the
+// row.
+type compareLockedRef struct {
+	uid          string
+	resourceType k8s.ResourceType
+	name         string
+	namespace    string
+}
+
+// inCompareMode reports whether the user has a locked baseline row.
+func (m AppModel) inCompareMode() bool { return m.compareLock != nil }
+
+// setCompareLock stamps the currently-pointed item as the comparison
+// baseline. Caller must have already verified the item is selectable
+// (non-empty list, cursor in range).
+func (m *AppModel) setCompareLock(item k8s.ResourceItem, rt k8s.ResourceType) {
+	m.compareLock = &compareLockedRef{
+		uid:          item.UID,
+		resourceType: rt,
+		name:         item.Name,
+		namespace:    item.Namespace,
+	}
+	m.syncCompareLockToTable()
+}
+
+// clearCompareLock exits compare mode. Idempotent — calling when already
+// out of compare mode is a no-op, so the various exit paths (Space-menu
+// Exit / focus change / item deletion) can all funnel here without
+// pre-checks.
+func (m *AppModel) clearCompareLock() {
+	m.compareLock = nil
+	m.table.SetLockedRow(-1)
+}
+
+// compareCtxForMenu assembles the panel2CompareCtx the menu needs to
+// decide which of "Lock / Compare to this / Exit" to surface for the
+// cursor-pointed row. Centralised here so the gating rules live with
+// the lock state itself rather than in the menu file.
+func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCtx {
+	ctx := panel2CompareCtx{
+		locked:  m.inCompareMode(),
+		canLock: len(m.items) > 1,
+	}
+	if ctx.locked {
+		ctx.cursorComparable = m.compareLock.uid != cursorItem.UID &&
+			m.compareLock.resourceType == m.currentResource
+	}
+	return ctx
+}
+
+// syncCompareLockToTable re-resolves the locked UID into a row index
+// against the CURRENT items slice and pushes it to the TableModel.
+// Called after any path that changes items (watcher update) or the
+// lock itself (set / clear). -1 when not in compare mode or the locked
+// UID isn't in the current items (the dropCompareLockIfMissing path
+// usually catches this first, but the index helper stays defensive).
+func (m *AppModel) syncCompareLockToTable() {
+	if !m.inCompareMode() {
+		m.table.SetLockedRow(-1)
+		return
+	}
+	for i, it := range m.items {
+		if it.UID == m.compareLock.uid {
+			m.table.SetLockedRow(i)
+			return
+		}
+	}
+	m.table.SetLockedRow(-1)
 }
 
 // honorPendingTableSelect snaps the table cursor onto the requested
@@ -128,7 +210,17 @@ type drillDownEntry struct {
 	parentItems []k8s.ResourceItem
 }
 
-func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel {
+// parseCompareLayout maps a config-file string into the typed enum.
+// Empty / unknown values fall back to Split — same rationale as the
+// CompareConfig.Layout comment.
+func parseCompareLayout(s string) CompareLayout {
+	if s == "unified" {
+		return CompareLayoutUnified
+	}
+	return CompareLayoutSplit
+}
+
+func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor, compareLayout string) AppModel {
 	info := client.GetClusterInfo()
 
 	sidebar := NewSidebarModel(t)
@@ -139,6 +231,9 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 
 	detail := NewDetailModel(t)
 	detail.SetResourceType(k8s.ResourcePods)
+
+	newCompareModel := NewCompareYamlPopupModel(t)
+	newCompareModel.SetDefaultLayout(parseCompareLayout(compareLayout))
 
 	return AppModel{
 		sidebar:         sidebar,
@@ -156,6 +251,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor string) AppModel 
 		shellPty:        NewPtyView(),
 		txPty:           NewPtyView(),
 		yamlPopup:       NewYamlPopupModel(t),
+		comparePopup:    newCompareModel,
 		breadcrumbPopup: NewBreadcrumbPopupModel(t),
 		helmDocMenu:     NewHelmDocMenuPopupModel(t),
 		panel2Menu:      NewPanel2MenuPopupModel(t),
@@ -263,6 +359,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.yamlPopup.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.comparePopup.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.breadcrumbPopup.HandleTick(tickMsg); c != nil {
@@ -405,6 +504,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			var cmd tea.Cmd
 			m.yamlPopup, cmd = m.yamlPopup.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
+	if m.comparePopup.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.comparePopup, cmd = m.comparePopup.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -750,7 +861,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
 					m.panel2Menu.SetSize(m.width, m.height)
-					return m, m.panel2Menu.Open(m.currentResource, item, len(m.drillDownStack) > 0)
+					return m, m.panel2Menu.Open(m.currentResource, item, len(m.drillDownStack) > 0, m.compareCtxForMenu(item))
 				}
 				return m, nil
 			}
@@ -915,8 +1026,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.drillDownPod != nil {
 			return m, tea.Batch(cmds...)
 		}
+		// Compare mode: if the locked baseline has disappeared from the
+		// watcher (deleted / renamed / fell out of namespace scope),
+		// drop the lock and flash a toast — otherwise the status-bar
+		// marker would hang around pointing at a row that no longer
+		// exists in panel 2.
+		if c := m.dropCompareLockIfMissing(m.items); c != nil {
+			cmds = append(cmds, c)
+		}
 		rows := augmentRowsWithHelm(m.items, msg.Type)
 		m.table.SetRows(rows)
+		m.syncCompareLockToTable()
 		m.honorPendingTableSelect(msg.Type, m.items)
 		if len(m.items) > 0 {
 			idx := m.table.SelectedRow()
@@ -1324,6 +1444,52 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			detail := fmt.Sprintf("kubectl delete %s %s -n %s", resource.KubectlName(), item.Name, item.Namespace)
 			return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
 				deleteResource(resource, item.Name, item.Namespace, m.k8sClient.ContextName()))
+		case "LockCompare":
+			// Lock-to-compare. menu was shown only when ctx.canLock so the
+			// "only one item in list" no-op case can't reach here. No toast
+			// — the cyan row background + status-bar marker already say it
+			// loud enough; an extra toast just noises up the view.
+			m.setCompareLock(item, resource)
+			m.appLog.Info(fmt.Sprintf("compare: locked %s/%s", resource.KubectlName(), item.Name))
+			return m, nil
+		case "CompareTo":
+			// Compare-to-this. Resolve the locked item out of the current
+			// items list (post-watcher update — UID is the authoritative
+			// identity, name+ns are stamped at lock time but could drift if
+			// the cluster object was recreated). Both YAML payloads go
+			// through MarshalItemYAMLForCompare to strip status + per-
+			// instance noise before the diff is computed.
+			if !m.inCompareMode() {
+				return m, nil
+			}
+			var lockedItem *k8s.ResourceItem
+			for i := range m.items {
+				if m.items[i].UID == m.compareLock.uid {
+					lockedItem = &m.items[i]
+					break
+				}
+			}
+			if lockedItem == nil {
+				return m, m.toast.Show("compare: locked item gone")
+			}
+			leftYAML := k8s.MarshalItemYAMLForCompare(*lockedItem)
+			rightYAML := k8s.MarshalItemYAMLForCompare(item)
+			leftLabel := fmt.Sprintf("%s/%s", lockedItem.Namespace, lockedItem.Name)
+			rightLabel := fmt.Sprintf("%s/%s", item.Namespace, item.Name)
+			if lockedItem.Namespace == "" {
+				leftLabel = lockedItem.Name
+			}
+			if item.Namespace == "" {
+				rightLabel = item.Name
+			}
+			m.comparePopup.SetSize(m.width, m.height)
+			return m, m.comparePopup.Open(leftYAML, rightYAML, leftLabel, rightLabel)
+		case "ExitCompare":
+			// Symmetric with LockCompare — no toast needed. Row background
+			// clears, status-bar marker disappears; that IS the feedback.
+			m.clearCompareLock()
+			m.appLog.Info("compare: exited")
+			return m, nil
 		}
 		return m, nil
 
@@ -1399,7 +1565,14 @@ func (m AppModel) View() string {
 	if m.shellPty != nil && m.shellPty.IsAlive() && m.shellPty.IsHidden() {
 		ptyMarker = &PtyMarker{Visible: false, Label: " KM8erm"}
 	}
-	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker)
+	var compareMarker *CompareMarker
+	if m.inCompareMode() {
+		compareMarker = &CompareMarker{
+			Label: fmt.Sprintf("\U000f055c %s/%s",
+				m.compareLock.resourceType.KubectlName(), m.compareLock.name),
+		}
+	}
+	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker, compareMarker)
 	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage(), "")
 
 	var mainView string
@@ -1487,6 +1660,11 @@ func (m AppModel) View() string {
 	if m.yamlPopup.IsActive() {
 		m.yamlPopup.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.yamlPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.comparePopup.IsActive() {
+		m.comparePopup.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.comparePopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.breadcrumbPopup.IsActive() {
@@ -2042,6 +2220,7 @@ func (m *AppModel) clearSearchOnLeave(from Panel) {
 func (m *AppModel) setPanel(p Panel) {
 	if p != m.activePanel {
 		m.clearSearchOnLeave(m.activePanel)
+		m.exitCompareOnLeave(m.activePanel, p)
 	}
 	m.activePanel = p
 	m.updateFocus()
@@ -2058,10 +2237,12 @@ func (m *AppModel) cyclePanel() {
 		m.activePanel = SidebarPanel
 	}
 	m.clearSearchOnLeave(from)
+	m.exitCompareOnLeave(from, m.activePanel)
 	m.updateFocus()
 }
 
 func (m *AppModel) cyclePanelReverse() {
+	from := m.activePanel
 	switch m.activePanel {
 	case SidebarPanel:
 		m.activePanel = DetailPanel
@@ -2070,7 +2251,38 @@ func (m *AppModel) cyclePanelReverse() {
 	case DetailPanel:
 		m.activePanel = TablePanel
 	}
+	m.exitCompareOnLeave(from, m.activePanel)
 	m.updateFocus()
+}
+
+// exitCompareOnLeave drops compare mode the instant focus moves out of
+// panel 2 — compare actions only make sense while the user is
+// navigating the list, so leaving for sidebar / detail releases the
+// lock without ceremony. Hook is also fed the destination so other
+// future "leaving X for Y" rules can attach here.
+func (m *AppModel) exitCompareOnLeave(from, to Panel) {
+	if from == TablePanel && to != TablePanel && m.inCompareMode() {
+		m.clearCompareLock()
+	}
+}
+
+// dropCompareLockIfMissing scans the freshly delivered watcher items
+// for the locked UID. If absent (delete event / namespace change /
+// row simply scrolled out of scope), drops the lock and returns a
+// toast Cmd to notify the user. Returns nil otherwise.
+func (m *AppModel) dropCompareLockIfMissing(items []k8s.ResourceItem) tea.Cmd {
+	if !m.inCompareMode() {
+		return nil
+	}
+	for _, it := range items {
+		if it.UID == m.compareLock.uid {
+			return nil
+		}
+	}
+	missing := fmt.Sprintf("%s/%s", m.compareLock.resourceType.KubectlName(), m.compareLock.name)
+	m.clearCompareLock()
+	m.appLog.Info("compare: locked item gone — " + missing)
+	return m.toast.Show("compare: locked item gone")
 }
 
 func (m *AppModel) updateFocus() {

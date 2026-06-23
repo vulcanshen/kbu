@@ -49,7 +49,7 @@ func TestPanel2Menu_Items_PodHasShell(t *testing.T) {
 	// Pod has containers — Shell must appear. Pod also drills (→ containers)
 	// so Enter entry is appended at the END (with separator). Full set:
 	// Y / E / S / D / Enter, Enter has groupBreak=true.
-	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false)
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	wantKeys := []string{"Y", "E", "S", "D", "Enter"}
 	if len(items) != len(wantKeys) {
 		t.Fatalf("Pod menu len=%d, want %d (keys=%v)", len(items), len(wantKeys), wantKeys)
@@ -64,7 +64,7 @@ func TestPanel2Menu_Items_PodHasShell(t *testing.T) {
 func TestPanel2Menu_Items_ServiceNoShell(t *testing.T) {
 	// Service has no containers — Shell must be omitted. Service also
 	// doesn't drill — no Enter entry.
-	items := buildPanel2MenuItems(k8s.ResourceServices, k8s.ResourceItem{}, false)
+	items := buildPanel2MenuItems(k8s.ResourceServices, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	for _, it := range items {
 		if it.key == "S" {
 			t.Errorf("Service menu must not have Shell, got items=%v", items)
@@ -84,7 +84,7 @@ func TestPanel2Menu_Items_ServiceNoShell(t *testing.T) {
 func TestPanel2Menu_Items_HelmManagedRuleA(t *testing.T) {
 	// Helm-managed pod: Edit and Delete dropped (Rule A read-only).
 	// Shell + Enter still present (read actions).
-	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, true)
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, true, panel2CompareCtx{})
 	keys := itemKeys(items)
 	for _, banned := range []string{"E", "D"} {
 		if contains(keys, banned) {
@@ -101,7 +101,7 @@ func TestPanel2Menu_Items_HelmManagedRuleA(t *testing.T) {
 func TestPanel2Menu_Items_EventsNoEditNoDelete(t *testing.T) {
 	// Events: system-generated immutable — E, D dropped. Events don't drill
 	// either, so no Enter entry. Result: YAML only.
-	items := buildPanel2MenuItems(k8s.ResourceEvents, k8s.ResourceItem{}, false)
+	items := buildPanel2MenuItems(k8s.ResourceEvents, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	keys := itemKeys(items)
 	if len(keys) != 1 || keys[0] != "Y" {
 		t.Errorf("Events menu should be YAML only, got %v", keys)
@@ -111,7 +111,7 @@ func TestPanel2Menu_Items_EventsNoEditNoDelete(t *testing.T) {
 func TestPanel2Menu_Items_NodesEditNoDelete(t *testing.T) {
 	// Nodes: Edit kept (admin label/taint changes), Delete blocked.
 	// Nodes don't drill — no Enter entry.
-	items := buildPanel2MenuItems(k8s.ResourceNodes, k8s.ResourceItem{}, false)
+	items := buildPanel2MenuItems(k8s.ResourceNodes, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	keys := itemKeys(items)
 	if !contains(keys, "Y") || !contains(keys, "E") {
 		t.Errorf("Nodes menu missing YAML or Edit, got %v", keys)
@@ -127,7 +127,7 @@ func TestPanel2Menu_Items_NodesEditNoDelete(t *testing.T) {
 func TestPanel2Menu_Items_NamespacesEditNoDelete(t *testing.T) {
 	// Namespaces: Edit kept (labels/annotations), Delete blocked.
 	// Namespaces don't drill — no Enter entry.
-	items := buildPanel2MenuItems(k8s.ResourceNamespaces, k8s.ResourceItem{}, false)
+	items := buildPanel2MenuItems(k8s.ResourceNamespaces, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	keys := itemKeys(items)
 	if !contains(keys, "Y") || !contains(keys, "E") {
 		t.Errorf("Namespaces menu missing YAML or Edit, got %v", keys)
@@ -139,17 +139,77 @@ func TestPanel2Menu_Items_NamespacesEditNoDelete(t *testing.T) {
 
 func TestPanel2Menu_Items_HelmManagedNoContainer(t *testing.T) {
 	// Helm-managed Service: only YAML remains.
-	items := buildPanel2MenuItems(k8s.ResourceServices, k8s.ResourceItem{}, true)
+	items := buildPanel2MenuItems(k8s.ResourceServices, k8s.ResourceItem{}, true, panel2CompareCtx{})
 	keys := itemKeys(items)
 	if len(keys) != 1 || keys[0] != "Y" {
 		t.Errorf("helm-managed Service should only have YAML, got %v", keys)
 	}
 }
 
+func TestPanel2Menu_Items_CompareNotLocked_ShowsLockEntry(t *testing.T) {
+	// Not in compare mode + canLock (panel-2 has >1 items) → "Lock to
+	// compare" appears. Multi-char key "LockCompare" prevents direct
+	// hotkey dispatch (menu-only by design).
+	ctx := panel2CompareCtx{locked: false, canLock: true}
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
+	keys := itemKeys(items)
+	if !contains(keys, "LockCompare") {
+		t.Errorf("expected LockCompare in not-locked menu, got %v", keys)
+	}
+	for _, banned := range []string{"CompareTo", "ExitCompare"} {
+		if contains(keys, banned) {
+			t.Errorf("must NOT show %q when not in compare mode, got %v", banned, keys)
+		}
+	}
+}
+
+func TestPanel2Menu_Items_CompareSingleItem_HidesLock(t *testing.T) {
+	// canLock=false (single item in panel-2 — nothing to compare against)
+	// hides the Lock entry entirely.
+	ctx := panel2CompareCtx{locked: false, canLock: false}
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
+	if contains(itemKeys(items), "LockCompare") {
+		t.Errorf("LockCompare must be hidden with canLock=false, got %v", itemKeys(items))
+	}
+}
+
+func TestPanel2Menu_Items_CompareLocked_ShowsCompareAndExit(t *testing.T) {
+	// In compare mode + cursor on a comparable row (different UID, same
+	// kind) → both "Compare to this resource" and "Exit compare mode"
+	// appear. "Lock to compare" must NOT appear (already locked).
+	ctx := panel2CompareCtx{locked: true, canLock: true, cursorComparable: true}
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
+	keys := itemKeys(items)
+	for _, want := range []string{"CompareTo", "ExitCompare"} {
+		if !contains(keys, want) {
+			t.Errorf("expected %q in compare-mode menu, got %v", want, keys)
+		}
+	}
+	if contains(keys, "LockCompare") {
+		t.Errorf("must NOT show LockCompare while already locked, got %v", keys)
+	}
+}
+
+func TestPanel2Menu_Items_CompareLockedOnLockedRow_HidesCompareTo(t *testing.T) {
+	// Cursor sitting on the locked row itself: cursorComparable=false —
+	// "Compare to this resource" hidden (comparing self vs self is empty
+	// diff). "Exit compare mode" still surfaces so user can release the
+	// lock from the locked row directly.
+	ctx := panel2CompareCtx{locked: true, canLock: true, cursorComparable: false}
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
+	keys := itemKeys(items)
+	if contains(keys, "CompareTo") {
+		t.Errorf("must NOT show CompareTo when cursor on locked row, got %v", keys)
+	}
+	if !contains(keys, "ExitCompare") {
+		t.Errorf("ExitCompare must remain visible on the locked row, got %v", keys)
+	}
+}
+
 func TestPanel2Menu_Items_DeploymentDrillsToPods(t *testing.T) {
 	// Deployment drills to Pods — Enter entry is last with groupBreak,
 	// hint should say "drill into pods" (KubectlName "pod" + "s").
-	items := buildPanel2MenuItems(k8s.ResourceDeployments, k8s.ResourceItem{}, false)
+	items := buildPanel2MenuItems(k8s.ResourceDeployments, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	last := items[len(items)-1]
 	if last.key != "Enter" {
 		t.Fatalf("Deployment last item must be Enter (drill), got %q", last.key)
@@ -162,7 +222,7 @@ func TestPanel2Menu_Items_DeploymentDrillsToPods(t *testing.T) {
 func TestPanel2Menu_Items_PodDrillsToContainers(t *testing.T) {
 	// Pod drills to containers (special-cased — containers aren't a K8s
 	// API resource so we don't go through the registry's KubectlName).
-	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false)
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	last := items[len(items)-1]
 	if last.key != "Enter" {
 		t.Fatalf("Pod last item must be Enter, got %q", last.key)
@@ -178,7 +238,7 @@ func TestPanel2Menu_Open_CanPopAppendsEsc(t *testing.T) {
 	// an "Esc" entry so users see they can pop back to the parent list.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx-abc-xyz", Namespace: "default"}
-	cmd := m.Open(k8s.ResourcePods, item, true) // canPop=true → from drill
+	cmd := m.Open(k8s.ResourcePods, item, true, panel2CompareCtx{}) // canPop=true → from drill
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	last := m.items[len(m.items)-1]
@@ -194,7 +254,7 @@ func TestPanel2Menu_Open_NoCanPopOmitsEsc(t *testing.T) {
 	// Root list (not drilled): canPop=false → no Esc entry.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
-	cmd := m.Open(k8s.ResourcePods, item, false)
+	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	for _, it := range m.items {
@@ -210,7 +270,7 @@ func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 	// Cursor starts at 0 = YAML. Pressing Enter commits Y.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
-	cmd := m.Open(k8s.ResourcePods, item, false)
+	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, batchCmd := m.Update(key("enter"))
@@ -243,7 +303,7 @@ func TestPanel2Menu_EnterOnDrillRowEmitsEnter(t *testing.T) {
 	// maps to enterDrillDown.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
-	cmd := m.Open(k8s.ResourcePods, item, false)
+	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	m, _ = m.Update(key("G"))
@@ -272,7 +332,7 @@ func TestPanel2Menu_HotkeyDirectTrigger(t *testing.T) {
 	// Pressing "E" while menu is open commits Edit without cursor move.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
-	cmd := m.Open(k8s.ResourcePods, item, false)
+	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, batchCmd := m.Update(key("E"))
@@ -302,7 +362,7 @@ func TestPanel2Menu_HotkeyNotInMenuIsNoOp(t *testing.T) {
 	// gates via hotkey.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "my-svc", Namespace: "default"}
-	cmd := m.Open(k8s.ResourceServices, item, false)
+	cmd := m.Open(k8s.ResourceServices, item, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, cmd2 := m.Update(key("S"))
@@ -321,7 +381,7 @@ func TestPanel2Menu_HotkeyBlockedByRuleA(t *testing.T) {
 		},
 	}
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default", Raw: pod}
-	cmd := m.Open(k8s.ResourcePods, item, false)
+	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, cmd2 := m.Update(key("E"))
@@ -334,7 +394,7 @@ func TestPanel2Menu_HotkeyBlockedByRuleA(t *testing.T) {
 
 func TestPanel2Menu_SpaceCloses(t *testing.T) {
 	m := newPanel2Menu(t)
-	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false)
+	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, closeCmd := m.Update(key(" "))
@@ -345,7 +405,7 @@ func TestPanel2Menu_SpaceCloses(t *testing.T) {
 
 func TestPanel2Menu_EscCloses(t *testing.T) {
 	m := newPanel2Menu(t)
-	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false)
+	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
 	_, closeCmd := m.Update(key("esc"))

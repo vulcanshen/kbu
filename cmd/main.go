@@ -55,7 +55,7 @@ func main() {
 	// Optional Helm Releases category — only registered when `helm` is on PATH.
 	k8s.RegisterHelmIfAvailable()
 
-	app := ui.NewAppModel(t, client, cfg.Editor)
+	app := ui.NewAppModel(t, client, cfg.Editor, cfg.Compare.Layout)
 
 	p := tea.NewProgram(app,
 		tea.WithAltScreen(),
