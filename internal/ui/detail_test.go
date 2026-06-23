@@ -697,6 +697,85 @@ func TestDetailModel_RelativesL_Retired(t *testing.T) {
 	}
 }
 
+// TestDetailModel_RelativesTab_LastCursorScrollsViewport guards the
+// 2026-06-23 bug where pressing j past the last selectable entry froze
+// the viewport — trailing contentLines (section spacing, blank rows)
+// stayed invisible because j was bound exclusively to nextSelectableCursor
+// and never fell through to scrollDown. With many relatives + a tight
+// viewport this manifested as "37 of 47" stuck and the last ~10 lines
+// of the list unreachable.
+func TestDetailModel_RelativesTab_LastCursorScrollsViewport(t *testing.T) {
+	// Generic Relatives with a tail of non-selectable rows AFTER the last
+	// drillable entry — mirrors the real-world layout that surfaced the
+	// bug (Node view: many "Pods on this Node" drillables + a trailing
+	// section header with no entries / informational rows). With viewport
+	// smaller than total content, scrolling past the last cursor row
+	// requires the fallback path.
+	rows := make([]k8s.RelativeRow, 0, 30)
+	for i := 0; i < 30; i++ {
+		rows = append(rows, k8s.RelativeRow{
+			Label: fmt.Sprintf("pod-%02d", i),
+			Value: fmt.Sprintf("default/nginx-pod-%02d", i),
+			Ref: &k8s.RefTarget{
+				Type: k8s.ResourcePods, Name: fmt.Sprintf("nginx-pod-%02d", i), Namespace: "default",
+			},
+		})
+	}
+	detail := k8s.ResourceDetail{
+		Name: "node-1", Kind: "Node",
+		Relatives: []k8s.RelativeSection{
+			{Title: "Pods on this Node", Entries: rows},
+			// Trailing section: header + a non-drillable info row.
+			// Both are non-selectable, so cursor cannot reach them
+			// — they exist past the last drillable to force the bug.
+			{
+				Title: "Trailing Info",
+				Entries: []k8s.RelativeRow{
+					{Label: "note", Value: "informational, no ref"},
+				},
+			},
+		},
+	}
+	m := newTestDetail()
+	m.SetSize(80, 8) // viewport smaller than full content
+	m.SetResourceType(k8s.ResourceNodes)
+	m.SetDetail(detail, nil)
+	m = m.switchToTab(0)
+
+	// Drive cursor to the last selectable entry — stop as soon as the
+	// cursor stops advancing (because every j past that point also
+	// scrolls the viewport, which would void the test setup).
+	for i := 0; i < len(m.relativeEntries)+5; i++ {
+		prev := m.relativeCursor
+		m, _ = m.Update(keyMsg('j'))
+		if m.relativeCursor == prev {
+			break
+		}
+	}
+	if !m.relativeEntries[m.relativeCursor].isSelectable() {
+		t.Fatalf("setup: cursor must end on a selectable entry, got header %q",
+			m.relativeEntries[m.relativeCursor].label)
+	}
+
+	pinnedCursor := m.relativeCursor
+	offsetBefore := m.scrollOffset
+	maxOffset := m.maxScrollOffset()
+	if offsetBefore >= maxOffset {
+		t.Skipf("setup: viewport already at max scroll (offset=%d max=%d) — bug doesn't manifest here", offsetBefore, maxOffset)
+	}
+
+	// Press j once more — cursor is pinned (already at last selectable);
+	// fix must let the viewport advance so trailing lines come into view.
+	m, _ = m.Update(keyMsg('j'))
+	if m.relativeCursor != pinnedCursor {
+		t.Errorf("cursor should stay at last selectable when j has nowhere to go; before=%d after=%d", pinnedCursor, m.relativeCursor)
+	}
+	if m.scrollOffset <= offsetBefore {
+		t.Errorf("scrollOffset must advance once cursor is pinned (regression — list stuck); before=%d after=%d max=%d",
+			offsetBefore, m.scrollOffset, maxOffset)
+	}
+}
+
 // TestDetailModel_RelativesTab_EmptyShowsPlaceholder verifies the "no relatives to
 // show" placeholder renders for a supported kind whose specific instance
 // happens to have no link refs (e.g. ConfigMap with no consumer Pods).
