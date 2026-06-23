@@ -1916,7 +1916,18 @@ func buildKubectlExecCmd(podName, namespace, container, contextName string) *exe
 	if contextName != "" {
 		args = append(args, "--context", contextName)
 	}
-	args = append(args, "--", "/bin/sh")
+	// Prefer bash via PATH lookup (covers /bin/bash, /usr/bin/bash,
+	// /usr/local/bin/bash) and fall back to POSIX sh — handles the
+	// 95% case (debian/ubuntu/centos+bash, alpine sh, debian minimal)
+	// in a single kubectl invocation. Distroless / scratch images
+	// without /bin/sh still fail; no probe sidesteps that.
+	//
+	// `command -v` probes existence with all output silenced; the exec
+	// itself runs WITHOUT a stderr redirect, because bash writes its PS1
+	// prompt to stderr via readline — redirecting fd 2 to /dev/null on
+	// the exec swallows the prompt and the shell looks dead.
+	args = append(args, "--", "/bin/sh", "-c",
+		"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi")
 	return exec.Command("kubectl", args...)
 }
 

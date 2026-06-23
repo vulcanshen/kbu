@@ -421,6 +421,7 @@ func init() {
 		OrderInCategory: 0,
 		Columns: []Column{
 			{Title: "Name", MinWidth: 20},
+			{Title: "Namespace", MinWidth: 15},
 			{Title: "Data", MinWidth: 6},
 			{Title: "Age", MinWidth: 8},
 		},
