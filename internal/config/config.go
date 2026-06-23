@@ -23,6 +23,20 @@ type Config struct {
 	// Editor overrides $EDITOR for kubectl edit operations.
 	// Empty string means fall back to $EDITOR, then platform default.
 	Editor string `yaml:"editor"`
+
+	// Compare carries settings for the YAML compare popup.
+	Compare CompareConfig `yaml:"compare"`
+}
+
+// CompareConfig holds settings for the YAML compare popup. Currently
+// only the default layout. Read at startup; in-session toggle does
+// NOT persist back (the popup's Space-menu toggle is session-local).
+type CompareConfig struct {
+	// Layout is the default diff layout for new compare popups.
+	// Valid values: "split" (side-by-side, default) | "unified"
+	// (single column with -/+ markers).  Empty or unrecognised value
+	// falls back to "split".
+	Layout string `yaml:"layout"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.

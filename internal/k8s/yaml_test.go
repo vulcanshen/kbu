@@ -85,3 +85,93 @@ func TestMarshalContainerYAML_NotAPod(t *testing.T) {
 		t.Errorf("expected empty when Raw is not *corev1.Pod, got %q", out)
 	}
 }
+
+func TestMarshalItemYAMLForCompare_StripsStatusAndNoise(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "nginx",
+			Namespace:         "default",
+			UID:               "deadbeef-1234",
+			ResourceVersion:   "98765",
+			Generation:        7,
+			CreationTimestamp: metav1.Date(2026, 1, 1, 12, 0, 0, 0, metav1.Now().Location()),
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "nginx", Image: "nginx:1.27.1"}},
+		},
+		Status: corev1.PodStatus{
+			Phase:   corev1.PodRunning,
+			PodIP:   "10.244.0.5",
+			HostIP:  "192.168.1.10",
+			Message: "should not appear in compare",
+		},
+	}
+	item := ResourceItem{Name: "nginx", Namespace: "default", Raw: pod}
+	out := MarshalItemYAMLForCompare(item)
+	if out == "" {
+		t.Fatal("expected non-empty YAML")
+	}
+	for _, banned := range []string{
+		"uid: deadbeef-1234",
+		"resourceVersion: \"98765\"",
+		"generation: 7",
+		"creationTimestamp:",
+		"status:",
+		"10.244.0.5", // PodIP — inside status block
+		"should not appear in compare",
+	} {
+		if strings.Contains(out, banned) {
+			t.Errorf("compare YAML must NOT contain %q, got:\n%s", banned, out)
+		}
+	}
+	// Identity + spec must remain — the diff is meaningless without them.
+	for _, want := range []string{
+		"name: nginx",
+		"namespace: default",
+		"image: nginx:1.27.1",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("compare YAML must contain %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestStripStatusBlock_Idempotent(t *testing.T) {
+	// stripStatusBlock should be a no-op on a YAML doc without `status:`.
+	in := "apiVersion: v1\nkind: Pod\nmetadata:\n  name: x\nspec:\n  containers:\n  - name: y\n"
+	if got := stripStatusBlock(in); got != in {
+		t.Errorf("stripStatusBlock changed a status-less doc:\nwant %q\ngot  %q", in, got)
+	}
+}
+
+func TestStripStatusBlock_RemovesTopLevelStatus(t *testing.T) {
+	in := strings.Join([]string{
+		"apiVersion: v1",
+		"kind: Pod",
+		"metadata:",
+		"  name: x",
+		"spec:",
+		"  containers:",
+		"  - name: y",
+		"status:",
+		"  phase: Running",
+		"  podIP: 10.0.0.1",
+		"  conditions:",
+		"  - type: Ready",
+		"    status: \"True\"",
+		"",
+	}, "\n")
+	out := stripStatusBlock(in)
+	if strings.Contains(out, "status:") {
+		t.Errorf("status: line still present, got:\n%s", out)
+	}
+	if strings.Contains(out, "podIP") {
+		t.Errorf("podIP (status child) still present, got:\n%s", out)
+	}
+	if !strings.Contains(out, "kind: Pod") {
+		t.Errorf("trimmed too aggressively — kind missing, got:\n%s", out)
+	}
+	if !strings.Contains(out, "name: y") {
+		t.Errorf("container spec lost (mis-detected as status child), got:\n%s", out)
+	}
+}

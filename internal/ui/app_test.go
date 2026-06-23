@@ -492,5 +492,182 @@ func TestAppModel_ExitDrillDownFromContainers_RowsStayHelmAligned(t *testing.T) 
 	}
 }
 
+// ── compare-mode state machine ────────────────────────────────────────────
+
+func TestAppModel_Compare_LockLifecycle(t *testing.T) {
+	// setCompareLock → inCompareMode flips on, table.lockedRow tracks the
+	// item index. clearCompareLock zeroes both.
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+
+	if m.inCompareMode() {
+		t.Fatal("compare mode should be off initially")
+	}
+	m.setCompareLock(items[1], k8s.ResourcePods) // lock the second item
+	if !m.inCompareMode() {
+		t.Fatal("compare mode should turn on after setCompareLock")
+	}
+	if m.compareLock.uid != "uid-b" {
+		t.Errorf("compareLock UID = %q, want uid-b", m.compareLock.uid)
+	}
+	if m.table.lockedRow != 1 {
+		t.Errorf("table.lockedRow = %d, want 1 (item index)", m.table.lockedRow)
+	}
+	m.clearCompareLock()
+	if m.inCompareMode() {
+		t.Error("compare mode should be off after clearCompareLock")
+	}
+	if m.table.lockedRow != -1 {
+		t.Errorf("table.lockedRow = %d, want -1 after clear", m.table.lockedRow)
+	}
+}
+
+func TestAppModel_Compare_DropLockIfMissing(t *testing.T) {
+	// Watcher delivers an items slice no longer containing the locked
+	// UID → compare mode auto-exits and a toast Cmd is returned. The
+	// status-bar marker would otherwise hang around pointing at a row
+	// that no longer exists.
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+	m.appLog = NewAppLogModel(m.theme)
+	m.setCompareLock(items[1], k8s.ResourcePods)
+	if !m.inCompareMode() {
+		t.Fatal("setup: lock should be active")
+	}
+
+	// Simulate watcher delete: items now only has uid-a.
+	newItems := []k8s.ResourceItem{items[0]}
+	cmd := m.dropCompareLockIfMissing(newItems)
+	if m.inCompareMode() {
+		t.Error("compare mode should auto-exit when locked UID disappears")
+	}
+	if cmd == nil {
+		t.Error("expected a toast Cmd when lock dropped, got nil")
+	}
+}
+
+func TestAppModel_Compare_DropLockIfMissing_NoOpWhenPresent(t *testing.T) {
+	// Locked UID still in items → no drop, no toast.
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+	m.setCompareLock(items[0], k8s.ResourcePods)
+	if cmd := m.dropCompareLockIfMissing(items); cmd != nil {
+		t.Error("dropCompareLockIfMissing must be a no-op when UID still present")
+	}
+	if !m.inCompareMode() {
+		t.Error("lock should remain active when UID still present")
+	}
+}
+
+func TestAppModel_Compare_ExitOnLeavePanel2(t *testing.T) {
+	// Focus moving from TablePanel to any other panel ends compare mode.
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+	m.activePanel = TablePanel
+	m.setCompareLock(items[0], k8s.ResourcePods)
+
+	m.exitCompareOnLeave(TablePanel, SidebarPanel)
+	if m.inCompareMode() {
+		t.Error("compare mode must end when focus leaves panel 2 for sidebar")
+	}
+}
+
+func TestAppModel_Compare_NoExitWhenLeavingOtherPanel(t *testing.T) {
+	// Lock is panel-2-bound — leaving sidebar / detail does NOT touch
+	// the lock (those transitions don't even happen while locked since
+	// the lock would already be gone, but the guard is worth covering).
+	items := []k8s.ResourceItem{{Name: "a", UID: "uid-a", Row: []string{"a"}}}
+	m := appWithItems(items, 0)
+	m.compareLock = &compareLockedRef{uid: "uid-a", resourceType: k8s.ResourcePods, name: "a"}
+
+	m.exitCompareOnLeave(SidebarPanel, DetailPanel)
+	if !m.inCompareMode() {
+		t.Error("sidebar→detail transition must NOT clear compare lock")
+	}
+}
+
+func TestAppModel_Compare_CtxForMenu(t *testing.T) {
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+	}
+	cases := []struct {
+		name           string
+		setup          func(*AppModel)
+		cursor         k8s.ResourceItem
+		wantLocked     bool
+		wantCanLock    bool
+		wantComparable bool
+	}{
+		{
+			name:        "no lock, multiple items",
+			setup:       func(_ *AppModel) {},
+			cursor:      items[0],
+			wantCanLock: true,
+		},
+		{
+			name: "no lock, single item — cannot lock",
+			setup: func(m *AppModel) {
+				m.items = items[:1]
+			},
+			cursor:      items[0],
+			wantCanLock: false,
+		},
+		{
+			name: "locked, cursor on other row — comparable",
+			setup: func(m *AppModel) {
+				m.setCompareLock(items[0], k8s.ResourcePods)
+			},
+			cursor:         items[1],
+			wantLocked:     true,
+			wantCanLock:    true,
+			wantComparable: true,
+		},
+		{
+			name: "locked, cursor on locked row — NOT comparable",
+			setup: func(m *AppModel) {
+				m.setCompareLock(items[0], k8s.ResourcePods)
+			},
+			cursor:         items[0],
+			wantLocked:     true,
+			wantCanLock:    true,
+			wantComparable: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := appWithItems(items, 0)
+			m.currentResource = k8s.ResourcePods
+			tc.setup(&m)
+			got := m.compareCtxForMenu(tc.cursor)
+			if got.locked != tc.wantLocked {
+				t.Errorf("locked = %v, want %v", got.locked, tc.wantLocked)
+			}
+			if got.canLock != tc.wantCanLock {
+				t.Errorf("canLock = %v, want %v", got.canLock, tc.wantCanLock)
+			}
+			if got.cursorComparable != tc.wantComparable {
+				t.Errorf("cursorComparable = %v, want %v", got.cursorComparable, tc.wantComparable)
+			}
+		})
+	}
+}
+
 // silence unused warning if tea is not referenced elsewhere in tests
 var _ tea.Msg = struct{}{}

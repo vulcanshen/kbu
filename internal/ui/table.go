@@ -30,6 +30,12 @@ type TableModel struct {
 	resourceType    k8s.ResourceType
 	searching       bool
 	searchQuery     string
+
+	// Compare-mode lock highlight. lockedRow is the (post-filter) row
+	// index that should render with the compare-baseline background.
+	// -1 = no lock. AppModel re-resolves the index whenever rows change
+	// (filter / watcher / drill-down) and calls SetLockedRow.
+	lockedRow int
 }
 
 // CopyableContent returns the current (filtered) table rows as plain text
@@ -109,7 +115,16 @@ func NewTableModel(t *theme.Theme) TableModel {
 		theme:        t,
 		pendingG:     false,
 		resourceType: k8s.ResourcePods,
+		lockedRow:    -1,
 	}
+}
+
+// SetLockedRow marks the row at (post-filter) index `idx` as the
+// compare-mode baseline. -1 clears the highlight. Caller (AppModel)
+// owns the lock identity (by UID) and re-resolves the index whenever
+// rows change.
+func (m *TableModel) SetLockedRow(idx int) {
+	m.lockedRow = idx
 }
 
 // Init implements tea.Model.
@@ -378,17 +393,31 @@ func (m TableModel) View() string {
 		// for darker variants — pastel green on the focused-cursor
 		// reverse-video row reads as "barely visible".
 		onLightBg := false
+		isLocked := i == m.lockedRow
 		if i == m.cursor && m.focused {
 			style = m.theme.TableSelectedRowStyle()
 			onLightBg = true
 		} else if i == m.cursor {
 			style = m.theme.TableUnfocusedSelectedRowStyle()
+		} else if isLocked {
+			// Compare-mode lock background — same #9DDAEA cyan as the
+			// status-bar marker so the two signals visually connect.
+			// Dark foreground keeps text readable on the light bg.
+			style = lipgloss.NewStyle().
+				Background(lipgloss.Color("#9DDAEA")).
+				Foreground(lipgloss.Color("#1e1e2e"))
+			onLightBg = true
 		} else if i%2 == 0 {
 			style = m.theme.TableAlternatingRowStyle()
 		} else {
 			style = m.theme.TableRowStyle()
 		}
 		row := m.renderRow(colWidths, m.rows[i], style, onLightBg)
+		// Cursor sitting on top of the locked row keeps the reverse-
+		// video cursor style — the user's cursor position is the more
+		// transient signal (changes every j/k), the lock is fixed and
+		// already surfaced in the status-bar marker. Combining the two
+		// visual cues on one row reads as visual noise.
 		b.WriteString(row)
 		if i < end-1 {
 			b.WriteString("\n")

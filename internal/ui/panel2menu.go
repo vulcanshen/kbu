@@ -70,11 +70,14 @@ func NewPanel2MenuPopupModel(t *theme.Theme) Panel2MenuPopupModel {
 // canPop=true appends the "Esc ↖" back entry — used when the table is
 // inside a drill chain (e.g. user pressed Enter on a Deployment row and
 // is now viewing its Pods, so Esc pops back to the Deployment list).
-func (m *Panel2MenuPopupModel) Open(rt k8s.ResourceType, item k8s.ResourceItem, canPop bool) tea.Cmd {
+// compare carries the compare-mode flags so the per-row menu can surface
+// "Lock to compare" / "Compare to this resource" / "Exit compare mode"
+// in the right combinations.
+func (m *Panel2MenuPopupModel) Open(rt k8s.ResourceType, item k8s.ResourceItem, canPop bool, compare panel2CompareCtx) tea.Cmd {
 	m.resource = rt
 	m.item = item
 	m.helmManaged = k8s.IsHelmManaged(item)
-	m.items = buildPanel2MenuItems(rt, item, m.helmManaged)
+	m.items = buildPanel2MenuItems(rt, item, m.helmManaged, compare)
 	if canPop {
 		m.items = append(m.items, panel2MenuItem{
 			label: "Esc " + drillUpIcon,
@@ -153,7 +156,8 @@ func (m Panel2MenuPopupModel) Update(msg tea.Msg) (Panel2MenuPopupModel, tea.Cmd
 		// the menu (Rule A removed Edit/Delete for helm-managed rows; a
 		// hotkey shortcut shouldn't bypass that gate). Unknown hotkey
 		// falls through to no-op so users don't accidentally close the
-		// popup with a stray press.
+		// popup with a stray press. Compare-mode actions deliberately
+		// have no entry here — they're menu-only, see buildPanel2MenuItems.
 		key := keyMsg.String()
 		for _, it := range m.items {
 			if it.key == key {
@@ -206,7 +210,7 @@ func (m Panel2MenuPopupModel) RenderPopup() string {
 // (no false "[E]nter" rendering) and bypasses direct-hotkey dispatch
 // (cursor+Enter only — direct Enter from elsewhere in the menu commits
 // the cursor's own item, not the drill entry).
-func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool) []panel2MenuItem {
+func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool, compare panel2CompareCtx) []panel2MenuItem {
 	canEdit := !helmManaged && resourceAllowsEdit(rt)
 	canDelete := !helmManaged && resourceAllowsDelete(rt)
 
@@ -222,6 +226,28 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 	if canDelete {
 		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
 	}
+	// Compare mode entries. Three states drive what appears:
+	//   - not locked AND >1 selectable items → "Lock to compare"
+	//   - locked AND cursor on a different item of the same kind →
+	//       "Compare to this resource"
+	//   - locked (in any cursor position)            → "Exit compare mode"
+	// Single-item lists hide "Lock to compare" since locking with no
+	// alternative target is a dead end.
+	// Compare actions deliberately use multi-char keys so:
+	//   - bracketHotkey skips them (no misleading "[L]ock to compare"
+	//     render — these are menu-only, no direct hotkey)
+	//   - the direct-hotkey case list below ignores them — pressing L /
+	//     C / X anywhere does nothing on its own; the user MUST cursor
+	//     onto the row and Enter to commit. Same pattern as the "Enter"
+	//     drill-down entry.
+	if compare.locked {
+		if compare.cursorComparable {
+			items = append(items, panel2MenuItem{label: "Compare to this resource", key: "CompareTo", hint: "diff against the locked item"})
+		}
+		items = append(items, panel2MenuItem{label: "Exit compare mode", key: "ExitCompare", hint: "release the locked item"})
+	} else if compare.canLock {
+		items = append(items, panel2MenuItem{label: "Lock to compare", key: "LockCompare", hint: "pick this row as the diff baseline"})
+	}
 	if rt.SupportsDrillDown() {
 		target := panel2DrillLabel(rt, item)
 		hint := "drill into " + target
@@ -235,6 +261,25 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 		})
 	}
 	return items
+}
+
+// panel2CompareCtx carries the compare-mode flags into menu construction.
+// Held as a struct (rather than 3 bool args) so the call site reads more
+// purposefully — "the menu cares about compare context", not "three
+// random bool flags".
+//
+//   - locked:           AppModel.inCompareMode()
+//   - canLock:          len(panel-2 items) > 1 (single-item lists hide
+//     the Lock entry — locking with no alternative
+//     target is a dead end)
+//   - cursorComparable: cursor row is a different UID from the locked
+//     row AND same resource type. False when cursor
+//     is on the locked row itself, or when locked
+//     item is from a different (now-switched) kind.
+type panel2CompareCtx struct {
+	locked           bool
+	canLock          bool
+	cursorComparable bool
 }
 
 // panel2DrillLabel returns the human-readable plural for what Enter drills
