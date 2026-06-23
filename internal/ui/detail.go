@@ -309,25 +309,17 @@ func (m DetailModel) handleRelativeKey(msg tea.KeyMsg) (DetailModel, bool, tea.C
 		}
 		switch msg.Runes[0] {
 		case 'j':
-			m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, +1)
-			m.buildContentLines()
-			m = m.scrollRelativeCursorIntoView()
+			m = m.relativeMoveOrScroll(+1)
 			return m, true, nil
 		case 'k':
-			m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, -1)
-			m.buildContentLines()
-			m = m.scrollRelativeCursorIntoView()
+			m = m.relativeMoveOrScroll(-1)
 			return m, true, nil
 		}
 	case tea.KeyDown:
-		m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, +1)
-		m.buildContentLines()
-		m = m.scrollRelativeCursorIntoView()
+		m = m.relativeMoveOrScroll(+1)
 		return m, true, nil
 	case tea.KeyUp:
-		m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, -1)
-		m.buildContentLines()
-		m = m.scrollRelativeCursorIntoView()
+		m = m.relativeMoveOrScroll(-1)
 		return m, true, nil
 	case tea.KeyEnter:
 		return m.dispatchRelativePush()
@@ -360,6 +352,27 @@ func (m DetailModel) dispatchRelativePop() (DetailModel, bool, tea.Cmd) {
 	}
 	m.PopDrillFrame()
 	return m, true, nil
+}
+
+// relativeMoveOrScroll moves the cursor to the next/prev selectable entry
+// (dir = +1 / -1). When the cursor is already at the boundary and cannot
+// advance, falls through to a plain viewport scroll so the user can still
+// reveal trailing/leading non-selectable content (section dividers,
+// footer rows) that sits past the last/first selectable entry.
+// Without this fallback, lists with non-selectable trailing content get
+// stuck at "(maxCursorLine - h + 1) of N" and the last few contentLines
+// stay invisible.
+func (m DetailModel) relativeMoveOrScroll(dir int) DetailModel {
+	prev := m.relativeCursor
+	m.relativeCursor = nextSelectableCursor(m.relativeEntries, m.relativeCursor, dir)
+	m.buildContentLines()
+	if m.relativeCursor != prev {
+		return m.scrollRelativeCursorIntoView()
+	}
+	if dir > 0 {
+		return m.scrollDown()
+	}
+	return m.scrollUp()
 }
 
 // scrollRelativeCursorIntoView nudges scrollOffset so the cursor row is
@@ -549,15 +562,23 @@ func (m DetailModel) CopyableContent() string {
 	return strings.Join(plain, "\n")
 }
 
-// ScrollInfo returns scroll position for the detail panel.
+// ScrollInfo returns scroll position for the detail panel. Position is the
+// LAST visible line of contentLines (capped at total), so reaching the
+// bottom reads "N of N" — matching the table panel's "cursor of total"
+// semantics. The earlier "first visible line" form maxed out at
+// "(N-h+1) of N" and never reached N, leaving users unsure whether
+// they'd actually scrolled to the bottom.
 func (m DetailModel) ScrollInfo() *ScrollInfo {
 	lines := m.contentLines
 	if len(lines) == 0 {
 		return nil
 	}
-	pos := m.scrollOffset + 1
+	pos := m.scrollOffset + m.contentHeight()
 	if pos > len(lines) {
 		pos = len(lines)
+	}
+	if pos < 1 {
+		pos = 1
 	}
 	return &ScrollInfo{Position: pos, Total: len(lines)}
 }
