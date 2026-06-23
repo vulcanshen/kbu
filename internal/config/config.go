@@ -26,6 +26,19 @@ type Config struct {
 
 	// Compare carries settings for the YAML compare popup.
 	Compare CompareConfig `yaml:"compare"`
+
+	// PinnedResourceKinds is the user's "Pinned" sidebar list — each
+	// entry is a resource KIND (KubectlName, e.g. "pod", "namespace",
+	// "configmap"). Stable across km8 versions and matches the editing
+	// format users reach for. The sidebar renders these as a top-level
+	// "Pinned" category in insertion order. To reorder: remove + re-pin.
+	// Unknown / no-longer-registered entries are dropped silently at
+	// startup (e.g. a CRD that was uninstalled).
+	//
+	// Named "kinds" not "resources" because each entry pins the kind
+	// itself (the sidebar navigation target), not a specific named
+	// instance.
+	PinnedResourceKinds []string `yaml:"pinned_resource_kinds"`
 }
 
 // CompareConfig holds settings for the YAML compare popup. Currently
@@ -103,4 +116,47 @@ func LoadFrom(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// Save persists the config to the default path via atomic write
+// (write to a tempfile in the same dir, then rename). The atomic step
+// matters because km8 mutates the file during use (pin / unpin) and a
+// crash mid-write must not leave a half-written config that fails to
+// parse on next startup.
+//
+// Creates the config dir if it doesn't exist (first-ever save case).
+func (c *Config) Save() error {
+	return c.SaveTo(ConfigPath())
+}
+
+// SaveTo writes the config to the given path. Same atomic semantics as
+// Save(); separated so tests can target a tempdir.
+func (c *Config) SaveTo(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating config dir %s: %w", dir, err)
+	}
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshalling config: %w", err)
+	}
+	tmp, err := os.CreateTemp(dir, ".config.*.yaml")
+	if err != nil {
+		return fmt.Errorf("creating tempfile in %s: %w", dir, err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("writing tempfile: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing tempfile: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renaming tempfile to %s: %w", path, err)
+	}
+	return nil
 }

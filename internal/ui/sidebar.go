@@ -25,11 +25,18 @@ type SidebarResource struct {
 // visibleItem represents a single item in the flattened visible list.
 type visibleItem struct {
 	isCategory    bool
-	categoryIndex int // index into categories slice (-1 for standalone)
+	categoryIndex int // index into categories slice (-1 standalone, -2 Pinned virtual category)
 	resourceIndex int // index into category's Items slice (-1 for category header)
 	label         string
 	resourceType  k8s.ResourceType
+	pinned        bool // true when this is the row's appearance INSIDE the Pinned category (so an "Unpin" action can disambiguate from the same kind in its original category)
 }
+
+// pinnedCategoryIndex is the sentinel value for visibleItem.categoryIndex
+// signalling "this item lives in the virtual Pinned category at the top
+// of the sidebar". -1 was already taken by standalone resources; -2 is
+// unambiguous and stable.
+const pinnedCategoryIndex = -2
 
 // SidebarModel is the Bubble Tea model for the sidebar panel.
 type SidebarModel struct {
@@ -45,6 +52,158 @@ type SidebarModel struct {
 	selected     k8s.ResourceType
 	searching    bool
 	searchQuery  string
+
+	// pinned is the ordered list of resource kinds the user has pinned to
+	// the top of the sidebar (insertion order). Rendered as a virtual
+	// "Pinned" category prepended to visibleItems(). Empty = the Pinned
+	// category does not appear at all (no empty placeholder).
+	//
+	// Same kind may live in both Pinned and its original category — the
+	// pinned slot is an additional surface, not a move.
+	pinned []k8s.ResourceType
+}
+
+// SetPinned replaces the pinned-kinds list — called at startup from
+// the config-loaded slice. Duplicates / unknown kinds are NOT filtered
+// here; the caller is responsible for resolving config strings to
+// registered ResourceTypes before invoking this.
+//
+// Re-snaps the cursor onto m.selected so the row the user logically
+// is "on" stays under the cursor even though prepending the Pinned
+// virtual category shifted every other index down by len(pinned)+1.
+// Without this, startup with non-empty pinned list landed the cursor
+// on whatever happened to be at the original index — usually Nodes
+// instead of Pods, while panel 2 still showed Pods.
+func (m *SidebarModel) SetPinned(kinds []k8s.ResourceType) {
+	m.pinned = append(m.pinned[:0], kinds...)
+	m.restoreCursorToSelected()
+}
+
+// snapCursorToKindPreferringSection points the cursor at the row whose
+// (resourceType, categoryIndex) matches the given pair — i.e. the
+// SAME logical row the cursor was sitting on before a layout-shifting
+// change (Pin / Unpin). Falls back to the first row with the matching
+// resourceType when the exact (kind, section) pair has disappeared
+// (e.g. after unpinning the only row in the Pinned section). Out-of-
+// view positioning is handled by ensureCursorVisible.
+func (m *SidebarModel) snapCursorToKindPreferringSection(rt k8s.ResourceType, preferCatIdx int) {
+	if rt == "" {
+		return
+	}
+	visible := m.visibleItems()
+	for i, item := range visible {
+		if !item.isCategory && item.resourceType == rt && item.categoryIndex == preferCatIdx {
+			m.cursor = i
+			m.ensureCursorVisible()
+			return
+		}
+	}
+	for i, item := range visible {
+		if !item.isCategory && item.resourceType == rt {
+			m.cursor = i
+			m.ensureCursorVisible()
+			return
+		}
+	}
+}
+
+// CursorCategoryIndex returns the categoryIndex of the row the cursor
+// is currently on (matches visibleItem.categoryIndex semantics:
+// -1 = standalone, -2 = Pinned virtual category, >=0 = real category
+// index). Returns -1 for out-of-range cursor or category headers. Used
+// by AppModel to capture the visual row identity BEFORE a pin/unpin
+// toggle so the same row can be re-located in the post-toggle layout.
+func (m SidebarModel) CursorCategoryIndex() int {
+	visible := m.visibleItems()
+	if m.cursor < 0 || m.cursor >= len(visible) {
+		return -1
+	}
+	item := visible[m.cursor]
+	if item.isCategory {
+		return -1
+	}
+	return item.categoryIndex
+}
+
+// SnapCursor is the exported wrapper around snapCursorToKindPreferringSection —
+// AppModel calls it after a pin/unpin toggle to keep the cursor on
+// the visually-equivalent row.
+func (m *SidebarModel) SnapCursor(rt k8s.ResourceType, preferCatIdx int) {
+	m.snapCursorToKindPreferringSection(rt, preferCatIdx)
+}
+
+// PinnedKinds returns a copy of the currently pinned list — used by
+// AppModel when serialising to config and by the Space-menu action
+// context to decide whether the cursor row is already pinned.
+func (m SidebarModel) PinnedKinds() []k8s.ResourceType {
+	out := make([]k8s.ResourceType, len(m.pinned))
+	copy(out, m.pinned)
+	return out
+}
+
+// AddPinned appends a kind to the pinned list (insertion order = render
+// order). No-op when the kind is already pinned — pin is idempotent
+// because the menu hides "Pin" once an item is in the list, but the
+// guard catches programmatic callers / future hotkey races.
+func (m *SidebarModel) AddPinned(rt k8s.ResourceType) {
+	for _, existing := range m.pinned {
+		if existing == rt {
+			return
+		}
+	}
+	m.pinned = append(m.pinned, rt)
+}
+
+// RemovePinned drops a kind from the pinned list. No-op if missing.
+func (m *SidebarModel) RemovePinned(rt k8s.ResourceType) {
+	for i, existing := range m.pinned {
+		if existing == rt {
+			m.pinned = append(m.pinned[:i], m.pinned[i+1:]...)
+			return
+		}
+	}
+}
+
+// IsPinned reports whether the given kind is currently in the pinned
+// list — used by the Space-menu logic to surface "Pin" vs "Unpin".
+func (m SidebarModel) IsPinned(rt k8s.ResourceType) bool {
+	for _, existing := range m.pinned {
+		if existing == rt {
+			return true
+		}
+	}
+	return false
+}
+
+// CursorPinned reports whether the cursor is currently parked on a row
+// that is itself rendered inside the virtual Pinned category. The same
+// kind may also live in its original category; CursorPinned answers
+// specifically "the Unpin action should be on the menu" — i.e. cursor
+// IS in the Pinned section. Returns false for category headers, for
+// rows outside the Pinned section, or when the cursor is out of range.
+func (m SidebarModel) CursorPinned() bool {
+	visible := m.visibleItems()
+	if m.cursor < 0 || m.cursor >= len(visible) {
+		return false
+	}
+	return visible[m.cursor].pinned && !visible[m.cursor].isCategory
+}
+
+// CursorResourceType returns the ResourceType under the cursor when
+// the cursor is on a resource row (in any category — Pinned, Cluster,
+// Workloads, ...). Returns empty / zero for category headers or out-
+// of-range cursor. Used by the panel-1 Space menu to decide which
+// pin/unpin action to surface.
+func (m SidebarModel) CursorResourceType() k8s.ResourceType {
+	visible := m.visibleItems()
+	if m.cursor < 0 || m.cursor >= len(visible) {
+		return ""
+	}
+	item := visible[m.cursor]
+	if item.isCategory {
+		return ""
+	}
+	return item.resourceType
 }
 
 // IsSearching returns true if the sidebar is in search mode.
@@ -485,6 +644,42 @@ func (m SidebarModel) View() string {
 func (m SidebarModel) visibleItems() []visibleItem {
 	query := strings.ToLower(m.searchQuery)
 	var items []visibleItem
+	// Pinned virtual category — prepended only when the user has pinned
+	// anything. Each pinned kind is resolved against the registry for
+	// its DisplayName so the label matches what the same kind shows in
+	// its original category. Kinds that no longer resolve (CRD removed,
+	// etc.) are silently skipped.
+	if len(m.pinned) > 0 {
+		var pinnedChildren []visibleItem
+		catLabel := "Pinned"
+		catMatch := query != "" && strings.Contains(strings.ToLower(catLabel), query)
+		for ri, rt := range m.pinned {
+			label := string(rt)
+			if def := k8s.DefaultRegistry.Get(rt); def != nil {
+				label = def.DisplayName
+			}
+			if query != "" && !catMatch && !strings.Contains(strings.ToLower(label), query) {
+				continue
+			}
+			pinnedChildren = append(pinnedChildren, visibleItem{
+				isCategory:    false,
+				categoryIndex: pinnedCategoryIndex,
+				resourceIndex: ri,
+				label:         label,
+				resourceType:  rt,
+				pinned:        true,
+			})
+		}
+		if len(pinnedChildren) > 0 || query == "" {
+			items = append(items, visibleItem{
+				isCategory:    true,
+				categoryIndex: pinnedCategoryIndex,
+				resourceIndex: -1,
+				label:         catLabel,
+			})
+			items = append(items, pinnedChildren...)
+		}
+	}
 	for ci, cat := range m.categories {
 		catMatch := query != "" && strings.Contains(strings.ToLower(cat.Label), query)
 		var children []visibleItem

@@ -509,3 +509,173 @@ func TestSidebarModel_SetSelected_NoOpOnMissingType(t *testing.T) {
 		t.Errorf("selected changed on missing type: before=%v, after=%v", beforeSelected, m.Selected())
 	}
 }
+
+func TestSidebarModel_Pinned_VisibleItemsPrependCategory(t *testing.T) {
+	// Pinned category should appear FIRST in visibleItems, before
+	// "Cluster" and friends. Each pinned kind keeps its original
+	// DisplayName.
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods, k8s.ResourceNamespaces})
+
+	visible := m.visibleItems()
+	if len(visible) < 3 {
+		t.Fatalf("expected at least 3 visible items (Pinned header + 2 pinned items), got %d", len(visible))
+	}
+	if !visible[0].isCategory || visible[0].label != "Pinned" {
+		t.Errorf("visible[0] must be the Pinned category header, got %+v", visible[0])
+	}
+	if visible[1].resourceType != k8s.ResourcePods {
+		t.Errorf("visible[1] kind = %v, want Pods (insertion-order render)", visible[1].resourceType)
+	}
+	if visible[2].resourceType != k8s.ResourceNamespaces {
+		t.Errorf("visible[2] kind = %v, want Namespaces", visible[2].resourceType)
+	}
+	for i := 0; i < 3; i++ {
+		if i == 0 {
+			continue // category header
+		}
+		if !visible[i].pinned {
+			t.Errorf("visible[%d] must carry pinned=true, got %+v", i, visible[i])
+		}
+	}
+}
+
+func TestSidebarModel_Pinned_SameKindAppearsTwice(t *testing.T) {
+	// Spec: same kind can live in Pinned AND its original category;
+	// pinning is an additional surface, not a move. visibleItems must
+	// emit two rows with resourceType == Pods.
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods})
+	visible := m.visibleItems()
+	count := 0
+	for _, it := range visible {
+		if !it.isCategory && it.resourceType == k8s.ResourcePods {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Errorf("Pods must appear once in Pinned AND once in Workloads, got %d", count)
+	}
+}
+
+func TestSidebarModel_AddPinned_Idempotent(t *testing.T) {
+	m := newTestSidebar()
+	m.AddPinned(k8s.ResourcePods)
+	m.AddPinned(k8s.ResourcePods) // idempotent
+	if len(m.PinnedKinds()) != 1 {
+		t.Errorf("AddPinned must dedupe; got %d entries", len(m.PinnedKinds()))
+	}
+}
+
+func TestSidebarModel_RemovePinned_DropsEntry(t *testing.T) {
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods, k8s.ResourceNodes})
+	m.RemovePinned(k8s.ResourcePods)
+	pinned := m.PinnedKinds()
+	if len(pinned) != 1 || pinned[0] != k8s.ResourceNodes {
+		t.Errorf("RemovePinned must drop Pods only; got %v", pinned)
+	}
+}
+
+func TestSidebarModel_CursorPinned_TrueOnlyInsidePinned(t *testing.T) {
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods})
+
+	// Cursor at 0 (Pinned header) — not a row, false.
+	m.cursor = 0
+	if m.CursorPinned() {
+		t.Errorf("CursorPinned must be false on category header")
+	}
+	// Cursor at 1 (the pinned Pods row) — true.
+	m.cursor = 1
+	if !m.CursorPinned() {
+		t.Errorf("CursorPinned must be true on a row inside the Pinned section")
+	}
+	// Move to the Pods row INSIDE Workloads — should be false even
+	// though resourceType matches.
+	visible := m.visibleItems()
+	for i, it := range visible {
+		if i > 2 && !it.isCategory && it.resourceType == k8s.ResourcePods {
+			m.cursor = i
+			break
+		}
+	}
+	if m.CursorPinned() {
+		t.Errorf("CursorPinned must be false for Pods in its original Workloads category (only the Pinned-section row counts)")
+	}
+}
+
+func TestSidebarModel_SetPinned_KeepsCursorOnSelected(t *testing.T) {
+	// Startup bug: NewSidebarModel positioned the cursor on Pods
+	// (index 5), then config-driven SetPinned prepended a Pinned
+	// category which shifted every row down by len(pinned)+1 — cursor
+	// stayed on the old index and pointed at Nodes while panel 2 still
+	// showed Pods. SetPinned now re-snaps the cursor to the row
+	// matching m.selected.
+	m := newTestSidebar()
+	if m.Selected() != k8s.ResourcePods {
+		t.Fatalf("setup: default selected expected to be Pods, got %v", m.Selected())
+	}
+	m.SetPinned([]k8s.ResourceType{k8s.ResourceDeployments, k8s.ResourceNodes})
+
+	visible := m.visibleItems()
+	if m.cursor < 0 || m.cursor >= len(visible) {
+		t.Fatalf("cursor out of range after SetPinned: %d (visible=%d)", m.cursor, len(visible))
+	}
+	row := visible[m.cursor]
+	if row.isCategory || row.resourceType != k8s.ResourcePods {
+		t.Errorf("cursor should land on the row matching selected (Pods), got %+v", row)
+	}
+}
+
+func TestSidebarModel_SnapCursor_PrefersExactSectionMatch(t *testing.T) {
+	// Pin Pods → same kind exists in BOTH Pinned and Workloads sections.
+	// SnapCursor with preferCatIdx pointing at Workloads must land on
+	// the Workloads/Pods row, not the Pinned/Pods row — even though
+	// Pinned/Pods is the FIRST match.
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods})
+
+	// Locate the Workloads/Pods row + its categoryIndex.
+	visible := m.visibleItems()
+	var workloadsCatIdx int = -99
+	var workloadsRow int = -1
+	for i, it := range visible {
+		if it.isCategory && it.label == "Workloads" {
+			workloadsCatIdx = it.categoryIndex
+		}
+		if !it.isCategory && it.resourceType == k8s.ResourcePods && it.categoryIndex == workloadsCatIdx && workloadsCatIdx != -99 {
+			workloadsRow = i
+			break
+		}
+	}
+	if workloadsRow < 0 {
+		t.Fatalf("could not locate Workloads/Pods row in visible (workloadsCatIdx=%d)", workloadsCatIdx)
+	}
+
+	m.SnapCursor(k8s.ResourcePods, workloadsCatIdx)
+	if m.cursor != workloadsRow {
+		t.Errorf("SnapCursor with Workloads categoryIndex landed at %d, expected %d (the Workloads/Pods row)", m.cursor, workloadsRow)
+	}
+}
+
+func TestSidebarModel_SnapCursor_FallsBackWhenExactGone(t *testing.T) {
+	// Cursor was on Pinned/Pods (categoryIndex = pinnedCategoryIndex).
+	// Pods then gets unpinned. The Pinned/Pods row is gone, but a
+	// fallback to "first Pods anywhere" must still place the cursor on
+	// Workloads/Pods so the user doesn't see "no selection" or land on
+	// an unrelated row.
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods})
+	m.RemovePinned(k8s.ResourcePods)
+
+	m.SnapCursor(k8s.ResourcePods, pinnedCategoryIndex)
+	visible := m.visibleItems()
+	if m.cursor < 0 || m.cursor >= len(visible) {
+		t.Fatalf("cursor out of range: %d (visible=%d)", m.cursor, len(visible))
+	}
+	row := visible[m.cursor]
+	if row.resourceType != k8s.ResourcePods || row.isCategory {
+		t.Errorf("SnapCursor fallback should land on first Pods anywhere; got %+v", row)
+	}
+}
