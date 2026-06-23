@@ -750,8 +750,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				(m.activePanel == DetailPanel && m.detail.HasActiveFilter())
 			if filterActive {
 				// Let panel handle Esc to clear filter
-			} else if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
-				return m, m.exitDrillDown()
+			} else {
+				// Panel 2 Esc with compare mode active: peel the
+				// lock off first and KEEP going — same keypress
+				// also pops one drill level if applicable. The
+				// alternative (two-press: one for lock, one for
+				// drill-back) made Esc feel inconsistent — every
+				// other Esc in km8 does its work in one press.
+				if m.activePanel == TablePanel && m.inCompareMode() {
+					m.clearCompareLock()
+				}
+				if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
+					return m, m.exitDrillDown()
+				}
 			}
 		case "N":
 			return m, fetchNamespaces(m.k8sClient)

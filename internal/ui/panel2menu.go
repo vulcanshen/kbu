@@ -79,11 +79,14 @@ func (m *Panel2MenuPopupModel) Open(rt k8s.ResourceType, item k8s.ResourceItem, 
 	m.helmManaged = k8s.IsHelmManaged(item)
 	m.items = buildPanel2MenuItems(rt, item, m.helmManaged, compare)
 	if canPop {
-		m.items = append(m.items, panel2MenuItem{
+		// Esc is also a menu-only entry (no single-letter hotkey) so
+		// it joins the top group alongside Enter / Compare / Lock —
+		// prepended rather than appended.
+		m.items = append([]panel2MenuItem{{
 			label: "Esc " + drillUpIcon,
 			key:   "Esc",
 			hint:  "back to parent list",
-		})
+		}}, m.items...)
 	}
 	m.cursor = 0
 	m.titleOverride = ""
@@ -205,49 +208,26 @@ func (m Panel2MenuPopupModel) RenderPopup() string {
 //
 // The Enter entry is appended at the END (with a separator above) when the
 // kind supports drill-down — surfaces the drill action for discoverability,
-// visually separated from the hotkey-driven Y/E/S/D group since Enter has
-// no single-letter hotkey. Multi-char key "Enter" skips bracketHotkey
-// (no false "[E]nter" rendering) and bypasses direct-hotkey dispatch
-// (cursor+Enter only — direct Enter from elsewhere in the menu commits
-// the cursor's own item, not the drill entry).
+// Layout: menu-only items (multi-char "Enter" / "LockCompare" /
+// "CompareTo" / "ExitCompare") render at the TOP of the list, then
+// the hotkey-driven Y / E / S / D group at the BOTTOM. Cursor opens
+// on the first menu-only entry — that's the action with NO direct
+// shortcut, so making it the default landing target gives it the
+// discoverability boost it needs. Hotkey actions can be triggered
+// without opening the menu in the first place (direct Y/E/S/D) so
+// they don't need to live at the cursor.
+//
+// Multi-char keys ("Enter" / "LockCompare" / ...) skip bracketHotkey
+// (no false "[E]nter" rendering) and bypass direct-hotkey dispatch
+// (cursor+Enter only — direct Enter from elsewhere in the menu
+// commits the cursor's own item, not the drill entry).
 func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool, compare panel2CompareCtx) []panel2MenuItem {
 	canEdit := !helmManaged && resourceAllowsEdit(rt)
 	canDelete := !helmManaged && resourceAllowsDelete(rt)
 
-	items := []panel2MenuItem{
-		{label: "YAML", key: "Y", hint: "view resource manifest"},
-	}
-	if canEdit {
-		items = append(items, panel2MenuItem{label: "Edit", key: "E", hint: "kubectl edit"})
-	}
-	if resourceHasContainer(rt) {
-		items = append(items, panel2MenuItem{label: "Shell", key: "S", hint: "kubectl exec -it"})
-	}
-	if canDelete {
-		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
-	}
-	// Compare mode entries. Three states drive what appears:
-	//   - not locked AND >1 selectable items → "Lock to compare"
-	//   - locked AND cursor on a different item of the same kind →
-	//       "Compare to this resource"
-	//   - locked (in any cursor position)            → "Exit compare mode"
-	// Single-item lists hide "Lock to compare" since locking with no
-	// alternative target is a dead end.
-	// Compare actions deliberately use multi-char keys so:
-	//   - bracketHotkey skips them (no misleading "[L]ock to compare"
-	//     render — these are menu-only, no direct hotkey)
-	//   - the direct-hotkey case list below ignores them — pressing L /
-	//     C / X anywhere does nothing on its own; the user MUST cursor
-	//     onto the row and Enter to commit. Same pattern as the "Enter"
-	//     drill-down entry.
-	if compare.locked {
-		if compare.cursorComparable {
-			items = append(items, panel2MenuItem{label: "Compare to this resource", key: "CompareTo", hint: "diff against the locked item"})
-		}
-		items = append(items, panel2MenuItem{label: "Exit compare mode", key: "ExitCompare", hint: "release the locked item"})
-	} else if compare.canLock {
-		items = append(items, panel2MenuItem{label: "Lock to compare", key: "LockCompare", hint: "pick this row as the diff baseline"})
-	}
+	var items []panel2MenuItem
+
+	// ── menu-only (no hotkey) — top ──
 	if rt.SupportsDrillDown() {
 		target := panel2DrillLabel(rt, item)
 		hint := "drill into " + target
@@ -259,6 +239,33 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 			key:   "Enter",
 			hint:  hint,
 		})
+	}
+	// Compare mode entries. Three states drive what appears:
+	//   - not locked AND >1 selectable items → "Lock to compare"
+	//   - locked AND cursor on a different item of the same kind →
+	//       "Compare to this resource"
+	//   - locked (in any cursor position)            → "Exit compare mode"
+	// Single-item lists hide "Lock to compare" since locking with no
+	// alternative target is a dead end.
+	if compare.locked {
+		if compare.cursorComparable {
+			items = append(items, panel2MenuItem{label: "Compare to this resource", key: "CompareTo", hint: "diff against the locked item"})
+		}
+		items = append(items, panel2MenuItem{label: "Exit compare mode", key: "ExitCompare", hint: "release the locked item"})
+	} else if compare.canLock {
+		items = append(items, panel2MenuItem{label: "Lock to compare", key: "LockCompare", hint: "pick this row as the diff baseline"})
+	}
+
+	// ── hotkey group — bottom ──
+	items = append(items, panel2MenuItem{label: "YAML", key: "Y", hint: "view resource manifest"})
+	if canEdit {
+		items = append(items, panel2MenuItem{label: "Edit", key: "E", hint: "kubectl edit"})
+	}
+	if resourceHasContainer(rt) {
+		items = append(items, panel2MenuItem{label: "Shell", key: "S", hint: "kubectl exec -it"})
+	}
+	if canDelete {
+		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
 	}
 	return items
 }

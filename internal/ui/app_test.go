@@ -671,3 +671,56 @@ func TestAppModel_Compare_CtxForMenu(t *testing.T) {
 
 // silence unused warning if tea is not referenced elsewhere in tests
 var _ tea.Msg = struct{}{}
+
+func TestAppModel_EscOnPanel2WithCompareMode_ClearsLockAndPopsDrill(t *testing.T) {
+	// Panel 2 Esc with compare mode active AND a drill chain in
+	// place: ONE Esc must both release the compare lock AND pop one
+	// drill level. Without this combined handling Esc would either
+	// silently drop one of the actions or force the user to press
+	// Esc twice — both confusing relative to every other Esc in km8.
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+	m.activePanel = TablePanel
+	m.appLog = NewAppLogModel(m.theme)
+	m.statusLine = NewStatusLineModel(m.theme)
+	m.logStreamer = k8s.NewLogStreamer(nil)
+
+	// Set up: in compare mode AND on a drill stack (e.g. drilled
+	// from Deployment → Pods).
+	m.setCompareLock(items[0], k8s.ResourcePods)
+	m.drillDownStack = append(m.drillDownStack, drillDownEntry{parentType: k8s.ResourceDeployments, parentName: "nginx"})
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	got := updated.(AppModel)
+	if got.inCompareMode() {
+		t.Error("Esc must release compare lock when both lock + drill are active")
+	}
+	if len(got.drillDownStack) != 0 {
+		t.Errorf("Esc must also pop the drill stack in the same press; got len=%d", len(got.drillDownStack))
+	}
+}
+
+func TestAppModel_EscOnPanel2WithCompareMode_NoDrill_JustClearsLock(t *testing.T) {
+	// Compare mode active, no drill: Esc only releases the lock.
+	// Without drill stack to pop, the keypress does its compare-mode
+	// work and otherwise no-ops.
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+	m.activePanel = TablePanel
+	m.appLog = NewAppLogModel(m.theme)
+	m.setCompareLock(items[0], k8s.ResourcePods)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	got := updated.(AppModel)
+	if got.inCompareMode() {
+		t.Error("Esc must release compare lock")
+	}
+}

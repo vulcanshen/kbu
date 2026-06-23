@@ -47,10 +47,10 @@ func drainPanel2MenuToInteractive(t *testing.T, m *Panel2MenuPopupModel, openCmd
 
 func TestPanel2Menu_Items_PodHasShell(t *testing.T) {
 	// Pod has containers — Shell must appear. Pod also drills (→ containers)
-	// so Enter entry is appended at the END (with separator). Full set:
-	// Y / E / S / D / Enter, Enter has groupBreak=true.
+	// so Enter entry is at the TOP (menu-only entries lead, hotkey entries
+	// follow). Full set in order: Enter / Y / E / S / D.
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	wantKeys := []string{"Y", "E", "S", "D", "Enter"}
+	wantKeys := []string{"Enter", "Y", "E", "S", "D"}
 	if len(items) != len(wantKeys) {
 		t.Fatalf("Pod menu len=%d, want %d (keys=%v)", len(items), len(wantKeys), wantKeys)
 	}
@@ -207,28 +207,30 @@ func TestPanel2Menu_Items_CompareLockedOnLockedRow_HidesCompareTo(t *testing.T) 
 }
 
 func TestPanel2Menu_Items_DeploymentDrillsToPods(t *testing.T) {
-	// Deployment drills to Pods — Enter entry is last with groupBreak,
-	// hint should say "drill into pods" (KubectlName "pod" + "s").
+	// Deployment drills to Pods — Enter entry sits at the TOP (no-hotkey
+	// items lead the menu); hint says "drill into pods" (KubectlName
+	// "pod" + "s").
 	items := buildPanel2MenuItems(k8s.ResourceDeployments, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	last := items[len(items)-1]
-	if last.key != "Enter" {
-		t.Fatalf("Deployment last item must be Enter (drill), got %q", last.key)
+	first := items[0]
+	if first.key != "Enter" {
+		t.Fatalf("Deployment first item must be Enter (drill), got %q", first.key)
 	}
-	if last.hint != "drill into pods" {
-		t.Errorf("Deployment Enter hint = %q, want %q", last.hint, "drill into pods")
+	if first.hint != "drill into pods" {
+		t.Errorf("Deployment Enter hint = %q, want %q", first.hint, "drill into pods")
 	}
 }
 
 func TestPanel2Menu_Items_PodDrillsToContainers(t *testing.T) {
 	// Pod drills to containers (special-cased — containers aren't a K8s
 	// API resource so we don't go through the registry's KubectlName).
+	// Enter is the TOP entry — menu-only items lead.
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	last := items[len(items)-1]
-	if last.key != "Enter" {
-		t.Fatalf("Pod last item must be Enter, got %q", last.key)
+	first := items[0]
+	if first.key != "Enter" {
+		t.Fatalf("Pod first item must be Enter, got %q", first.key)
 	}
-	if last.hint != "drill into containers" {
-		t.Errorf("Pod Enter hint = %q, want %q", last.hint, "drill into containers")
+	if first.hint != "drill into containers" {
+		t.Errorf("Pod Enter hint = %q, want %q", first.hint, "drill into containers")
 	}
 }
 
@@ -241,12 +243,12 @@ func TestPanel2Menu_Open_CanPopAppendsEsc(t *testing.T) {
 	cmd := m.Open(k8s.ResourcePods, item, true, panel2CompareCtx{}) // canPop=true → from drill
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
-	last := m.items[len(m.items)-1]
-	if last.key != "Esc" {
-		t.Fatalf("when canPop=true, last item must be Esc, got %q (full=%v)", last.key, itemKeys(m.items))
+	first := m.items[0]
+	if first.key != "Esc" {
+		t.Fatalf("when canPop=true, first item must be Esc, got %q (full=%v)", first.key, itemKeys(m.items))
 	}
-	if last.hint != "back to parent list" {
-		t.Errorf("Esc hint = %q, want %q", last.hint, "back to parent list")
+	if first.hint != "back to parent list" {
+		t.Errorf("Esc hint = %q, want %q", first.hint, "back to parent list")
 	}
 }
 
@@ -267,7 +269,9 @@ func TestPanel2Menu_Open_NoCanPopOmitsEsc(t *testing.T) {
 // ── commit paths ───────────────────────────────────────────────────────────
 
 func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
-	// Cursor starts at 0 = YAML. Pressing Enter commits Y.
+	// Cursor starts at index 0 — the top of the menu. With the
+	// menu-only-first layout that's "Enter" (drill into containers
+	// for Pods). Pressing Enter on cursor 0 commits Action="Enter".
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
 	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
@@ -283,8 +287,8 @@ func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 		if !ok {
 			return false
 		}
-		if am.Action != "Y" {
-			t.Errorf("cursor 0 should commit Y (YAML), got %q", am.Action)
+		if am.Action != "Enter" {
+			t.Errorf("cursor 0 should commit Enter (drill, the top menu-only entry), got %q", am.Action)
 		}
 		if am.Item.Name != "nginx" {
 			t.Errorf("action item.Name=%q, want nginx", am.Item.Name)
@@ -297,10 +301,12 @@ func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 	}
 }
 
-func TestPanel2Menu_EnterOnDrillRowEmitsEnter(t *testing.T) {
-	// Pod menu ends with Enter (drill) at the last index. G jumps cursor
-	// to the last item; pressing Enter commits Action="Enter" → app.go
-	// maps to enterDrillDown.
+func TestPanel2Menu_CursorOnHotkeyRowCommitsThatHotkey(t *testing.T) {
+	// Pod menu order: Enter / Y / E / S / D. G jumps cursor to the
+	// last item — Delete — and Enter commits Action="D" → app.go
+	// dispatches the kubectl delete confirm. Covers the hotkey-tail
+	// of the menu so a regression that resorts the items can't
+	// silently break the hotkey group.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
 	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
@@ -317,14 +323,14 @@ func TestPanel2Menu_EnterOnDrillRowEmitsEnter(t *testing.T) {
 		if !ok {
 			return false
 		}
-		if am.Action != "Enter" {
-			t.Errorf("last cursor (drill row) should commit Enter, got %q", am.Action)
+		if am.Action != "D" {
+			t.Errorf("last cursor (Delete row) should commit D, got %q", am.Action)
 		}
 		found = true
 		return true
 	})
 	if !found {
-		t.Error("Enter on drill row did not emit Panel2MenuActionMsg")
+		t.Error("Enter on last row did not emit Panel2MenuActionMsg")
 	}
 }
 
