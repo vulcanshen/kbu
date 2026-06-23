@@ -1421,7 +1421,15 @@ func servicePorts(svc *corev1.Service) string {
 	}
 	var ports []string
 	for _, p := range svc.Spec.Ports {
-		s := fmt.Sprintf("%d/%s", p.Port, p.Protocol)
+		// Match `kubectl get svc` PORT(S): show port:nodePort/protocol when
+		// the controller has assigned a nodePort (NodePort + LoadBalancer
+		// types), otherwise plain port/protocol (ClusterIP / Headless).
+		var s string
+		if p.NodePort > 0 {
+			s = fmt.Sprintf("%d:%d/%s", p.Port, p.NodePort, p.Protocol)
+		} else {
+			s = fmt.Sprintf("%d/%s", p.Port, p.Protocol)
+		}
 		ports = append(ports, s)
 	}
 	return strings.Join(ports, ",")
@@ -1656,6 +1664,7 @@ func fetchConfigMaps(ctx context.Context, cs kubernetes.Interface, ns string) ([
 			Raw:       cm,
 			Row: []string{
 				cm.Name,
+				cm.Namespace,
 				fmt.Sprintf("%d", len(cm.Data)+len(cm.BinaryData)),
 				formatAge(cm.CreationTimestamp.Time),
 			},
