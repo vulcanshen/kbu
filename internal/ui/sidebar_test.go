@@ -23,6 +23,42 @@ func TestSidebarModel_SearchJKAreTypedNotNavigation(t *testing.T) {
 	// regression we guard against is j/k bypassing the rune handler entirely.
 }
 
+func TestSidebarModel_SearchEnterNoMatchClearsFilter(t *testing.T) {
+	// Bug: typing junk + Enter left searching=false with a non-empty
+	// searchQuery and zero visible items. handleKey's "no visible
+	// items → return early" guard then swallowed every subsequent key
+	// including `/` to restart search — the panel was stuck until
+	// focus changed. Enter on an empty match now behaves like Esc:
+	// clear the filter and restore the cursor.
+	m := newTestSidebar()
+
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "xxxnomatchxxx" {
+		m, _ = m.Update(keyMsg(r))
+	}
+	if m.searchQuery == "" {
+		t.Fatal("setup: search query expected to be populated")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.searching {
+		t.Error("Enter must exit search input mode")
+	}
+	if m.searchQuery != "" {
+		t.Errorf("Enter on empty match must clear searchQuery, got %q", m.searchQuery)
+	}
+	if m.HasActiveFilter() {
+		t.Error("filter must drop when Enter has no match")
+	}
+
+	// `/` must work again — the original symptom of the bug was this
+	// key getting eaten.
+	m, _ = m.Update(keyMsg('/'))
+	if !m.searching {
+		t.Error("`/` after Enter-no-match must re-enter search mode")
+	}
+}
+
 func TestSidebarModel_CopyableContent(t *testing.T) {
 	m := newTestSidebar()
 	got := m.CopyableContent()
