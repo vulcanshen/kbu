@@ -234,6 +234,17 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case msg.Type == tea.KeyEnter:
 		m.searching = false
 		visible := m.visibleItems()
+		// No match: Enter behaves like Esc — clears the filter and
+		// restores the cursor. Without this the sidebar landed in a
+		// dead state (searching=false, searchQuery non-empty, visible
+		// empty), and handleKey's "no visible items → return early"
+		// guard swallowed every subsequent key, including `/` to start
+		// a new search. Only escape was switching panel.
+		if len(visible) == 0 {
+			m.searchQuery = ""
+			m.restoreCursorToSelected()
+			return m, nil
+		}
 		return m.activateResource(visible)
 	case msg.Type == tea.KeyBackspace:
 		if len(m.searchQuery) > 0 {
