@@ -321,11 +321,16 @@ func resourceAllowsDelete(rt k8s.ResourceType) bool {
 }
 
 // bracketHotkey wraps the hotkey letter inside the label with square
-// brackets (vim-help convention). "YAML" + "Y" → "[Y]AML". Falls back
-// to the unmodified label when the hotkey isn't a substring (case-
-// insensitive match) or when the key is multi-character (e.g. "Enter" —
-// bracketing would be misleading since Enter isn't a single-letter
-// shortcut), preserving label readability over hint correctness.
+// brackets (vim-help convention). "YAML" + "Y" → "[Y]AML",
+// "Unpin Pods" + "P" → "Un[P]in Pods". The bracketed letter is rendered
+// in the key's casing (always uppercase since hotkeys are case-
+// sensitive uppercase) — without this, "Unpin"'s lowercase p inside
+// the label would render "Un[p]in" while the actual hotkey is Shift+P,
+// which reads as a key-mismatch hint to users. Falls back to the
+// unmodified label when the hotkey isn't a substring (case-insensitive
+// match) or when the key is multi-character (e.g. "Enter" — bracketing
+// would be misleading since Enter isn't a single-letter shortcut),
+// preserving label readability over hint correctness.
 func bracketHotkey(label, key string) string {
 	if label == "" || key == "" || len(key) > 1 {
 		return label
@@ -336,7 +341,7 @@ func bracketHotkey(label, key string) string {
 	if idx < 0 {
 		return label
 	}
-	return label[:idx] + "[" + string(label[idx]) + "]" + label[idx+1:]
+	return label[:idx] + "[" + upperKey + "]" + label[idx+1:]
 }
 
 // resourceHasContainer returns true for kinds where `kubectl exec` is

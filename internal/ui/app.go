@@ -75,6 +75,7 @@ type AppModel struct {
 	width           int
 	height          int
 	theme           *theme.Theme
+	cfg             *config.Config // user config — mutated + persisted on pin/unpin
 	cfgEditor       string
 	editing         bool
 	successNotice   string
@@ -164,6 +165,58 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 	return ctx
 }
 
+// togglePinnedKind flips the pin status for the given resource kind:
+//   - not pinned → AddPinned
+//   - already pinned → RemovePinned
+//
+// Used by both the direct `P` hotkey on panel 1 and the Space-menu
+// PinKind / UnpinKind actions — single funnel keeps the two paths
+// from drifting on edge cases. Persists the updated list to config
+// atomically; on save failure the in-memory state already changed
+// but the toast surfaces the error.
+//
+// Cursor preservation: pinning prepends rows to the visible list and
+// unpinning removes them, both of which shift indices. The cursor's
+// original (resourceType, categoryIndex) is captured before the
+// toggle and re-snapped after — so the user's eyes stay on the same
+// visual row instead of being pushed to whatever happened to be at
+// the old index.
+func (m *AppModel) togglePinnedKind(rt k8s.ResourceType) tea.Cmd {
+	cursorCatIdx := m.sidebar.CursorCategoryIndex()
+	cursorRT := m.sidebar.CursorResourceType()
+	if m.sidebar.IsPinned(rt) {
+		m.sidebar.RemovePinned(rt)
+	} else {
+		m.sidebar.AddPinned(rt)
+	}
+	m.sidebar.SnapCursor(cursorRT, cursorCatIdx)
+	if err := m.persistPinnedKinds(); err != nil {
+		m.appLog.Error("pin save failed: " + err.Error())
+		return m.toast.Show("pin save failed")
+	}
+	return nil
+}
+
+// persistPinnedKinds projects the sidebar's current pinned list back
+// into the config struct (using KubectlName as the stable string form)
+// and writes the config file atomically. Returns the underlying error
+// — the caller surfaces a toast / app-log entry on failure so the
+// in-memory pin state doesn't silently diverge from disk.
+func (m *AppModel) persistPinnedKinds() error {
+	if m.cfg == nil {
+		return nil
+	}
+	pinned := m.sidebar.PinnedKinds()
+	kinds := make([]string, 0, len(pinned))
+	for _, rt := range pinned {
+		if def := m.k8sClient.Registry().Get(rt); def != nil {
+			kinds = append(kinds, def.KubectlName)
+		}
+	}
+	m.cfg.PinnedResourceKinds = kinds
+	return m.cfg.Save()
+}
+
 // syncCompareLockToTable re-resolves the locked UID into a row index
 // against the CURRENT items slice and pushes it to the TableModel.
 // Called after any path that changes items (watcher update) or the
@@ -220,11 +273,25 @@ func parseCompareLayout(s string) CompareLayout {
 	return CompareLayoutSplit
 }
 
-func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor, compareLayout string) AppModel {
+func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppModel {
 	info := client.GetClusterInfo()
 
 	sidebar := NewSidebarModel(t)
 	sidebar.SetFocused(true)
+	// Resolve pinned kind strings from config into registered
+	// ResourceTypes. Entries that no longer map to a registered kind
+	// (CRD uninstalled, etc.) are dropped silently — the user keeps
+	// their list, but missing entries don't render.
+	if cfg != nil && len(cfg.PinnedResourceKinds) > 0 {
+		var resolved []k8s.ResourceType
+		for _, kind := range cfg.PinnedResourceKinds {
+			rt := client.Registry().LookupByKubectlName(kind)
+			if rt != "" {
+				resolved = append(resolved, rt)
+			}
+		}
+		sidebar.SetPinned(resolved)
+	}
 
 	watcher := k8s.NewWatcher(client.Clientset())
 	logStreamer := k8s.NewLogStreamer(client.Clientset())
@@ -233,7 +300,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor, compareLayout st
 	detail.SetResourceType(k8s.ResourcePods)
 
 	newCompareModel := NewCompareYamlPopupModel(t)
-	newCompareModel.SetDefaultLayout(parseCompareLayout(compareLayout))
+	newCompareModel.SetDefaultLayout(parseCompareLayout(cfg.Compare.Layout))
 
 	return AppModel{
 		sidebar:         sidebar,
@@ -258,7 +325,8 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfgEditor, compareLayout st
 		hintPopup:       NewHintPopupModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
-		cfgEditor:       cfgEditor,
+		cfg:             cfg,
+		cfgEditor:       cfg.Editor,
 		k8sClient:       client,
 		watcher:         watcher,
 		logStreamer:     logStreamer,
@@ -689,6 +757,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, fetchNamespaces(m.k8sClient)
 		case "C":
 			return m, fetchContexts(m.k8sClient)
+		case "P":
+			// Panel-1 only: toggle pinned status for the cursor's
+			// resource kind. Acts on the sidebar's selected row even
+			// without opening Space menu first — same UX as N/C which
+			// surface globally. No-op when active panel isn't the
+			// sidebar or when the cursor is on a category header.
+			if m.activePanel != SidebarPanel {
+				return m, nil
+			}
+			rt := m.sidebar.CursorResourceType()
+			if rt == "" {
+				return m, nil
+			}
+			return m, m.togglePinnedKind(rt)
 		case "E":
 			if !m.editing && m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
 				idx := m.table.SelectedRow()
@@ -821,7 +903,30 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel == SidebarPanel && !m.sidebar.IsSearching() {
 				m.hintPopup.SetSize(m.width, m.height)
 				title, rows := sidebarHintContent()
-				return m, m.hintPopup.Open(title, rows)
+				// Contextual Pin / Unpin toggle. Surfaces on any
+				// resource row (category headers excluded — they have
+				// no kind to act on). Pin vs Unpin is decided purely
+				// by IsPinned(rt) so the SAME kind shown in both the
+				// Pinned section AND its original category gives the
+				// same action — pin status is per-kind, not per-row.
+				// Hotkey "P" toggles either direction.
+				var actions []hintAction
+				if rt := m.sidebar.CursorResourceType(); rt != "" {
+					label := string(rt)
+					if def := m.k8sClient.Registry().Get(rt); def != nil {
+						label = def.DisplayName
+					}
+					if m.sidebar.IsPinned(rt) {
+						actions = append(actions, hintAction{
+							label: "Unpin " + label, key: "P", action: "UnpinKind",
+						})
+					} else {
+						actions = append(actions, hintAction{
+							label: "Pin " + label, key: "P", action: "PinKind",
+						})
+					}
+				}
+				return m, m.hintPopup.OpenWithActions(title, actions, rows)
 			}
 			// Container drill view: panel 2 is showing the containers of
 			// the pod we drilled into. Space opens a minimal menu carrying
@@ -1490,6 +1595,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearCompareLock()
 			m.appLog.Info("compare: exited")
 			return m, nil
+		}
+		return m, nil
+
+	case HintActionMsg:
+		// Sidebar Space-menu actions. Currently Pin / Unpin only;
+		// extend the switch when more actions get attached to the
+		// hint popup in the future. Both share togglePinnedKind so
+		// the menu + direct `P` hotkey can't drift on edge cases.
+		switch msg.Action {
+		case "PinKind", "UnpinKind":
+			rt := m.sidebar.CursorResourceType()
+			if rt == "" {
+				return m, nil
+			}
+			return m, m.togglePinnedKind(rt)
 		}
 		return m, nil
 

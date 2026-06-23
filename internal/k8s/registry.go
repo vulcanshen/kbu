@@ -99,6 +99,22 @@ func (r *Registry) Get(rt ResourceType) *ResourceDefinition {
 	return r.defs[rt]
 }
 
+// LookupByKubectlName resolves a kubectl short-name (e.g. "pod",
+// "configmap", "namespace") to the registered ResourceType. Returns
+// the empty ResourceType if no match. Used to resolve user-editable
+// strings in the config file (e.g. PinnedResourceKinds entries) into
+// runtime ResourceTypes.
+func (r *Registry) LookupByKubectlName(name string) ResourceType {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for rt, def := range r.defs {
+		if def.KubectlName == name {
+			return rt
+		}
+	}
+	return ""
+}
+
 // CategoryGroup represents a sidebar category with its resources.
 type CategoryGroup struct {
 	Label     string

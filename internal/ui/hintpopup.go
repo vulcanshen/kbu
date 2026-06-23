@@ -9,24 +9,49 @@ import (
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
-// HintPopupModel is the read-only "what can I do here?" popup. Used wherever
-// a panel / tab has no actionable per-row menu but the user might still want
-// to know which keys work. Content (title + rows) is passed in at Open() so
-// one instance serves multiple call sites (sidebar, Logs tab, Events tab,
-// Relatives-at-depth-1).
+// HintPopupModel is the "what can I do here?" popup. Used wherever a
+// panel / tab might want to surface its keybindings. Content (title +
+// rows) is passed in at Open() so one instance serves multiple call
+// sites (sidebar, Logs tab, Events tab, Relatives-at-depth-1).
+//
+// By default the popup is READ-ONLY — Update only handles close keys.
+// If OpenWithActions is used instead of Open, the popup grows an
+// interactive top region: a single-column action list. Cursor + Enter
+// commits an action, or the action's single-letter hotkey commits
+// directly. Used by the panel-1 sidebar Space menu so the same popup
+// can carry the cheatsheet AND the contextual Pin / Unpin action.
 type HintPopupModel struct {
 	animator PopupAnimator
 	screenW  int
 	theme    *theme.Theme
 
 	// Captured at Open — re-render uses these.
-	title string
-	rows  []hintRow
+	title   string
+	rows    []hintRow
+	actions []hintAction
+	cursor  int // index into actions; ignored when len(actions) == 0
 }
 
 type hintRow struct {
 	keys string // "j/k", "Enter", "/", ...
 	hint string // one-line description
+}
+
+// hintAction is one interactive entry rendered in the top region of
+// the popup. Key is the single-letter hotkey (bracketed in label via
+// bracketHotkey, dispatched directly on press). Action is the opaque
+// identifier emitted via HintActionMsg so the caller routes commits.
+type hintAction struct {
+	label  string // "Pin Pods" / "Unpin Pods" / ...
+	key    string // single-letter hotkey, e.g. "P"
+	action string // commit identifier passed back in HintActionMsg
+}
+
+// HintActionMsg is emitted when the user commits one of the popup's
+// actions (via cursor + Enter or direct hotkey letter). Action is the
+// string the action was registered with at OpenWithActions time.
+type HintActionMsg struct {
+	Action string
 }
 
 func NewHintPopupModel(t *theme.Theme) HintPopupModel {
@@ -36,10 +61,26 @@ func NewHintPopupModel(t *theme.Theme) HintPopupModel {
 	}
 }
 
-// Open shows the popup with the given title + rows.
+// Open shows the popup with the given title + rows. No interactive
+// actions — popup is read-only, every key closes or is ignored.
 func (m *HintPopupModel) Open(title string, rows []hintRow) tea.Cmd {
 	m.title = title
 	m.rows = rows
+	m.actions = nil
+	m.cursor = 0
+	return m.animator.Open()
+}
+
+// OpenWithActions opens the popup with both an interactive top region
+// (actions) and the read-only cheatsheet below. Cursor starts at index
+// 0 of actions. j/k navigate, Enter commits, single-letter hotkey
+// commits directly. Empty actions slice degrades to the same behaviour
+// as Open.
+func (m *HintPopupModel) OpenWithActions(title string, actions []hintAction, rows []hintRow) tea.Cmd {
+	m.title = title
+	m.rows = rows
+	m.actions = actions
+	m.cursor = 0
 	return m.animator.Open()
 }
 
@@ -55,8 +96,10 @@ func (m *HintPopupModel) HandleTick(msg AnimTickMsg) tea.Cmd {
 	return m.animator.Tick()
 }
 
-// Update only handles close keys — nothing to commit. Mirror the panel2 menu's
-// close set (Esc / q / Space) plus Enter as a friendly close-on-confirm.
+// Update handles close keys + (when actions present) cursor navigation
+// and commit. Mirror the panel2 menu's close set (Esc / q / Space).
+// Enter closes only when there are no actions — with actions, Enter
+// commits the cursor item.
 func (m HintPopupModel) Update(msg tea.Msg) (HintPopupModel, tea.Cmd) {
 	if !m.animator.IsInteractive() {
 		return m, nil
@@ -65,11 +108,54 @@ func (m HintPopupModel) Update(msg tea.Msg) (HintPopupModel, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	switch keyMsg.String() {
-	case "esc", "q", " ", "enter":
+	key := keyMsg.String()
+	switch key {
+	case "esc", "q", " ":
 		return m, m.animator.Close()
 	}
+	if len(m.actions) == 0 {
+		// Read-only popup — Enter also closes for the friendly
+		// "press anything to dismiss" feel.
+		if key == "enter" {
+			return m, m.animator.Close()
+		}
+		return m, nil
+	}
+	switch key {
+	case "j", "down":
+		if m.cursor < len(m.actions)-1 {
+			m.cursor++
+		}
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "enter":
+		if m.cursor < 0 || m.cursor >= len(m.actions) {
+			return m, nil
+		}
+		return m, m.commitAction(m.actions[m.cursor].action)
+	default:
+		// Direct hotkey trigger — must match an action's registered
+		// key (case-sensitive). Unknown keys fall through to no-op so
+		// stray presses don't close the popup.
+		for _, a := range m.actions {
+			if a.key != "" && key == a.key {
+				return m, m.commitAction(a.action)
+			}
+		}
+	}
 	return m, nil
+}
+
+// commitAction returns the Cmd batch that closes the popup AND emits
+// the action message back to AppModel. Bundled so the trigger paths
+// (Enter on cursor / direct hotkey) cannot diverge — every action
+// commit closes the popup.
+func (m *HintPopupModel) commitAction(action string) tea.Cmd {
+	closeCmd := m.animator.Close()
+	actionCmd := func() tea.Msg { return HintActionMsg{Action: action} }
+	return tea.Batch(closeCmd, actionCmd)
 }
 
 func (m HintPopupModel) View() string { return "" }
@@ -101,6 +187,7 @@ func sidebarHintContent() (string, []hintRow) {
 		{keys: "/", hint: "search by name; type to filter"},
 		{keys: drillArrow + " Enter", hint: "while searching: lock the filter and exit search mode"},
 		{keys: drillArrow + " Esc", hint: "clear search / exit search mode"},
+		{keys: "P", hint: "toggle pinned — pin / unpin the cursor's resource kind"},
 		{keys: "N", hint: "switch namespace (global)"},
 		{keys: "C", hint: "switch context (global)"},
 	}
@@ -285,9 +372,46 @@ func (m HintPopupModel) renderFullPopup() string {
 	right := bStyle.Render("│")
 	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
 
+	// Build the action rows (top, interactive) if any. Cursor row gets
+	// reverse-video; non-cursor rows render in the popup's accent
+	// colour, dimmed, with the hotkey letter bracketed via
+	// bracketHotkey (same visual convention as panel-2 Y/E/S/D).
+	cursorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#1e1e2e")).
+		Background(bc).Bold(true)
+	actionStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	var actionRows []string
+	for i, a := range m.actions {
+		bracketed := bracketHotkey(a.label, a.key)
+		body := " " + bracketed
+		plainW := lipgloss.Width(body)
+		pad := ""
+		if plainW < innerW {
+			pad = strings.Repeat(" ", innerW-plainW)
+		}
+		row := body + pad
+		if i == m.cursor {
+			row = cursorStyle.Render(row)
+		} else {
+			row = actionStyle.Render(row)
+		}
+		actionRows = append(actionRows, row)
+	}
+
 	var b strings.Builder
 	b.WriteString(bStyle.Render("╭─") + tStyle.Render(title) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
 	b.WriteString(padRow)
+	for _, line := range actionRows {
+		b.WriteString(left + line + right + "\n")
+	}
+	if len(actionRows) > 0 {
+		// Visual separator between the action region and the read-only
+		// cheatsheet below — same dim-grey horizontal rule the popup
+		// border uses, inset by one column on each side so it reads
+		// as an internal divider, not a re-doubled border.
+		sep := bStyle.Render(strings.Repeat("─", innerW))
+		b.WriteString(left + sep + right + "\n")
+	}
 	for _, line := range rows {
 		lw := lipgloss.Width(line)
 		pad := ""

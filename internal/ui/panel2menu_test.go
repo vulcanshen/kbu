@@ -508,3 +508,26 @@ func contains(s []string, want string) bool {
 	}
 	return false
 }
+
+func TestBracketHotkey_RendersUppercaseEvenWhenLabelHasLowercase(t *testing.T) {
+	cases := []struct {
+		name  string
+		label string
+		key   string
+		want  string
+	}{
+		{"all-caps label, all-caps key", "YAML", "Y", "[Y]AML"},
+		{"mixed-case label, key matches uppercase letter", "Pin Pods", "P", "[P]in Pods"},
+		{"mixed-case label, key matches lowercase letter", "Unpin Pods", "P", "Un[P]in Pods"},
+		{"multi-char key falls back", "Enter Drill", "Enter", "Enter Drill"},
+		{"missing letter falls back", "Compare", "Z", "Compare"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := bracketHotkey(tc.label, tc.key)
+			if got != tc.want {
+				t.Errorf("bracketHotkey(%q, %q) = %q, want %q", tc.label, tc.key, got, tc.want)
+			}
+		})
+	}
+}

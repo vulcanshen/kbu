@@ -167,3 +167,94 @@ func TestHintPopup_EnterCloses(t *testing.T) {
 		t.Fatal("Enter must close the read-only help popup")
 	}
 }
+
+func TestHintPopup_Actions_HotkeyCommitsAndCloses(t *testing.T) {
+	// OpenWithActions registers "P" as the hotkey for the Pin action.
+	// Pressing capital P (Shift+P) directly must commit + close in
+	// one batch — same UX as panel-2's Y/E/S/D direct dispatch.
+	m := newHintPopup(t)
+	actions := []hintAction{
+		{label: "Pin Pods", key: "P", action: "PinKind"},
+	}
+	title, rows := sidebarHintContent()
+	openCmd := m.OpenWithActions(title, actions, rows)
+	drainHintToInteractive(t, &m, openCmd)
+
+	_, batchCmd := m.Update(key("P"))
+	if batchCmd == nil {
+		t.Fatal("hotkey P must return a Cmd batch (close + action msg)")
+	}
+	// Drain the batch — expect to see HintActionMsg.
+	saw := false
+	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
+		am, ok := msg.(HintActionMsg)
+		if !ok {
+			return false
+		}
+		if am.Action != "PinKind" {
+			t.Errorf("hotkey P committed action %q, want PinKind", am.Action)
+		}
+		saw = true
+		return true
+	})
+	if !saw {
+		t.Error("hotkey P did not produce a HintActionMsg")
+	}
+}
+
+func TestHintPopup_Actions_EnterOnCursorCommits(t *testing.T) {
+	// Without the hotkey, cursor + Enter is the menu-only fallback —
+	// same path Panel 2's multi-char "Enter"/"LockCompare" keys use.
+	m := newHintPopup(t)
+	actions := []hintAction{
+		{label: "Unpin Pods", key: "P", action: "UnpinKind"},
+	}
+	title, rows := sidebarHintContent()
+	openCmd := m.OpenWithActions(title, actions, rows)
+	drainHintToInteractive(t, &m, openCmd)
+
+	_, batchCmd := m.Update(key("enter"))
+	if batchCmd == nil {
+		t.Fatal("cursor + Enter must commit the only action")
+	}
+	saw := false
+	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
+		am, ok := msg.(HintActionMsg)
+		if !ok {
+			return false
+		}
+		if am.Action != "UnpinKind" {
+			t.Errorf("Enter committed %q, want UnpinKind", am.Action)
+		}
+		saw = true
+		return true
+	})
+	if !saw {
+		t.Error("cursor Enter did not produce HintActionMsg")
+	}
+}
+
+func TestHintPopup_Actions_SpaceClosesWithoutCommit(t *testing.T) {
+	// Space (the "close" convention across km8 popups) must close the
+	// popup WITHOUT committing any action — pressing Space mid-decision
+	// would be a confusing way to silently pin/unpin.
+	m := newHintPopup(t)
+	actions := []hintAction{
+		{label: "Pin Pods", key: "P", action: "PinKind"},
+	}
+	title, rows := sidebarHintContent()
+	openCmd := m.OpenWithActions(title, actions, rows)
+	drainHintToInteractive(t, &m, openCmd)
+
+	_, closeCmd := m.Update(key(" "))
+	if closeCmd == nil {
+		t.Fatal("Space must trigger close")
+	}
+	// Expect NO HintActionMsg emitted — only animator close ticks.
+	expectMsg(t, closeCmd, func(msg tea.Msg) bool {
+		if _, ok := msg.(HintActionMsg); ok {
+			t.Error("Space must NOT commit an action — only close")
+		}
+		return false
+	})
+}

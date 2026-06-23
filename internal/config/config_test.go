@@ -194,3 +194,56 @@ func TestLoadFrom_EmptyFile(t *testing.T) {
 		t.Errorf("Editor: got %q, want empty", cfg.Editor)
 	}
 }
+
+func TestSaveLoadRoundtrip_PinnedResourceKinds(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg := &Config{
+		Editor:              "vim",
+		PinnedResourceKinds: []string{"pod", "namespace", "configmap"},
+		Compare:             CompareConfig{Layout: "unified"},
+	}
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+	loaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if got, want := loaded.PinnedResourceKinds, cfg.PinnedResourceKinds; len(got) != len(want) {
+		t.Fatalf("PinnedResourceKinds len = %d, want %d", len(got), len(want))
+	}
+	for i := range cfg.PinnedResourceKinds {
+		if loaded.PinnedResourceKinds[i] != cfg.PinnedResourceKinds[i] {
+			t.Errorf("PinnedResourceKinds[%d] = %q, want %q (order matters — sidebar render uses this)", i, loaded.PinnedResourceKinds[i], cfg.PinnedResourceKinds[i])
+		}
+	}
+	if loaded.Editor != "vim" {
+		t.Errorf("Editor lost in roundtrip: %q", loaded.Editor)
+	}
+	if loaded.Compare.Layout != "unified" {
+		t.Errorf("Compare.Layout lost in roundtrip: %q", loaded.Compare.Layout)
+	}
+}
+
+func TestSaveTo_Atomic_NoTempfileLeak(t *testing.T) {
+	// Save should not leave .config.*.yaml stragglers around after a
+	// successful write — they would confuse a user listing the config
+	// dir, and indicate the rename failed.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg := &Config{Editor: "vim", PinnedResourceKinds: []string{"pod"}}
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, e := range entries {
+		if e.Name() != "config.yaml" {
+			t.Errorf("unexpected leftover file in config dir: %q", e.Name())
+		}
+	}
+}
