@@ -54,9 +54,10 @@ func SortItems(items []ResourceItem, columns []Column, columnTitle string, ascen
 //
 // Well-known titles + their comparators:
 //   - "Age"                              → CreationTimestamp (time)
+//   - "Updated"                          → Helm release Updated (time)
 //   - "Ready"                            → "N/M" parsed as ints
 //   - "Restarts" / "Desired" / "Current" → Row cell parsed as int
-//     "Up-to-date" / "Available" / "Active"
+//     "Up-to-date" / "Available" / "Active" / "Rev"
 //
 // String fallback covers everything else (Name, Status, Roles,
 // Version, Type, Reason, Object, Message, IP, Node, Schedule, ...).
@@ -66,9 +67,11 @@ func comparatorForColumn(title string, colIdx int) func(a, b ResourceItem) int {
 	switch title {
 	case "Age":
 		return lessByCreationTime
+	case "Updated":
+		return lessByHelmUpdatedTime
 	case "Ready":
 		return lessByReadyCell(colIdx)
-	case "Restarts", "Desired", "Current", "Up-to-date", "Available", "Active":
+	case "Restarts", "Desired", "Current", "Up-to-date", "Available", "Active", "Rev":
 		return lessByIntCell(colIdx)
 	}
 	return lessByStringCell(colIdx)
@@ -101,6 +104,39 @@ func creationTimeOf(item ResourceItem) time.Time {
 		return obj.GetCreationTimestamp().Time
 	}
 	return time.Time{}
+}
+
+// lessByHelmUpdatedTime is the comparator for the Helm Releases
+// "Updated" column. Raw carries a *Release whose Updated field is
+// the helm CLI's Go time.String() form ("2024-05-19 14:31:22.123
+// +0800 CST"); the displayed Row cell is an age string ("5d" /
+// "2h") that lex-sorts wrong ("10d" < "2d"). Parsing back from Raw
+// dodges that entirely.
+//
+// Non-helm items, parse failures, and missing data all fall back to
+// the zero time. The stable sort keeps their incoming order.
+func lessByHelmUpdatedTime(a, b ResourceItem) int {
+	ta := helmUpdatedTimeOf(a)
+	tb := helmUpdatedTimeOf(b)
+	switch {
+	case ta.Before(tb):
+		return -1
+	case ta.After(tb):
+		return 1
+	}
+	return 0
+}
+
+func helmUpdatedTimeOf(item ResourceItem) time.Time {
+	r, ok := item.Raw.(*Release)
+	if !ok || r.Updated == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", r.Updated)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // lessByIntCell parses Row[colIdx] as an int. Used for plain counter

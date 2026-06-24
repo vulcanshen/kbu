@@ -303,7 +303,7 @@ func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
 // "selecting Unset on a never-sorted column does nothing"
 // agreement.
 func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) tea.Cmd {
-	def := m.k8sClient.Registry().Get(rt)
+	def := sortRegistry().Get(rt)
 	if def == nil {
 		return nil
 	}
@@ -361,8 +361,15 @@ func (m *AppModel) commitSortFlow(direction string) tea.Cmd {
 	default:
 		return closeCmd
 	}
+	var saveErrCmd tea.Cmd
 	if err := m.cfg.Save(); err != nil {
+		// In-memory state already mutated — surface the disk-side
+		// failure via both the app log (full error) and a toast (so
+		// the user actually notices). Matches togglePinnedKind's
+		// behaviour; without this the user would think their sort
+		// stuck across restarts when it didn't.
 		m.appLog.Error("sort save failed: " + err.Error())
+		saveErrCmd = m.toast.Show("sort save failed")
 	}
 	// Re-apply sort to whatever's currently in panel 2 if this
 	// kind is the one being viewed — no point waiting for the next
@@ -373,14 +380,15 @@ func (m *AppModel) commitSortFlow(direction string) tea.Cmd {
 		rows := augmentRowsWithHelm(m.items, m.currentResource)
 		m.table.SetRows(rows)
 	}
-	return closeCmd
+	return tea.Batch(closeCmd, saveErrCmd)
 }
 
 // applySortToItems re-orders m.items per the current kind's saved
 // sort config. When no config exists for the kind, falls back to
-// metadata.name ascending — a universal stable order that holds
-// across kinds (every K8s object has a name, including Events whose
-// displayed columns don't include Name). The fallback also catches
+// (Namespace asc, Name asc) — matches kubectl's default order so a
+// cross-namespace Pods list groups by namespace the way users
+// expect, and degenerates to Name asc for cluster-scoped kinds
+// (Namespace is uniformly empty there). The fallback also catches
 // the Unset path: clearing the saved sort needs to actually re-
 // order panel 2 immediately, not wait for the next kind switch.
 //
@@ -398,6 +406,9 @@ func (m *AppModel) applySortToItems() {
 	sortCfg := m.cfg.GetSort(def.KubectlName)
 	if sortCfg == nil {
 		sort.SliceStable(m.items, func(i, j int) bool {
+			if m.items[i].Namespace != m.items[j].Namespace {
+				return m.items[i].Namespace < m.items[j].Namespace
+			}
 			return m.items[i].Name < m.items[j].Name
 		})
 		return
@@ -459,27 +470,45 @@ func sortDirectionGlyph(direction string) string {
 	return ""
 }
 
-// persistPinnedKinds rewrites the config's pinned state to mirror the
-// sidebar's current PinnedKinds order, then saves atomically. The
-// sidebar is the in-memory source of truth during a session; this
-// flushes the diff out to disk so a restart restores the same order.
+// persistPinnedKinds rewrites the config's pinned state to mirror
+// the sidebar's current PinnedKinds order, then saves atomically.
+// The sidebar is the in-memory source of truth for kinds the
+// registry knows about; this flushes the diff out to disk so a
+// restart restores the same order.
 //
-// Strategy: clear every existing pin entry then re-pin in sidebar
-// order with sparse Order values. This is simpler than diffing add /
-// remove / reorder events and runs in O(n) on a list that's
-// rarely > 10 entries.
+// Critical invariant: pins for unregistered kinds (CRDs that
+// disappeared mid-session, or were never installed when km8 started
+// but are listed in config) MUST survive this rewrite. The
+// ResourceKindConfigEntry contract is "Unknown kinds at load time
+// stay in the map but are dropped from the sidebar — the entry is
+// preserved so a re-install of the CRD silently restores the user's
+// pin / sort." A naive "wipe all + re-add from sidebar" defeats
+// that, since unregistered kinds were never in the sidebar to be
+// re-added.
+//
+// Strategy: only clear pin entries for kinds the registry currently
+// knows about (i.e. those the sidebar manages); leave everything
+// else untouched. The unregistered kind keeps its Order value, so
+// when its CRD comes back it slots into its original relative
+// position.
 func (m *AppModel) persistPinnedKinds() error {
 	if m.cfg == nil {
 		return nil
 	}
-	// Clear any existing pins first so removed entries actually leave
-	// the config (UnsetPinned also drops the kind entry when it's
-	// otherwise empty, keeping the YAML tidy).
+	reg := m.k8sClient.Registry()
+	knownKubectl := make(map[string]struct{})
+	for _, rt := range reg.AllTypes() {
+		if def := reg.Get(rt); def != nil {
+			knownKubectl[def.KubectlName] = struct{}{}
+		}
+	}
 	for _, kind := range m.cfg.PinnedOrdered() {
-		m.cfg.UnsetPinned(kind)
+		if _, ok := knownKubectl[kind]; ok {
+			m.cfg.UnsetPinned(kind)
+		}
 	}
 	for i, rt := range m.sidebar.PinnedKinds() {
-		def := m.k8sClient.Registry().Get(rt)
+		def := reg.Get(rt)
 		if def == nil {
 			continue
 		}

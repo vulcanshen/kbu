@@ -171,6 +171,48 @@ func TestSortItems_EmptyOrSingleItem_NoOp(t *testing.T) {
 	}
 }
 
+func TestSortItems_HelmRevColumn_IntComparator(t *testing.T) {
+	// Helm "Rev" column carries a revision number — string sort
+	// puts "10" between "1" and "2". The "Rev" → int comparator
+	// fixes the order.
+	cols := []Column{
+		{Title: "Name"}, {Title: "Namespace"}, {Title: "Chart"},
+		{Title: "App Ver"}, {Title: "Rev"}, {Title: "Status"}, {Title: "Updated"},
+	}
+	items := []ResourceItem{
+		{Name: "a", Row: []string{"a", "default", "ch", "1.0", "10", "deployed", "x"}},
+		{Name: "b", Row: []string{"b", "default", "ch", "1.0", "2", "deployed", "x"}},
+		{Name: "c", Row: []string{"c", "default", "ch", "1.0", "1", "deployed", "x"}},
+	}
+	SortItems(items, cols, "Rev", true)
+	want := []string{"c", "b", "a"}
+	for i, w := range want {
+		if items[i].Name != w {
+			t.Errorf("Rev asc[%d] = %q, want %q (full=%v)", i, items[i].Name, w, names(items))
+		}
+	}
+}
+
+func TestSortItems_HelmUpdatedColumn_UsesRawTime(t *testing.T) {
+	// "Updated" column reads the time off Raw (*Release.Updated)
+	// rather than the rendered age string. The age string ("5d" /
+	// "10d") would lex-sort wrong ("10d" < "5d"); the time-parse
+	// path keeps order honest.
+	cols := []Column{{Title: "Name"}, {Title: "Updated"}}
+	items := []ResourceItem{
+		{Name: "new", Row: []string{"new", "5d"}, Raw: &Release{Updated: "2026-06-20 10:00:00.000000000 +0000 UTC"}},
+		{Name: "old", Row: []string{"old", "10d"}, Raw: &Release{Updated: "2026-06-15 10:00:00.000000000 +0000 UTC"}},
+		{Name: "mid", Row: []string{"mid", "7d"}, Raw: &Release{Updated: "2026-06-17 10:00:00.000000000 +0000 UTC"}},
+	}
+	SortItems(items, cols, "Updated", true)
+	want := []string{"old", "mid", "new"}
+	for i, w := range want {
+		if items[i].Name != w {
+			t.Errorf("Updated asc[%d] = %q, want %q (oldest → newest)", i, items[i].Name, w)
+		}
+	}
+}
+
 func TestSortItems_StableOnTies(t *testing.T) {
 	// Three pods all with Restarts=5 must preserve the incoming order
 	// under SliceStable so a follow-up sort on a different column

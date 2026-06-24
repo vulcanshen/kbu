@@ -67,10 +67,11 @@ func itoa(n int) string {
 }
 
 func TestApplySortToItems_NoConfig_FallsBackToNameAsc(t *testing.T) {
-	// No sort config for the kind → fall back to metadata.name
-	// ascending. Covers the Unset path: clearing a saved sort must
-	// reshape items immediately, not preserve the previous sort
-	// order until the next kind switch.
+	// No sort config for the kind, all items in the same namespace →
+	// the (namespace, name) fallback degenerates to pure Name asc.
+	// Covers the Unset path: clearing a saved sort must reshape items
+	// immediately, not preserve the previous sort order until the
+	// next kind switch.
 	items := []k8s.ResourceItem{makePod("zzz", 5), makePod("aaa", 0), makePod("mmm", 2)}
 	m := appWithCfg(items, config.DefaultConfig())
 	m.applySortToItems()
@@ -78,6 +79,39 @@ func TestApplySortToItems_NoConfig_FallsBackToNameAsc(t *testing.T) {
 	for i, w := range want {
 		if m.items[i].Name != w {
 			t.Errorf("no-config fallback items[%d] = %q, want %q (Name asc)", i, m.items[i].Name, w)
+		}
+	}
+}
+
+func TestApplySortToItems_NoConfig_GroupsByNamespaceThenName(t *testing.T) {
+	// kubectl's default ordering for cross-namespace lists is
+	// (namespace, name). Pure name asc would scatter items across
+	// namespaces; users called this out as feeling wrong.
+	mk := func(ns, name string) k8s.ResourceItem {
+		return k8s.ResourceItem{
+			Name:      name,
+			Namespace: ns,
+			UID:       ns + "/" + name,
+			Row:       []string{name},
+		}
+	}
+	items := []k8s.ResourceItem{
+		mk("monitoring", "grafana"),
+		mk("default", "api-2"),
+		mk("default", "api-1"),
+		mk("monitoring", "alertmanager"),
+	}
+	m := appWithCfg(items, config.DefaultConfig())
+	m.applySortToItems()
+	want := []struct{ ns, name string }{
+		{"default", "api-1"},
+		{"default", "api-2"},
+		{"monitoring", "alertmanager"},
+		{"monitoring", "grafana"},
+	}
+	for i, w := range want {
+		if m.items[i].Namespace != w.ns || m.items[i].Name != w.name {
+			t.Errorf("fallback[%d] = %s/%s, want %s/%s", i, m.items[i].Namespace, m.items[i].Name, w.ns, w.name)
 		}
 	}
 }
