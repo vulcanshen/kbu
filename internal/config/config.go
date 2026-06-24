@@ -28,6 +28,14 @@ type Config struct {
 	// Compare carries settings for the YAML compare popup.
 	Compare CompareConfig `yaml:"compare"`
 
+	// Mouse carries app-level mouse settings (enable toggle + scroll
+	// direction). Nested so future mouse options (double-click
+	// threshold, edge-pan, ...) drop in here without polluting the
+	// top-level Config. nil = use defaults (enabled, natural
+	// scrolling) — matches how an existing user's config behaves on
+	// upgrade.
+	Mouse *MouseConfig `yaml:"mouse_opt_config,omitempty"`
+
 	// ResourceKindConfig holds per-kind user preferences keyed by
 	// KubectlName (e.g. "pod" / "namespace" / "configmap"). Single
 	// home for everything km8 lets the user tune about a kind: pin
@@ -98,6 +106,68 @@ type CompareConfig struct {
 	// default) | "split" (side-by-side). Empty or unrecognised value
 	// falls back to "unified".
 	Layout string `yaml:"layout"`
+}
+
+// Mouse scroll direction constants — written verbatim to YAML and
+// matched in the wheel translator. Anything not equal to
+// MouseScrollReverse is treated as natural so a typo / future value
+// degrades gracefully.
+const (
+	MouseScrollNatural = "natural"
+	MouseScrollReverse = "reverse"
+)
+
+// MouseConfig is the nested config bag for everything mouse-related.
+// Lives behind a *MouseConfig in Config so legacy/empty configs
+// stay nil-friendly without leaking yaml `null`s into the file.
+//
+// Enabled is a pointer so the helper can distinguish "never set"
+// (legacy, treat as enabled) from "explicit false" (user turned it
+// off). ScrollDirection is a string so future values (e.g. a
+// per-axis variant) can be added without breaking the YAML shape.
+type MouseConfig struct {
+	Enabled         *bool  `yaml:"enabled,omitempty"`
+	ScrollDirection string `yaml:"scroll_direction,omitempty"`
+}
+
+// IsMouseEnabled reports the current mouse-enabled state. nil
+// MouseConfig or nil Enabled both fall back to true so an existing
+// user's config "just works" the moment this feature ships.
+func (c *Config) IsMouseEnabled() bool {
+	if c == nil || c.Mouse == nil || c.Mouse.Enabled == nil {
+		return true
+	}
+	return *c.Mouse.Enabled
+}
+
+// SetMouseEnabled writes the explicit on/off value, lazily creating
+// the nested MouseConfig if it's the first mouse setting touched.
+// Callers Save() to persist.
+func (c *Config) SetMouseEnabled(v bool) {
+	if c.Mouse == nil {
+		c.Mouse = &MouseConfig{}
+	}
+	c.Mouse.Enabled = &v
+}
+
+// MouseScrollDirection returns the configured wheel-direction string,
+// defaulting to natural when unset. Validity isn't enforced here —
+// the wheel translator only special-cases "reverse" and treats
+// everything else (including unrecognised values) as natural.
+func (c *Config) MouseScrollDirection() string {
+	if c == nil || c.Mouse == nil || c.Mouse.ScrollDirection == "" {
+		return MouseScrollNatural
+	}
+	return c.Mouse.ScrollDirection
+}
+
+// SetMouseScrollDirection writes the explicit scroll direction
+// string. Lazily creates MouseConfig if needed.
+func (c *Config) SetMouseScrollDirection(d string) {
+	if c.Mouse == nil {
+		c.Mouse = &MouseConfig{}
+	}
+	c.Mouse.ScrollDirection = d
 }
 
 // DefaultConfig returns a Config with sensible defaults.

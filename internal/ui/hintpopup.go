@@ -148,6 +148,46 @@ func (m HintPopupModel) Update(msg tea.Msg) (HintPopupModel, tea.Cmd) {
 	return m, nil
 }
 
+// HandleMouse routes a click against the popup. The popup has two
+// regions: an interactive action list at the top, and a read-only
+// cheatsheet below. Left-click on an action row commits that
+// action (mirror of cursor+Enter). Right-click anywhere inside the
+// popup closes it (mirror of Esc). Clicks on the cheatsheet rows,
+// padding, or borders are silent no-ops.
+func (m HintPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (HintPopupModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	popup := m.renderFullPopup()
+	lines := strings.Split(popup, "\n")
+	h := len(lines)
+	if h == 0 {
+		return m, nil
+	}
+	w := lipgloss.Width(lines[0])
+	px := (screenW - w) / 2
+	py := (screenH - h) / 2
+	if msg.X < px || msg.X >= px+w || msg.Y < py || msg.Y >= py+h {
+		return m, nil
+	}
+	if msg.Button == tea.MouseButtonRight {
+		return m, m.animator.Close()
+	}
+	if msg.Button != tea.MouseButtonLeft {
+		return m, nil
+	}
+	// Action rows live at lines 2..2+A-1 (top border + padding row
+	// above them). Cheatsheet rows below are non-interactive.
+	if len(m.actions) > 0 {
+		actionY := msg.Y - py - 2
+		if actionY >= 0 && actionY < len(m.actions) {
+			m.cursor = actionY
+			return m, m.commitAction(m.actions[actionY].action)
+		}
+	}
+	return m, nil
+}
+
 // commitAction returns the Cmd batch that closes the popup AND emits
 // the action message back to AppModel. Bundled so the trigger paths
 // (Enter on cursor / direct hotkey) cannot diverge — every action
@@ -183,7 +223,7 @@ func sidebarHintContent() (string, []hintRow) {
 	title := " " + titleIcon + " km8 — what can I do here?"
 	rows := []hintRow{
 		{keys: "j/k", hint: "move cursor (also ↓/↑)"},
-		{keys: "Enter", hint: "into — focus the selected resource into panel 2"},
+		{keys: "1/2/3", hint: "switch focus (also Tab / Shift+Tab)"},
 		{keys: "/", hint: "search by name; type to filter"},
 		{keys: drillArrow + " Enter", hint: "while searching: lock the filter and exit search mode"},
 		{keys: drillArrow + " Esc", hint: "clear search / exit search mode"},

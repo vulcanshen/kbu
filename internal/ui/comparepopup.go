@@ -580,6 +580,26 @@ func centerNoDiff(width int, t *theme.Theme) string {
 	return strings.Repeat(" ", pad) + dim.Render(msg)
 }
 
+// HandleMouse routes a click against the compare popup. Wheel
+// scroll already gets translated to u/d at the AppModel layer, so
+// this only needs to cover the discrete button gestures.
+// Right-click inside the popup closes it (mirror of Esc / q). The
+// in-popup Space menu stays keyboard-only — left-click is no-op
+// on both the diff body and the menu overlay to avoid accidental
+// layout toggles.
+func (m CompareYamlPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (CompareYamlPopupModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	if !popupContains(m.renderFrame(), msg, screenW, screenH) {
+		return m, nil
+	}
+	if msg.Button == tea.MouseButtonRight {
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 // RenderPopup composes the diff panel onto a centred overlay frame —
 // border, title, body, bottom-hint legend.
 func (m CompareYamlPopupModel) RenderPopup() string {

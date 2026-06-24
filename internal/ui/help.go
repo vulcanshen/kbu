@@ -99,6 +99,23 @@ func (m HelpModel) contentHeight() int {
 	return h
 }
 
+// HandleMouse routes a click against the help cheatsheet. Right-
+// click inside the popup closes it (mirror of Esc / q / ?). Left-
+// click is no-op — the cheatsheet is read-only. Wheel scrolls via
+// the AppModel-layer u/d synthesis.
+func (m HelpModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (HelpModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	if !popupContains(m.RenderPopup(), msg, screenW, screenH) {
+		return m, nil
+	}
+	if msg.Button == tea.MouseButtonRight {
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 // View renders the help overlay as a full-screen placement (legacy).
 func (m HelpModel) View() string {
 	if !m.animator.IsActive() {
@@ -447,7 +464,7 @@ func (m HelpModel) helpContent() []helpEntry {
 	// universal across every popup, no need to repeat per-popup.
 	return []helpEntry{
 		{isSection: true, text: "Core Navigation"},
-		{key: "Enter", desc: "Into — drill / focus / commit"},
+		{key: "Enter", desc: "Drill / commit (no focus shift)"},
 		{key: "Space", desc: "Open menu / close popup"},
 		{key: "h / l", desc: "Switch tab (panel 3)"},
 		{key: "Esc", desc: "Back / close"},

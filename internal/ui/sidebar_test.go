@@ -337,35 +337,18 @@ func TestSidebarModel_ShiftG(t *testing.T) {
 	}
 }
 
-// TestSidebarModel_EnterEmitsFocusTableMsg verifies l/Enter on the sidebar
-// (non-search) emit FocusTableMsg — they used to call activateResource and
-// re-fire ResourceSelectedMsg, but j/k already auto-selects, so the only
-// useful work left for l/Enter is forwarding focus to panel 2.
-func TestSidebarModel_EnterEmitsFocusTableMsg(t *testing.T) {
+// TestSidebarModel_EnterIsNoOpOutsideSearch — Enter no longer
+// forwards focus to panel 2. With mouse double-click → Enter
+// synthesis, "Enter from sidebar shifts focus away" surprised
+// users (the click landed ON the sidebar; user wasn't asking to
+// leave). Tab / 1 / 2 / 3 remain the focus-shift keys for
+// keyboard users.
+func TestSidebarModel_EnterIsNoOpOutsideSearch(t *testing.T) {
 	m := newTestSidebar()
 
-	var cmd tea.Cmd
-	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-	if cmd == nil {
-		t.Fatal("Enter must return a Cmd")
-	}
-	if _, ok := cmd().(FocusTableMsg); !ok {
-		t.Fatalf("expected FocusTableMsg, got %T", cmd())
-	}
-}
-
-// TestSidebarModel_LRetired — `l` no longer focuses the table panel.
-// v1.5.x: Enter is the sole drill / focus-next-panel key; `l` retired.
-func TestSidebarModel_LRetired(t *testing.T) {
-	m := newTestSidebar()
-
-	_, cmd := m.Update(keyMsg('l'))
-	if cmd == nil {
-		return // no-op is fine
-	}
-	if _, ok := cmd().(FocusTableMsg); ok {
-		t.Fatalf("l must NOT emit FocusTableMsg anymore (Enter is sole focus-next key)")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Errorf("Enter on sidebar (outside search) must be a no-op, got cmd %T", cmd())
 	}
 }
 

@@ -195,6 +195,33 @@ func (m HelmDocMenuPopupModel) Update(msg tea.Msg) (HelmDocMenuPopupModel, tea.C
 	return m, nil
 }
 
+// HandleMouse routes a click against the rendered helm-doc menu.
+// Left-click on a row picks that doc kind (same as keyboard Enter —
+// emits HelmDocRequestMsg). Right-click anywhere inside the popup
+// closes it.
+func (m HelmDocMenuPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (HelmDocMenuPopupModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	row := popupRowAt(m.renderFullPopup(), msg, screenW, screenH, 2, len(m.items))
+	if row < 0 {
+		if msg.Button == tea.MouseButtonRight && popupContains(m.renderFullPopup(), msg, screenW, screenH) {
+			return m, m.animator.Close()
+		}
+		return m, nil
+	}
+	switch msg.Button {
+	case tea.MouseButtonLeft:
+		m.cursor = row
+		it := m.items[row]
+		req := HelmDocRequestMsg{DocKind: it.docKind, ReleaseName: m.releaseName, Namespace: m.releaseNS}
+		return m, func() tea.Msg { return req }
+	case tea.MouseButtonRight:
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 func (m HelmDocMenuPopupModel) View() string { return "" }
 
 func (m HelmDocMenuPopupModel) RenderPopup() string {

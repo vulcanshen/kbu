@@ -382,6 +382,38 @@ func nextSelectableCursor(entries []relativeEntry, cursor, dir int) int {
 	return cursor
 }
 
+// entryLineCount returns the number of display lines the given
+// entry takes when renderRelativeEntries lays it out. Mirror of the
+// per-entry branch in renderRelativeEntries — nested drillables
+// (label has the "  " indent AND a ref) span 2 lines because the
+// resource ref / arrow sits on its own line below the alias; every
+// other entry is 1 line.
+func entryLineCount(e relativeEntry) int {
+	if !e.section && e.ref != nil && strings.HasPrefix(e.label, "  ") {
+		return 2
+	}
+	return 1
+}
+
+// entryAtLine returns the index of the entry whose rendered span
+// contains the given display-line index, or -1 when `line` is out
+// of range. Used by the mouse-click handler to map a cursor click
+// back to which Relatives entry the user pointed at.
+func entryAtLine(entries []relativeEntry, line int) int {
+	if line < 0 {
+		return -1
+	}
+	cur := 0
+	for i, e := range entries {
+		n := entryLineCount(e)
+		if line >= cur && line < cur+n {
+			return i
+		}
+		cur += n
+	}
+	return -1
+}
+
 // firstSelectableCursor returns the first selectable entry index, or -1 if
 // the list has no selectable entries.
 func firstSelectableCursor(entries []relativeEntry) int {

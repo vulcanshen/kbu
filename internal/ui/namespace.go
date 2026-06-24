@@ -179,6 +179,66 @@ func (m NamespacePickerModel) handleSearchKey(msg tea.KeyMsg) (NamespacePickerMo
 	return m, nil
 }
 
+// HandleMouse routes a click against the picker. Left-click on a
+// namespace row selects that namespace (mirror of cursor+Enter).
+// Right-click closes the picker. Clicks during the loading state
+// only respond to right-click (no rows to act on).
+//
+// The render shape adapts to whether the user has the search box
+// open, which pushes the namespace rows down by 3 lines (search-box
+// is itself a 3-line ╭─╮ block inside the popup). Scrolling matters
+// too — the picker only renders a 10-item window into m.namespaces
+// at a time, so a click on visible row N maps back to
+// m.namespaces[start+N] where `start` is the same window-clamp the
+// renderer uses.
+func (m NamespacePickerModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (NamespacePickerModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	if m.loading {
+		if msg.Button == tea.MouseButtonRight {
+			return m, m.animator.Close()
+		}
+		return m, nil
+	}
+	items := m.filtered()
+	maxVisible := 10
+	start := 0
+	if m.cursor >= maxVisible {
+		start = m.cursor - maxVisible + 1
+	}
+	end := start + maxVisible
+	if end > len(items) {
+		end = len(items)
+	}
+	numVisible := end - start
+
+	itemsStartLine := 2
+	if m.searching || m.searchQuery != "" {
+		// renderSearchBox emits 3 lines (top + mid + bottom border).
+		itemsStartLine += 3
+	}
+	row := popupRowAt(m.renderFullPopup(), msg, screenW, screenH, itemsStartLine, numVisible)
+	if row < 0 {
+		if msg.Button == tea.MouseButtonRight {
+			return m, m.animator.Close()
+		}
+		return m, nil
+	}
+	realIdx := start + row
+	if realIdx < 0 || realIdx >= len(items) {
+		return m, nil
+	}
+	switch msg.Button {
+	case tea.MouseButtonLeft:
+		m.cursor = realIdx
+		return m.selectCurrent(items)
+	case tea.MouseButtonRight:
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 func (m NamespacePickerModel) selectCurrent(items []string) (NamespacePickerModel, tea.Cmd) {
 	if len(items) == 0 || m.cursor >= len(items) {
 		return m, nil
