@@ -274,6 +274,95 @@ func TestPinnedHelpers_SetUnsetGet(t *testing.T) {
 	cfg.UnsetPinned("never-pinned")
 }
 
+func TestSortHelpers_SetUnsetGet(t *testing.T) {
+	cfg := DefaultConfig()
+	if got := cfg.GetSort("pod"); got != nil {
+		t.Errorf("fresh config GetSort = %+v, want nil", got)
+	}
+
+	cfg.SetSort("pod", "Age", SortDirectionDescending)
+	got := cfg.GetSort("pod")
+	if got == nil {
+		t.Fatal("GetSort returned nil after SetSort")
+	}
+	if got.Column != "Age" || got.Direction != SortDirectionDescending {
+		t.Errorf("GetSort = %+v, want {Column:Age Direction:desc}", got)
+	}
+
+	// SetSort overwrites the previous sort entry — single-column model.
+	cfg.SetSort("pod", "Name", SortDirectionAscending)
+	got = cfg.GetSort("pod")
+	if got == nil || got.Column != "Name" || got.Direction != SortDirectionAscending {
+		t.Errorf("SetSort overwrite = %+v, want {Column:Name Direction:asc}", got)
+	}
+
+	// UnsetSort on a kind with no other active config drops the entry.
+	cfg.UnsetSort("pod")
+	if got := cfg.GetSort("pod"); got != nil {
+		t.Errorf("GetSort after UnsetSort = %+v, want nil", got)
+	}
+	if _, ok := cfg.ResourceKindConfig["pod"]; ok {
+		t.Error("empty entry must be deleted after UnsetSort with no other config")
+	}
+
+	// UnsetSort on never-sorted kind is a no-op.
+	cfg.UnsetSort("never-sorted")
+}
+
+func TestSortHelpers_EntrySharedWithPinned(t *testing.T) {
+	// Both Pinned and Sort live in the same ResourceKindConfigEntry.
+	// Unsetting one must NOT drop the entry when the other is still
+	// active, otherwise the surviving config would silently disappear.
+	cfg := DefaultConfig()
+	cfg.SetPinned("pod", 10)
+	cfg.SetSort("pod", "Name", SortDirectionAscending)
+
+	cfg.UnsetSort("pod")
+	if !cfg.IsPinned("pod") {
+		t.Error("UnsetSort must not drop the entry when Pinned is still set")
+	}
+
+	cfg.SetSort("pod", "Age", SortDirectionDescending)
+	cfg.UnsetPinned("pod")
+	if got := cfg.GetSort("pod"); got == nil {
+		t.Error("UnsetPinned must not drop the entry when Sort is still set")
+	}
+
+	// Now drop both — entry should disappear from the map.
+	cfg.UnsetSort("pod")
+	if _, ok := cfg.ResourceKindConfig["pod"]; ok {
+		t.Error("entry must be deleted once both Pinned and Sort are unset")
+	}
+}
+
+func TestSortRoundtrip_SurvivesSaveLoad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg := DefaultConfig()
+	cfg.SetPinned("pod", 10)
+	cfg.SetSort("pod", "Age", SortDirectionDescending)
+	cfg.SetSort("deployment", "Name", SortDirectionAscending)
+
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+	loaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+
+	if got := loaded.GetSort("pod"); got == nil || got.Column != "Age" || got.Direction != SortDirectionDescending {
+		t.Errorf("pod sort lost in roundtrip, got %+v", got)
+	}
+	if got := loaded.GetSort("deployment"); got == nil || got.Column != "Name" || got.Direction != SortDirectionAscending {
+		t.Errorf("deployment sort lost in roundtrip, got %+v", got)
+	}
+	if !loaded.IsPinned("pod") {
+		t.Error("pod pin lost when round-tripped alongside sort")
+	}
+}
+
 func TestNextPinOrder_MonotonicSparse(t *testing.T) {
 	cfg := DefaultConfig()
 	if got := cfg.NextPinOrder(); got != 10 {

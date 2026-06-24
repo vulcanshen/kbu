@@ -14,9 +14,14 @@ func newTestNamespacePicker() NamespacePickerModel {
 
 var testNamespaces = []string{"default", "kube-system", "monitoring"}
 
-// openNamespacePicker opens the picker with testNamespaces and finalizes animation.
+// openNamespacePicker opens the picker via the OpenLoading + SetNamespaces
+// async flow, then finalizes the animation so the picker becomes
+// interactive. Matches what app.go does when the user presses N:
+// open the popup immediately, swap the placeholder for the real
+// list when fetchNamespaces returns.
 func openNamespacePicker(m *NamespacePickerModel) {
-	m.Open(testNamespaces)
+	m.OpenLoading()
+	m.SetNamespaces(testNamespaces)
 	m.animator.Finalize()
 }
 
@@ -63,8 +68,9 @@ func TestNamespacePickerModel_Open_ResetsCursor(t *testing.T) {
 	m, _ = m.Update(keyMsg('j'))
 	m, _ = m.Update(keyMsg('j'))
 
-	// Re-open.
-	m.Open(testNamespaces)
+	// Re-open via the async flow.
+	m.OpenLoading()
+	m.SetNamespaces(testNamespaces)
 	m.animator.Finalize()
 
 	if m.cursor != 0 {
@@ -326,6 +332,92 @@ func TestNamespacePickerModel_NSearchableInSearchMode(t *testing.T) {
 	}
 	if m.searchQuery != "n" {
 		t.Errorf("'n' in search must be typed; got query %q", m.searchQuery)
+	}
+}
+
+// ── Async loading flow ─────────────────────────────────────────────────────
+
+func TestNamespacePickerModel_OpenLoading_ActivatesInLoadingState(t *testing.T) {
+	// OpenLoading must make the popup IsActive immediately so the user
+	// gets visual feedback before fetchNamespaces returns.
+	m := newTestNamespacePicker()
+	m.OpenLoading()
+	m.animator.Finalize()
+
+	if !m.IsActive() {
+		t.Error("OpenLoading must activate the picker")
+	}
+	if !m.loading {
+		t.Error("OpenLoading must set loading=true")
+	}
+	if len(m.namespaces) != 0 {
+		t.Errorf("OpenLoading must not seed any namespaces, got %v", m.namespaces)
+	}
+}
+
+func TestNamespacePickerModel_LoadingState_NavKeysAreNoOp(t *testing.T) {
+	// In loading state, j/k/Enter/search must be ignored so the user
+	// can't act on the empty placeholder. Only the close set responds.
+	m := newTestNamespacePicker()
+	m.OpenLoading()
+	m.animator.Finalize()
+
+	for _, k := range []rune{'j', 'k', '/'} {
+		m, _ = m.Update(keyMsg(k))
+	}
+	if m.cursor != 0 {
+		t.Errorf("loading state must ignore j/k, cursor moved to %d", m.cursor)
+	}
+	if m.searching {
+		t.Error("loading state must ignore /, but search mode turned on")
+	}
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		if msg := runBatchForMsg[NamespaceChangedMsg](cmd); msg != nil {
+			t.Error("Enter in loading state must NOT emit NamespaceChangedMsg")
+		}
+	}
+}
+
+func TestNamespacePickerModel_LoadingState_EscCloses(t *testing.T) {
+	// Esc on a loading popup must dismiss it — otherwise a failed
+	// fetch leaves the user stuck (paired with the Err-handling
+	// path in app.go's NamespaceListMsg handler).
+	m := newTestNamespacePicker()
+	m.OpenLoading()
+	m.animator.Finalize()
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m.animator.Finalize()
+	if m.IsActive() {
+		t.Error("Esc must close a loading popup")
+	}
+}
+
+func TestNamespacePickerModel_SetNamespaces_SwapsListInPlace(t *testing.T) {
+	// SetNamespaces lands while the popup is open in loading state →
+	// loading flips off, list is prepended with "All Namespaces",
+	// cursor resets to 0, animator stays open (no re-animation, no
+	// flicker).
+	m := newTestNamespacePicker()
+	m.OpenLoading()
+	m.animator.Finalize()
+	stateBefore := m.animator.State
+
+	m.SetNamespaces([]string{"default", "kube-system"})
+
+	if m.loading {
+		t.Error("SetNamespaces must clear the loading flag")
+	}
+	if m.animator.State != stateBefore {
+		t.Errorf("animator state changed %v → %v, want stable", stateBefore, m.animator.State)
+	}
+	if len(m.namespaces) != 3 || m.namespaces[0] != "All Namespaces" {
+		t.Errorf("SetNamespaces should prepend 'All Namespaces', got %v", m.namespaces)
+	}
+	if m.cursor != 0 {
+		t.Errorf("SetNamespaces must reset cursor to 0, got %d", m.cursor)
 	}
 }
 

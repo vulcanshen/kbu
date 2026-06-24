@@ -15,6 +15,13 @@ type NamespacePickerModel struct {
 	theme       *theme.Theme
 	searching   bool
 	searchQuery string
+
+	// loading=true means the popup is open with a placeholder row
+	// while fetchNamespaces is still in flight. Update gates out all
+	// list-mutating keys in this state (j/k/Enter/search) so the
+	// user can't act on an empty list. Flipped to false by
+	// SetNamespaces once the real list arrives.
+	loading bool
 }
 
 func NewNamespacePickerModel(t *theme.Theme) NamespacePickerModel {
@@ -24,13 +31,35 @@ func NewNamespacePickerModel(t *theme.Theme) NamespacePickerModel {
 	}
 }
 
-func (m *NamespacePickerModel) Open(namespaces []string) tea.Cmd {
-	all := []string{"All Namespaces"}
-	m.namespaces = append(all, namespaces...)
+// OpenLoading opens the popup IMMEDIATELY in its loading state — no
+// API call needed to show the frame. fetchNamespaces is fired in
+// parallel by the caller; once NamespaceListMsg arrives,
+// SetNamespaces swaps the placeholder for the real list in place
+// (no re-animation, no flicker — the animator stays in
+// PopupOpen/PopupOpeningExpand).
+//
+// Pre-existing direct Open(namespaces) call was removed because the
+// caller would have had to do the fetch synchronously anyway —
+// merging into the async path is the whole point of this change.
+func (m *NamespacePickerModel) OpenLoading() tea.Cmd {
+	m.namespaces = nil
 	m.cursor = 0
 	m.searching = false
 	m.searchQuery = ""
+	m.loading = true
 	return m.animator.Open()
+}
+
+// SetNamespaces fills in the real list. Safe to call whether or not
+// the popup is still open — if the user dismissed before the fetch
+// returned, the state update is harmless (next OpenLoading resets
+// it). Cursor lands on "All Namespaces" so Enter immediately is a
+// sensible default.
+func (m *NamespacePickerModel) SetNamespaces(namespaces []string) {
+	m.loading = false
+	all := []string{"All Namespaces"}
+	m.namespaces = append(all, namespaces...)
+	m.cursor = 0
 }
 
 func (m NamespacePickerModel) filtered() []string {
@@ -67,6 +96,17 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 	}
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
+		return m, nil
+	}
+	if m.loading {
+		// Loading state: only the close set responds — j/k/Enter on
+		// an empty placeholder would either no-op or fire bogus
+		// selections, so we just ignore them until the real list
+		// lands.
+		switch keyMsg.String() {
+		case "esc", "n", "N", " ":
+			return m, m.animator.Close()
+		}
 		return m, nil
 	}
 	if m.searching {
@@ -184,7 +224,9 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 
 	var lines []string
-	if len(items) == 0 {
+	if m.loading {
+		lines = append(lines, normalStyle.Width(innerW).Render(" Loading namespaces…"))
+	} else if len(items) == 0 {
 		lines = append(lines, normalStyle.Width(innerW).Render(" (no matches)"))
 	} else {
 		for i := start; i < end; i++ {
