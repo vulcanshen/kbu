@@ -46,7 +46,9 @@
 | **`Space`** | *這裡能幹嘛？* — 在每個 panel、每個 tab 上開啟對應的 menu 或 cheatsheet |
 | **`Esc`** | 退回 — 回上一層 / 關閉 popup |
 
-不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`Y` YAML / `E` edit / `S` shell / `D` delete / `N` ns / `C` context）只是加速器，每一項都能透過 `Space` menu 抵達 — 想記再記，不想記也沒關係。
+不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `C` compare 或 context / `Y` YAML / `E` edit / `D` delete / `N` ns / `M` settings）只是加速器，每一項都能透過 `Space` menu 抵達 — 想記再記，不想記也沒關係。
+
+**滑鼠也能用**（v1.6 起）：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `M` 可以關掉滑鼠改成純鍵盤。
 
 ## 安裝
 
@@ -116,6 +118,11 @@ km8 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 ## Features
 
+- **Pinned resource kinds（`P`）** — Panel 1 sidebar 頂端新增 Pinned 區段。在任何 resource row 按 `P` 切換 pin / unpin，順序會持久化到 config。Pin 採「**移動**」語意，不是複製 — 被 pin 的 kind 會從原本類別消失、出現在 Pinned 區，所以每個 kind 永遠只有一個位置。pin / sort / 其他 per-kind 設定共享同一個 config 區塊，CRD 短暫消失（operator 重裝等）時 pin 跟 sort 會被靜默保留、CRD 回來時自動還原
+- **YAML Compare popup（`C`）** — Panel 2 列級的 diff。`C` 在 row 上把它標成 **compare anchor**（status bar 出現 glyph 標示鎖定哪一列）；`C` 在同 kind 的另一列開啟 side-by-side 或 unified 的 YAML diff；`C` 在 anchor 自己身上則取消 — 同一個鍵切三態（mark / diff / cancel）。Diff popup 有自己的 action menu（`Space`）可以即時切 layout，預設 layout（Unified）也會持久化。Compare YAML 已預先 clean（status / managedFields / resourceVersion / uid 等都拔掉），diff 聚焦在使用者真正寫的東西上
+- **List-view sort（sidebar 上的 `S`）** — per-kind 排序、跨 restart 持久化。三層 popup chain：column picker → direction picker（Ascending / Descending / Unset）→ 存檔。Panel 2 header 在被 sort 的欄位上顯示 ↑ / ↓ 箭頭。Comparator 自動依型別選擇：`Age` / `Updated` 用底層的 timestamp（不是顯示出來的 "5d3h" 字串）；`Ready` 解析 "N/M" 成兩個整數；`Restarts`、`Desired`、`Current`、`Up-to-date`、`Available`、`Active`、`Rev` 走 int 比較，所以 "10" 會排在 "2" 上面。沒有 sort 設定 = `(namespace, name)` ascending，跟 kubectl 跨 namespace 的預設一致
+- **滑鼠支援** — 點 panel 切焦點 + 移 cursor、雙擊鑽入（synth `Enter`）、右鍵開 row 的 context menu（synth `Space`）、滾輪半頁滾動（synth `u` / `d`）。13 個 popup 都吃滑鼠：list popup 左鍵 commit、viewer popup（YAML / Compare / App Log / Help）保留滾輪、confirm dialog 刻意把左鍵設為 no-op，避免誤觸觸發破壞性的 delete / quit / rollback。可在 Settings popup（`M`）關閉 mouse，以及用 `scroll_direction: natural | reverse` 翻轉滾輪方向
+- **Settings popup（`M`）** — app-level 設定 popup，Catppuccin blue 邊框 + cog glyph 標題。目前包含 Mouse on/off + Scroll Direction；未來 global 設定都會放這。Popup 自己是逃生口：即使 Mouse 設為 off，popup 內仍然能用滑鼠點 — 才不會把使用者鎖在「mouse off 之後沒辦法用 mouse 打開」的死局
 - **內建 27 種 resource + CRD 支援** — 啟動時動態探索 Custom Resources，分為 Cluster / Workloads / Network / Config / Storage / RBAC / Autoscaling / Helm 類別。Helm 類別僅在 `helm` CLI 存在於 `PATH` 時才會出現
 - **即時 Watch 更新** — 透過 Kubernetes Watch API 自動更新 resource
 - **Vim 風格導覽** — `j`/`k`、`u`/`d` 換頁、`gg`/`G`、`/` 搜尋
@@ -157,29 +164,48 @@ km8 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | 鍵 | 行為 |
 |---|---|
 | **`Tab`** | **Panel** — 把焦點移到下一個 panel（也可以直接按 `1` / `2` / `3` 跳轉）|
-| **`Enter`** | **Into** — 鑽入選中的 resource / 把焦點推到下個 panel / 確認 popup 選擇 |
-| **`Space`** | **Menu** — 在當下焦點處開啟對應 popup：sidebar cheatsheet（panel 1）、每列的 action menu / container Shell menu / 空 list 提示（panel 2）、Logs / Events / Relatives-drill / Relatives-breadcrumb / History rollback（panel 3 各 tab）。也可關閉任何已開啟的 popup（鏡像式開關）|
+| **`Enter`** | **Into** — 鑽入選中的 resource / 確認 popup 選擇。**不會**把焦點推到其他 panel（要切焦點請用 `Tab` / `1` / `2` / `3`）|
+| **`Space`** | **Menu** — 在當下焦點處開啟對應 popup：sidebar cheatsheet + Pin / Unpin / Sort 動作（panel 1）、每列的 action menu / container Shell menu / 空 list 提示（panel 2）、Logs / Events / Relatives-drill / Relatives-breadcrumb / History rollback（panel 3 各 tab）。也可關閉任何已開啟的 popup（鏡像式開關）|
 | **`Esc`** | **Back** — 退回一層 / 關閉 popup |
 
-只要有 context menu 存在的位置，`Space` 就足夠了 — 不需要記每個動作的 hotkey。Sidebar（panel 1）沒有 action menu，因為每一列本身就是導覽目標；`j`/`k` 移動、`Enter` 把焦點推到 table。
+只要有 context menu 存在的位置，`Space` 就足夠了 — 不需要記每個動作的 hotkey。
 
 Tab 導覽還支援 `h`/`l`（或 `[`/`]`）切換 panel 3 的 tab。
+
+### 滑鼠（v1.6 起）
+
+| 操作 | 行為 |
+|---|---|
+| **左鍵** 點 panel row | 切焦點到該 panel + cursor 移到該列 |
+| **雙擊** | Synth `Enter`（鑽入 cursor 那列）|
+| **右鍵** 點 row | Synth `Space`（開該列的 context menu / cheatsheet）|
+| **滾輪** 上 / 下 | Synth `u` / `d`（半頁移動）。方向可在 Settings popup 切換 `scroll_direction: natural | reverse` |
+| **左鍵** 點 list popup 的列 | Commit 該列（等同於 cursor + `Enter`）|
+| **右鍵** 點任何 popup | 關閉它（等同於 `Esc`）|
+
+Menu 類 popup（panel 2 menu、sort picker、namespace / context picker、breadcrumb、helm doc menu、hint、settings、confirm）忽略滾輪 — 內容短、半頁滾動沒意義。Viewer popup（YAML / Compare / App Log / Help）**會**吃滾輪。Confirm dialog 刻意把左鍵設為 no-op，避免誤觸觸發破壞性的 delete / quit / rollback — 確認只能用鍵盤 `Enter` / `y`。
+
+可以在 Settings popup（`M`）關閉滑鼠；popup 本身在 mouse off 時還是可以滑鼠操作，方便切回 on。
 
 ### 加速器 — cursor 與 power trigger
 
 ```
- cursor      j k        u d        gg G        / (在當前 panel 內搜尋)
- trigger     Y YAML     E edit     S shell     D delete          N ns    C context
- expand      z          z 切換當前 panel 全螢幕
- helm        .          . 切換 panel 2 中 helm-managed 物件顯示
+ cursor    j k         u d         gg G        / (在當前 panel 內搜尋)
+ trigger   Y YAML      E edit      D delete    N namespace
+ panel 1   P pin       S sort      C context
+ panel 2   S shell     C compare anchor
+ expand    z           z 切換當前 panel 全螢幕
+ helm      .           . 切換 panel 2 中 helm-managed 物件顯示
+ settings  M           M 開啟全域 Settings popup
 ```
 
-Trigger 鍵刻意設成大寫，避免在 `/` 搜尋輸入時誤觸。
+`S` 和 `C` 是 panel-aware 雙重綁定 — 同字母在不同 panel 做不同事，跟 `P` 只在 panel 1 有意義是同邏輯。Trigger 鍵刻意設成大寫，避免在 `/` 搜尋輸入時誤觸。
 
 ### 全域
 
 | 鍵 | 動作 |
 |---|---|
+| `M` | 開啟全域 Settings popup（mouse on/off、scroll direction；未來更多設定）|
 | `Alt+t` | 切換 KM8erm（spawn / 顯示 / 隱藏；shell 在隱藏時保持存活）|
 | `y` | 把焦點 panel 內容複製到剪貼簿（OSC 52）|
 | `!` | App log |
@@ -187,9 +213,20 @@ Trigger 鍵刻意設成大寫，避免在 `/` 搜尋輸入時誤觸。
 | `q` | 結束 km8（會確認）|
 | `Ctrl+C` | 立即結束 km8（不確認）|
 
+### Panel 1 sidebar Space menu
+
+| 鍵 | 動作 |
+|---|---|
+| `P` | Pin / Unpin cursor 那個 resource kind。被 pin 的 kind 會出現在頂端 "Pinned" 區、並**從**原本類別移走。順序 per-context 持久化到 config |
+| `S` | 對 cursor 那個 kind 開啟 Sort flow — column picker → direction picker → 存檔。Panel 2 header 會在被 sort 的欄位旁顯示 ↑ / ↓ |
+
 ### Panel 2 context menu（在任一 row 按 `Space`）
 
-依 resource 提供對應動作的 per-row menu — `Y` YAML / `E` Edit / `S` Shell / `D` Delete。用 `j`/`k` + `Enter`，或直接按字母觸發。Helm-managed row 會隱藏 `E`/`D`（Rule A：read-only — 即使編輯也會被 `helm upgrade`/`rollback` 蓋掉）；沒有 container 的 resource 會隱藏 `S`。
+依 resource 提供對應動作的 per-row menu — `Y` YAML / `E` Edit / `S` Shell / `D` Delete，加一個情境感知的 **`C` Compare** entry（Mark anchor / Compare to anchor / Unmark anchor，依目前狀態）。用 `j`/`k` + `Enter`，或直接按字母觸發。Helm-managed row 會隱藏 `E`/`D`（Rule A：read-only — 即使編輯也會被 `helm upgrade`/`rollback` 蓋掉）；沒有 container 的 resource 會隱藏 `S`。
+
+### Compare mode
+
+Anchor 已設時，panel 2 左下角會顯示 `esc: exit compare` 提示。被鎖定的 row 在 status bar 顯示 marker（kind + name），所以即使切焦點再回來也不會搞丟脈絡。Compare lock 在焦點離開 panel 2、或鎖定的 row 從 watcher 流中消失（被刪除 / namespace 過濾掉）時自動清除。
 
 ### Helm 專用
 
@@ -256,6 +293,30 @@ default_context: ""      # kubeconfig context（預設：current-context）
 default_namespace: ""    # namespace 過濾（預設：all namespaces）
 editor: ""               # 以 $KUBE_EDITOR 形式 export 給 kubectl
                          # （預設：kubectl 會 fallback 到 $EDITOR → vi / notepad）
+
+# Compare popup 預設值（v1.6+）。`layout` 選 diff render：
+# "unified"（預設）是單欄附 -/+ 標記，"split" 是左右並排。
+compare:
+  layout: unified
+
+# 滑鼠設定（v1.6+）。兩個欄位都是 optional，省略則 fallback 到下列預設。
+mouse_opt_config:
+  enabled: true                # 設 false 關閉 click + double-click + right-click + wheel
+  scroll_direction: natural    # "natural": 滾輪上 = cursor 上。"reverse" 翻轉對應。
+
+# Per-kind 偏好設定（v1.6+）。Key 是 kubectl name
+# （"pod" / "deployment" / "configmap" / ...）。每個 entry 都 optional，
+# 未知 kind 在 rewrite 時會被保留，CRD 短暫消失時 pin / sort 不會掉。
+resource_kind_config:
+  pod:
+    pinned:
+      order: 10              # sparse — 10 為增量，方便手動在兩個 pin 之間插入
+    sort:
+      column: Age            # 該 kind 在 panel 2 顯示的 column title
+      direction: desc        # "asc" 或 "desc"
+  configmap:
+    pinned:
+      order: 20
 ```
 
 ### theme.yaml
