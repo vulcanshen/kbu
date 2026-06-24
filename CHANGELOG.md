@@ -4,6 +4,156 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.6.0] - 2026-06-24
+
+Four big features land together: **Pinned** sidebar kinds, **YAML
+Compare**, per-kind **Sort**, and full **Mouse support** with a new
+Settings popup. The keyboard model stays unchanged outside two
+deliberate trims (Enter no longer forwards focus — see
+**Changed**); everything else extends existing surfaces rather than
+replacing them.
+
+### Added
+
+- **Pinned resource kinds (`P`).** Panel 1 grows a Pinned section
+  at the top. `P` on any sidebar row toggles pin / unpin, and the
+  pin order persists per-context into the config file. Pins move
+  rather than duplicate — a pinned kind disappears from its original
+  category and reappears under Pinned, so each kind always has
+  exactly one home. CRD-managed kinds preserved across uninstall /
+  reinstall: if a pinned CRD goes away, its pin stays in the config
+  silently and restores the moment the CRD comes back.
+- **YAML Compare popup.** New per-kind diff workflow on panel 2.
+  Press `C` on a row to mark it as the **compare anchor** (status
+  bar shows a glyph + row name), then `C` on a different row of the
+  same kind opens a side-by-side or unified YAML diff. `C` on the
+  anchor itself cancels — the same key toggles all three states
+  (mark / diff / cancel) so muscle memory is consistent. The diff
+  popup carries its own action menu (Space) for live layout
+  switching, and the default layout is persisted in config.
+- **List-view sort.** New three-step popup chain on panel 1 (`Sort
+  <Kind>…` action via Space-menu, or direct `S` hotkey): column
+  picker → direction picker (Ascending / Descending / Unset) →
+  persist. Sort is per-kind and lives in the same config block as
+  Pinned. Panel 2 header marks the sorted column with ↑ / ↓
+  arrows (NF U+F161 / U+F160). Comparators dispatch by column title:
+  `Age` / `Updated` use the underlying timestamp instead of the
+  rendered "5d3h" string (which lex-sorts wrong at unit boundaries);
+  `Ready` parses the "N/M" form; `Restarts`, `Desired`, `Current`,
+  `Up-to-date`, `Available`, `Active`, `Rev` use the int form. No
+  saved sort = `(namespace, name)` ascending — matches kubectl's
+  default for cross-namespace listings.
+- **Mouse support.** km8 had `tea.WithMouseCellMotion` enabled at
+  the program level since v1.5.x but only scroll-wheel handlers on
+  table/detail (gated on keyboard focus, so wheel never actually
+  worked the way users expected). v1.6.0 wires real mouse coverage:
+  - **Left-click** on a panel: focus that panel + move cursor to
+    the clicked row. Sidebar fires `ResourceSelectedMsg`, table
+    fires `RowSelectedMsg`, detail's Relatives tab moves the row
+    cursor.
+  - **Double-click**: synthesizes Enter (drill).
+  - **Right-click**: synthesizes Space (opens the row's context
+    menu / hint cheatsheet).
+  - **Wheel**: synthesizes `u` / `d` (half-page move) on main
+    panels and on viewer popups (yamlpopup, comparepopup, applog,
+    help). Menu-style popups swallow wheel since their content is
+    short and half-page semantics don't fit.
+  - **13 popups** all gain `HandleMouse`: list popups commit on
+    left-click, scroll-only popups close on right-click. The
+    confirm dialog deliberately makes left-click a no-op so a
+    stray click can't trigger a destructive delete / quit /
+    rollback.
+- **Settings popup (`M`).** New app-level config surface with a
+  Catppuccin-blue accent and a cog glyph in the title. Currently
+  carries two rows — Mouse on/off, Scroll Direction natural/reverse —
+  with a green/grey badge that toggles on Enter or click. Persists
+  per-toggle into the new `mouse_opt_config` block. The popup is
+  its own escape hatch: even when Mouse is off, clicking it
+  remains possible so users can turn it back on.
+- **Relatives tab cursor on click.** Detail panel's Relatives tab
+  now responds to mouse clicks — landing on a drillable row moves
+  `relativeCursor` to it. Wrapped multi-line entries (nested
+  drillable refs) collapse correctly back to a single cursor row
+  whichever of their lines you clicked.
+- **`mouse_opt_config` + `resource_kind_config` config blocks.**
+  New nested schema:
+  ```yaml
+  resource_kind_config:
+    pod:
+      pinned: { order: 10 }
+      sort: { column: Age, direction: desc }
+  mouse_opt_config:
+    enabled: true
+    scroll_direction: natural
+  ```
+  Both blocks are entirely optional — legacy configs keep working
+  unchanged.
+
+### Changed
+
+- **Enter no longer forwards focus across panels.** Panel 1 Enter
+  used to focus panel 2; panel 2 Enter on non-drillable kinds used
+  to focus panel 3. Both removed: with mouse double-click → Enter
+  synthesis, the focus-shift fallback would hijack focus every
+  double-click. Panel 1 Enter is now no-op (search-mode Enter still
+  locks the filter); panel 2 Enter only drills. Keyboard users
+  keep `Tab` / `Shift+Tab` / `1` / `2` / `3` for focus switching.
+- **Default compare layout is now Unified.** Side-by-side `Split`
+  required more horizontal room than narrow terminals could spare
+  and lex-jumped at line-wrap boundaries; Unified survives narrow
+  widths and reads like `git diff`. Users on wider terminals can
+  switch back via the Compare popup's Space-menu (and the choice
+  persists into config).
+- **Status bar marker `\U000F08AA`.** Replaces the prior compare-
+  mode marker; cleaner glyph that doesn't compete with the helm
+  icon family.
+- **`N` namespace picker opens immediately** with a "Loading…"
+  placeholder and fetches in parallel — no more visible lag on
+  cold connections. Esc works during loading; fetch errors close
+  the popup with a toast.
+
+### Fixed
+
+- **Sidebar / table click in search mode was offset by 2–3 rows**
+  because `renderSearchBox` emits a 3-line bordered box and the
+  cursor-mapping math stepped over only 1 line (sidebar) or none
+  (table). Fixed both.
+- **`persistPinnedKinds` was dropping pins for unregistered kinds.**
+  Naïve "wipe all and re-add from sidebar" defeated the
+  `ResourceKindConfigEntry` contract that says unknown kinds stay
+  in the map so a CRD reinstall silently restores their pin. Now
+  the wipe scopes to kubectl-names the registry currently knows
+  about; CRD entries that disappeared mid-session survive intact.
+- **Helm Releases sort comparators.** `Rev` is now routed through
+  the int comparator (lex sort put "10" between "1" and "2");
+  `Updated` reads the time off `Raw` (`*Release.Updated` Go
+  `time.String()`) instead of the rendered age string.
+- **MouseMsg routing.** Four older `IsActive` blocks (appLog,
+  help, contextPicker, namespacePicker) intercepted `tea.MouseMsg`
+  and forwarded it to their `Update()` methods which didn't accept
+  mouse events. The new `HandleMouse` dispatcher's coverage for
+  those popups was unreachable — click and wheel silently dropped.
+  Now trimmed to `KeyMsg` only; mouse properly reaches each popup's
+  `HandleMouse`.
+- **Compare anchor stale lock after re-fetch.** Watcher tick now
+  re-resolves the locked UID against the fresh items slice and
+  drops the lock (with a toast) if the anchored row disappeared.
+- **Panel 3 Relatives scroll past last cursor.** Drill chain
+  trailing rows could fall below the viewport; `relativeMoveOrScroll`
+  now scrolls past the cursor when at the boundary, and the panel's
+  `ScrollInfo` carries a bottom indicator so the user sees there's
+  more content. (v1.5.x carry-over from 25a12ec.)
+- **Sidebar Enter on no-match search clears the filter** instead
+  of leaving the sidebar in a dead state with no visible items and
+  no way to keystroke out. (v1.5.x carry-over from 3ce5ece.)
+
+### Removed
+
+- **`l` as a focus-forward key** and the **`FocusTableMsg` /
+  `FocusDetailMsg`** message types — see "Enter no longer forwards
+  focus" above. No keyboard alternative needed: existing
+  `Tab` / `1` / `2` / `3` already covered the use case.
+
 ## [v1.5.7] - 2026-06-10
 
 Two small `kubectl`-parity additions to the panel-2 list view: Pods

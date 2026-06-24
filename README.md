@@ -46,7 +46,9 @@ A scout-style Kubernetes TUI built around **Relatives navigation**.
 | **`Space`** | *What can I do here?* — opens a contextual menu or cheatsheet on every panel and every tab |
 | **`Esc`** | Back out — pop one drill level / close any popup |
 
-When in doubt, press `Space`. Power-user shortcuts (`Y` YAML / `E` edit / `S` shell / `D` delete / `N` ns / `C` context) exist for speed but every one is also reachable through the `Space` menu — nothing to memorize unless you want it.
+When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `C` compare or context / `Y` YAML / `E` edit / `D` delete / `N` ns / `M` settings) exist for speed — every one is also reachable through the `Space` menu, so nothing's required to memorize unless you want it.
+
+**Mouse works too**, since v1.6: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `M` to flip mouse off if you prefer keyboard-only.
 
 ## Install
 
@@ -116,6 +118,11 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 
 ## Features
 
+- **Pinned resource kinds (`P`)** -- panel 1's sidebar grows a Pinned section at the top. `P` on any resource row toggles pin / unpin, and the order persists into the config file. Pins **move** rather than duplicate — a pinned kind disappears from its original category and reappears under Pinned, so each kind has exactly one home. Pin / sort / future-per-kind settings share the same per-kind config block, so a CRD that briefly goes away (operator reinstall, etc.) keeps its pin and sort silently and restores both the moment it comes back
+- **YAML Compare popup (`C`)** -- panel 2 row-level diff. `C` on a row marks it as the **compare anchor** (status-bar glyph shows which row is locked); `C` on a different row of the same kind opens a side-by-side or unified YAML diff. `C` on the anchor itself cancels — the same key toggles all three states (mark / diff / cancel). The diff popup has its own action menu (`Space`) to switch layout live, and the default layout (Unified) is persisted in config. Compare YAML is pre-cleaned (status / managedFields / resourceVersion / uid stripped) so the diff focuses on what the user actually authored
+- **List-view sort (`S` on sidebar)** -- per-kind sort persisted across restarts. Three-step popup chain: column picker → direction picker (Ascending / Descending / Unset) → save. Panel 2 header marks the sorted column with ↑ / ↓ arrows. Comparators are type-aware: `Age` / `Updated` use the underlying timestamp (not the rendered "5d3h" string); `Ready` parses "N/M" as a pair of ints; `Restarts`, `Desired`, `Current`, `Up-to-date`, `Available`, `Active`, `Rev` use the int form so "10" sorts above "2". No saved sort = `(namespace, name)` ascending, matching kubectl's cross-namespace default
+- **Mouse support** -- click a panel to focus it + move the cursor, double-click to drill (synthesizes `Enter`), right-click to open the row's context menu (synthesizes `Space`), wheel scrolls half-page (synthesizes `u` / `d`). 13 popups respond too: list popups commit on left-click, viewer popups (YAML / Compare / App Log / Help) keep wheel scroll, the confirm dialog deliberately makes left-click a no-op so a stray click can't trigger a destructive delete / quit / rollback. Mouse can be turned off in the Settings popup (`M`) and a `scroll_direction: natural | reverse` setting flips the wheel for users who prefer the inverse mapping
+- **Settings popup (`M`)** -- new app-level surface with a Catppuccin-blue accent and a cog glyph in the title. Currently carries Mouse on/off + Scroll Direction; future global settings drop in here. The popup is its own escape hatch: even when Mouse is off, clicking remains possible inside the popup so users can turn mouse back on
 - **27 built-in resource types + CRD support** -- dynamic discovery of Custom Resources at startup, across Cluster / Workloads / Network / Config / Storage / RBAC / Autoscaling / Helm categories. The Helm category only registers when the `helm` CLI is on `PATH`
 - **Real-time Watch updates** -- resources refresh automatically via Kubernetes Watch API
 - **Vim-style navigation** -- `j`/`k`, `u`/`d` page scroll, `gg`/`G`, `/` search
@@ -159,29 +166,48 @@ Most of the time you're driving km8 with just four keys:
 | Key | Behavior |
 |---|---|
 | **`Tab`** | **Panel** — move focus to the next panel (or use `1` / `2` / `3` to jump directly) |
-| **`Enter`** | **Into** — drill into the selected resource / focus the next panel / commit a popup choice |
-| **`Space`** | **Menu** — open a contextual popup wherever focus is: sidebar cheatsheet (panel 1), per-row action menu / container Shell menu / empty-list hint (panel 2), Logs / Events / Relatives-drill / Relatives-breadcrumb / History rollback (panel 3 by tab). Also closes any open popup (mirror open) |
+| **`Enter`** | **Into** — drill into the selected resource / commit a popup choice. Does **not** forward focus to another panel (use `Tab` / `1` / `2` / `3` for that) |
+| **`Space`** | **Menu** — open a contextual popup wherever focus is: sidebar cheatsheet + Pin / Unpin / Sort actions (panel 1), per-row action menu / container Shell menu / empty-list hint (panel 2), Logs / Events / Relatives-drill / Relatives-breadcrumb / History rollback (panel 3 by tab). Also closes any open popup (mirror open) |
 | **`Esc`** | **Back** — pop one drill level / close any popup |
 
-Where a contextual menu exists, `Space` is enough — you don't need to memorize the per-action keys. The sidebar (panel 1) doesn't have an action menu because every row is itself a navigation target; `j`/`k` to move, `Enter` to focus into the table.
+Where a contextual menu exists, `Space` is enough — you don't need to memorize the per-action keys.
 
 Tab navigation also responds to `h`/`l` (or `[`/`]`) for switching panel 3 tabs.
+
+### Mouse (since v1.6)
+
+| Gesture | Behavior |
+|---|---|
+| **Left-click** on a panel row | Focus that panel + move the cursor to the clicked row |
+| **Double-click** | Synthesizes `Enter` (drill into the cursor row) |
+| **Right-click** on a row | Synthesizes `Space` (opens the row's context menu / cheatsheet) |
+| **Wheel up / down** | Synthesizes `u` / `d` (half-page move). Direction can be flipped via Settings popup (`scroll_direction: natural | reverse`) |
+| **Left-click** inside a list popup | Commits that row (same as cursor + `Enter`) |
+| **Right-click** inside any popup | Closes it (same as `Esc`) |
+
+Menu-style popups (panel 2 menu, sort picker, namespace / context picker, breadcrumb, helm doc menu, hint, settings, confirm) ignore the wheel — content is short and half-page semantics don't fit. Viewer popups (YAML / Compare / App Log / Help) **do** scroll on wheel. The confirm dialog deliberately makes left-click a no-op so a stray click can't trigger a destructive delete / quit / rollback — you confirm with keyboard `Enter` / `y` only.
+
+Mouse can be disabled in the Settings popup (`M`); the popup itself stays mouse-reachable in that state so you can flip it back on.
 
 ### Accelerators — cursor + power triggers
 
 ```
- cursor      j k        u d        gg G        / (search inside current panel)
- trigger     Y YAML     E edit     S shell     D delete          N ns    C context
- expand      z          z toggles full-screen on current panel
- helm        .          . toggles helm-managed visibility on panel 2
+ cursor    j k         u d         gg G        / (search inside current panel)
+ trigger   Y YAML      E edit      D delete    N namespace
+ panel 1   P pin       S sort      C context
+ panel 2   S shell     C compare anchor
+ expand    z           z toggles full-screen on current panel
+ helm      .           . toggles helm-managed visibility on panel 2
+ settings  M           M opens the global Settings popup
 ```
 
-Trigger keys are deliberately uppercase to avoid misfiring while typing in a `/` search field.
+`S` and `C` are panel-aware overloads — same letter, different action depending on which panel has focus, mirroring how `P` only makes sense on panel 1. Trigger keys are deliberately uppercase to avoid misfiring while typing in a `/` search field.
 
 ### Global
 
 | Key | Action |
 |---|---|
+| `M` | Open the global Settings popup (mouse on/off, scroll direction; future settings) |
 | `Alt+t` | Toggle KM8erm (spawn / show / hide; shell stays alive across hide) |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
 | `!` | App log |
@@ -189,13 +215,24 @@ Trigger keys are deliberately uppercase to avoid misfiring while typing in a `/`
 | `q` | Quit km8 (asks for confirmation) |
 | `Ctrl+C` | Quit km8 immediately (no confirm) |
 
+### Panel 1 sidebar Space menu
+
+| Key | Action |
+|---|---|
+| `P` | Pin / Unpin the cursor's resource kind. Pinned kinds appear in a top "Pinned" section and **move** out of their original category. Order persists per-context to config |
+| `S` | Open the Sort flow for the cursor's resource kind — column picker → direction picker → persist. Header shows ↑ / ↓ next to the sorted column |
+
 ### Panel 2 context menu (`Space` on any row)
 
-Per-row menu with resource-aware items — `Y` YAML / `E` Edit / `S` Shell / `D` Delete. Use `j`/`k` + `Enter` or hit the letter directly. Helm-managed rows hide `E`/`D` (Rule A: read-only — edits would be overwritten by `helm upgrade`/`rollback`); resources without containers hide `S`.
+Per-row menu with resource-aware items — `Y` YAML / `E` Edit / `S` Shell / `D` Delete plus a contextual **`C` Compare** entry (Mark anchor / Compare to anchor / Unmark anchor depending on state). Use `j`/`k` + `Enter` or hit the letter directly. Helm-managed rows hide `E`/`D` (Rule A: read-only — edits would be overwritten by `helm upgrade`/`rollback`); resources without containers hide `S`.
 
 Two cursor-only entries are appended for navigation discoverability (no single-letter hotkey, reached via `j`/`k` + `Enter`):
 - `Enter ↘` — drill into the row's children (`pods` / `containers` / `jobs` / etc., per kind). Same action as pressing `Enter` on the row directly.
 - `Esc ↖` — back to the parent list. Only appears when you're already inside a drill chain (e.g. viewing a Deployment's Pods, or a Pod's containers). Same action as pressing `Esc` directly.
+
+### Compare mode
+
+While the anchor is set, panel 2's bottom-left border shows an `esc: exit compare` hint. The locked row gets a status-bar marker (kind + name) so you can switch focus and come back without losing track. Compare lock auto-clears when focus leaves panel 2 or when the anchored row falls out of the watcher stream (deleted / namespace-filtered away).
 
 ### Helm-specific
 
@@ -262,6 +299,34 @@ default_context: ""      # kubeconfig context (default: current-context)
 default_namespace: ""    # namespace filter (default: all namespaces)
 editor: ""               # exposed to kubectl as $KUBE_EDITOR
                          # (default: kubectl falls back to $EDITOR → vi / notepad)
+
+# Compare popup defaults (v1.6+). `layout` picks the diff render —
+# "unified" (default) is a single column with -/+ markers,
+# "split" is side-by-side.
+compare:
+  layout: unified
+
+# Mouse settings (v1.6+). Both fields optional; omitting either
+# falls back to the defaults below.
+mouse_opt_config:
+  enabled: true                # set false to disable click + double-click + right-click + wheel
+  scroll_direction: natural    # "natural": wheel-up = cursor up. "reverse" swaps the mapping.
+
+# Per-kind preferences (v1.6+). Keyed by kubectl name
+# ("pod" / "deployment" / "configmap" / ...). Each entry is
+# optional and unknown kinds are preserved across the rewrite,
+# so a CRD that briefly uninstalls won't lose its pin / sort.
+resource_kind_config:
+  pod:
+    pinned:
+      order: 10              # sparse — increments of 10, so manual YAML
+                             # tweaks can wedge a kind between two existing pins
+    sort:
+      column: Age            # column title from the kind's panel-2 columns
+      direction: desc        # "asc" or "desc"
+  configmap:
+    pinned:
+      order: 20
 ```
 
 ### theme.yaml
