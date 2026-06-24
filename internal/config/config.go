@@ -70,9 +70,9 @@ type PinnedConfig struct {
 // NOT persist back (the popup's Space-menu toggle is session-local).
 type CompareConfig struct {
 	// Layout is the default diff layout for new compare popups.
-	// Valid values: "split" (side-by-side, default) | "unified"
-	// (single column with -/+ markers).  Empty or unrecognised value
-	// falls back to "split".
+	// Valid values: "unified" (single column with -/+ markers,
+	// default) | "split" (side-by-side). Empty or unrecognised value
+	// falls back to "unified".
 	Layout string `yaml:"layout"`
 }
 

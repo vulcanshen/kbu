@@ -93,13 +93,15 @@ type CompareYamlPopupModel struct {
 }
 
 // NewCompareYamlPopupModel constructs a compare popup with the default
-// (Split) layout. Callers override the layout via SetDefaultLayout before
-// Open if the user's config carries a different preference.
+// (Unified) layout. Unified survives narrow panels and reads like a
+// standard `git diff` to anyone who's used one, so it makes the
+// safer default than Split. Callers override via SetDefaultLayout
+// before Open if the user's config carries a different preference.
 func NewCompareYamlPopupModel(t *theme.Theme) CompareYamlPopupModel {
 	return CompareYamlPopupModel{
 		theme:    t,
 		animator: NewPopupAnimator("comparepopup", lipgloss.Color("#9DDAEA")),
-		layout:   CompareLayoutSplit,
+		layout:   CompareLayoutUnified,
 	}
 }
 
@@ -592,7 +594,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	titleStyle := lipgloss.NewStyle().Foreground(borderColor).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 
-	title := fmt.Sprintf(" \U000f055c Compare — %s vs %s (%s) ",
+	title := fmt.Sprintf(" \U000f08aa Compare — %s vs %s (%s) ",
 		m.leftLabel, m.rightLabel, m.layout.String())
 	titleW := lipgloss.Width(title)
 	innerW := popupW - 2

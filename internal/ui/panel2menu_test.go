@@ -46,11 +46,13 @@ func drainPanel2MenuToInteractive(t *testing.T, m *Panel2MenuPopupModel, openCmd
 // ── items shape ────────────────────────────────────────────────────────────
 
 func TestPanel2Menu_Items_PodHasShell(t *testing.T) {
-	// Pod has containers — Shell must appear. Pod also drills (→ containers)
-	// so Enter entry is at the TOP (menu-only entries lead, hotkey entries
-	// follow). Full set in order: Enter / Y / E / S / D.
+	// Pod has containers — Shell must appear. Order: hotkey group
+	// (Y/E/S/D) first, then Enter (drill) at the very end. Enter is
+	// at the bottom because it's a navigation action with no per-row
+	// payload; cursor opens on the first hotkey entry (the most
+	// commonly-used inspect action, Y).
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	wantKeys := []string{"Enter", "Y", "E", "S", "D"}
+	wantKeys := []string{"Y", "E", "S", "D", "Enter"}
 	if len(items) != len(wantKeys) {
 		t.Fatalf("Pod menu len=%d, want %d (keys=%v)", len(items), len(wantKeys), wantKeys)
 	}
@@ -146,91 +148,96 @@ func TestPanel2Menu_Items_HelmManagedNoContainer(t *testing.T) {
 	}
 }
 
-func TestPanel2Menu_Items_CompareNotLocked_ShowsLockEntry(t *testing.T) {
-	// Not in compare mode + canLock (panel-2 has >1 items) → "Lock to
-	// compare" appears. Multi-char key "LockCompare" prevents direct
-	// hotkey dispatch (menu-only by design).
+func TestPanel2Menu_Items_CompareNotAnchored_ShowsMarkEntry(t *testing.T) {
+	// No anchor set + canLock (panel-2 has >1 items) → "Mark as
+	// Compare anchor" appears with key "C". The same key serves the
+	// "Show diff" entry in the locked state — both surface
+	// contextually via a single muscle-memory hotkey.
 	ctx := panel2CompareCtx{locked: false, canLock: true}
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
-	keys := itemKeys(items)
-	if !contains(keys, "LockCompare") {
-		t.Errorf("expected LockCompare in not-locked menu, got %v", keys)
-	}
-	for _, banned := range []string{"CompareTo", "ExitCompare"} {
-		if contains(keys, banned) {
-			t.Errorf("must NOT show %q when not in compare mode, got %v", banned, keys)
+	found := false
+	for _, it := range items {
+		if it.key == "C" && it.label == "Mark as Compare anchor" {
+			found = true
+			break
 		}
+	}
+	if !found {
+		t.Errorf("expected 'Mark as Compare anchor' (key=C) in not-anchored menu, got %v", itemKeys(items))
 	}
 }
 
-func TestPanel2Menu_Items_CompareSingleItem_HidesLock(t *testing.T) {
-	// canLock=false (single item in panel-2 — nothing to compare against)
-	// hides the Lock entry entirely.
+func TestPanel2Menu_Items_CompareSingleItem_HidesMark(t *testing.T) {
+	// canLock=false (single item — nothing to compare against) hides
+	// the Mark entry entirely. The C hotkey gates on the same flag at
+	// the AppModel layer so direct presses are no-ops too.
 	ctx := panel2CompareCtx{locked: false, canLock: false}
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
-	if contains(itemKeys(items), "LockCompare") {
-		t.Errorf("LockCompare must be hidden with canLock=false, got %v", itemKeys(items))
+	if contains(itemKeys(items), "C") {
+		t.Errorf("C entry must be hidden when canLock=false, got %v", itemKeys(items))
 	}
 }
 
-func TestPanel2Menu_Items_CompareLocked_ShowsCompareAndExit(t *testing.T) {
-	// In compare mode + cursor on a comparable row (different UID, same
-	// kind) → both "Compare to this resource" and "Exit compare mode"
-	// appear. "Lock to compare" must NOT appear (already locked).
+func TestPanel2Menu_Items_CompareAnchored_ShowsShowDiff(t *testing.T) {
+	// Anchor set + cursor on a comparable row (different UID, same
+	// kind) → "Show diff against Compare anchor" appears with key "C".
+	// No "Exit compare mode" entry — Esc is the exit gesture, surfaced
+	// via the panel-2 bottom-left hint.
 	ctx := panel2CompareCtx{locked: true, canLock: true, cursorComparable: true}
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
-	keys := itemKeys(items)
-	for _, want := range []string{"CompareTo", "ExitCompare"} {
-		if !contains(keys, want) {
-			t.Errorf("expected %q in compare-mode menu, got %v", want, keys)
+	found := false
+	for _, it := range items {
+		if it.key == "C" && it.label == "Show diff vs Compare anchor" {
+			found = true
+			break
 		}
 	}
-	if contains(keys, "LockCompare") {
-		t.Errorf("must NOT show LockCompare while already locked, got %v", keys)
+	if !found {
+		t.Errorf("expected 'Show diff vs Compare anchor' (key=C) in anchored menu, got %v", itemKeys(items))
+	}
+	for _, banned := range []string{"LockCompare", "CompareTo", "ExitCompare"} {
+		if contains(itemKeys(items), banned) {
+			t.Errorf("legacy compare key %q must not appear, got %v", banned, itemKeys(items))
+		}
 	}
 }
 
-func TestPanel2Menu_Items_CompareLockedOnLockedRow_HidesCompareTo(t *testing.T) {
-	// Cursor sitting on the locked row itself: cursorComparable=false —
-	// "Compare to this resource" hidden (comparing self vs self is empty
-	// diff). "Exit compare mode" still surfaces so user can release the
-	// lock from the locked row directly.
+func TestPanel2Menu_Items_CompareAnchoredOnAnchorRow_HidesC(t *testing.T) {
+	// Cursor sitting on the anchor row itself: cursorComparable=false.
+	// No "Show diff" (self vs self is empty), no "Mark" (already
+	// anchored, re-marking same item is a no-op). C entry is hidden.
 	ctx := panel2CompareCtx{locked: true, canLock: true, cursorComparable: false}
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
-	keys := itemKeys(items)
-	if contains(keys, "CompareTo") {
-		t.Errorf("must NOT show CompareTo when cursor on locked row, got %v", keys)
-	}
-	if !contains(keys, "ExitCompare") {
-		t.Errorf("ExitCompare must remain visible on the locked row, got %v", keys)
+	if contains(itemKeys(items), "C") {
+		t.Errorf("C entry must be hidden when cursor sits on the anchor row, got %v", itemKeys(items))
 	}
 }
 
 func TestPanel2Menu_Items_DeploymentDrillsToPods(t *testing.T) {
-	// Deployment drills to Pods — Enter entry sits at the TOP (no-hotkey
-	// items lead the menu); hint says "drill into pods" (KubectlName
-	// "pod" + "s").
+	// Deployment drills to Pods — Enter entry sits at the very BOTTOM
+	// of the menu (the navigation tail, after the hotkey group); hint
+	// says "drill into pods" (KubectlName "pod" + "s").
 	items := buildPanel2MenuItems(k8s.ResourceDeployments, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	first := items[0]
-	if first.key != "Enter" {
-		t.Fatalf("Deployment first item must be Enter (drill), got %q", first.key)
+	last := items[len(items)-1]
+	if last.key != "Enter" {
+		t.Fatalf("Deployment last item must be Enter (drill), got %q", last.key)
 	}
-	if first.hint != "drill into pods" {
-		t.Errorf("Deployment Enter hint = %q, want %q", first.hint, "drill into pods")
+	if last.hint != "drill into pods" {
+		t.Errorf("Deployment Enter hint = %q, want %q", last.hint, "drill into pods")
 	}
 }
 
 func TestPanel2Menu_Items_PodDrillsToContainers(t *testing.T) {
 	// Pod drills to containers (special-cased — containers aren't a K8s
 	// API resource so we don't go through the registry's KubectlName).
-	// Enter is the TOP entry — menu-only items lead.
+	// Enter is the LAST entry — Enter sits at the menu tail.
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	first := items[0]
-	if first.key != "Enter" {
-		t.Fatalf("Pod first item must be Enter, got %q", first.key)
+	last := items[len(items)-1]
+	if last.key != "Enter" {
+		t.Fatalf("Pod last item must be Enter, got %q", last.key)
 	}
-	if first.hint != "drill into containers" {
-		t.Errorf("Pod Enter hint = %q, want %q", first.hint, "drill into containers")
+	if last.hint != "drill into containers" {
+		t.Errorf("Pod Enter hint = %q, want %q", last.hint, "drill into containers")
 	}
 }
 
@@ -270,8 +277,8 @@ func TestPanel2Menu_Open_NoCanPopOmitsEsc(t *testing.T) {
 
 func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 	// Cursor starts at index 0 — the top of the menu. With the
-	// menu-only-first layout that's "Enter" (drill into containers
-	// for Pods). Pressing Enter on cursor 0 commits Action="Enter".
+	// hotkey-group-first layout that's "Y" (view YAML). Pressing Enter
+	// on cursor 0 commits Action="Y".
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
 	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
@@ -287,8 +294,8 @@ func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 		if !ok {
 			return false
 		}
-		if am.Action != "Enter" {
-			t.Errorf("cursor 0 should commit Enter (drill, the top menu-only entry), got %q", am.Action)
+		if am.Action != "Y" {
+			t.Errorf("cursor 0 should commit Y (YAML, the top hotkey entry), got %q", am.Action)
 		}
 		if am.Item.Name != "nginx" {
 			t.Errorf("action item.Name=%q, want nginx", am.Item.Name)
@@ -301,12 +308,12 @@ func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 	}
 }
 
-func TestPanel2Menu_CursorOnHotkeyRowCommitsThatHotkey(t *testing.T) {
-	// Pod menu order: Enter / Y / E / S / D. G jumps cursor to the
-	// last item — Delete — and Enter commits Action="D" → app.go
-	// dispatches the kubectl delete confirm. Covers the hotkey-tail
-	// of the menu so a regression that resorts the items can't
-	// silently break the hotkey group.
+func TestPanel2Menu_CursorOnEnterRowCommitsEnter(t *testing.T) {
+	// Pod menu order: Y / E / S / D / Enter. G jumps cursor to the
+	// last item — Enter (drill) — and pressing Enter on it commits
+	// Action="Enter" → app.go dispatches enterDrillDown. Covers the
+	// navigation tail so a regression that re-sorts the items can't
+	// silently break the drill path.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
 	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
@@ -323,8 +330,8 @@ func TestPanel2Menu_CursorOnHotkeyRowCommitsThatHotkey(t *testing.T) {
 		if !ok {
 			return false
 		}
-		if am.Action != "D" {
-			t.Errorf("last cursor (Delete row) should commit D, got %q", am.Action)
+		if am.Action != "Enter" {
+			t.Errorf("last cursor (Enter drill row) should commit Enter, got %q", am.Action)
 		}
 		found = true
 		return true
