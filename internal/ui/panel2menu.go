@@ -245,20 +245,31 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 	if canDelete {
 		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
 	}
-	// Compare entry — single "C" key, behaviour switches on whether
-	// the anchor is already set:
+	// Compare entry — single "C" key, label switches on state so the
+	// user always sees what C would do on the current row:
 	//   - not set + >1 selectable items → "Mark as Compare anchor"
 	//     (the anchor IS the baseline; C marks current row as it)
 	//   - set + cursor on a different row of the same kind →
-	//     "Show diff against Compare anchor" (C opens diff popup)
-	//   - cursor on the anchor itself, or only one item in the list:
-	//     the entry is hidden (acting on it would be a no-op)
+	//     "Compare to anchor" (C opens the diff popup)
+	//   - set + cursor sits on the anchor row itself →
+	//     "Unmark Compare anchor" (C cancels the anchor, exiting
+	//     compare mode — same effect as Esc, surfaced here so C is a
+	//     toggle from any row of the same kind)
+	//   - kind switched away from anchor's kind, or single-item list:
+	//     entry hidden (acting on it would be a no-op)
 	if compare.locked {
-		if compare.cursorComparable {
+		switch {
+		case compare.cursorComparable:
 			items = append(items, panel2MenuItem{
-				label: "Show diff vs Compare anchor",
+				label: "Compare to anchor",
 				key:   "C",
 				hint:  "open the YAML diff popup",
+			})
+		case compare.cursorOnAnchor:
+			items = append(items, panel2MenuItem{
+				label: "Unmark Compare anchor",
+				key:   "C",
+				hint:  "cancel anchor, exit compare mode",
 			})
 		}
 	} else if compare.canLock {
@@ -298,10 +309,17 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 //     row AND same resource type. False when cursor
 //     is on the locked row itself, or when locked
 //     item is from a different (now-switched) kind.
+//   - cursorOnAnchor:   cursor sits on the anchor row itself. Distinct
+//     from cursorComparable=false because the
+//     kind-mismatch case is also "not comparable" but
+//     shouldn't surface the Unmark entry — Unmark only
+//     makes sense when the user is looking at the
+//     anchor.
 type panel2CompareCtx struct {
 	locked           bool
 	canLock          bool
 	cursorComparable bool
+	cursorOnAnchor   bool
 }
 
 // panel2DrillLabel returns the human-readable plural for what Enter drills

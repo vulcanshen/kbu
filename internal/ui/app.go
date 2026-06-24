@@ -150,7 +150,7 @@ func (m *AppModel) clearCompareLock() {
 }
 
 // compareCtxForMenu assembles the panel2CompareCtx the menu needs to
-// decide which of "Lock / Compare to this / Exit" to surface for the
+// decide which of "Mark / Compare to / Unmark" to surface for the
 // cursor-pointed row. Centralised here so the gating rules live with
 // the lock state itself rather than in the menu file.
 func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCtx {
@@ -159,7 +159,8 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 		canLock: len(m.items) > 1,
 	}
 	if ctx.locked {
-		ctx.cursorComparable = m.compareLock.uid != cursorItem.UID &&
+		ctx.cursorOnAnchor = m.compareLock.uid == cursorItem.UID
+		ctx.cursorComparable = !ctx.cursorOnAnchor &&
 			m.compareLock.resourceType == m.currentResource
 	}
 	return ctx
@@ -169,17 +170,20 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 //   - no anchor set → mark the given row as the anchor
 //   - anchor set, cursor on a different row of the same kind → open
 //     the diff popup against the anchor
-//   - cursor on the anchor row, or anchor kind differs from the
-//     current row's kind → silent no-op
+//   - anchor set, cursor sits on the anchor row itself → cancel the
+//     anchor (exit compare mode). Makes C a toggle from any row of
+//     the same kind: press C to mark, press C again on the same
+//     row to unmark.
+//   - anchor kind differs from the current row's kind → silent no-op
+//     (the menu hides the C entry in that case too)
 //
 // Used by BOTH the menu commit handler (case "C") and the direct
-// panel-2 C-key path (compareDirectHotkey) so the two surfaces can't
-// drift on edge cases. The no-op cases match the menu gating in
-// compareCtxForMenu — pressing C where the menu would have hidden
-// the entry has no effect.
+// panel-2 C-key path so the two surfaces can't drift on edge cases.
 func (m *AppModel) compareHotkeyDispatch(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
 	if m.inCompareMode() {
 		if m.compareLock.uid == item.UID {
+			m.clearCompareLock()
+			m.appLog.Info("compare: anchor cleared")
 			return nil
 		}
 		if m.compareLock.resourceType != rt {

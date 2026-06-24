@@ -178,22 +178,23 @@ func TestPanel2Menu_Items_CompareSingleItem_HidesMark(t *testing.T) {
 	}
 }
 
-func TestPanel2Menu_Items_CompareAnchored_ShowsShowDiff(t *testing.T) {
+func TestPanel2Menu_Items_CompareAnchored_ShowsCompareTo(t *testing.T) {
 	// Anchor set + cursor on a comparable row (different UID, same
-	// kind) → "Show diff against Compare anchor" appears with key "C".
-	// No "Exit compare mode" entry — Esc is the exit gesture, surfaced
-	// via the panel-2 bottom-left hint.
+	// kind) → "Compare to anchor" appears with key "C". No "Exit
+	// compare mode" entry — Esc is the exit gesture, surfaced via the
+	// panel-2 bottom-left hint. Label is the [C]ompare-prefixed form
+	// (the C lives at the start, bracketed by bracketHotkey).
 	ctx := panel2CompareCtx{locked: true, canLock: true, cursorComparable: true}
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
 	found := false
 	for _, it := range items {
-		if it.key == "C" && it.label == "Show diff vs Compare anchor" {
+		if it.key == "C" && it.label == "Compare to anchor" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected 'Show diff vs Compare anchor' (key=C) in anchored menu, got %v", itemKeys(items))
+		t.Errorf("expected 'Compare to anchor' (key=C) in anchored menu, got %v", itemKeys(items))
 	}
 	for _, banned := range []string{"LockCompare", "CompareTo", "ExitCompare"} {
 		if contains(itemKeys(items), banned) {
@@ -202,14 +203,33 @@ func TestPanel2Menu_Items_CompareAnchored_ShowsShowDiff(t *testing.T) {
 	}
 }
 
-func TestPanel2Menu_Items_CompareAnchoredOnAnchorRow_HidesC(t *testing.T) {
-	// Cursor sitting on the anchor row itself: cursorComparable=false.
-	// No "Show diff" (self vs self is empty), no "Mark" (already
-	// anchored, re-marking same item is a no-op). C entry is hidden.
-	ctx := panel2CompareCtx{locked: true, canLock: true, cursorComparable: false}
+func TestPanel2Menu_Items_CompareAnchoredOnAnchorRow_ShowsUnmark(t *testing.T) {
+	// Cursor sitting on the anchor row itself: cursorOnAnchor=true.
+	// "Unmark Compare anchor" surfaces with key "C" — pressing C
+	// toggles the anchor off, mirroring the C-on-anchor cancel
+	// behaviour in compareHotkeyDispatch.
+	ctx := panel2CompareCtx{locked: true, canLock: true, cursorOnAnchor: true}
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
+	found := false
+	for _, it := range items {
+		if it.key == "C" && it.label == "Unmark Compare anchor" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'Unmark Compare anchor' (key=C) when cursor on anchor row, got %v", itemKeys(items))
+	}
+}
+
+func TestPanel2Menu_Items_CompareAnchoredKindMismatch_HidesC(t *testing.T) {
+	// Anchor set but user has switched panel-1 to a different kind:
+	// cursorComparable=false AND cursorOnAnchor=false. Mark / Compare-to
+	// / Unmark all make no sense here — C entry is hidden.
+	ctx := panel2CompareCtx{locked: true, canLock: true, cursorComparable: false, cursorOnAnchor: false}
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
 	if contains(itemKeys(items), "C") {
-		t.Errorf("C entry must be hidden when cursor sits on the anchor row, got %v", itemKeys(items))
+		t.Errorf("C entry must be hidden when anchor kind doesn't match current kind, got %v", itemKeys(items))
 	}
 }
 
