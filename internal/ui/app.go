@@ -166,8 +166,8 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 }
 
 // togglePinnedKind flips the pin status for the given resource kind:
-//   - not pinned → AddPinned
-//   - already pinned → RemovePinned
+//   - not pinned → AddPinned (kind moves from its original category to Pinned)
+//   - already pinned → RemovePinned (kind moves back to its original category)
 //
 // Used by both the direct `P` hotkey on panel 1 and the Space-menu
 // PinKind / UnpinKind actions — single funnel keeps the two paths
@@ -175,21 +175,17 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 // atomically; on save failure the in-memory state already changed
 // but the toast surfaces the error.
 //
-// Cursor preservation: pinning prepends rows to the visible list and
-// unpinning removes them, both of which shift indices. The cursor's
-// original (resourceType, categoryIndex) is captured before the
-// toggle and re-snapped after — so the user's eyes stay on the same
-// visual row instead of being pushed to whatever happened to be at
-// the old index.
+// Cursor follows the kind: each kind has exactly one location, so
+// SnapCursorToKind picks up wherever Pods (say) ended up after the
+// move — Pinned section if just pinned, original Workloads if just
+// unpinned. No "remember category" bookkeeping needed.
 func (m *AppModel) togglePinnedKind(rt k8s.ResourceType) tea.Cmd {
-	cursorCatIdx := m.sidebar.CursorCategoryIndex()
-	cursorRT := m.sidebar.CursorResourceType()
 	if m.sidebar.IsPinned(rt) {
 		m.sidebar.RemovePinned(rt)
 	} else {
 		m.sidebar.AddPinned(rt)
 	}
-	m.sidebar.SnapCursor(cursorRT, cursorCatIdx)
+	m.sidebar.SnapCursorToKind(rt)
 	if err := m.persistPinnedKinds(); err != nil {
 		m.appLog.Error("pin save failed: " + err.Error())
 		return m.toast.Show("pin save failed")
@@ -197,23 +193,32 @@ func (m *AppModel) togglePinnedKind(rt k8s.ResourceType) tea.Cmd {
 	return nil
 }
 
-// persistPinnedKinds projects the sidebar's current pinned list back
-// into the config struct (using KubectlName as the stable string form)
-// and writes the config file atomically. Returns the underlying error
-// — the caller surfaces a toast / app-log entry on failure so the
-// in-memory pin state doesn't silently diverge from disk.
+// persistPinnedKinds rewrites the config's pinned state to mirror the
+// sidebar's current PinnedKinds order, then saves atomically. The
+// sidebar is the in-memory source of truth during a session; this
+// flushes the diff out to disk so a restart restores the same order.
+//
+// Strategy: clear every existing pin entry then re-pin in sidebar
+// order with sparse Order values. This is simpler than diffing add /
+// remove / reorder events and runs in O(n) on a list that's
+// rarely > 10 entries.
 func (m *AppModel) persistPinnedKinds() error {
 	if m.cfg == nil {
 		return nil
 	}
-	pinned := m.sidebar.PinnedKinds()
-	kinds := make([]string, 0, len(pinned))
-	for _, rt := range pinned {
-		if def := m.k8sClient.Registry().Get(rt); def != nil {
-			kinds = append(kinds, def.KubectlName)
-		}
+	// Clear any existing pins first so removed entries actually leave
+	// the config (UnsetPinned also drops the kind entry when it's
+	// otherwise empty, keeping the YAML tidy).
+	for _, kind := range m.cfg.PinnedOrdered() {
+		m.cfg.UnsetPinned(kind)
 	}
-	m.cfg.PinnedResourceKinds = kinds
+	for i, rt := range m.sidebar.PinnedKinds() {
+		def := m.k8sClient.Registry().Get(rt)
+		if def == nil {
+			continue
+		}
+		m.cfg.SetPinned(def.KubectlName, (i+1)*10)
+	}
 	return m.cfg.Save()
 }
 
@@ -279,14 +284,15 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 	sidebar := NewSidebarModel(t)
 	sidebar.SetFocused(true)
 	// Resolve pinned kind strings from config into registered
-	// ResourceTypes. Entries that no longer map to a registered kind
-	// (CRD uninstalled, etc.) are dropped silently — the user keeps
-	// their list, but missing entries don't render.
-	if cfg != nil && len(cfg.PinnedResourceKinds) > 0 {
-		var resolved []k8s.ResourceType
-		for _, kind := range cfg.PinnedResourceKinds {
-			rt := client.Registry().LookupByKubectlName(kind)
-			if rt != "" {
+	// ResourceTypes, preserving the user's chosen Order. Entries that
+	// no longer map to a registered kind (CRD uninstalled, etc.) are
+	// SKIPPED for sidebar rendering but stay in the config — a
+	// re-install of the CRD silently restores the pin.
+	if cfg != nil {
+		ordered := cfg.PinnedOrdered()
+		resolved := make([]k8s.ResourceType, 0, len(ordered))
+		for _, kind := range ordered {
+			if rt := client.Registry().LookupByKubectlName(kind); rt != "" {
 				resolved = append(resolved, rt)
 			}
 		}

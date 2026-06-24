@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -29,13 +30,14 @@ type visibleItem struct {
 	resourceIndex int // index into category's Items slice (-1 for category header)
 	label         string
 	resourceType  k8s.ResourceType
-	pinned        bool // true when this is the row's appearance INSIDE the Pinned category (so an "Unpin" action can disambiguate from the same kind in its original category)
 }
 
 // pinnedCategoryIndex is the sentinel value for visibleItem.categoryIndex
 // signalling "this item lives in the virtual Pinned category at the top
 // of the sidebar". -1 was already taken by standalone resources; -2 is
-// unambiguous and stable.
+// unambiguous and stable. Used by CursorPinned to recognise the Pinned
+// section without a separate boolean flag — every kind appears in
+// exactly one location, so the categoryIndex alone disambiguates.
 const pinnedCategoryIndex = -2
 
 // SidebarModel is the Bubble Tea model for the sidebar panel.
@@ -53,13 +55,17 @@ type SidebarModel struct {
 	searching    bool
 	searchQuery  string
 
-	// pinned is the ordered list of resource kinds the user has pinned to
-	// the top of the sidebar (insertion order). Rendered as a virtual
-	// "Pinned" category prepended to visibleItems(). Empty = the Pinned
-	// category does not appear at all (no empty placeholder).
+	// pinned is the ordered list of resource kinds the user has pinned
+	// to the top of the sidebar (Order value from config drives this
+	// slice; sidebar internally just sees a position). Rendered as a
+	// virtual "Pinned" category prepended to visibleItems(). Empty =
+	// the Pinned category does not appear at all (no empty placeholder).
 	//
-	// Same kind may live in both Pinned and its original category — the
-	// pinned slot is an additional surface, not a move.
+	// A pinned kind is REMOVED from its original category — each kind
+	// has exactly one location in the sidebar. Original category
+	// headers hide when all their kinds get pinned out. This makes the
+	// cursor logic simpler (snap by kind, no "which copy") and saves
+	// vertical space in a panel that's chronically tight.
 	pinned []k8s.ResourceType
 }
 
@@ -79,25 +85,20 @@ func (m *SidebarModel) SetPinned(kinds []k8s.ResourceType) {
 	m.restoreCursorToSelected()
 }
 
-// snapCursorToKindPreferringSection points the cursor at the row whose
-// (resourceType, categoryIndex) matches the given pair — i.e. the
-// SAME logical row the cursor was sitting on before a layout-shifting
-// change (Pin / Unpin). Falls back to the first row with the matching
-// resourceType when the exact (kind, section) pair has disappeared
-// (e.g. after unpinning the only row in the Pinned section). Out-of-
-// view positioning is handled by ensureCursorVisible.
-func (m *SidebarModel) snapCursorToKindPreferringSection(rt k8s.ResourceType, preferCatIdx int) {
+// SnapCursorToKind points the cursor at the unique row carrying the
+// given resource kind. Used by AppModel after a pin/unpin toggle so
+// the cursor follows the kind through the layout shift (Pods moves
+// from Workloads → Pinned, or back, and the cursor follows along).
+//
+// Each kind appears in exactly one location now that Pinned is a
+// MOVE not a duplicate — so the previous "prefer this section vs that
+// section" logic isn't needed. No-op when the kind isn't visible
+// (search-filtered out / not registered).
+func (m *SidebarModel) SnapCursorToKind(rt k8s.ResourceType) {
 	if rt == "" {
 		return
 	}
 	visible := m.visibleItems()
-	for i, item := range visible {
-		if !item.isCategory && item.resourceType == rt && item.categoryIndex == preferCatIdx {
-			m.cursor = i
-			m.ensureCursorVisible()
-			return
-		}
-	}
 	for i, item := range visible {
 		if !item.isCategory && item.resourceType == rt {
 			m.cursor = i
@@ -105,31 +106,6 @@ func (m *SidebarModel) snapCursorToKindPreferringSection(rt k8s.ResourceType, pr
 			return
 		}
 	}
-}
-
-// CursorCategoryIndex returns the categoryIndex of the row the cursor
-// is currently on (matches visibleItem.categoryIndex semantics:
-// -1 = standalone, -2 = Pinned virtual category, >=0 = real category
-// index). Returns -1 for out-of-range cursor or category headers. Used
-// by AppModel to capture the visual row identity BEFORE a pin/unpin
-// toggle so the same row can be re-located in the post-toggle layout.
-func (m SidebarModel) CursorCategoryIndex() int {
-	visible := m.visibleItems()
-	if m.cursor < 0 || m.cursor >= len(visible) {
-		return -1
-	}
-	item := visible[m.cursor]
-	if item.isCategory {
-		return -1
-	}
-	return item.categoryIndex
-}
-
-// SnapCursor is the exported wrapper around snapCursorToKindPreferringSection —
-// AppModel calls it after a pin/unpin toggle to keep the cursor on
-// the visually-equivalent row.
-func (m *SidebarModel) SnapCursor(rt k8s.ResourceType, preferCatIdx int) {
-	m.snapCursorToKindPreferringSection(rt, preferCatIdx)
 }
 
 // PinnedKinds returns a copy of the currently pinned list — used by
@@ -175,18 +151,17 @@ func (m SidebarModel) IsPinned(rt k8s.ResourceType) bool {
 	return false
 }
 
-// CursorPinned reports whether the cursor is currently parked on a row
-// that is itself rendered inside the virtual Pinned category. The same
-// kind may also live in its original category; CursorPinned answers
-// specifically "the Unpin action should be on the menu" — i.e. cursor
-// IS in the Pinned section. Returns false for category headers, for
-// rows outside the Pinned section, or when the cursor is out of range.
+// CursorPinned reports whether the cursor is currently parked on a
+// row inside the Pinned virtual category. Each kind lives in exactly
+// one section now (pin moves rather than duplicates), so categoryIndex
+// alone is the unambiguous signal — no per-row pinned flag needed.
 func (m SidebarModel) CursorPinned() bool {
 	visible := m.visibleItems()
 	if m.cursor < 0 || m.cursor >= len(visible) {
 		return false
 	}
-	return visible[m.cursor].pinned && !visible[m.cursor].isCategory
+	row := visible[m.cursor]
+	return !row.isCategory && row.categoryIndex == pinnedCategoryIndex
 }
 
 // CursorResourceType returns the ResourceType under the cursor when
@@ -600,6 +575,15 @@ func (m SidebarModel) View() string {
 	baseStyle := m.theme.SidebarStyle()
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	categoryStyle := m.theme.SidebarCategoryStyle()
+	// Pinned category header in Catppuccin Mocha lavender — same hue
+	// family as the blue system categories so it reads as "same kind
+	// of header" while still being distinguishable as the user-
+	// curated section. Earlier picks: peach (#fab387) collided with
+	// the KM8erm status-bar marker and read too loud; mauve (#cba6f7)
+	// was distinct but the popup-border association pulled it
+	// conceptually toward "this is interactive" — too much for a
+	// passive category label.
+	pinnedCategoryStyle := categoryStyle.Foreground(lipgloss.Color("#b4befe"))
 
 	viewH := m.viewportHeight()
 	end := m.scrollOffset + viewH
@@ -614,7 +598,11 @@ func (m SidebarModel) View() string {
 
 		var line string
 		if item.isCategory {
-			line = categoryStyle.Width(m.width).Render(truncateSidebarLabel(item.label, m.width))
+			style := categoryStyle
+			if item.categoryIndex == pinnedCategoryIndex {
+				style = pinnedCategoryStyle
+			}
+			line = style.Width(m.width).Render(truncateSidebarLabel(item.label, m.width))
 		} else {
 			label := "  " + truncateSidebarLabel(item.label, m.width-2)
 			unfocusedSelStyle := m.theme.SidebarUnfocusedSelectedStyle()
@@ -641,8 +629,17 @@ func (m SidebarModel) View() string {
 // visibleItems computes the flat list of visible items, filtered by search query.
 // A category-level match (e.g. typing "cluster") expands the whole category;
 // otherwise only individual resource items matching the query are shown.
+//
+// Pinned kinds appear ONLY in the virtual Pinned category at the top —
+// they are skipped from their original category. If a category's only
+// non-pinned kinds get pinned out, the category header is hidden too
+// (avoids a lonely "Workloads" header above empty space).
 func (m SidebarModel) visibleItems() []visibleItem {
 	query := strings.ToLower(m.searchQuery)
+	pinnedSet := make(map[k8s.ResourceType]struct{}, len(m.pinned))
+	for _, rt := range m.pinned {
+		pinnedSet[rt] = struct{}{}
+	}
 	var items []visibleItem
 	// Pinned virtual category — prepended only when the user has pinned
 	// anything. Each pinned kind is resolved against the registry for
@@ -667,7 +664,6 @@ func (m SidebarModel) visibleItems() []visibleItem {
 				resourceIndex: ri,
 				label:         label,
 				resourceType:  rt,
-				pinned:        true,
 			})
 		}
 		if len(pinnedChildren) > 0 || query == "" {
@@ -684,6 +680,9 @@ func (m SidebarModel) visibleItems() []visibleItem {
 		catMatch := query != "" && strings.Contains(strings.ToLower(cat.Label), query)
 		var children []visibleItem
 		for ri, res := range cat.Items {
+			if _, isPinned := pinnedSet[res.ResourceType]; isPinned {
+				continue
+			}
 			if query != "" && !catMatch && !strings.Contains(strings.ToLower(res.Label), query) {
 				continue
 			}
@@ -695,17 +694,27 @@ func (m SidebarModel) visibleItems() []visibleItem {
 				resourceType:  res.ResourceType,
 			})
 		}
-		if len(children) > 0 || query == "" {
-			items = append(items, visibleItem{
-				isCategory:    true,
-				categoryIndex: ci,
-				resourceIndex: -1,
-				label:         cat.Label,
-			})
-			items = append(items, children...)
+		// Hide the category entirely when:
+		//   - search filter is active and produced no children, OR
+		//   - all kinds in the category got pinned out (no children
+		//     left at all).
+		// Without this guard a fully pinned-out category would render
+		// as a dangling header with empty space underneath.
+		if len(children) == 0 {
+			continue
 		}
+		items = append(items, visibleItem{
+			isCategory:    true,
+			categoryIndex: ci,
+			resourceIndex: -1,
+			label:         cat.Label,
+		})
+		items = append(items, children...)
 	}
 	for _, res := range m.standalone {
+		if _, isPinned := pinnedSet[res.ResourceType]; isPinned {
+			continue
+		}
 		if query != "" && !strings.Contains(strings.ToLower(res.Label), query) {
 			continue
 		}
@@ -721,6 +730,16 @@ func (m SidebarModel) visibleItems() []visibleItem {
 }
 
 func (m *SidebarModel) ensureCursorVisible() {
+	// Bail when the panel hasn't been sized yet — happens during
+	// AppModel init when SetPinned → restoreCursorToSelected fires
+	// before the first WindowSizeMsg. viewportHeight() clamps to 1
+	// for render safety, so checking the post-clamp value would
+	// happily set scrollOffset = cursor and hide every row above the
+	// cursor. The actual fix is to skip scroll math entirely until
+	// height is real; SetSize re-runs us once it is.
+	if m.height <= 0 {
+		return
+	}
 	viewH := m.viewportHeight()
 	if viewH <= 0 {
 		return
@@ -750,10 +769,14 @@ func (m SidebarModel) viewportHeight() int {
 	return h
 }
 
-// SetSize sets the dimensions of the sidebar panel.
+// SetSize sets the dimensions of the sidebar panel. Triggers a
+// cursor-visibility re-snap once height becomes real — handles both
+// the init path (first WindowSizeMsg after NewAppModel) and runtime
+// resizes that could leave the cursor off-screen.
 func (m *SidebarModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+	m.ensureCursorVisible()
 }
 
 // SetFocused sets whether the sidebar is focused.

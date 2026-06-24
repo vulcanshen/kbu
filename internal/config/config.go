@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,18 +28,41 @@ type Config struct {
 	// Compare carries settings for the YAML compare popup.
 	Compare CompareConfig `yaml:"compare"`
 
-	// PinnedResourceKinds is the user's "Pinned" sidebar list — each
-	// entry is a resource KIND (KubectlName, e.g. "pod", "namespace",
-	// "configmap"). Stable across km8 versions and matches the editing
-	// format users reach for. The sidebar renders these as a top-level
-	// "Pinned" category in insertion order. To reorder: remove + re-pin.
-	// Unknown / no-longer-registered entries are dropped silently at
-	// startup (e.g. a CRD that was uninstalled).
-	//
-	// Named "kinds" not "resources" because each entry pins the kind
-	// itself (the sidebar navigation target), not a specific named
-	// instance.
-	PinnedResourceKinds []string `yaml:"pinned_resource_kinds"`
+	// ResourceKindConfig holds per-kind user preferences keyed by
+	// KubectlName (e.g. "pod" / "namespace" / "configmap"). Single
+	// home for everything km8 lets the user tune about a kind: pin
+	// state, sort, future column visibility / filter. Unknown kinds
+	// at load time stay in the map but are dropped from the sidebar
+	// (CRD uninstalled, etc.) — the entry is preserved so a re-install
+	// of the CRD silently restores the user's pin / sort.
+	ResourceKindConfig map[string]ResourceKindConfigEntry `yaml:"resource_kind_config,omitempty"`
+}
+
+// ResourceKindConfigEntry is the per-kind config bag. Each sub-field
+// is a pointer so YAML round-trips preserve "absent" vs "explicitly
+// empty" — important so removing the last pinned kind from a kind's
+// entry leaves the YAML clean rather than emitting `pinned: null`.
+//
+// IsEmpty reports whether the entry carries any active config, used
+// at unpin time to decide whether to keep the map entry around (any
+// other config present) or delete it entirely (none).
+type ResourceKindConfigEntry struct {
+	Pinned *PinnedConfig `yaml:"pinned,omitempty"`
+}
+
+// IsEmpty reports whether the entry has zero active config — caller
+// (UnsetPinned, future UnsetSort, ...) drops the kind from the map
+// when an unset leaves the entry empty so the YAML stays tidy.
+func (e ResourceKindConfigEntry) IsEmpty() bool {
+	return e.Pinned == nil
+}
+
+// PinnedConfig is the per-kind pin state. Order drives sidebar render
+// order (ascending). Sparse — increments of 10 by default so manual
+// YAML edits + future insertion-between-existing don't force a
+// reindex.
+type PinnedConfig struct {
+	Order int `yaml:"order"`
 }
 
 // CompareConfig holds settings for the YAML compare popup. Currently
@@ -114,8 +138,99 @@ func LoadFrom(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parsing config file %s: %w", path, err)
 	}
-
 	return cfg, nil
+}
+
+// GetPinned returns the pin state for kind, or nil when not pinned.
+func (c *Config) GetPinned(kind string) *PinnedConfig {
+	if c.ResourceKindConfig == nil {
+		return nil
+	}
+	entry, ok := c.ResourceKindConfig[kind]
+	if !ok {
+		return nil
+	}
+	return entry.Pinned
+}
+
+// IsPinned is the bool convenience wrapper.
+func (c *Config) IsPinned(kind string) bool {
+	return c.GetPinned(kind) != nil
+}
+
+// SetPinned upserts the pin entry for kind. Caller chooses Order —
+// typically via NextPinOrder() when appending, or any int when the
+// user manually moves a pin around. Pre-existing pin is overwritten.
+func (c *Config) SetPinned(kind string, order int) {
+	if c.ResourceKindConfig == nil {
+		c.ResourceKindConfig = make(map[string]ResourceKindConfigEntry)
+	}
+	entry := c.ResourceKindConfig[kind]
+	entry.Pinned = &PinnedConfig{Order: order}
+	c.ResourceKindConfig[kind] = entry
+}
+
+// UnsetPinned drops the pin state for kind. When the entry has no
+// other active config left (IsEmpty), the entire map entry is removed
+// so the YAML stays tidy. Without this housekeeping, unpinning the
+// only thing on a kind would leave `kind: {}` in the file.
+func (c *Config) UnsetPinned(kind string) {
+	if c.ResourceKindConfig == nil {
+		return
+	}
+	entry, ok := c.ResourceKindConfig[kind]
+	if !ok {
+		return
+	}
+	entry.Pinned = nil
+	if entry.IsEmpty() {
+		delete(c.ResourceKindConfig, kind)
+	} else {
+		c.ResourceKindConfig[kind] = entry
+	}
+}
+
+// PinnedOrdered returns kinds in display order — ascending Pinned.Order.
+// Empty slice when no pins exist. Stable across calls.
+func (c *Config) PinnedOrdered() []string {
+	if c.ResourceKindConfig == nil {
+		return nil
+	}
+	type kv struct {
+		kind  string
+		order int
+	}
+	pairs := make([]kv, 0, len(c.ResourceKindConfig))
+	for kind, entry := range c.ResourceKindConfig {
+		if entry.Pinned != nil {
+			pairs = append(pairs, kv{kind, entry.Pinned.Order})
+		}
+	}
+	sort.SliceStable(pairs, func(i, j int) bool {
+		return pairs[i].order < pairs[j].order
+	})
+	out := make([]string, len(pairs))
+	for i, p := range pairs {
+		out[i] = p.kind
+	}
+	return out
+}
+
+// NextPinOrder returns the next sparse Order to use when appending a
+// new pin (max existing + 10). Sparse increment lets the user wedge a
+// kind between two existing pins by manually editing YAML without
+// having to renumber the rest.
+func (c *Config) NextPinOrder() int {
+	max := 0
+	if c.ResourceKindConfig == nil {
+		return 10
+	}
+	for _, entry := range c.ResourceKindConfig {
+		if entry.Pinned != nil && entry.Pinned.Order > max {
+			max = entry.Pinned.Order
+		}
+	}
+	return max + 10
 }
 
 // Save persists the config to the default path via atomic write
