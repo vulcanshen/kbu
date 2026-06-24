@@ -137,7 +137,11 @@ func (m *SidebarModel) SetCursorAtScreenY(screenY int) tea.Cmd {
 		return nil
 	}
 	if m.searching || m.searchQuery != "" {
-		contentY-- // skip the search box header
+		// renderSearchBox emits a 3-line bordered box (top / mid /
+		// bottom). Previous "contentY--" only stepped over one line,
+		// offsetting every click by 2 rows when the user was in
+		// search mode.
+		contentY -= 3
 		if contentY < 0 {
 			return nil
 		}
