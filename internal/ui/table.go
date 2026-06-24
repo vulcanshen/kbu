@@ -130,15 +130,32 @@ func NewTableModel(t *theme.Theme) TableModel {
 
 // SetCursorAtScreenY moves the cursor to the data row a mouse click
 // landed on. screenY is counted from the panel's top border (0 =
-// top border, 1 = column header, 2+ = data rows).
+// top border, 1+ = panel content rows).
+//
+// Layout the math walks through, top-down:
+//   - line 0:           panel top border (no row, no-op)
+//   - lines 1..3:       optional search box (renderSearchBox emits
+//     a 3-line bordered box, only when the user is
+//     in search mode or has a sticky filter)
+//   - next line:        column header (no row, no-op)
+//   - subsequent lines: data rows
 //
 // Returns the same RowSelectedMsg-emitting cmd as keyboard j/k so the
 // detail panel re-fetches for the clicked row. Clicks on the border,
-// the header, or any out-of-range row are silent no-ops.
+// header, search box, or any out-of-range row are silent no-ops.
 func (m *TableModel) SetCursorAtScreenY(screenY int) tea.Cmd {
 	contentY := screenY - 1 // skip the top border
+	if contentY < 0 {
+		return nil
+	}
+	if m.searching || m.searchQuery != "" {
+		contentY -= 3 // skip the 3-line search-box header
+		if contentY < 0 {
+			return nil
+		}
+	}
 	if contentY <= 0 {
-		return nil // border or column header
+		return nil // column header (always present)
 	}
 	rowIdx := m.scrollOffset + (contentY - 1)
 	if rowIdx < 0 || rowIdx >= len(m.rows) {

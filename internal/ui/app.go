@@ -514,6 +514,28 @@ func (m *AppModel) commitSettingsToggle(key string) tea.Cmd {
 // counts as a double-click. Standard desktop default.
 const doubleClickWindow = 500 * time.Millisecond
 
+// isMenuPopupActive reports whether a short menu-style popup is
+// currently up. These popups (panel2 menu, listpicker, settings,
+// hint actions, breadcrumb, helm-doc menu, namespace / context
+// pickers, confirm dialog) all run on tight item lists where
+// half-page wheel scrolling doesn't make sense — the dispatcher
+// swallows the wheel rather than synthesise an unbound u/d that
+// the popup would silently drop. Viewer popups (yamlpopup,
+// comparepopup, appLog, help) are intentionally NOT in this set:
+// they bind u/d for half-page scroll, so wheel through them is
+// genuinely useful.
+func (m AppModel) isMenuPopupActive() bool {
+	return m.panel2Menu.IsActive() ||
+		m.listPicker.IsActive() ||
+		m.settingsPopup.IsActive() ||
+		m.hintPopup.IsActive() ||
+		m.breadcrumbPopup.IsActive() ||
+		m.helmDocMenu.IsActive() ||
+		m.namespacePicker.IsActive() ||
+		m.contextPicker.IsActive() ||
+		m.confirm.IsActive()
+}
+
 // handleMousePress is the main mouse dispatcher. Runs only on
 // MouseActionPress events (release / motion are no-ops in phase 1).
 // Single left-click → focus the hit panel + move cursor to the
@@ -1026,7 +1048,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.appLog.IsActive() {
 		switch msg := msg.(type) {
-		case tea.KeyMsg, tea.MouseMsg:
+		case tea.KeyMsg:
 			var cmd tea.Cmd
 			m.appLog, cmd = m.appLog.Update(msg)
 			if cmd != nil {
@@ -1038,7 +1060,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.help.IsActive() {
 		switch msg := msg.(type) {
-		case tea.KeyMsg, tea.MouseMsg:
+		case tea.KeyMsg:
 			var cmd tea.Cmd
 			m.help, cmd = m.help.Update(msg)
 			if cmd != nil {
@@ -1050,7 +1072,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.contextPicker.IsActive() {
 		switch msg := msg.(type) {
-		case tea.KeyMsg, tea.MouseMsg:
+		case tea.KeyMsg:
 			var cmd tea.Cmd
 			m.contextPicker, cmd = m.contextPicker.Update(msg)
 			if cmd != nil {
@@ -1062,7 +1084,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.namespacePicker.IsActive() {
 		switch msg := msg.(type) {
-		case tea.KeyMsg, tea.MouseMsg:
+		case tea.KeyMsg:
 			var cmd tea.Cmd
 			m.namespacePicker, cmd = m.namespacePicker.Update(msg)
 			if cmd != nil {
@@ -1178,25 +1200,39 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		// Mouse routing. Layered:
-		//   1. MouseEnabled gate (short-circuit when user has it off)
-		//   2. Wheel → synthesize j/k unconditionally. The synthesized
-		//      KeyMsg follows the normal keyboard routing, so the
-		//      wheel naturally scrolls whichever popup or panel is
-		//      currently active — no per-popup wheel handler needed.
+		//   1. MouseEnabled gate — short-circuit when off, EXCEPT
+		//      for the Settings popup itself. Users who toggle Mouse
+		//      OFF would otherwise be locked out of the surface that
+		//      toggles it back on; the popup is its own escape hatch.
+		//   2. Wheel → synthesize u/d (half-page) for main panels +
+		//      viewer popups (yaml / compare / appLog / help) that
+		//      bind u/d natively. Menu-style popups (short lists)
+		//      explicitly swallow wheel: u/d is unbound there so the
+		//      synth would no-op anyway, and ignoring it keeps the
+		//      wheel from drifting the underlying panel's cursor
+		//      through the popup overlay.
 		//   3. Settings popup owns its own click (toggle on row).
-		//   4. Other interactive popups swallow non-wheel clicks so
-		//      a stray click can't dismiss a keyboard-driven modal.
+		//   4. Other popups route through their HandleMouse.
 		//   5. Otherwise, handleMousePress for the main 3 panels.
 		if m.cfg != nil && !m.cfg.IsMouseEnabled() {
+			if m.settingsPopup.IsActive() {
+				var cmd tea.Cmd
+				m.settingsPopup, cmd = m.settingsPopup.HandleMouse(msg, m.width, m.height)
+				return m, cmd
+			}
 			return m, nil
 		}
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			// Wheel translates to half-page move (u / d), not single-
-			// row j / k. Single-row felt too coarse-grained per-tick
-			// and required many spins to traverse a long list. u / d
-			// are bound across sidebar / table / detail (and the
-			// viewer popups: yamlpopup, comparepopup, applog), so the
-			// wheel works wherever the user might land.
+			// Menu popups ignore wheel entirely — their content is
+			// short and u/d half-page semantics don't fit a
+			// 3-7-item picker.
+			if m.isMenuPopupActive() {
+				return m, nil
+			}
+			// Wheel translates to half-page move (u / d). u/d are
+			// bound across sidebar / table / detail and the viewer
+			// popups (yamlpopup / comparepopup / applog / help), so
+			// the wheel works wherever the user might land.
 			//
 			// Direction:
 			//   natural (default): wheel-up = scroll content up =
@@ -1379,7 +1415,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// is the active panel. Panel 1/2 = no-op (panel 2 was the
 			// previous owner — moved to panel 3 so tab nav and list nav
 			// live on different panels). `l` is no longer a drill key
-			// either; Enter is the sole drill / focus path.
+			// either; Enter is the sole drill key (focus-shift fallback
+			// removed when mouse double-click → Enter synthesis landed).
 			if m.activePanel == DetailPanel {
 				m.detail = m.detail.PrevTab()
 				return m, nil
@@ -1588,7 +1625,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case " ":
 			// Sidebar (panel 1): rows are nav targets, not action targets.
 			// Open a read-only cheatsheet popup explaining what the user
-			// can do here (j/k move, Enter focus, / search, etc.). Mirrors
+			// can do here (j/k move, 1/2/3 switch focus, / search, etc.). Mirrors
 			// the panel 2/3 "Space surfaces what's possible" affordance —
 			// but informational rather than committable.
 			if m.activePanel == SidebarPanel && !m.sidebar.IsSearching() {
