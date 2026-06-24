@@ -154,13 +154,15 @@ func (m Panel2MenuPopupModel) Update(msg tea.Msg) (Panel2MenuPopupModel, tea.Cmd
 			return m, nil
 		}
 		return m, m.commit(m.items[m.cursor].key)
-	case "Y", "E", "S", "D":
+	case "Y", "E", "S", "D", "C":
 		// Direct hotkey trigger — must match an item actually present in
 		// the menu (Rule A removed Edit/Delete for helm-managed rows; a
-		// hotkey shortcut shouldn't bypass that gate). Unknown hotkey
-		// falls through to no-op so users don't accidentally close the
-		// popup with a stray press. Compare-mode actions deliberately
-		// have no entry here — they're menu-only, see buildPanel2MenuItems.
+		// hotkey shortcut shouldn't bypass that gate). C is the
+		// contextual Compare hotkey — its menu entry varies (Mark as
+		// anchor vs Show diff) but both bind to the same letter so the
+		// muscle memory is "C = compare action for the current row".
+		// Unknown hotkey falls through to no-op so users don't
+		// accidentally close the popup with a stray press.
 		key := keyMsg.String()
 		for _, it := range m.items {
 			if it.key == key {
@@ -210,24 +212,64 @@ func (m Panel2MenuPopupModel) RenderPopup() string {
 // kind supports drill-down — surfaces the drill action for discoverability,
 // Layout: menu-only items (multi-char "Enter" / "LockCompare" /
 // "CompareTo" / "ExitCompare") render at the TOP of the list, then
-// the hotkey-driven Y / E / S / D group at the BOTTOM. Cursor opens
-// on the first menu-only entry — that's the action with NO direct
-// shortcut, so making it the default landing target gives it the
-// discoverability boost it needs. Hotkey actions can be triggered
-// without opening the menu in the first place (direct Y/E/S/D) so
-// they don't need to live at the cursor.
+// the hotkey-driven Y / E / S / D / C group in the MIDDLE, then
+// "Enter" drill at the very BOTTOM (Enter is navigation, not an
+// action on the item; user already presses Enter directly on the row
+// to focus into it, so the menu surfacing is the least valuable one
+// to sit at the cursor on open).
 //
-// Multi-char keys ("Enter" / "LockCompare" / ...) skip bracketHotkey
-// (no false "[E]nter" rendering) and bypass direct-hotkey dispatch
-// (cursor+Enter only — direct Enter from elsewhere in the menu
-// commits the cursor's own item, not the drill entry).
+// Exit compare mode is NOT a menu entry — Esc is the single canonical
+// gesture for "back out of compare", and a hint in panel 2's
+// bottom-left border surfaces that affordance whenever the anchor is
+// set. Earlier "Exit compare mode" entry made the menu list "two
+// ways to do the same thing".
+//
+// Multi-char keys ("Enter") skip bracketHotkey (no false "[E]nter"
+// rendering) and bypass direct-hotkey dispatch (cursor+Enter only —
+// direct Enter from elsewhere in the menu commits the cursor's own
+// item, not the drill entry).
 func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool, compare panel2CompareCtx) []panel2MenuItem {
 	canEdit := !helmManaged && resourceAllowsEdit(rt)
 	canDelete := !helmManaged && resourceAllowsDelete(rt)
 
 	var items []panel2MenuItem
 
-	// ── menu-only (no hotkey) — top ──
+	// ── hotkey group ──
+	items = append(items, panel2MenuItem{label: "YAML", key: "Y", hint: "view resource manifest"})
+	if canEdit {
+		items = append(items, panel2MenuItem{label: "Edit", key: "E", hint: "kubectl edit"})
+	}
+	if resourceHasContainer(rt) {
+		items = append(items, panel2MenuItem{label: "Shell", key: "S", hint: "kubectl exec -it"})
+	}
+	if canDelete {
+		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
+	}
+	// Compare entry — single "C" key, behaviour switches on whether
+	// the anchor is already set:
+	//   - not set + >1 selectable items → "Mark as Compare anchor"
+	//     (the anchor IS the baseline; C marks current row as it)
+	//   - set + cursor on a different row of the same kind →
+	//     "Show diff against Compare anchor" (C opens diff popup)
+	//   - cursor on the anchor itself, or only one item in the list:
+	//     the entry is hidden (acting on it would be a no-op)
+	if compare.locked {
+		if compare.cursorComparable {
+			items = append(items, panel2MenuItem{
+				label: "Show diff vs Compare anchor",
+				key:   "C",
+				hint:  "open the YAML diff popup",
+			})
+		}
+	} else if compare.canLock {
+		items = append(items, panel2MenuItem{
+			label: "Mark as Compare anchor",
+			key:   "C",
+			hint:  "set this row as the diff baseline",
+		})
+	}
+
+	// ── menu-only navigation, bottom ──
 	if rt.SupportsDrillDown() {
 		target := panel2DrillLabel(rt, item)
 		hint := "drill into " + target
@@ -239,33 +281,6 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 			key:   "Enter",
 			hint:  hint,
 		})
-	}
-	// Compare mode entries. Three states drive what appears:
-	//   - not locked AND >1 selectable items → "Lock to compare"
-	//   - locked AND cursor on a different item of the same kind →
-	//       "Compare to this resource"
-	//   - locked (in any cursor position)            → "Exit compare mode"
-	// Single-item lists hide "Lock to compare" since locking with no
-	// alternative target is a dead end.
-	if compare.locked {
-		if compare.cursorComparable {
-			items = append(items, panel2MenuItem{label: "Compare to this resource", key: "CompareTo", hint: "diff against the locked item"})
-		}
-		items = append(items, panel2MenuItem{label: "Exit compare mode", key: "ExitCompare", hint: "release the locked item"})
-	} else if compare.canLock {
-		items = append(items, panel2MenuItem{label: "Lock to compare", key: "LockCompare", hint: "pick this row as the diff baseline"})
-	}
-
-	// ── hotkey group — bottom ──
-	items = append(items, panel2MenuItem{label: "YAML", key: "Y", hint: "view resource manifest"})
-	if canEdit {
-		items = append(items, panel2MenuItem{label: "Edit", key: "E", hint: "kubectl edit"})
-	}
-	if resourceHasContainer(rt) {
-		items = append(items, panel2MenuItem{label: "Shell", key: "S", hint: "kubectl exec -it"})
-	}
-	if canDelete {
-		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
 	}
 	return items
 }

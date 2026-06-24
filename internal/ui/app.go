@@ -165,6 +165,65 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 	return ctx
 }
 
+// compareHotkeyDispatch routes the "C" hotkey contextually:
+//   - no anchor set → mark the given row as the anchor
+//   - anchor set, cursor on a different row of the same kind → open
+//     the diff popup against the anchor
+//   - cursor on the anchor row, or anchor kind differs from the
+//     current row's kind → silent no-op
+//
+// Used by BOTH the menu commit handler (case "C") and the direct
+// panel-2 C-key path (compareDirectHotkey) so the two surfaces can't
+// drift on edge cases. The no-op cases match the menu gating in
+// compareCtxForMenu — pressing C where the menu would have hidden
+// the entry has no effect.
+func (m *AppModel) compareHotkeyDispatch(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+	if m.inCompareMode() {
+		if m.compareLock.uid == item.UID {
+			return nil
+		}
+		if m.compareLock.resourceType != rt {
+			return nil
+		}
+		return m.openCompareDiff(item)
+	}
+	if len(m.items) <= 1 {
+		return nil
+	}
+	m.setCompareLock(item, rt)
+	m.appLog.Info(fmt.Sprintf("compare: anchor set on %s/%s", rt.KubectlName(), item.Name))
+	return nil
+}
+
+// openCompareDiff resolves the locked anchor out of the current items
+// slice (UID lookup — name/ns are stamped at anchor time but the row
+// could have been recreated since), strips both YAMLs to compare-clean
+// form, and opens the diff popup.
+func (m *AppModel) openCompareDiff(item k8s.ResourceItem) tea.Cmd {
+	var anchorItem *k8s.ResourceItem
+	for i := range m.items {
+		if m.items[i].UID == m.compareLock.uid {
+			anchorItem = &m.items[i]
+			break
+		}
+	}
+	if anchorItem == nil {
+		return m.toast.Show("compare: anchor item gone")
+	}
+	leftYAML := k8s.MarshalItemYAMLForCompare(*anchorItem)
+	rightYAML := k8s.MarshalItemYAMLForCompare(item)
+	leftLabel := fmt.Sprintf("%s/%s", anchorItem.Namespace, anchorItem.Name)
+	rightLabel := fmt.Sprintf("%s/%s", item.Namespace, item.Name)
+	if anchorItem.Namespace == "" {
+		leftLabel = anchorItem.Name
+	}
+	if item.Namespace == "" {
+		rightLabel = item.Name
+	}
+	m.comparePopup.SetSize(m.width, m.height)
+	return m.comparePopup.Open(leftYAML, rightYAML, leftLabel, rightLabel)
+}
+
 // togglePinnedKind flips the pin status for the given resource kind:
 //   - not pinned → AddPinned (kind moves from its original category to Pinned)
 //   - already pinned → RemovePinned (kind moves back to its original category)
@@ -269,13 +328,15 @@ type drillDownEntry struct {
 }
 
 // parseCompareLayout maps a config-file string into the typed enum.
-// Empty / unknown values fall back to Split — same rationale as the
-// CompareConfig.Layout comment.
+// Empty / unknown values fall back to Unified — diff readers grok
+// `-`/`+` markers immediately and the unified form survives narrow
+// panels without column-wrapping artefacts. Split is opt-in via
+// config.
 func parseCompareLayout(s string) CompareLayout {
-	if s == "unified" {
-		return CompareLayoutUnified
+	if s == "split" {
+		return CompareLayoutSplit
 	}
-	return CompareLayoutSplit
+	return CompareLayoutUnified
 }
 
 func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppModel {
@@ -773,6 +834,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "N":
 			return m, fetchNamespaces(m.k8sClient)
 		case "C":
+			// Panel 2 cursor-on-row: C is the contextual Compare
+			// hotkey (same path as the panel-2 Space menu's "C"
+			// entry). Same trade-off the P pin hotkey makes on
+			// panel 1 — panel-context-specific override of a
+			// global letter. Everywhere ELSE C still opens the
+			// context picker.
+			if m.activePanel == TablePanel && !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
+				idx := m.table.SelectedRow()
+				if idx >= 0 && idx < len(m.items) {
+					return m, m.compareHotkeyDispatch(m.currentResource, m.items[idx])
+				}
+			}
 			return m, fetchContexts(m.k8sClient)
 		case "P":
 			// Panel-1 only: toggle pinned status for the cursor's
@@ -1566,52 +1639,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			detail := fmt.Sprintf("kubectl delete %s %s -n %s", resource.KubectlName(), item.Name, item.Namespace)
 			return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
 				deleteResource(resource, item.Name, item.Namespace, m.k8sClient.ContextName()))
-		case "LockCompare":
-			// Lock-to-compare. menu was shown only when ctx.canLock so the
-			// "only one item in list" no-op case can't reach here. No toast
-			// — the cyan row background + status-bar marker already say it
-			// loud enough; an extra toast just noises up the view.
-			m.setCompareLock(item, resource)
-			m.appLog.Info(fmt.Sprintf("compare: locked %s/%s", resource.KubectlName(), item.Name))
-			return m, nil
-		case "CompareTo":
-			// Compare-to-this. Resolve the locked item out of the current
-			// items list (post-watcher update — UID is the authoritative
-			// identity, name+ns are stamped at lock time but could drift if
-			// the cluster object was recreated). Both YAML payloads go
-			// through MarshalItemYAMLForCompare to strip status + per-
-			// instance noise before the diff is computed.
-			if !m.inCompareMode() {
-				return m, nil
-			}
-			var lockedItem *k8s.ResourceItem
-			for i := range m.items {
-				if m.items[i].UID == m.compareLock.uid {
-					lockedItem = &m.items[i]
-					break
-				}
-			}
-			if lockedItem == nil {
-				return m, m.toast.Show("compare: locked item gone")
-			}
-			leftYAML := k8s.MarshalItemYAMLForCompare(*lockedItem)
-			rightYAML := k8s.MarshalItemYAMLForCompare(item)
-			leftLabel := fmt.Sprintf("%s/%s", lockedItem.Namespace, lockedItem.Name)
-			rightLabel := fmt.Sprintf("%s/%s", item.Namespace, item.Name)
-			if lockedItem.Namespace == "" {
-				leftLabel = lockedItem.Name
-			}
-			if item.Namespace == "" {
-				rightLabel = item.Name
-			}
-			m.comparePopup.SetSize(m.width, m.height)
-			return m, m.comparePopup.Open(leftYAML, rightYAML, leftLabel, rightLabel)
-		case "ExitCompare":
-			// Symmetric with LockCompare — no toast needed. Row background
-			// clears, status-bar marker disappears; that IS the feedback.
-			m.clearCompareLock()
-			m.appLog.Info("compare: exited")
-			return m, nil
+		case "C":
+			// Contextual compare action — same letter, dispatches on
+			// current state:
+			//   - no anchor set → mark this row as the anchor
+			//   - anchor set, cursor on different row of same kind →
+			//     open the diff popup against the anchor
+			// Menu gating hides "C" when the action would be a no-op
+			// (cursor on the anchor itself, single-item list, kind
+			// switched away from the anchor's), so we don't need to
+			// double-guard here beyond the inCompareMode branch.
+			return m, m.compareHotkeyDispatch(resource, item)
 		}
 		return m, nil
 
@@ -1704,9 +1742,12 @@ func (m AppModel) View() string {
 	}
 	var compareMarker *CompareMarker
 	if m.inCompareMode() {
+		// Compare anchor only works within panel 2 — the user is
+		// already on the kind that matches the anchor's kind. So the
+		// kind prefix would just duplicate context already on screen;
+		// the bare name is enough.
 		compareMarker = &CompareMarker{
-			Label: fmt.Sprintf("\U000f055c %s/%s",
-				m.compareLock.resourceType.KubectlName(), m.compareLock.name),
+			Label: fmt.Sprintf("\U000f08aa %s", m.compareLock.name),
 		}
 	}
 	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker, compareMarker)
@@ -2286,15 +2327,23 @@ func (m AppModel) focusedPanelContent() string {
 	return ""
 }
 
-// tablePanelBottomLeft returns the bottom-left border hint for panel 2 —
-// a hotkey hint advertising the `.` toggle for helm-managed visibility.
-// Hidden on the Releases category since the entire list is helm-managed
-// there, so the toggle is a no-op.
+// tablePanelBottomLeft returns the bottom-left border hint for panel 2.
+// Composes two hotkey hints:
+//   - `.` to toggle helm-managed visibility (hidden in Releases since
+//     the entire list is helm-managed there)
+//   - `esc` to exit compare mode (only when a compare anchor is set,
+//     since Esc otherwise has its standard back-out semantics elsewhere
+//     — the hint is the discoverable affordance that "Exit compare
+//     mode" used to live in the Space menu)
 func (m *AppModel) tablePanelBottomLeft() string {
-	if m.currentResource == k8s.ResourceReleases {
-		return ""
+	var parts []string
+	if m.currentResource != k8s.ResourceReleases {
+		parts = append(parts, ".: toggle helm")
 	}
-	return ".: toggle helm"
+	if m.inCompareMode() {
+		parts = append(parts, "esc: exit compare")
+	}
+	return strings.Join(parts, "  ")
 }
 
 // filterHelmIfHidden drops helm-managed items (and, for Secrets, also helm
