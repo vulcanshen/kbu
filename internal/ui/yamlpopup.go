@@ -387,6 +387,24 @@ func (m YamlPopupModel) maxScrollOffset() int {
 	return n
 }
 
+// HandleMouse routes a click against the YAML viewer. Wheel scroll
+// is already translated to u/d at the AppModel layer; this method
+// only handles discrete buttons. Right-click inside the popup
+// closes it (mirror of Esc / q). Left-click is no-op — YAML has
+// no row cursor.
+func (m YamlPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (YamlPopupModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	if !popupContains(m.renderFullPopup(), msg, screenW, screenH) {
+		return m, nil
+	}
+	if msg.Button == tea.MouseButtonRight {
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 // View is a no-op; rendering happens via RenderPopup + overlay composition.
 func (m YamlPopupModel) View() string { return "" }
 

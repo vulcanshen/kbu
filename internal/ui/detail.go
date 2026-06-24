@@ -398,6 +398,43 @@ func (m DetailModel) scrollRelativeCursorIntoView() DetailModel {
 	return m
 }
 
+// SetCursorAtScreenY moves the Relatives cursor to the entry whose
+// rendered span contains the given screen-relative Y (counted from
+// the panel's top border, 0 = border, 1 = first content row). On
+// other tabs (Logs, Events, YAML, Conditions, History) the click
+// only changes focus — there's no row cursor to follow.
+//
+// Returns nil; the cursor move doesn't fire any selection cmd
+// because the Relatives tab doesn't have a panel-wide "row
+// selected" side-effect — drilling is its own gesture (Enter / Y /
+// double-click) that the user takes explicitly.
+func (m *DetailModel) SetCursorAtScreenY(screenY int) tea.Cmd {
+	if m.ActiveTabName() != "Relatives" {
+		return nil
+	}
+	contentLine := screenY - 1 // skip the panel's top border row
+	if contentLine < 0 {
+		return nil
+	}
+	target := m.scrollOffset + contentLine
+	idx := entryAtLine(m.relativeEntries, target)
+	if idx < 0 {
+		return nil
+	}
+	if !m.relativeEntries[idx].isSelectable() {
+		return nil
+	}
+	if m.relativeCursor == idx {
+		return nil
+	}
+	m.relativeCursor = idx
+	// buildContentLines re-renders with the new cursor row
+	// highlighted and updates relativeCursorLine for the
+	// scroll-into-view path.
+	m.buildContentLines()
+	return nil
+}
+
 func (m DetailModel) handleMouse(msg tea.MouseMsg) (DetailModel, tea.Cmd) {
 	switch msg.Type {
 	case tea.MouseWheelUp:

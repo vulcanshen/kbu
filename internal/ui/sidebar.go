@@ -117,6 +117,46 @@ func (m SidebarModel) PinnedKinds() []k8s.ResourceType {
 	return out
 }
 
+// SetCursorAtScreenY moves the cursor to the visible row a mouse
+// click landed on. screenY is the row count from the panel's top
+// BORDER (0 = top border, 1 = first content row). The math accounts
+// for:
+//   - the top border (1 row, never selectable)
+//   - the search box header (1 row, present only when searching)
+//   - the scrollOffset (so a click on a scrolled-down sidebar
+//     resolves to the right item in visibleItems)
+//
+// Clicks on category headers or out-of-range positions are no-ops —
+// cursor never sits on a category header in keyboard nav either. The
+// returned cmd carries ResourceSelectedMsg when the cursor actually
+// landed on a resource row, matching the keyboard moveDown / moveUp
+// flow so the rest of the app responds the same way.
+func (m *SidebarModel) SetCursorAtScreenY(screenY int) tea.Cmd {
+	contentY := screenY - 1 // skip the top border
+	if contentY < 0 {
+		return nil
+	}
+	if m.searching || m.searchQuery != "" {
+		contentY-- // skip the search box header
+		if contentY < 0 {
+			return nil
+		}
+	}
+	rowIdx := m.scrollOffset + contentY
+	visible := m.visibleItems()
+	if rowIdx < 0 || rowIdx >= len(visible) {
+		return nil
+	}
+	row := visible[rowIdx]
+	if row.isCategory {
+		return nil
+	}
+	m.cursor = rowIdx
+	m.selected = row.resourceType
+	rt := row.resourceType
+	return func() tea.Msg { return ResourceSelectedMsg{Type: rt} }
+}
+
 // AddPinned appends a kind to the pinned list (insertion order = render
 // order). No-op when the kind is already pinned — pin is idempotent
 // because the menu hides "Pin" once an item is in the list, but the
@@ -344,9 +384,13 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case tea.KeyUp:
 		return m.moveUp(visible)
 	case tea.KeyEnter:
-		// Same rationale as 'l' — auto-selection means Enter only needs
-		// to forward focus.
-		return m, func() tea.Msg { return FocusTableMsg{} }
+		// Enter no longer forwards focus to panel 2. Mouse use brought
+		// double-click → Enter synthesis, and "click row → focus shifts
+		// to another panel" felt wrong (the user just pointed at THIS
+		// panel — they don't expect the focus to leave). Keyboard
+		// users still have Tab / 1 / 2 / 3 to switch focus, so this
+		// only costs one extra key per panel switch.
+		return m, nil
 	case tea.KeyEscape:
 		if m.searchQuery != "" {
 			m.searchQuery = ""

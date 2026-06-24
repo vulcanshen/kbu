@@ -363,6 +363,68 @@ func TestSortRoundtrip_SurvivesSaveLoad(t *testing.T) {
 	}
 }
 
+func TestMouse_DefaultsApply(t *testing.T) {
+	// Legacy configs leave Mouse=nil. Both helpers fall back to safe
+	// defaults: enabled=true, scroll=natural.
+	cfg := DefaultConfig()
+	if cfg.Mouse != nil {
+		t.Errorf("DefaultConfig must leave Mouse nil, got %v", cfg.Mouse)
+	}
+	if !cfg.IsMouseEnabled() {
+		t.Error("default IsMouseEnabled should be true (nil = enabled)")
+	}
+	if got := cfg.MouseScrollDirection(); got != MouseScrollNatural {
+		t.Errorf("default MouseScrollDirection = %q, want %q", got, MouseScrollNatural)
+	}
+}
+
+func TestMouse_SetAndRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg := DefaultConfig()
+	cfg.SetMouseEnabled(false)
+	cfg.SetMouseScrollDirection(MouseScrollReverse)
+	if cfg.IsMouseEnabled() {
+		t.Error("SetMouseEnabled(false) → IsMouseEnabled should be false")
+	}
+	if cfg.MouseScrollDirection() != MouseScrollReverse {
+		t.Errorf("ScrollDirection mismatch: %q", cfg.MouseScrollDirection())
+	}
+
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+	loaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if loaded.IsMouseEnabled() {
+		t.Error("enabled=false should survive roundtrip")
+	}
+	if loaded.MouseScrollDirection() != MouseScrollReverse {
+		t.Errorf("scroll_direction lost in roundtrip: %q", loaded.MouseScrollDirection())
+	}
+	if loaded.Mouse == nil || loaded.Mouse.Enabled == nil {
+		t.Error("explicit Enabled must persist as non-nil, distinguishing from legacy")
+	}
+}
+
+func TestMouse_PartialMouseConfig(t *testing.T) {
+	// User sets only scroll_direction → enabled stays nil and falls
+	// back to true. Mirror: setting only enabled leaves scroll at
+	// its default. Ensures the nested struct's fields are
+	// independently settable.
+	cfg := DefaultConfig()
+	cfg.SetMouseScrollDirection(MouseScrollReverse)
+	if !cfg.IsMouseEnabled() {
+		t.Error("scroll-only set should leave enabled at default true")
+	}
+	if cfg.Mouse.Enabled != nil {
+		t.Error("setting only scroll must not touch Enabled")
+	}
+}
+
 func TestNextPinOrder_MonotonicSparse(t *testing.T) {
 	cfg := DefaultConfig()
 	if got := cfg.NextPinOrder(); got != 10 {

@@ -128,6 +128,26 @@ func NewTableModel(t *theme.Theme) TableModel {
 	}
 }
 
+// SetCursorAtScreenY moves the cursor to the data row a mouse click
+// landed on. screenY is counted from the panel's top border (0 =
+// top border, 1 = column header, 2+ = data rows).
+//
+// Returns the same RowSelectedMsg-emitting cmd as keyboard j/k so the
+// detail panel re-fetches for the clicked row. Clicks on the border,
+// the header, or any out-of-range row are silent no-ops.
+func (m *TableModel) SetCursorAtScreenY(screenY int) tea.Cmd {
+	contentY := screenY - 1 // skip the top border
+	if contentY <= 0 {
+		return nil // border or column header
+	}
+	rowIdx := m.scrollOffset + (contentY - 1)
+	if rowIdx < 0 || rowIdx >= len(m.rows) {
+		return nil
+	}
+	m.cursor = rowIdx
+	return m.emitCursorChanged()
+}
+
 // SetLockedRow marks the row at (post-filter) index `idx` as the
 // compare-mode baseline. -1 clears the highlight. Caller (AppModel)
 // owns the lock identity (by UID) and re-resolves the index whenever
@@ -262,13 +282,14 @@ func (m TableModel) handleKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 		return m, nil
 
 	case msg.Type == tea.KeyEnter:
-		// j/k already auto-fires RowSelectedMsg on cursor move, so
-		// Enter has no row-load work to do — promote it to "open this
-		// row's detail" by shifting focus to panel 3.
+		// Enter on a non-drillable table or inside a drill view used to
+		// fall back to "focus panel 3". With mouse double-click → Enter
+		// synthesis that fallback would have hijacked the user's focus
+		// every time they double-clicked a row. Removed: app.go's
+		// "case enter" still routes Enter to enterDrillDown when the
+		// kind is drillable; for non-drillable kinds Enter is a
+		// deliberate no-op now.
 		m.pendingG = false
-		if len(m.rows) > 0 {
-			return m, func() tea.Msg { return FocusDetailMsg{} }
-		}
 
 	case msg.Type == tea.KeyEscape:
 		if m.searchQuery != "" {
@@ -300,13 +321,13 @@ func (m TableModel) handleSearchKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 		return m, nil
 
 	case msg.Type == tea.KeyEnter:
-		// Search commits — leave search mode and shift focus to detail.
-		// j/k inside search already kept detail in sync via
-		// emitCursorChanged, so no extra row-load needed.
+		// Search commits — leave search mode, keep the filter active.
+		// Previously this also auto-focused panel 3; that focus jump
+		// got removed when the broader Enter-as-focus fallback went
+		// away (avoids double-click → Enter accidentally shifting
+		// focus). j/k inside search already kept detail in sync via
+		// emitCursorChanged, so no extra row-load needed here.
 		m.searching = false
-		if len(m.rows) > 0 {
-			return m, func() tea.Msg { return FocusDetailMsg{} }
-		}
 		return m, nil
 
 	case msg.Type == tea.KeyBackspace:

@@ -164,6 +164,52 @@ func (m ContextPickerModel) selectCurrent(items []string) (ContextPickerModel, t
 	})
 }
 
+// HandleMouse routes a click against the picker. Left-click on a
+// row selects that context (same as cursor+Enter). Right-click
+// closes the picker. Mirror of NamespacePickerModel.HandleMouse —
+// both pickers share the same maxVisible=10 scroll window and the
+// same optional search-box-on-top render shape.
+func (m ContextPickerModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (ContextPickerModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	items := m.filtered()
+	maxVisible := 10
+	start := 0
+	if m.cursor >= maxVisible {
+		start = m.cursor - maxVisible + 1
+	}
+	end := start + maxVisible
+	if end > len(items) {
+		end = len(items)
+	}
+	numVisible := end - start
+
+	itemsStartLine := 2
+	if m.searching || m.searchQuery != "" {
+		itemsStartLine += 3 // renderSearchBox emits 3 lines
+	}
+	row := popupRowAt(m.renderFullPopup(), msg, screenW, screenH, itemsStartLine, numVisible)
+	if row < 0 {
+		if msg.Button == tea.MouseButtonRight && popupContains(m.renderFullPopup(), msg, screenW, screenH) {
+			return m, m.animator.Close()
+		}
+		return m, nil
+	}
+	realIdx := start + row
+	if realIdx < 0 || realIdx >= len(items) {
+		return m, nil
+	}
+	switch msg.Button {
+	case tea.MouseButtonLeft:
+		m.cursor = realIdx
+		return m.selectCurrent(items)
+	case tea.MouseButtonRight:
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 // View renders the context picker (no-op; rendering via RenderPopup + overlay).
 func (m ContextPickerModel) View() string {
 	return ""

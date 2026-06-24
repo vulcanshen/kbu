@@ -303,6 +303,23 @@ func (m AppLogModel) maxScrollOffset() int {
 	return max
 }
 
+// HandleMouse routes a click against the app log viewer. Right-
+// click inside the popup closes it (mirror of Esc / q / !).
+// Left-click is no-op — log lines aren't selectable. Wheel scroll
+// is handled at the AppModel layer (synthesizes u/d).
+func (m AppLogModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (AppLogModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	if !popupContains(m.RenderPopup(), msg, screenW, screenH) {
+		return m, nil
+	}
+	if msg.Button == tea.MouseButtonRight {
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 func (m AppLogModel) View() string {
 	return lipgloss.Place(m.width, m.height,
 		lipgloss.Center, lipgloss.Center,

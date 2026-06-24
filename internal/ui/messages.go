@@ -126,19 +126,6 @@ type RequestSwitchToResourceMsg struct {
 	Ref k8s.RefTarget
 }
 
-// FocusTableMsg is emitted when the user presses l / Enter on the
-// sidebar (outside search mode). Sidebar's j/k already auto-selects
-// the cursor row, so l / Enter would just re-fire the same
-// ResourceSelectedMsg and waste a watcher restart. Instead, treat
-// l / Enter as "I've picked the resource, now move me into the table"
-// and let AppModel shift active panel.
-type FocusTableMsg struct{}
-
-// FocusDetailMsg is the table-panel counterpart of FocusTableMsg —
-// pressing Enter on a row shifts focus to panel 3 instead of re-firing
-// the row-selection effect that j/k already triggered.
-type FocusDetailMsg struct{}
-
 // RelativeJumpMsg is emitted by the breadcrumb popup when the user picks a
 // level to jump back to. Level=1 means root; values >Depth are clamped
 // by the handler.

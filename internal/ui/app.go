@@ -72,6 +72,7 @@ type AppModel struct {
 	panel2Menu      Panel2MenuPopupModel
 	hintPopup       HintPopupModel
 	listPicker      ListPickerModel
+	settingsPopup   SettingsPopupModel
 
 	activePanel     Panel
 	width           int
@@ -122,6 +123,16 @@ type AppModel struct {
 	// flow in progress.
 	sortFlowKind   k8s.ResourceType
 	sortFlowColumn string
+
+	// Mouse double-click detection. Bubbletea's MouseMsg doesn't
+	// carry a timestamp so we stamp wall-clock at press time and
+	// look back N ms on the next press to decide single vs double.
+	// Same panel + adjacent cell within doubleClickWindow → emit
+	// Enter; otherwise treat as a fresh single click.
+	lastLeftPressAt    time.Time
+	lastLeftPressX     int
+	lastLeftPressY     int
+	lastLeftPressPanel Panel
 }
 
 // compareLockedRef identifies the panel-2 row currently locked as the
@@ -439,6 +450,189 @@ func (m *AppModel) syncTableSortIndicator() {
 	m.table.SetSortIndicator("", "")
 }
 
+// buildSettingsItems snapshots the current config state into the row
+// list the SettingsPopup renders. Called at popup Open and again
+// after each toggle (via SetItems) so the displayed badge always
+// reflects the live config.
+//
+// ValueOn drives the badge colour. For boolean settings (Mouse) it
+// matches the actual on/off state. For multi-value settings
+// (Scroll Direction) it stays true — both values are valid choices,
+// so the badge stays green-coloured rather than dropping to grey on
+// "reverse".
+func (m *AppModel) buildSettingsItems() []SettingsItem {
+	mouseOn := m.cfg.IsMouseEnabled()
+	mouseBadge := "OFF"
+	if mouseOn {
+		mouseBadge = "ON"
+	}
+	scrollDir := m.cfg.MouseScrollDirection()
+	scrollBadge := "NATURAL"
+	if scrollDir == config.MouseScrollReverse {
+		scrollBadge = "REVERSE"
+	}
+	return []SettingsItem{
+		{Key: "mouse", Label: "Mouse", ValueText: mouseBadge, ValueOn: mouseOn},
+		{Key: "scroll", Label: "Scroll Direction", ValueText: scrollBadge, ValueOn: true},
+	}
+}
+
+// commitSettingsToggle handles the SettingsToggleMsg the popup emits
+// on Enter / mouse click. Switches on the row's Key to apply the
+// actual change, persists to disk, then refreshes the popup's items
+// so the badge flips visually without close-reopen.
+//
+// "scroll" cycles between two values (natural ↔ reverse) — same
+// commit shape as the binary toggle, just a different mutation
+// underneath.
+func (m *AppModel) commitSettingsToggle(key string) tea.Cmd {
+	if m.cfg == nil {
+		return nil
+	}
+	var cmds []tea.Cmd
+	switch key {
+	case "mouse":
+		m.cfg.SetMouseEnabled(!m.cfg.IsMouseEnabled())
+	case "scroll":
+		next := config.MouseScrollReverse
+		if m.cfg.MouseScrollDirection() == config.MouseScrollReverse {
+			next = config.MouseScrollNatural
+		}
+		m.cfg.SetMouseScrollDirection(next)
+	default:
+		return nil
+	}
+	if err := m.cfg.Save(); err != nil {
+		m.appLog.Error("settings save failed: " + err.Error())
+		cmds = append(cmds, m.toast.Show("settings save failed"))
+	}
+	m.settingsPopup.SetItems(m.buildSettingsItems())
+	return tea.Batch(cmds...)
+}
+
+// doubleClickWindow is the max gap between two left presses that
+// counts as a double-click. Standard desktop default.
+const doubleClickWindow = 500 * time.Millisecond
+
+// handleMousePress is the main mouse dispatcher. Runs only on
+// MouseActionPress events (release / motion are no-ops in phase 1).
+// Single left-click → focus the hit panel + move cursor to the
+// clicked row. Double-left-click → synthesize Enter so the existing
+// keyboard path handles drill / focus-into. Right-click →
+// synthesize Space so the existing Space-menu paths apply.
+//
+// Hit-test ignores clicks outside any panel (e.g. on the status bar
+// or border gutters) and clicks that land while MouseEnabled is
+// false. Popup hit-testing is left to the popup's own MouseMsg
+// handler — this dispatcher only fires when no interactive popup is
+// in front.
+func (m *AppModel) handleMousePress(msg tea.MouseMsg) tea.Cmd {
+	if m.cfg == nil || !m.cfg.IsMouseEnabled() {
+		return nil
+	}
+	if msg.Action != tea.MouseActionPress {
+		return nil
+	}
+	panel, ok := m.panelAt(msg.X, msg.Y)
+	if !ok {
+		return nil
+	}
+	switch msg.Button {
+	case tea.MouseButtonLeft:
+		now := time.Now()
+		isDouble := !m.lastLeftPressAt.IsZero() &&
+			now.Sub(m.lastLeftPressAt) <= doubleClickWindow &&
+			panel == m.lastLeftPressPanel &&
+			abs(msg.X-m.lastLeftPressX) <= 1 &&
+			abs(msg.Y-m.lastLeftPressY) <= 1
+		m.lastLeftPressAt = now
+		m.lastLeftPressX = msg.X
+		m.lastLeftPressY = msg.Y
+		m.lastLeftPressPanel = panel
+		// First click of any pair: always focus + cursor. Idempotent
+		// when this turns out to also be the first half of a double.
+		m.setPanel(panel)
+		selCmd := m.cursorToScreenY(panel, msg.Y)
+		if isDouble {
+			// Reset so a third press isn't read as another double.
+			m.lastLeftPressAt = time.Time{}
+			enterCmd := func() tea.Msg { return tea.KeyMsg{Type: tea.KeyEnter} }
+			return tea.Batch(selCmd, enterCmd)
+		}
+		return selCmd
+	case tea.MouseButtonRight:
+		m.setPanel(panel)
+		selCmd := m.cursorToScreenY(panel, msg.Y)
+		spaceCmd := func() tea.Msg { return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}} }
+		return tea.Batch(selCmd, spaceCmd)
+	}
+	return nil
+}
+
+// panelAt does hit-test on the screen coordinate against the
+// currently-laid-out panel rects. Returns the panel under (x, y) and
+// true; (zero, false) if the point is outside any panel (status bar,
+// margins, gaps). The arithmetic mirrors panelSizes() and the
+// renderer's positioning so it stays correct across resize +
+// expanded modes.
+func (m AppModel) panelAt(x, y int) (Panel, bool) {
+	sw, rw, upperH, detailH := m.panelSizes()
+	middleY := 1 // status bar height
+	sidebarX := panelHMargin
+	rightX := panelHMargin + sw + panelHSpace
+	totalRightH := upperH + panelVSpace + detailH
+
+	// Sidebar fills the entire middle on the left.
+	if x >= sidebarX && x < sidebarX+sw && y >= middleY && y < middleY+totalRightH {
+		return SidebarPanel, true
+	}
+	// Right side splits into table (top) + detail (bottom), unless an
+	// expanded mode collapses one of them.
+	if x >= rightX && x < rightX+rw && y >= middleY && y < middleY+totalRightH {
+		if m.tableExpanded {
+			return TablePanel, true
+		}
+		if m.detailExpanded {
+			return DetailPanel, true
+		}
+		if y < middleY+upperH {
+			return TablePanel, true
+		}
+		return DetailPanel, true
+	}
+	return SidebarPanel, false
+}
+
+// cursorToScreenY moves the targeted panel's cursor to the row the
+// user clicked and returns the selection-change cmd the panel emits
+// (mirrors keyboard j/k behaviour — sidebar fires
+// ResourceSelectedMsg, table fires RowSelectedMsg, detail's
+// Relatives tab moves m.relativeCursor without an emit). screenY is
+// the absolute screen Y; per-panel offsets are computed here.
+func (m *AppModel) cursorToScreenY(panel Panel, screenY int) tea.Cmd {
+	// Strip the status bar (always at y=0). Sidebar / table top
+	// borders sit at the post-stripped y=0.
+	screenY -= 1
+	switch panel {
+	case SidebarPanel:
+		return m.sidebar.SetCursorAtScreenY(screenY)
+	case TablePanel:
+		return m.table.SetCursorAtScreenY(screenY)
+	case DetailPanel:
+		// Detail's top y depends on layout mode:
+		//   - detailExpanded:  detail fills the right side, top at 0
+		//   - normal:          detail sits below the table, top at upperH
+		//   - tableExpanded:   detail isn't rendered, panelAt won't return DetailPanel
+		_, _, upperH, _ := m.panelSizes()
+		detailTop := 0
+		if !m.detailExpanded {
+			detailTop = upperH
+		}
+		return m.detail.SetCursorAtScreenY(screenY - detailTop)
+	}
+	return nil
+}
+
 // sortRegistry is the registry the sort flow looks up resource
 // definitions in. Returns the global DefaultRegistry — which is the
 // same instance k8s.Client wraps via .Registry() — so the sort
@@ -627,6 +821,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 		panel2Menu:      NewPanel2MenuPopupModel(t),
 		hintPopup:       NewHintPopupModel(t),
 		listPicker:      NewListPickerModel(t),
+		settingsPopup:   NewSettingsPopupModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfg:             cfg,
@@ -749,6 +944,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.listPicker.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.settingsPopup.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
@@ -958,6 +1156,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.settingsPopup.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.settingsPopup, cmd = m.settingsPopup.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -965,6 +1175,118 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ready = true
 		m.layout()
 		return m, nil
+
+	case tea.MouseMsg:
+		// Mouse routing. Layered:
+		//   1. MouseEnabled gate (short-circuit when user has it off)
+		//   2. Wheel → synthesize j/k unconditionally. The synthesized
+		//      KeyMsg follows the normal keyboard routing, so the
+		//      wheel naturally scrolls whichever popup or panel is
+		//      currently active — no per-popup wheel handler needed.
+		//   3. Settings popup owns its own click (toggle on row).
+		//   4. Other interactive popups swallow non-wheel clicks so
+		//      a stray click can't dismiss a keyboard-driven modal.
+		//   5. Otherwise, handleMousePress for the main 3 panels.
+		if m.cfg != nil && !m.cfg.IsMouseEnabled() {
+			return m, nil
+		}
+		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+			// Wheel translates to half-page move (u / d), not single-
+			// row j / k. Single-row felt too coarse-grained per-tick
+			// and required many spins to traverse a long list. u / d
+			// are bound across sidebar / table / detail (and the
+			// viewer popups: yamlpopup, comparepopup, applog), so the
+			// wheel works wherever the user might land.
+			//
+			// Direction:
+			//   natural (default): wheel-up = scroll content up =
+			//                      cursor / view moves toward TOP = 'u'
+			//   reverse:           swap, so wheel-up = 'd'
+			up, down := 'u', 'd'
+			if m.cfg != nil && m.cfg.MouseScrollDirection() == config.MouseScrollReverse {
+				up, down = 'd', 'u'
+			}
+			r := up
+			if msg.Button == tea.MouseButtonWheelDown {
+				r = down
+			}
+			return m, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
+		}
+		// Forward to whichever interactive popup is on top. Each
+		// popup's HandleMouse owns its own hit-test (popup rect,
+		// row offsets) and decides what a click commits.
+		if m.settingsPopup.IsActive() {
+			var cmd tea.Cmd
+			m.settingsPopup, cmd = m.settingsPopup.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.panel2Menu.IsActive() {
+			var cmd tea.Cmd
+			m.panel2Menu, cmd = m.panel2Menu.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.listPicker.IsActive() {
+			var cmd tea.Cmd
+			m.listPicker, cmd = m.listPicker.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.namespacePicker.IsActive() {
+			var cmd tea.Cmd
+			m.namespacePicker, cmd = m.namespacePicker.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.hintPopup.IsActive() {
+			var cmd tea.Cmd
+			m.hintPopup, cmd = m.hintPopup.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		// Remaining popups all have HandleMouse now. List-style
+		// popups commit on left-click; scroll-only / dialog popups
+		// close on right-click; left-click is no-op everywhere a
+		// stray click could fire a destructive or surprising
+		// action (confirm dialogs especially).
+		if m.confirm.IsActive() {
+			var cmd tea.Cmd
+			m.confirm, cmd = m.confirm.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.help.IsActive() {
+			var cmd tea.Cmd
+			m.help, cmd = m.help.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.appLog.IsActive() {
+			var cmd tea.Cmd
+			m.appLog, cmd = m.appLog.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.contextPicker.IsActive() {
+			var cmd tea.Cmd
+			m.contextPicker, cmd = m.contextPicker.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.yamlPopup.IsActive() {
+			var cmd tea.Cmd
+			m.yamlPopup, cmd = m.yamlPopup.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.comparePopup.IsActive() {
+			var cmd tea.Cmd
+			m.comparePopup, cmd = m.comparePopup.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.breadcrumbPopup.IsActive() {
+			var cmd tea.Cmd
+			m.breadcrumbPopup, cmd = m.breadcrumbPopup.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		if m.helmDocMenu.IsActive() {
+			var cmd tea.Cmd
+			m.helmDocMenu, cmd = m.helmDocMenu.HandleMouse(msg, m.width, m.height)
+			return m, cmd
+		}
+		cmd := m.handleMousePress(msg)
+		return m, cmd
 
 	case tea.KeyMsg:
 		// When any panel is in search mode, only ctrl+c passes through.
@@ -992,6 +1314,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confirm.Show(ConfirmQuit, "Quit km8?", "", quitCmd)
 		case "V":
 			return m, m.splash.Show()
+		case "M":
+			// Global Settings popup. Opens from any panel; popups
+			// already-open intercept keys earlier so M while inside
+			// another popup is naturally a no-op. Items rebuilt
+			// from current config every Open so the badge reflects
+			// state on each re-entry.
+			m.settingsPopup.SetSize(m.width, m.height)
+			return m, m.settingsPopup.Open(m.buildSettingsItems())
 		case "alt+t", "alt+T", "ctrl+t":
 			// Alt+T is the single KM8erm toggle:
 			//   - no shell alive   → spawn KM8erm
@@ -1403,19 +1733,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-
-	case FocusTableMsg:
-		// Sidebar's l/Enter — move focus into panel 2 without re-firing
-		// ResourceSelectedMsg (j/k already did the resource selection).
-		m.setPanel(TablePanel)
-		return m, nil
-
-	case FocusDetailMsg:
-		// Table's Enter — move focus into panel 3. Detail content was
-		// kept in sync by the row-cursor's auto-emitted RowSelectedMsg,
-		// so there's nothing extra to fetch here.
-		m.setPanel(DetailPanel)
-		return m, nil
 
 	case RequestSwitchToResourceMsg:
 		// Single confirm-gate for both Relatives space and breadcrumb
@@ -1992,6 +2309,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case SettingsToggleMsg:
+		// Commit a Settings popup toggle. Currently only "mouse" is
+		// wired; commitSettingsToggle ignores unknown keys so a
+		// future setting added to the popup can be wired in one
+		// place without touching this routing.
+		return m, m.commitSettingsToggle(msg.Key)
+
 	case ListPickerCancelMsg:
 		// Esc at any sort step: drop in-flight kind/column so a
 		// later sort flow starts fresh. The picker's own close
@@ -2175,6 +2499,11 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.listPicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
+	if m.settingsPopup.IsActive() {
+		m.settingsPopup.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.settingsPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
 	if m.yamlPopup.IsActive() {
 		m.yamlPopup.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.yamlPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
@@ -2309,9 +2638,12 @@ func joinTableAndDetail(tablePanel, detailPanel string, w int) string {
 func (m *AppModel) enterDrillDown() tea.Cmd {
 	idx := m.table.SelectedRow()
 	if idx < 0 || idx >= len(m.items) {
-		// Empty / out-of-range table — no drill target, but still
-		// honour Enter as "move me to panel 3" so the key isn't silent.
-		return func() tea.Msg { return FocusDetailMsg{} }
+		// Empty / out-of-range table — no drill target. Used to
+		// fall through to "focus panel 3" so the key wasn't silent;
+		// removed when the broader Enter-as-focus fallback went
+		// away (mouse double-click synthesizes Enter and shifting
+		// focus on double-click felt wrong).
+		return nil
 	}
 	item := m.items[idx]
 
@@ -2337,9 +2669,11 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 
 	// Resource → child resource drill-down — only kinds with a
 	// registered DrillDown config (HPA → target workload, etc.). For
-	// everything else, Enter is the panel-2 → panel-3 focus shift.
+	// everything else Enter is now a deliberate no-op (the panel-2 →
+	// panel-3 focus shift was removed alongside the broader Enter-
+	// as-focus fallback).
 	if !m.currentResource.SupportsDrillDown() {
-		return func() tea.Msg { return FocusDetailMsg{} }
+		return nil
 	}
 
 	return func() tea.Msg {

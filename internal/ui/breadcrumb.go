@@ -116,6 +116,67 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 	return m, nil
 }
 
+// HandleMouse routes a click against the rendered breadcrumb popup.
+// Left-click on a chain entry commits a jump to that level (same as
+// cursor+Enter — emits RequestSwitchToResourceMsg). Right-click
+// inside the popup closes it. Long labels that wrap across multiple
+// display lines all map back to their single entry, mirroring how
+// cursor navigation treats them as one row.
+func (m BreadcrumbPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (BreadcrumbPopupModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	popup := m.renderFullPopup()
+	if !popupContains(popup, msg, screenW, screenH) {
+		return m, nil
+	}
+	if msg.Button == tea.MouseButtonRight {
+		return m, m.animator.Close()
+	}
+	if msg.Button != tea.MouseButtonLeft {
+		return m, nil
+	}
+	// Find the entry under the click. Each entry can span N display
+	// lines (label-wrap path); walk lines per entry to find the
+	// match.
+	lines := strings.Split(popup, "\n")
+	w := lipgloss.Width(lines[0])
+	py := (screenH - len(lines)) / 2
+	rowOffset := msg.Y - py - 2 // skip top border + top padding row
+	if rowOffset < 0 {
+		return m, nil
+	}
+	innerW := w - 2
+	cur := 0
+	for i := range m.chain {
+		n := m.entryDisplayLines(i, innerW)
+		if rowOffset >= cur && rowOffset < cur+n {
+			m.cursor = i
+			ref := m.chain[i]
+			return m, func() tea.Msg { return RequestSwitchToResourceMsg{Ref: ref} }
+		}
+		cur += n
+	}
+	return m, nil
+}
+
+// entryDisplayLines mirrors renderEntry's chunk count without
+// re-rendering — needed for the mouse hit-test which has to map a
+// clicked display line back to the entry that produced it.
+func (m BreadcrumbPopupModel) entryDisplayLines(i int, innerW int) int {
+	if i < 0 || i >= len(m.chain) {
+		return 0
+	}
+	labelPrefix := fmt.Sprintf("%d. ", i+1)
+	labelPrefixW := lipgloss.Width(labelPrefix)
+	const markerW = 2
+	labelBudget := innerW - 1 - labelPrefixW - markerW
+	if labelBudget < 10 {
+		labelBudget = 10
+	}
+	return len(wrapPlain(refDisplay(m.chain[i]), labelBudget))
+}
+
 func (m BreadcrumbPopupModel) View() string { return "" }
 
 func (m BreadcrumbPopupModel) RenderPopup() string {

@@ -152,6 +152,32 @@ func (m ListPickerModel) Update(msg tea.Msg) (ListPickerModel, tea.Cmd) {
 	return m, nil
 }
 
+// HandleMouse routes clicks against the rendered picker. Left-click
+// on an item commits that row (cursor moves to it + the same msg
+// keyboard Enter would have fired). Right-click closes via the
+// cancel path, so chained flows (sort: column → direction) drop
+// their cached state the same way as Esc.
+func (m ListPickerModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (ListPickerModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	row := popupRowAt(m.renderFullPopup(), msg, screenW, screenH, 2, len(m.items))
+	if row < 0 {
+		return m, nil
+	}
+	switch msg.Button {
+	case tea.MouseButtonLeft:
+		m.cursor = row
+		return m, m.commit(m.items[row].Key)
+	case tea.MouseButtonRight:
+		pickerID := m.pickerID
+		closeCmd := m.animator.Close()
+		cancelCmd := func() tea.Msg { return ListPickerCancelMsg{PickerID: pickerID} }
+		return m, tea.Batch(closeCmd, cancelCmd)
+	}
+	return m, nil
+}
+
 // commit emits the action msg WITHOUT running the close animation.
 // app.go decides whether to chain (open the next step with new
 // content — Open swaps in place) or to close the picker (call

@@ -176,6 +176,29 @@ func (m Panel2MenuPopupModel) Update(msg tea.Msg) (Panel2MenuPopupModel, tea.Cmd
 	return m, nil
 }
 
+// HandleMouse routes a click against the rendered menu. Left-click
+// on an item is identical to keyboard Enter on that item (commits
+// the row's action + closes the popup). Right-click on the popup
+// closes it (mirror of Esc). Outside-popup clicks are no-ops so an
+// accidental click below the menu doesn't dismiss it.
+func (m Panel2MenuPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (Panel2MenuPopupModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	row := popupRowAt(m.renderFullPopup(), msg, screenW, screenH, 2, len(m.items))
+	if row < 0 {
+		return m, nil
+	}
+	switch msg.Button {
+	case tea.MouseButtonLeft:
+		m.cursor = row
+		return m, m.commit(m.items[row].key)
+	case tea.MouseButtonRight:
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 // commit closes the popup AND emits the action msg. Trigger 後 menu popup
 // 一律關閉 — A 方案: cursor+Enter and direct hotkey paths reach the same
 // final state, popup stack哲學不破 (menu is a launcher, not a context).

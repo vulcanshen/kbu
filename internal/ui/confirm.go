@@ -86,6 +86,26 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 	return m, nil
 }
 
+// HandleMouse routes a click against the confirm dialog.
+// Right-click inside the popup cancels (mirror of Esc / n / Space).
+// Left-click intentionally does NOT confirm — accidental click
+// could fire a destructive delete / quit / rollback, so the user
+// must commit deliberately via keyboard Enter / y. Outside-popup
+// clicks are no-ops.
+func (m ConfirmModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (ConfirmModel, tea.Cmd) {
+	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	if !popupContains(m.renderFullPopup(), msg, screenW, screenH) {
+		return m, nil
+	}
+	if msg.Button == tea.MouseButtonRight {
+		m.onConfirm = nil
+		return m, m.animator.Close()
+	}
+	return m, nil
+}
+
 func (m ConfirmModel) View() string {
 	return ""
 }
