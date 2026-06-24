@@ -36,6 +36,15 @@ type TableModel struct {
 	// -1 = no lock. AppModel re-resolves the index whenever rows change
 	// (filter / watcher / drill-down) and calls SetLockedRow.
 	lockedRow int
+
+	// Sort indicator — column title currently sorted on (matches one
+	// of m.columns[i].Title) and its direction. Empty sortColumn = no
+	// arrow rendered in any header. Drives the panel-2 header glyph
+	// next to the sorted column name. AppModel calls SetSortIndicator
+	// on init, on kind switch, and on every sort commit so the
+	// header stays in lock-step with the saved config.
+	sortColumn    string
+	sortDirection string
 }
 
 // CopyableContent returns the current (filtered) table rows as plain text
@@ -125,6 +134,17 @@ func NewTableModel(t *theme.Theme) TableModel {
 // rows change.
 func (m *TableModel) SetLockedRow(idx int) {
 	m.lockedRow = idx
+}
+
+// SetSortIndicator declares which column header should render an
+// arrow glyph and in what direction. Empty column = no indicator.
+// Direction strings match config.SortDirection* constants but the
+// table is decoupled from the config package — anything that isn't
+// the asc/desc string renders no glyph (defensive against stale
+// config strings).
+func (m *TableModel) SetSortIndicator(column, direction string) {
+	m.sortColumn = column
+	m.sortDirection = direction
 }
 
 // Init implements tea.Model.
@@ -440,7 +460,16 @@ func (m TableModel) View() string {
 func (m TableModel) columnTitles() []string {
 	titles := make([]string, len(m.columns))
 	for i, col := range m.columns {
-		titles[i] = col.Title
+		title := col.Title
+		if title != "" && title == m.sortColumn {
+			switch m.sortDirection {
+			case "asc":
+				title += " " + sortAscendingGlyph
+			case "desc":
+				title += " " + sortDescendingGlyph
+			}
+		}
+		titles[i] = title
 	}
 	return titles
 }

@@ -63,9 +63,13 @@ type ResourceDetailMsg struct {
 	Events  []k8s.EventItem
 }
 
-// NamespaceListMsg carries the list of available namespaces.
+// NamespaceListMsg carries the list of available namespaces. Err is
+// non-nil when the fetch failed — the picker uses this to leave its
+// loading state (close + toast), since otherwise the "Loading…"
+// placeholder would hang forever.
 type NamespaceListMsg struct {
 	Namespaces []string
+	Err        error
 }
 
 // RelativeDrillMsg is emitted when the user presses Y on a Relatives-tab entry —

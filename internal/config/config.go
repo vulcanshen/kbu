@@ -44,17 +44,18 @@ type Config struct {
 // entry leaves the YAML clean rather than emitting `pinned: null`.
 //
 // IsEmpty reports whether the entry carries any active config, used
-// at unpin time to decide whether to keep the map entry around (any
-// other config present) or delete it entirely (none).
+// at unpin/unsort time to decide whether to keep the map entry
+// around (any other config present) or delete it entirely (none).
 type ResourceKindConfigEntry struct {
 	Pinned *PinnedConfig `yaml:"pinned,omitempty"`
+	Sort   *SortConfig   `yaml:"sort,omitempty"`
 }
 
 // IsEmpty reports whether the entry has zero active config — caller
-// (UnsetPinned, future UnsetSort, ...) drops the kind from the map
-// when an unset leaves the entry empty so the YAML stays tidy.
+// (UnsetPinned / UnsetSort / ...) drops the kind from the map when
+// an unset leaves the entry empty so the YAML stays tidy.
 func (e ResourceKindConfigEntry) IsEmpty() bool {
-	return e.Pinned == nil
+	return e.Pinned == nil && e.Sort == nil
 }
 
 // PinnedConfig is the per-kind pin state. Order drives sidebar render
@@ -63,6 +64,29 @@ func (e ResourceKindConfigEntry) IsEmpty() bool {
 // reindex.
 type PinnedConfig struct {
 	Order int `yaml:"order"`
+}
+
+// Sort direction constants — the YAML strings stored verbatim in the
+// config file. Anything else (including empty) is treated as
+// "unsorted" by the UI layer, so writing garbage to the file
+// harmlessly degrades to default order.
+const (
+	SortDirectionAscending  = "asc"
+	SortDirectionDescending = "desc"
+)
+
+// SortConfig is the per-kind list-view sort state. Column is the
+// column Title as defined in the resource registry (e.g. "Name" /
+// "Age" / "Status") — stable per kind, readable in YAML, doesn't
+// depend on column order. Direction is one of SortDirection* above.
+//
+// Persisted via SetSort; cleared via UnsetSort. Single-column for v1
+// — multi-column sort can be expressed as a YAML list in a future
+// version without breaking the pointer-to-struct shape (the pointer
+// becomes a slice).
+type SortConfig struct {
+	Column    string `yaml:"column"`
+	Direction string `yaml:"direction"`
 }
 
 // CompareConfig holds settings for the YAML compare popup. Currently
@@ -214,6 +238,50 @@ func (c *Config) PinnedOrdered() []string {
 		out[i] = p.kind
 	}
 	return out
+}
+
+// GetSort returns the sort state for kind, or nil when unsorted.
+func (c *Config) GetSort(kind string) *SortConfig {
+	if c.ResourceKindConfig == nil {
+		return nil
+	}
+	entry, ok := c.ResourceKindConfig[kind]
+	if !ok {
+		return nil
+	}
+	return entry.Sort
+}
+
+// SetSort upserts the sort entry for kind. Pre-existing sort is
+// overwritten — single-column model means each new selection fully
+// replaces the previous one.
+func (c *Config) SetSort(kind, column, direction string) {
+	if c.ResourceKindConfig == nil {
+		c.ResourceKindConfig = make(map[string]ResourceKindConfigEntry)
+	}
+	entry := c.ResourceKindConfig[kind]
+	entry.Sort = &SortConfig{Column: column, Direction: direction}
+	c.ResourceKindConfig[kind] = entry
+}
+
+// UnsetSort drops the sort state for kind. When the entry has no
+// other active config left (IsEmpty), the entire map entry is
+// removed so the YAML stays tidy. Mirror of UnsetPinned's
+// housekeeping.
+func (c *Config) UnsetSort(kind string) {
+	if c.ResourceKindConfig == nil {
+		return
+	}
+	entry, ok := c.ResourceKindConfig[kind]
+	if !ok {
+		return
+	}
+	entry.Sort = nil
+	if entry.IsEmpty() {
+		delete(c.ResourceKindConfig, kind)
+	} else {
+		c.ResourceKindConfig[kind] = entry
+	}
 }
 
 // NextPinOrder returns the next sparse Order to use when appending a

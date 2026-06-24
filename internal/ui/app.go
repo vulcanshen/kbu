@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -70,6 +71,7 @@ type AppModel struct {
 	helmDocMenu     HelmDocMenuPopupModel
 	panel2Menu      Panel2MenuPopupModel
 	hintPopup       HintPopupModel
+	listPicker      ListPickerModel
 
 	activePanel     Panel
 	width           int
@@ -110,6 +112,16 @@ type AppModel struct {
 	// compare / panel focus leaving panel 2 / locked item disappearing
 	// from the watcher stream. Nil = not in compare mode.
 	compareLock *compareLockedRef
+
+	// Sort flow in-flight state. The Sort menu is a 3-popup chain
+	// (sidebar hint → column picker → direction picker); these fields
+	// carry the user's column choice across the column → direction
+	// step so the direction commit knows which column to persist.
+	// Cleared on direction commit, on cancel at either step, and on
+	// any path that closes the listPicker. Empty kind/column = no
+	// flow in progress.
+	sortFlowKind   k8s.ResourceType
+	sortFlowColumn string
 }
 
 // compareLockedRef identifies the panel-2 row currently locked as the
@@ -256,6 +268,197 @@ func (m *AppModel) togglePinnedKind(rt k8s.ResourceType) tea.Cmd {
 	return nil
 }
 
+// openSortColumnPicker opens the listPicker as the first step of the
+// Sort flow. Items are the kind's column titles; the column currently
+// in use (if any) is badged with its direction arrow so the user
+// sees where they are now. Caches kind in sortFlowKind so the
+// direction step knows what kind it's committing for even if the
+// sidebar cursor drifts mid-flow.
+func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
+	def := sortRegistry().Get(rt)
+	if def == nil || len(def.Columns) == 0 {
+		return nil
+	}
+	m.sortFlowKind = rt
+	m.sortFlowColumn = ""
+	current := m.cfg.GetSort(def.KubectlName)
+	items := make([]ListPickerItem, 0, len(def.Columns))
+	for _, c := range def.Columns {
+		it := ListPickerItem{Key: c.Title, Label: c.Title}
+		if current != nil && current.Column == c.Title {
+			it.Badge = sortDirectionGlyph(current.Direction)
+		}
+		items = append(items, it)
+	}
+	title := "Sort " + def.DisplayName + " by…"
+	m.listPicker.SetSize(m.width, m.height)
+	return m.listPicker.Open("sort:column", title, items)
+}
+
+// openSortDirectionPicker is the second step. Items are
+// Ascending / Descending / Unset; the current direction is badged
+// "current" if the picked column matches the existing sort entry.
+// Unset is offered unconditionally — but commit logic treats it as
+// no-op when the column isn't currently sorted, matching the
+// "selecting Unset on a never-sorted column does nothing"
+// agreement.
+func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) tea.Cmd {
+	def := m.k8sClient.Registry().Get(rt)
+	if def == nil {
+		return nil
+	}
+	m.sortFlowColumn = column
+	current := m.cfg.GetSort(def.KubectlName)
+	items := []ListPickerItem{
+		{Key: config.SortDirectionAscending, Label: "Ascending"},
+		{Key: config.SortDirectionDescending, Label: "Descending"},
+		{Key: "unset", Label: "Unset"},
+	}
+	if current != nil && current.Column == column {
+		for i := range items {
+			if items[i].Key == current.Direction {
+				items[i].Badge = "current"
+			}
+		}
+	}
+	title := "Sort " + def.DisplayName + " by " + column + "…"
+	m.listPicker.SetSize(m.width, m.height)
+	return m.listPicker.Open("sort:direction", title, items)
+}
+
+// commitSortFlow finalises the Sort flow once the user picks a
+// direction. Persists to config (or unsets, if the user chose
+// "unset" AND the picked column is the currently-sorted column),
+// re-applies sort to the live items so panel-2 reflects the change
+// immediately, then closes the picker.
+//
+// The "unset on never-sorted column" no-op gate matches the design
+// agreement: picking Unset on a column that wasn't sorted should
+// do nothing, not silently clobber any unrelated sort the user
+// might have on a different column.
+func (m *AppModel) commitSortFlow(direction string) tea.Cmd {
+	rt := m.sortFlowKind
+	column := m.sortFlowColumn
+	m.sortFlowKind = ""
+	m.sortFlowColumn = ""
+	closeCmd := m.listPicker.Close()
+	if rt == "" || column == "" || m.cfg == nil {
+		return closeCmd
+	}
+	def := sortRegistry().Get(rt)
+	if def == nil {
+		return closeCmd
+	}
+	current := m.cfg.GetSort(def.KubectlName)
+	switch direction {
+	case "unset":
+		if current == nil || current.Column != column {
+			return closeCmd
+		}
+		m.cfg.UnsetSort(def.KubectlName)
+	case config.SortDirectionAscending, config.SortDirectionDescending:
+		m.cfg.SetSort(def.KubectlName, column, direction)
+	default:
+		return closeCmd
+	}
+	if err := m.cfg.Save(); err != nil {
+		m.appLog.Error("sort save failed: " + err.Error())
+	}
+	// Re-apply sort to whatever's currently in panel 2 if this
+	// kind is the one being viewed — no point waiting for the next
+	// watcher tick.
+	if rt == m.currentResource {
+		m.syncTableSortIndicator()
+		m.applySortToItems()
+		rows := augmentRowsWithHelm(m.items, m.currentResource)
+		m.table.SetRows(rows)
+	}
+	return closeCmd
+}
+
+// applySortToItems re-orders m.items per the current kind's saved
+// sort config. When no config exists for the kind, falls back to
+// metadata.name ascending — a universal stable order that holds
+// across kinds (every K8s object has a name, including Events whose
+// displayed columns don't include Name). The fallback also catches
+// the Unset path: clearing the saved sort needs to actually re-
+// order panel 2 immediately, not wait for the next kind switch.
+//
+// Called on every ResourceDataMsg before the table sees the rows,
+// and immediately after a direction commit so the view reflects the
+// new order without waiting for the next watcher tick.
+func (m *AppModel) applySortToItems() {
+	if m.cfg == nil {
+		return
+	}
+	def := sortRegistry().Get(m.currentResource)
+	if def == nil {
+		return
+	}
+	sortCfg := m.cfg.GetSort(def.KubectlName)
+	if sortCfg == nil {
+		sort.SliceStable(m.items, func(i, j int) bool {
+			return m.items[i].Name < m.items[j].Name
+		})
+		return
+	}
+	asc := sortCfg.Direction == config.SortDirectionAscending
+	k8s.SortItems(m.items, def.Columns, sortCfg.Column, asc)
+}
+
+// syncTableSortIndicator pushes the current kind's saved sort
+// (column + direction) to the table so the panel-2 header renders
+// the right arrow. Called wherever sort state can change relative
+// to the table: kind switch, sort commit, app init. Empty kind /
+// empty config clears the indicator.
+func (m *AppModel) syncTableSortIndicator() {
+	if m.cfg == nil || m.currentResource == "" {
+		m.table.SetSortIndicator("", "")
+		return
+	}
+	def := sortRegistry().Get(m.currentResource)
+	if def == nil {
+		m.table.SetSortIndicator("", "")
+		return
+	}
+	if s := m.cfg.GetSort(def.KubectlName); s != nil {
+		m.table.SetSortIndicator(s.Column, s.Direction)
+		return
+	}
+	m.table.SetSortIndicator("", "")
+}
+
+// sortRegistry is the registry the sort flow looks up resource
+// definitions in. Returns the global DefaultRegistry — which is the
+// same instance k8s.Client wraps via .Registry() — so the sort
+// helpers don't require a constructed k8s.Client during tests, and
+// production code still hits the one and only registry. If a future
+// app supports multiple registries (multi-cluster?), wrap this in a
+// per-AppModel field.
+func sortRegistry() *k8s.Registry { return k8s.DefaultRegistry }
+
+// sortAscendingGlyph / sortDescendingGlyph render the Nerd Font
+// arrows the user picked for sort direction indicators (U+F161 up
+// / U+F160 down). Centralised here so the listPicker and the
+// panel-2 header use the same glyphs.
+const (
+	sortAscendingGlyph  = ""
+	sortDescendingGlyph = ""
+)
+
+// sortDirectionGlyph returns the right arrow glyph for a saved
+// direction string. Used by the column picker to badge the
+// currently-sorted column.
+func sortDirectionGlyph(direction string) string {
+	switch direction {
+	case config.SortDirectionAscending:
+		return sortAscendingGlyph
+	case config.SortDirectionDescending:
+		return sortDescendingGlyph
+	}
+	return ""
+}
+
 // persistPinnedKinds rewrites the config's pinned state to mirror the
 // sidebar's current PinnedKinds order, then saves atomically. The
 // sidebar is the in-memory source of truth during a session; this
@@ -394,6 +597,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 		helmDocMenu:     NewHelmDocMenuPopupModel(t),
 		panel2Menu:      NewPanel2MenuPopupModel(t),
 		hintPopup:       NewHintPopupModel(t),
+		listPicker:      NewListPickerModel(t),
 		activePanel:     SidebarPanel,
 		theme:           t,
 		cfg:             cfg,
@@ -513,6 +717,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.hintPopup.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.listPicker.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
@@ -710,6 +917,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.listPicker.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.listPicker, cmd = m.listPicker.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -836,7 +1055,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "N":
-			return m, fetchNamespaces(m.k8sClient)
+			// Open the picker immediately in its loading state so the
+			// user gets zero-lag visual feedback, then fire the
+			// LIST namespaces API in parallel. NamespaceListMsg swaps
+			// in the real list when it arrives — no flicker because
+			// the animator stays in open state across SetNamespaces.
+			openCmd := m.namespacePicker.OpenLoading()
+			return m, tea.Batch(openCmd, fetchNamespaces(m.k8sClient))
 		case "C":
 			// Panel 2 cursor-on-row: C is the contextual Compare
 			// hotkey (same path as the panel-2 Space menu's "C"
@@ -909,6 +1134,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
 			return m, waitForWatchUpdate(m.watcher, m.currentResource)
 		case "S":
+			// Panel-1: open Sort flow on the cursor's resource kind
+			// (mirror of direct `P` for pin). Cursor on a category
+			// header → silent no-op.
+			// Panel-2: Shell into the selected pod's container.
+			// Each panel owns its own meaning of S — same trade-off
+			// as P/N/C globals.
+			if m.activePanel == SidebarPanel {
+				rt := m.sidebar.CursorResourceType()
+				if rt == "" {
+					return m, nil
+				}
+				return m, m.openSortColumnPicker(rt)
+			}
 			if m.activePanel == TablePanel {
 				return m, m.execShell()
 			}
@@ -1017,6 +1255,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						actions = append(actions, hintAction{
 							label: "Pin " + label, key: "P", action: "PinKind",
+						})
+					}
+					// Sort entry — surfaces for every kind that has at
+					// least one column (every registered kind in
+					// practice). Commit routes through HintActionMsg
+					// → SortKind handler, which opens the column
+					// picker.
+					if def := m.k8sClient.Registry().Get(rt); def != nil && len(def.Columns) > 0 {
+						actions = append(actions, hintAction{
+							label: "Sort " + label + "…", key: "S", action: "SortKind",
 						})
 					}
 				}
@@ -1201,6 +1449,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.table, cmd = m.table.Update(msg)
 		cmds = append(cmds, cmd)
+		m.syncTableSortIndicator()
 		m.switchSeq++
 		seq := m.switchSeq
 		cmds = append(cmds, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
@@ -1225,6 +1474,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.drillDownPod != nil {
 			return m, tea.Batch(cmds...)
 		}
+		// Apply the user's saved sort BEFORE compare-lock resolution
+		// and row augmentation. compare lock is tracked by UID so the
+		// reorder doesn't break the lookup, but the table row index
+		// it locks onto depends on the post-sort positions — sort
+		// first, then sync, so the lockedRow points at the right
+		// row. Indicator sync is idempotent and cheap, so refreshing
+		// it on every data tick guarantees the header stays in lock-
+		// step with the saved config even after kind switches that
+		// arrive before the first ResourceSelectedMsg-driven sync.
+		m.applySortToItems()
+		m.syncTableSortIndicator()
 		// Compare mode: if the locked baseline has disappeared from the
 		// watcher (deleted / renamed / fell out of namespace scope),
 		// drop the lock and flash a toast — otherwise the status-bar
@@ -1442,7 +1702,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case NamespaceListMsg:
-		return m, m.namespacePicker.Open(msg.Namespaces)
+		// Fetch failed — pull the picker out of its loading state
+		// rather than leaving "Loading…" sticky. Toast surfaces the
+		// reason so the user knows it wasn't just slow.
+		if msg.Err != nil {
+			m.appLog.Error("namespace fetch: " + msg.Err.Error())
+			closeCmd := m.namespacePicker.Close()
+			return m, tea.Batch(closeCmd, m.toast.Show("namespace fetch failed"))
+		}
+		// Picker was opened in loading state by the N keypress; just
+		// swap in the real list. If the user dismissed before this
+		// landed, SetNamespaces is a harmless state poke.
+		m.namespacePicker.SetNamespaces(msg.Namespaces)
+		return m, nil
 
 	case NamespaceChangedMsg:
 		ns := msg.Namespace
@@ -1658,10 +1930,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case HintActionMsg:
-		// Sidebar Space-menu actions. Currently Pin / Unpin only;
-		// extend the switch when more actions get attached to the
-		// hint popup in the future. Both share togglePinnedKind so
-		// the menu + direct `P` hotkey can't drift on edge cases.
+		// Sidebar Space-menu actions. Pin / Unpin share
+		// togglePinnedKind so the menu + direct `P` hotkey can't
+		// drift; SortKind kicks off the listPicker chain (column →
+		// direction → persist).
 		switch msg.Action {
 		case "PinKind", "UnpinKind":
 			rt := m.sidebar.CursorResourceType()
@@ -1669,6 +1941,36 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, m.togglePinnedKind(rt)
+		case "SortKind":
+			rt := m.sidebar.CursorResourceType()
+			if rt == "" {
+				return m, nil
+			}
+			return m, m.openSortColumnPicker(rt)
+		}
+		return m, nil
+
+	case ListPickerActionMsg:
+		// Sort flow commits routed by PickerID. Column step picks a
+		// column → opens the direction step (in-place swap on the
+		// same listPicker). Direction step persists the choice and
+		// closes the picker.
+		switch msg.PickerID {
+		case "sort:column":
+			return m, m.openSortDirectionPicker(m.sortFlowKind, msg.Key)
+		case "sort:direction":
+			return m, m.commitSortFlow(msg.Key)
+		}
+		return m, nil
+
+	case ListPickerCancelMsg:
+		// Esc at any sort step: drop in-flight kind/column so a
+		// later sort flow starts fresh. The picker's own close
+		// animation is already queued by the Cancel msg.
+		switch msg.PickerID {
+		case "sort:column", "sort:direction":
+			m.sortFlowKind = ""
+			m.sortFlowColumn = ""
 		}
 		return m, nil
 
@@ -1837,6 +2139,11 @@ func (m AppModel) View() string {
 	if m.hintPopup.IsActive() {
 		m.hintPopup.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.hintPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
+	if m.listPicker.IsActive() {
+		m.listPicker.SetSize(m.width, m.height)
+		mainView = overlay.Composite(m.listPicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	if m.yamlPopup.IsActive() {
@@ -2607,7 +2914,7 @@ func fetchNamespaces(client *k8s.Client) tea.Cmd {
 	return func() tea.Msg {
 		items, err := k8s.FetchResources(context.Background(), client.Clientset(), k8s.ResourceNamespaces, "")
 		if err != nil {
-			return nil
+			return NamespaceListMsg{Err: err}
 		}
 		names := make([]string, len(items))
 		for i, item := range items {
