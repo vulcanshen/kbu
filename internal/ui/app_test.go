@@ -614,6 +614,7 @@ func TestAppModel_Compare_CtxForMenu(t *testing.T) {
 		wantLocked     bool
 		wantCanLock    bool
 		wantComparable bool
+		wantOnAnchor   bool
 	}{
 		{
 			name:        "no lock, multiple items",
@@ -640,7 +641,7 @@ func TestAppModel_Compare_CtxForMenu(t *testing.T) {
 			wantComparable: true,
 		},
 		{
-			name: "locked, cursor on locked row — NOT comparable",
+			name: "locked, cursor on locked row — onAnchor, not comparable",
 			setup: func(m *AppModel) {
 				m.setCompareLock(items[0], k8s.ResourcePods)
 			},
@@ -648,6 +649,19 @@ func TestAppModel_Compare_CtxForMenu(t *testing.T) {
 			wantLocked:     true,
 			wantCanLock:    true,
 			wantComparable: false,
+			wantOnAnchor:   true,
+		},
+		{
+			name: "locked, kind switched — neither comparable nor onAnchor",
+			setup: func(m *AppModel) {
+				m.setCompareLock(items[0], k8s.ResourcePods)
+				m.currentResource = k8s.ResourceServices
+			},
+			cursor:         items[1],
+			wantLocked:     true,
+			wantCanLock:    true,
+			wantComparable: false,
+			wantOnAnchor:   false,
 		},
 	}
 	for _, tc := range cases {
@@ -665,7 +679,45 @@ func TestAppModel_Compare_CtxForMenu(t *testing.T) {
 			if got.cursorComparable != tc.wantComparable {
 				t.Errorf("cursorComparable = %v, want %v", got.cursorComparable, tc.wantComparable)
 			}
+			if got.cursorOnAnchor != tc.wantOnAnchor {
+				t.Errorf("cursorOnAnchor = %v, want %v", got.cursorOnAnchor, tc.wantOnAnchor)
+			}
 		})
+	}
+}
+
+func TestAppModel_CompareHotkeyDispatch_TogglesOnAnchorRow(t *testing.T) {
+	// C on the anchor row itself = cancel anchor (exit compare mode).
+	// Mirrors the menu's "Unmark Compare anchor" entry — same letter
+	// from either surface flips the lock back off.
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourcePods
+	m.appLog = NewAppLogModel(m.theme)
+
+	// Press C on row 0 → marks it as anchor.
+	if cmd := m.compareHotkeyDispatch(k8s.ResourcePods, items[0]); cmd != nil {
+		t.Errorf("mark anchor must not return a cmd, got %T", cmd)
+	}
+	if !m.inCompareMode() {
+		t.Fatal("mark anchor should turn compare mode on")
+	}
+	if m.compareLock.uid != "uid-a" {
+		t.Errorf("compareLock UID = %q, want uid-a", m.compareLock.uid)
+	}
+
+	// Press C on the SAME row → cancel anchor, exit compare mode.
+	if cmd := m.compareHotkeyDispatch(k8s.ResourcePods, items[0]); cmd != nil {
+		t.Errorf("unmark anchor must not return a cmd, got %T", cmd)
+	}
+	if m.inCompareMode() {
+		t.Error("C on anchor row must cancel anchor (exit compare mode)")
+	}
+	if m.table.lockedRow != -1 {
+		t.Errorf("table.lockedRow = %d, want -1 after cancel", m.table.lockedRow)
 	}
 }
 
