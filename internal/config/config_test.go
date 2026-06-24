@@ -195,15 +195,21 @@ func TestLoadFrom_EmptyFile(t *testing.T) {
 	}
 }
 
-func TestSaveLoadRoundtrip_PinnedResourceKinds(t *testing.T) {
+func TestSaveLoadRoundtrip_ResourceKindConfig(t *testing.T) {
+	// Round-trip the new resource_kind_config shape: pinned state + the
+	// other primitives that share the YAML file must all survive a
+	// save→load cycle. Migration is tested separately.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 
 	cfg := &Config{
-		Editor:              "vim",
-		PinnedResourceKinds: []string{"pod", "namespace", "configmap"},
-		Compare:             CompareConfig{Layout: "unified"},
+		Editor:  "vim",
+		Compare: CompareConfig{Layout: "unified"},
 	}
+	cfg.SetPinned("pod", 10)
+	cfg.SetPinned("namespace", 20)
+	cfg.SetPinned("configmap", 30)
+
 	if err := cfg.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
 	}
@@ -211,13 +217,21 @@ func TestSaveLoadRoundtrip_PinnedResourceKinds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
-	if got, want := loaded.PinnedResourceKinds, cfg.PinnedResourceKinds; len(got) != len(want) {
-		t.Fatalf("PinnedResourceKinds len = %d, want %d", len(got), len(want))
+
+	wantOrdered := []string{"pod", "namespace", "configmap"}
+	got := loaded.PinnedOrdered()
+	if len(got) != len(wantOrdered) {
+		t.Fatalf("PinnedOrdered len = %d, want %d (got %v)", len(got), len(wantOrdered), got)
 	}
-	for i := range cfg.PinnedResourceKinds {
-		if loaded.PinnedResourceKinds[i] != cfg.PinnedResourceKinds[i] {
-			t.Errorf("PinnedResourceKinds[%d] = %q, want %q (order matters — sidebar render uses this)", i, loaded.PinnedResourceKinds[i], cfg.PinnedResourceKinds[i])
+	for i, kind := range wantOrdered {
+		if got[i] != kind {
+			t.Errorf("PinnedOrdered[%d] = %q, want %q (Order drives sidebar render)", i, got[i], kind)
 		}
+	}
+	// Order values survive the round-trip — important if the user
+	// hand-edits YAML to leave gaps.
+	if p := loaded.GetPinned("pod"); p == nil || p.Order != 10 {
+		t.Errorf("pod Order lost in roundtrip, got %+v", p)
 	}
 	if loaded.Editor != "vim" {
 		t.Errorf("Editor lost in roundtrip: %q", loaded.Editor)
@@ -227,13 +241,62 @@ func TestSaveLoadRoundtrip_PinnedResourceKinds(t *testing.T) {
 	}
 }
 
+func TestPinnedHelpers_SetUnsetGet(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.IsPinned("pod") {
+		t.Error("fresh config should have no pins")
+	}
+	cfg.SetPinned("pod", 10)
+	if !cfg.IsPinned("pod") {
+		t.Error("IsPinned should report true after SetPinned")
+	}
+	if p := cfg.GetPinned("pod"); p == nil || p.Order != 10 {
+		t.Errorf("GetPinned returned %+v, want {Order:10}", p)
+	}
+
+	// SetPinned overwrites Order on existing entry.
+	cfg.SetPinned("pod", 25)
+	if p := cfg.GetPinned("pod"); p == nil || p.Order != 25 {
+		t.Errorf("SetPinned must overwrite Order, got %+v", p)
+	}
+
+	// UnsetPinned drops the kind entry entirely when nothing else
+	// occupies it — keeps the YAML clean.
+	cfg.UnsetPinned("pod")
+	if cfg.IsPinned("pod") {
+		t.Error("IsPinned should be false after UnsetPinned")
+	}
+	if _, ok := cfg.ResourceKindConfig["pod"]; ok {
+		t.Error("empty entry must be deleted from the map after UnsetPinned")
+	}
+
+	// UnsetPinned on a kind that isn't pinned is a no-op.
+	cfg.UnsetPinned("never-pinned")
+}
+
+func TestNextPinOrder_MonotonicSparse(t *testing.T) {
+	cfg := DefaultConfig()
+	if got := cfg.NextPinOrder(); got != 10 {
+		t.Errorf("NextPinOrder on empty config = %d, want 10", got)
+	}
+	cfg.SetPinned("pod", 10)
+	if got := cfg.NextPinOrder(); got != 20 {
+		t.Errorf("NextPinOrder after one pin = %d, want 20", got)
+	}
+	cfg.SetPinned("namespace", 55) // simulate user hand-edit
+	if got := cfg.NextPinOrder(); got != 65 {
+		t.Errorf("NextPinOrder must be max+10 = 65, got %d", got)
+	}
+}
+
 func TestSaveTo_Atomic_NoTempfileLeak(t *testing.T) {
 	// Save should not leave .config.*.yaml stragglers around after a
 	// successful write — they would confuse a user listing the config
 	// dir, and indicate the rename failed.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	cfg := &Config{Editor: "vim", PinnedResourceKinds: []string{"pod"}}
+	cfg := &Config{Editor: "vim"}
+	cfg.SetPinned("pod", 10)
 	if err := cfg.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
 	}
