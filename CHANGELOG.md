@@ -4,6 +4,127 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.0] - 2026-06-25
+
+Polish release on top of v1.6.0. Two real new features — **multi-
+column sort** and **pinned drag-and-drop reorder** — plus a sweep
+of popup-design unification (region headers, region-aware
+selectable navigation), sort-flow UX overhaul (loop, swap
+animation, conditional Unset, configurable Reset), and one
+breaking hotkey swap on panel 2.
+
+### Added
+
+- **Multi-column sort (chain).** Sort config now stores a list of
+  tiers instead of a single column. Pick a column → direction →
+  popup loops back to the column picker so additional tiers can be
+  stacked without re-invoking the flow. Each tier in the chain
+  renders its priority and direction in the table header
+  (`Name (1) ↑ · Restarts (2) ↓ …`); single-tier chains collapse
+  to just the arrow to preserve the v1.6 look. Comparator chain
+  walks tiers in order, first non-zero wins; unknown columns
+  silently skip so a stale config doesn't break the sort. YAML
+  back-compat: the v1.6 single-mapping shape (`sort: {column,
+  direction}`) lifts to a one-tier chain on load; a load-then-save
+  cleanly migrates to the new sequence form. `sort: null` /
+  `sort:` / `sort: ""` also tolerated (clears the chain).
+- **Pinned drag-and-drop reorder (`D`).** Press `D` on a pinned
+  sidebar row (with two or more pinned kinds) to enter modal drag
+  mode: `j` / `k` swap the locked kind with its neighbour,
+  `Enter` or `D` commits the new order, `Esc` and anything else
+  cancels back to the snapshot taken at entry. The "Pinned" header
+  shows `Pinned ⇅ [D]rop` while dragging, the dragged row paints
+  in lavender reverse, and a sticky toast carries the keyboard
+  contract throughout. `Space` mid-drag opens a trimmed drop-only
+  menu — useful when the keyboard contract slips out of memory.
+- **Sort picker `Reset` shortcut.** Column picker grows a Reset
+  row at the bottom (with an undo glyph) once a chain exists.
+  Selecting Reset drops the entire chain, re-applies the
+  `(namespace, name)` fallback to live items, and loops back to
+  the now-empty column picker — never closes the popup. Direction
+  picker also gains a per-column `Unset` row that only surfaces
+  when that column is already in the chain.
+- **Sort picker swap animation.** Switching content between chain
+  steps (column → direction → loop back) no longer flashes; the
+  popup compresses to 50% vertical height, content swaps at the
+  midpoint, and expands back. Total ~120ms. Same visual vocabulary
+  as the existing open/close animation; new
+  `PopupSwappingCompress` / `PopupSwappingExpand` states.
+- **Popup region headers.** Three popup families (listpicker,
+  panel-2 menu, hintpopup) gain non-selectable `Header` and
+  `Separator` rows so cursor navigation, Enter, hotkey dispatch,
+  and mouse-click all skip them uniformly. Used wherever a popup
+  mixes operation kinds:
+  - **Sort column picker**: "fields" above the columns, "all"
+    above Reset (when chain exists).
+  - **Panel-2 popup menu**: "item operation" above
+    Y/E/S/D/C+Enter, "panel operation" above the Sort entry.
+  - **Panel-1 Space menu**: "item operation" above
+    Pin/Unpin/Sort, "panel operation" above Drag (when the
+    cursor row qualifies for drag-and-drop).
+- **Sort picker title icon.** Border title gains the nf-fa-sort
+  glyph (`U+F0DC`) so the picker's purpose reads at a glance —
+  matches hintpopup's wheel icon and settingspopup's cog.
+
+### Changed
+
+- **Panel-2 sort hotkey: `Alt+Shift+S`.** Bare `S` on panel 2 is
+  Shell, so the modifier carves out a panel-2 sort gesture
+  without breaking that. The popup menu entry reads "[Alt][S]ort
+  panel 2 list". Panel 1 keeps plain `S` (v1.6 muscle memory).
+  AeroSpace users on macOS: this collides with the default
+  `alt-shift-s` workspace binding; rebind in AeroSpace if you
+  want km8's hotkey.
+- **Panel-1 sidebar Space menu Sort entry**: now reads "Sort
+  panel 2 list" (hotkey `S`). The cross-panel effect is explicit
+  in the wording instead of being inferred from "Set Order in
+  …".
+- **Panel-1 Space cheatsheet drops the standalone `P` row.** The
+  contextual Pin / Unpin entry surfaces in the action region
+  above; the cheatsheet row was a duplicate.
+- **Sort picker loops back instead of closing on commit.**
+  Direction commit re-opens the column picker (swap animation
+  plays) so additional tiers can be added without re-invoking the
+  flow. `Esc` on the looped picker is the canonical "I'm done"
+  exit. Reset behaves the same way — drops the chain, refreshes
+  the picker, stays open.
+- **Direction picker hides `Unset` for never-sorted columns.**
+  Surfacing a guaranteed no-op just clutters the picker; matches
+  the column-picker's "Reset hidden when no chain" gate.
+- **Popup menus universally cycle on `j` / `k`.** Eight popups
+  (panel-2 menu, helmdocmenu, listpicker, settingspopup, context,
+  namespace, breadcrumb, hintpopup) now wrap navigation past the
+  ends instead of clamping. Main panel `hjkl` unchanged.
+- **Toast layering split sticky vs non-sticky.** Sticky toasts
+  (background reminders like drag mode's keyboard contract)
+  composite UNDER the popup stack so a user-summoned popup wins.
+  Non-sticky toasts (transient interrupts like save errors) keep
+  compositing ABOVE the popup stack.
+
+### Fixed
+
+- **Sort chain comparator silently skips unknown tiers** so a
+  stale chain entry (column removed from the kind's registry
+  between sessions) doesn't break the sort or crash. Stale entries
+  also render invisibly in the table header.
+- **`O` in container drill view** is now a silent no-op (mirrors
+  E/D/C drill-mode gating). Previously the picker would open
+  titled "Sort Pods by…" while the user was looking at containers.
+- **`sort: null` / `sort:` / `sort: ""` in YAML** no longer fail
+  the config load — they degrade to an empty chain.
+- **`commitSortFlow` / `resetSortFlow` defensive paths** no longer
+  close the popup on inconsistent state. Reset must never close
+  the popup unilaterally, so even recovery paths now no-op and let
+  the user `Esc` out.
+
+### Removed
+
+- **`O` as a sort hotkey.** Panel 1 went `S → O → S` during
+  development; panel 2 went `O → Alt+Shift+S`. Net for an end
+  user: `O` is now unbound on both panels. v1.6 users continue
+  pressing `S` on panel 1 just like before; the new option is
+  `Alt+Shift+S` on panel 2.
+
 ## [v1.6.0] - 2026-06-24
 
 Four big features land together: **Pinned** sidebar kinds, **YAML

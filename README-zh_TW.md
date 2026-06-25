@@ -46,7 +46,7 @@
 | **`Space`** | *這裡能幹嘛？* — 在每個 panel、每個 tab 上開啟對應的 menu 或 cheatsheet |
 | **`Esc`** | 退回 — 回上一層 / 關閉 popup |
 
-不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `C` compare 或 context / `Y` YAML / `E` edit / `D` delete / `N` ns / `M` settings）只是加速器，每一項都能透過 `Space` menu 抵達 — 想記再記，不想記也沒關係。
+不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt+Shift+S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `M` settings）只是加速器，每一項都能透過 `Space` menu 抵達 — 想記再記，不想記也沒關係。
 
 **滑鼠也能用**（v1.6 起）：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `M` 可以關掉滑鼠改成純鍵盤。
 
@@ -118,9 +118,9 @@ km8 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 ## Features
 
-- **Pinned resource kinds（`P`）** — Panel 1 sidebar 頂端新增 Pinned 區段。在任何 resource row 按 `P` 切換 pin / unpin，順序會持久化到 config。Pin 採「**移動**」語意，不是複製 — 被 pin 的 kind 會從原本類別消失、出現在 Pinned 區，所以每個 kind 永遠只有一個位置。pin / sort / 其他 per-kind 設定共享同一個 config 區塊，CRD 短暫消失（operator 重裝等）時 pin 跟 sort 會被靜默保留、CRD 回來時自動還原
+- **Pinned resource kinds（`P` + `D` drag-and-drop）** — Panel 1 sidebar 頂端新增 Pinned 區段。在任何 resource row 按 `P` 切換 pin / unpin，順序會持久化到 config。Pin 採「**移動**」語意，不是複製 — 被 pin 的 kind 會從原本類別消失、出現在 Pinned 區，所以每個 kind 永遠只有一個位置。兩個以上 pinned kind 時，在 pinned row 按 `D` 進入 modal drag-and-drop：`j` / `k` 跟相鄰 pinned 互換、`Enter` 或 `D` 確認新順序、`Esc` 或任何其他輸入 revert 回進入時的 snapshot。Header 顯示 `Pinned ⇅ [D]rop`、dragged row 染成 lavender、sticky toast 全程帶著鍵盤提示；drag 中按 `Space` 會開一個只剩 Drop entry 的 mini menu，給忘記合約的時候用。pin / sort / 其他 per-kind 設定共享同一個 config 區塊，CRD 短暫消失（operator 重裝等）時 pin 跟 sort 會被靜默保留、CRD 回來時自動還原
 - **YAML Compare popup（`C`）** — Panel 2 列級的 diff。`C` 在 row 上把它標成 **compare anchor**（status bar 出現 glyph 標示鎖定哪一列）；`C` 在同 kind 的另一列開啟 side-by-side 或 unified 的 YAML diff；`C` 在 anchor 自己身上則取消 — 同一個鍵切三態（mark / diff / cancel）。Diff popup 有自己的 action menu（`Space`）可以即時切 layout，預設 layout（Unified）也會持久化。Compare YAML 已預先 clean（status / managedFields / resourceVersion / uid 等都拔掉），diff 聚焦在使用者真正寫的東西上
-- **List-view sort（sidebar 上的 `S`）** — per-kind 排序、跨 restart 持久化。三層 popup chain：column picker → direction picker（Ascending / Descending / Unset）→ 存檔。Panel 2 header 在被 sort 的欄位上顯示 ↑ / ↓ 箭頭。Comparator 自動依型別選擇：`Age` / `Updated` 用底層的 timestamp（不是顯示出來的 "5d3h" 字串）；`Ready` 解析 "N/M" 成兩個整數；`Restarts`、`Desired`、`Current`、`Up-to-date`、`Available`、`Active`、`Rev` 走 int 比較，所以 "10" 會排在 "2" 上面。沒有 sort 設定 = `(namespace, name)` ascending，跟 kubectl 跨 namespace 的預設一致
+- **List-view sort（sidebar 上的 `S`、panel 2 上的 `Alt+Shift+S`）** — per-kind 多欄排序、跨 restart 持久化。選 column → 方向 → picker 自動 swap 回 column 步驟讓你直接加下一個 tier，不用重 trigger flow。每個 tier 在 panel 2 header 顯示優先順序跟方向（`Name (1) ↑ · Restarts (2) ↓ …`）；單 tier chain 收摺成只有箭頭、跟 v1.6 視覺一致。Reset row 一次清掉整條 chain；direction step 的 `Unset` 只移除一個 tier。`Esc` 是唯一的離開方式 — picker 操作中不會自動關。Comparator 自動依型別選擇：`Age` / `Updated` 用底層的 timestamp（不是顯示出來的 "5d3h" 字串）；`Ready` 解析 "N/M" 成兩個整數；`Restarts`、`Desired`、`Current`、`Up-to-date`、`Available`、`Active`、`Rev` 走 int 比較，所以 "10" 會排在 "2" 上面。Unknown column 靜默 skip，stale config 不會破壞排序。沒有 sort 設定 = `(namespace, name)` ascending，跟 kubectl 跨 namespace 的預設一致
 - **滑鼠支援** — 點 panel 切焦點 + 移 cursor、雙擊鑽入（synth `Enter`）、右鍵開 row 的 context menu（synth `Space`）、滾輪半頁滾動（synth `u` / `d`）。13 個 popup 都吃滑鼠：list popup 左鍵 commit、viewer popup（YAML / Compare / App Log / Help）保留滾輪、confirm dialog 刻意把左鍵設為 no-op，避免誤觸觸發破壞性的 delete / quit / rollback。可在 Settings popup（`M`）關閉 mouse，以及用 `scroll_direction: natural | reverse` 翻轉滾輪方向
 - **Settings popup（`M`）** — app-level 設定 popup，Catppuccin blue 邊框 + cog glyph 標題。目前包含 Mouse on/off + Scroll Direction；未來 global 設定都會放這。Popup 自己是逃生口：即使 Mouse 設為 off，popup 內仍然能用滑鼠點 — 才不會把使用者鎖在「mouse off 之後沒辦法用 mouse 打開」的死局
 - **內建 27 種 resource + CRD 支援** — 啟動時動態探索 Custom Resources，分為 Cluster / Workloads / Network / Config / Storage / RBAC / Autoscaling / Helm 類別。Helm 類別僅在 `helm` CLI 存在於 `PATH` 時才會出現
@@ -165,7 +165,7 @@ km8 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 |---|---|
 | **`Tab`** | **Panel** — 把焦點移到下一個 panel（也可以直接按 `1` / `2` / `3` 跳轉）|
 | **`Enter`** | **Into** — 鑽入選中的 resource / 確認 popup 選擇。**不會**把焦點推到其他 panel（要切焦點請用 `Tab` / `1` / `2` / `3`）|
-| **`Space`** | **Menu** — 在當下焦點處開啟對應 popup：sidebar cheatsheet + Pin / Unpin / Sort 動作（panel 1）、每列的 action menu / container Shell menu / 空 list 提示（panel 2）、Logs / Events / Relatives-drill / Relatives-breadcrumb / History rollback（panel 3 各 tab）。也可關閉任何已開啟的 popup（鏡像式開關）|
+| **`Space`** | **Menu** — 在當下焦點處開啟對應 popup：sidebar cheatsheet + Pin / Unpin / Sort / Drag 動作（panel 1）、每列的 action menu 分上下半 item 操作 + panel 級 Sort entry / container Shell menu / 空 list 提示（panel 2）、Logs / Events / Relatives-drill / Relatives-breadcrumb / History rollback（panel 3 各 tab）。也可關閉任何已開啟的 popup（鏡像式開關）|
 | **`Esc`** | **Back** — 退回一層 / 關閉 popup |
 
 只要有 context menu 存在的位置，`Space` 就足夠了 — 不需要記每個動作的 hotkey。
@@ -191,15 +191,15 @@ Menu 類 popup（panel 2 menu、sort picker、namespace / context picker、bread
 
 ```
  cursor    j k         u d         gg G        / (在當前 panel 內搜尋)
- trigger   Y YAML      E edit      D delete    N namespace
- panel 1   P pin       S sort      C context
- panel 2   S shell     C compare anchor
+ trigger   Y YAML      E edit      N namespace
+ panel 1   P pin       S sort      D drag-and-drop pinned (modal)    C context
+ panel 2   S shell     Alt+Shift+S sort    D delete    C compare anchor
  expand    z           z 切換當前 panel 全螢幕
  helm      .           . 切換 panel 2 中 helm-managed 物件顯示
  settings  M           M 開啟全域 Settings popup
 ```
 
-`S` 和 `C` 是 panel-aware 雙重綁定 — 同字母在不同 panel 做不同事，跟 `P` 只在 panel 1 有意義是同邏輯。Trigger 鍵刻意設成大寫，避免在 `/` 搜尋輸入時誤觸。
+`S` / `C` / `D` 是 panel-aware 雙重綁定 — 同字母在不同 panel 做不同事，跟 `P` 只在 panel 1 有意義是同邏輯。Panel 2 的 sort 需要 `Alt+Shift+S` 組合鍵、因為單 `S` 已經是 Shell — 加 modifier 騰出 panel 2 的 sort 鍵位、不破壞 Shell 既有 muscle memory。Trigger 鍵刻意設成大寫，避免在 `/` 搜尋輸入時誤觸。
 
 ### 全域
 
@@ -215,14 +215,17 @@ Menu 類 popup（panel 2 menu、sort picker、namespace / context picker、bread
 
 ### Panel 1 sidebar Space menu
 
+當條件成立時，action 區會分成兩個帶 header 的群組：
+
 | 鍵 | 動作 |
 |---|---|
-| `P` | Pin / Unpin cursor 那個 resource kind。被 pin 的 kind 會出現在頂端 "Pinned" 區、並**從**原本類別移走。順序 per-context 持久化到 config |
-| `S` | 對 cursor 那個 kind 開啟 Sort flow — column picker → direction picker → 存檔。Panel 2 header 會在被 sort 的欄位旁顯示 ↑ / ↓ |
+| `P` | **item operation** — Pin / Unpin cursor 那個 resource kind。被 pin 的 kind 會出現在頂端 "Pinned" 區、並**從**原本類別移走。順序 per-context 持久化到 config |
+| `S` | **item operation** — 對 cursor 那個 kind 開啟 Sort flow。Column picker 跟 direction picker 之間互相 loop，多欄 chain 不用反覆 trigger，Reset row 一次清整條 chain |
+| `D` | **panel operation** — 進入 drag-and-drop 重排模式。只有當 cursor 在 pinned row 且有至少另一個 pinned kind 可交換時才會出現 |
 
 ### Panel 2 context menu（在任一 row 按 `Space`）
 
-依 resource 提供對應動作的 per-row menu — `Y` YAML / `E` Edit / `S` Shell / `D` Delete，加一個情境感知的 **`C` Compare** entry（Mark anchor / Compare to anchor / Unmark anchor，依目前狀態）。用 `j`/`k` + `Enter`，或直接按字母觸發。Helm-managed row 會隱藏 `E`/`D`（Rule A：read-only — 即使編輯也會被 `helm upgrade`/`rollback` 蓋掉）；沒有 container 的 resource 會隱藏 `S`。
+依 resource 提供對應動作的 per-row menu — `Y` YAML / `E` Edit / `S` Shell / `D` Delete，加一個情境感知的 **`C` Compare** entry（Mark anchor / Compare to anchor / Unmark anchor，依目前狀態）。下方再用分隔線切出 **panel operation** 區：`[Alt][S]ort panel 2 list` 開啟跟 panel 1 Space menu 同一條的 column picker、scope 是目前 panel 2 顯示的 kind。用 `j`/`k` + `Enter`，或直接按字母觸發。Helm-managed row 會隱藏 `E`/`D`（Rule A：read-only — 即使編輯也會被 `helm upgrade`/`rollback` 蓋掉）；沒有 container 的 resource 會隱藏 `S`。
 
 ### Compare mode
 
@@ -307,16 +310,25 @@ mouse_opt_config:
 # Per-kind 偏好設定（v1.6+）。Key 是 kubectl name
 # （"pod" / "deployment" / "configmap" / ...）。每個 entry 都 optional，
 # 未知 kind 在 rewrite 時會被保留，CRD 短暫消失時 pin / sort 不會掉。
+#
+# Sort 自 v1.7 起變成多 tier chain — tier 0 為主排序、tier 1 為第一
+# tiebreaker，依此類推。v1.6 單一 mapping 形式仍接受，載入時自動 lift
+# 為 1-tier chain，下次 save 時以新 sequence 形式寫回。
 resource_kind_config:
   pod:
     pinned:
       order: 10              # sparse — 10 為增量，方便手動在兩個 pin 之間插入
     sort:
-      column: Age            # 該 kind 在 panel 2 顯示的 column title
-      direction: desc        # "asc" 或 "desc"
+      - column: Restarts     # 該 kind 在 panel 2 顯示的 column title
+        direction: desc      # "asc" 或 "desc"
+      - column: Name         # tier 1 — Restarts 相同時的 tiebreaker
+        direction: asc
   configmap:
     pinned:
       order: 20
+    sort:                    # 單一 tier chain 也合法
+      - column: Age
+        direction: desc
 ```
 
 ### theme.yaml
