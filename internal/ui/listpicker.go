@@ -30,24 +30,45 @@ type ListPickerModel struct {
 	cursor   int
 	screenW  int
 	theme    *theme.Theme
+
+	// Pending swap content — set by Open when called on an already-
+	// open picker. The mini swap animation runs Compress → midpoint
+	// → Expand; at the midpoint HandleTick copies these into the
+	// active fields so the user sees the new content as the popup
+	// expands back out.
+	pendingPickerID string
+	pendingTitle    string
+	pendingItems    []ListPickerItem
 }
 
 // ListPickerItem is one row in the picker.
 //
-//   - Key:     emitted in ListPickerActionMsg on commit; app.go
+//   - Key:       emitted in ListPickerActionMsg on commit; app.go
 //     switches on it.
-//   - Label:   visible row text (left side).
-//   - Hint:    right-side dim text (optional). Suppresses cleanly
+//   - Label:     visible row text (left side); for Header items the
+//     label IS the region heading (rendered dim grey).
+//   - Hint:      right-side dim text (optional). Suppresses cleanly
 //     when empty so plain pickers don't render a phantom
 //     gap.
-//   - Badge:   small marker shown after Label (e.g. "↑" / "↓" for
+//   - Badge:     small marker shown after Label (e.g. "↑" / "↓" for
 //     the current sort column, "current" for the current
 //     direction). Optional.
+//   - Separator: when true the row is a non-selectable visual divider;
+//     j/k/g/G + mouse clicks skip past it, Enter never
+//     commits it. Other fields are ignored.
+//   - Header:    when true the row is a non-selectable region label
+//     rendered in dim grey above the items it introduces.
+//     Same navigation skip rules as Separator. Used by
+//     pickers that mix multiple operation kinds (e.g. sort
+//     column picker: "fields" above the column list,
+//     "all" above the Reset shortcut).
 type ListPickerItem struct {
-	Key   string
-	Label string
-	Hint  string
-	Badge string
+	Key       string
+	Label     string
+	Hint      string
+	Badge     string
+	Separator bool
+	Header    bool
 }
 
 // ListPickerActionMsg is emitted when the user commits a row (Enter
@@ -80,20 +101,93 @@ func NewListPickerModel(t *theme.Theme) ListPickerModel {
 // Badge == "current" (so the user sees where they are now), or 0
 // otherwise.
 func (m *ListPickerModel) Open(pickerID, title string, items []ListPickerItem) tea.Cmd {
+	if m.animator.State == PopupOpen {
+		// Already open: defer content until the swap animation
+		// midpoint so the user sees a "yawn" cue instead of an
+		// instant swap. HandleTick promotes pending fields when
+		// the animator transitions Compress → Expand.
+		m.pendingPickerID = pickerID
+		m.pendingTitle = title
+		m.pendingItems = items
+		return m.animator.Swap()
+	}
+	m.applyContent(pickerID, title, items)
+	return m.animator.Open()
+}
+
+// applyContent installs the picker's content + parks the cursor on
+// the first selectable row, then promotes it to a Badge=="current"
+// row if any. Shared between immediate Open (when the popup was
+// closed) and the swap midpoint (when the popup is mid-animation).
+func (m *ListPickerModel) applyContent(pickerID, title string, items []ListPickerItem) {
 	m.pickerID = pickerID
 	m.title = title
 	m.items = items
-	m.cursor = 0
+	m.cursor = m.firstSelectable()
 	for i, it := range items {
-		if it.Badge == "current" {
+		if !it.Separator && !it.Header && it.Badge == "current" {
 			m.cursor = i
 			break
 		}
 	}
-	if m.animator.State == PopupOpen {
-		return nil
+}
+
+// firstSelectable returns the index of the first non-separator item,
+// or 0 if every item is a separator (shouldn't happen but guards
+// against pathological input).
+func (m ListPickerModel) firstSelectable() int {
+	for i, it := range m.items {
+		if !it.Separator && !it.Header {
+			return i
+		}
 	}
-	return m.animator.Open()
+	return 0
+}
+
+// lastSelectable returns the index of the last non-separator item,
+// or len(items)-1 as a fallback.
+func (m ListPickerModel) lastSelectable() int {
+	for i := len(m.items) - 1; i >= 0; i-- {
+		if !m.items[i].Separator && !m.items[i].Header {
+			return i
+		}
+	}
+	if len(m.items) == 0 {
+		return 0
+	}
+	return len(m.items) - 1
+}
+
+// nextSelectable cycles cursor forward to the next non-separator
+// item. Returns the current cursor when no selectable rows exist.
+func (m ListPickerModel) nextSelectable(from int) int {
+	n := len(m.items)
+	if n == 0 {
+		return from
+	}
+	for step := 1; step <= n; step++ {
+		idx := (from + step) % n
+		if !m.items[idx].Separator && !m.items[idx].Header {
+			return idx
+		}
+	}
+	return from
+}
+
+// prevSelectable cycles cursor backward to the previous
+// non-separator item.
+func (m ListPickerModel) prevSelectable(from int) int {
+	n := len(m.items)
+	if n == 0 {
+		return from
+	}
+	for step := 1; step <= n; step++ {
+		idx := (from - step + n) % n
+		if !m.items[idx].Separator && !m.items[idx].Header {
+			return idx
+		}
+	}
+	return from
 }
 
 func (m *ListPickerModel) Close() tea.Cmd     { return m.animator.Close() }
@@ -105,7 +199,18 @@ func (m *ListPickerModel) HandleTick(msg AnimTickMsg) tea.Cmd {
 	if msg.Target != m.animator.Target {
 		return nil
 	}
-	return m.animator.Tick()
+	// Detect the swap midpoint: animator just transitioned from
+	// SwappingCompress to SwappingExpand. Cache state BEFORE the
+	// tick advances it.
+	beforeState := m.animator.State
+	cmd := m.animator.Tick()
+	if beforeState == PopupSwappingCompress && m.animator.State == PopupSwappingExpand && m.pendingItems != nil {
+		m.applyContent(m.pendingPickerID, m.pendingTitle, m.pendingItems)
+		m.pendingPickerID = ""
+		m.pendingTitle = ""
+		m.pendingItems = nil
+	}
+	return cmd
 }
 
 func (m ListPickerModel) Update(msg tea.Msg) (ListPickerModel, tea.Cmd) {
@@ -118,23 +223,22 @@ func (m ListPickerModel) Update(msg tea.Msg) (ListPickerModel, tea.Cmd) {
 	}
 	switch keyMsg.String() {
 	case "j", "down":
-		if m.cursor < len(m.items)-1 {
-			m.cursor++
-		}
+		m.cursor = m.nextSelectable(m.cursor)
 		return m, nil
 	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
+		m.cursor = m.prevSelectable(m.cursor)
 		return m, nil
 	case "g":
-		m.cursor = 0
+		m.cursor = m.firstSelectable()
 		return m, nil
 	case "G":
-		m.cursor = len(m.items) - 1
+		m.cursor = m.lastSelectable()
 		return m, nil
 	case "enter":
 		if m.cursor < 0 || m.cursor >= len(m.items) {
+			return m, nil
+		}
+		if m.items[m.cursor].Separator || m.items[m.cursor].Header {
 			return m, nil
 		}
 		return m, m.commit(m.items[m.cursor].Key)
@@ -167,6 +271,9 @@ func (m ListPickerModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (Li
 	}
 	switch msg.Button {
 	case tea.MouseButtonLeft:
+		if m.items[row].Separator || m.items[row].Header {
+			return m, nil
+		}
 		m.cursor = row
 		return m, m.commit(m.items[row].Key)
 	case tea.MouseButtonRight:
@@ -237,8 +344,23 @@ func (m ListPickerModel) renderFullPopup() string {
 	}
 
 	const gutter = "  "
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	var rows []string
 	for i, it := range m.items {
+		if it.Header {
+			// Region label — dim grey, indented by gutter so it
+			// hangs over the items below. No background, no border —
+			// reads as section heading, not a clickable row.
+			rows = append(rows, " "+gutter+headerStyle.Render(it.Label))
+			continue
+		}
+		if it.Separator {
+			// Same purple horizontal rule the hintpopup uses to split
+			// its action region from the cheatsheet below — keeps
+			// every km8 popup's internal divider visually consistent.
+			rows = append(rows, bStyle.Render(strings.Repeat("─", innerW)))
+			continue
+		}
 		isCursor := i == m.cursor
 		label := it.Label
 		// Badge sits inline right after the label, separated by a

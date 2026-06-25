@@ -36,8 +36,18 @@ const (
 
 // ToastModel renders a transient centered popup that auto-dismisses.
 // It is non-blocking: keys still reach the underlying panels.
+//
+// sticky distinguishes background-reminder toasts (sticky=true, set
+// up BEFORE the user opens any popup — e.g. drag mode's keyboard
+// contract) from transient interrupts (sticky=false, fired AS A
+// RESULT of user action). View() uses this to decide rendering
+// order vs the popup stack: sticky sits BELOW popups (a popup the
+// user just opened should win over a pre-existing background hint);
+// non-sticky sits ABOVE popups (a freshly-fired error or status
+// should interrupt whatever popup is on screen).
 type ToastModel struct {
 	active  bool
+	sticky  bool
 	level   toastLevel
 	message string
 	id      int // generation counter, so stale Tick fires are ignored
@@ -51,6 +61,7 @@ func NewToastModel(t *theme.Theme) ToastModel {
 }
 
 func (m ToastModel) IsActive() bool { return m.active }
+func (m ToastModel) IsSticky() bool { return m.sticky }
 
 // Show is the info-level toast — short reminders, "Copied!", PTY hints.
 // 1s duration, sky-blue border.
@@ -66,8 +77,35 @@ func (m *ToastModel) ShowWarn(message string) tea.Cmd {
 	return m.show(toastWarn, message)
 }
 
+// ShowSticky displays an info-level toast that does NOT auto-dismiss —
+// caller MUST call Dismiss() to take it down. Used for modal states
+// where the toast is the persistent visual contract (e.g. sidebar
+// drag mode — the keyboard contract stays on screen until commit /
+// cancel). Increments id so any prior in-flight auto-dismiss tick
+// becomes stale and won't take this sticky one down.
+func (m *ToastModel) ShowSticky(message string) tea.Cmd {
+	m.active = true
+	m.sticky = true
+	m.level = toastInfo
+	m.message = message
+	m.id++
+	return nil
+}
+
+// Dismiss takes the toast down immediately. Intended for sticky
+// toasts (paired with ShowSticky); also bumps id so the now-dismissed
+// toast can't be re-killed by a stale tick if the caller turns
+// around and calls Show() — that path schedules its own fresh tick
+// against the new id.
+func (m *ToastModel) Dismiss() {
+	m.active = false
+	m.sticky = false
+	m.id++
+}
+
 func (m *ToastModel) show(level toastLevel, message string) tea.Cmd {
 	m.active = true
+	m.sticky = false
 	m.level = level
 	m.message = message
 	m.id++

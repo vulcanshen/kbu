@@ -17,12 +17,21 @@ const (
 	PopupOpen
 	PopupClosingCompress
 	PopupClosingLine
+
+	// PopupSwappingCompress / PopupSwappingExpand drive the mini
+	// "yawn" animation when a popup's content is replaced in place
+	// (e.g. listpicker chain step: column → direction). Compress
+	// shrinks from 100% to 50% vertical height; expand grows back.
+	// Total ~120ms split evenly between the two phases.
+	PopupSwappingCompress
+	PopupSwappingExpand
 )
 
 const (
 	animFrameDuration = 20 * time.Millisecond
 	animLineFrames    = 4
 	animExpandFrames  = 4
+	swapHalfFrames    = 3 // each swap phase runs this many ticks
 )
 
 // AnimTickMsg drives popup animations. Target identifies which popup.
@@ -76,6 +85,22 @@ func (a *PopupAnimator) Close() tea.Cmd {
 	return a.tickCmd()
 }
 
+// Swap begins the mini in-place content-swap animation. Only valid
+// when the popup is fully open; no-op otherwise. The animation
+// runs Compress → midpoint → Expand and returns to PopupOpen. The
+// caller is expected to detect the Compress → Expand transition
+// (e.g. via state inspection in HandleTick) and substitute new
+// content there, so the user perceives the swap as the popup
+// briefly "yawning" with new content already inside.
+func (a *PopupAnimator) Swap() tea.Cmd {
+	if a.State != PopupOpen {
+		return nil
+	}
+	a.State = PopupSwappingCompress
+	a.Frame = 0
+	return a.tickCmd()
+}
+
 // Finalize completes any in-progress animation immediately. Used by tests.
 func (a *PopupAnimator) Finalize() {
 	switch a.State {
@@ -84,6 +109,9 @@ func (a *PopupAnimator) Finalize() {
 		a.Frame = 0
 	case PopupClosingCompress, PopupClosingLine:
 		a.State = PopupClosed
+		a.Frame = 0
+	case PopupSwappingCompress, PopupSwappingExpand:
+		a.State = PopupOpen
 		a.Frame = 0
 	}
 }
@@ -114,6 +142,19 @@ func (a *PopupAnimator) Tick() tea.Cmd {
 	case PopupClosingLine:
 		if a.Frame >= animLineFrames {
 			a.State = PopupClosed
+			a.Frame = 0
+			return nil
+		}
+		return a.tickCmd()
+	case PopupSwappingCompress:
+		if a.Frame >= swapHalfFrames {
+			a.State = PopupSwappingExpand
+			a.Frame = 0
+		}
+		return a.tickCmd()
+	case PopupSwappingExpand:
+		if a.Frame >= swapHalfFrames {
+			a.State = PopupOpen
 			a.Frame = 0
 			return nil
 		}
@@ -184,6 +225,33 @@ func (a PopupAnimator) RenderFrame(fullPopup string) string {
 	case PopupClosingCompress:
 		// Vertical compress toward center.
 		progress := 1.0 - float64(a.Frame+1)/float64(animExpandFrames)
+		visibleHeight := int(float64(height) * progress)
+		if visibleHeight < 1 {
+			visibleHeight = 1
+		}
+		if visibleHeight > height {
+			visibleHeight = height
+		}
+		return centerSlice(lines, visibleHeight)
+
+	case PopupSwappingCompress:
+		// Mini compress: 100% → 50% height. Stops at 50% (the
+		// midpoint where the caller swaps content); never hits the
+		// border line state. Same centerSlice rendering as the full
+		// close so the visual reads consistent.
+		progress := 1.0 - 0.5*float64(a.Frame+1)/float64(swapHalfFrames)
+		visibleHeight := int(float64(height) * progress)
+		if visibleHeight < 1 {
+			visibleHeight = 1
+		}
+		if visibleHeight > height {
+			visibleHeight = height
+		}
+		return centerSlice(lines, visibleHeight)
+
+	case PopupSwappingExpand:
+		// Mini expand: 50% → 100% height. Mirror of compress.
+		progress := 0.5 + 0.5*float64(a.Frame+1)/float64(swapHalfFrames)
 		visibleHeight := int(float64(height) * progress)
 		if visibleHeight < 1 {
 			visibleHeight = 1

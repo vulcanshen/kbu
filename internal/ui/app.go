@@ -292,106 +292,197 @@ func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
 	}
 	m.sortFlowKind = rt
 	m.sortFlowColumn = ""
-	current := m.cfg.GetSort(def.KubectlName)
-	items := make([]ListPickerItem, 0, len(def.Columns))
+	chain := m.cfg.GetSort(def.KubectlName)
+	// When a chain exists, render TWO operation regions (fields +
+	// reset) with section headers; flat single-region picker drops
+	// the headers to stay visually quiet. Matches the popup-design
+	// mindset: only annotate regions when there is more than one.
+	multiRegion := len(chain) > 0
+	items := make([]ListPickerItem, 0, len(def.Columns)+4)
+	if multiRegion {
+		items = append(items, ListPickerItem{Header: true, Label: "fields"})
+	}
 	for _, c := range def.Columns {
 		it := ListPickerItem{Key: c.Title, Label: c.Title}
-		if current != nil && current.Column == c.Title {
-			it.Badge = sortDirectionGlyph(current.Direction)
+		// Columns in the chain get a priority+direction badge —
+		// single-tier chain shows just the arrow, multi-tier shows
+		// "(N) ↑" so the user sees the tier order.
+		if idx := chain.IndexOf(c.Title); idx >= 0 {
+			it.Badge = sortTierBadge(idx, chain[idx].Direction, len(chain))
 		}
 		items = append(items, it)
 	}
-	title := "Sort " + def.DisplayName + " by…"
+	if multiRegion {
+		items = append(items, ListPickerItem{Separator: true})
+		items = append(items, ListPickerItem{Header: true, Label: "all"})
+		items = append(items, ListPickerItem{Key: sortResetKey, Label: "Reset " + resetIcon})
+	}
+	title := sortPopupIcon + " Sort " + def.DisplayName + " by…"
 	m.listPicker.SetSize(m.width, m.height)
 	return m.listPicker.Open("sort:column", title, items)
 }
 
-// openSortDirectionPicker is the second step. Items are
-// Ascending / Descending / Unset; the current direction is badged
-// "current" if the picked column matches the existing sort entry.
-// Unset is offered unconditionally — but commit logic treats it as
-// no-op when the column isn't currently sorted, matching the
-// "selecting Unset on a never-sorted column does nothing"
-// agreement.
+// sortTierBadge formats the priority + direction marker used in the
+// column picker. Mirrors the table header's collapse rule: a
+// single-tier chain shows just the direction arrow (no "(1)"), a
+// multi-tier chain shows "(N) ↑/↓" so the user sees the tier order.
+// chainLen is the total length so the picker and header stay
+// visually consistent.
+func sortTierBadge(idx int, direction string, chainLen int) string {
+	arrow := sortDirectionGlyph(direction)
+	if chainLen <= 1 {
+		return arrow
+	}
+	return fmt.Sprintf("(%d) %s", idx+1, arrow)
+}
+
+// openSortDirectionPicker is the second step. Always offers
+// Ascending / Descending; offers Unset ONLY when the column is
+// already in the chain (otherwise Unset would be a guaranteed no-op
+// and surfacing it just clutters the picker — same logic the column
+// step uses to hide Reset when there's nothing to reset).
+//
+// When the column IS in the chain, its current direction gets
+// badged "current" so the user sees their existing pick.
 func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) tea.Cmd {
 	def := sortRegistry().Get(rt)
 	if def == nil {
 		return nil
 	}
 	m.sortFlowColumn = column
-	current := m.cfg.GetSort(def.KubectlName)
+	chain := m.cfg.GetSort(def.KubectlName)
 	items := []ListPickerItem{
 		{Key: config.SortDirectionAscending, Label: "Ascending"},
 		{Key: config.SortDirectionDescending, Label: "Descending"},
-		{Key: "unset", Label: "Unset"},
 	}
-	if current != nil && current.Column == column {
+	if idx := chain.IndexOf(column); idx >= 0 {
 		for i := range items {
-			if items[i].Key == current.Direction {
+			if items[i].Key == chain[idx].Direction {
 				items[i].Badge = "current"
 			}
 		}
+		items = append(items, ListPickerItem{Key: "unset", Label: "Unset"})
 	}
-	title := "Sort " + def.DisplayName + " by " + column + "…"
+	title := sortPopupIcon + " Sort " + def.DisplayName + " by " + column + "…"
 	m.listPicker.SetSize(m.width, m.height)
 	return m.listPicker.Open("sort:direction", title, items)
 }
 
-// commitSortFlow finalises the Sort flow once the user picks a
-// direction. Persists to config (or unsets, if the user chose
-// "unset" AND the picked column is the currently-sorted column),
-// re-applies sort to the live items so panel-2 reflects the change
-// immediately, then closes the picker.
+// commitSortFlow finalises one tier — column + direction. Persists
+// the upsert (or removes the tier on "unset"), re-applies the sort
+// to live items, then LOOPS BACK to the column picker so the user
+// can stack additional tiers without re-invoking O each time.
+// Esc on the looped column picker is the canonical "I'm done"
+// gesture (ListPickerCancelMsg path), preserving the Esc=close
+// contract.
 //
-// The "unset on never-sorted column" no-op gate matches the design
-// agreement: picking Unset on a column that wasn't sorted should
-// do nothing, not silently clobber any unrelated sort the user
-// might have on a different column.
+// One-tier users pay a single extra Esc compared to the old
+// auto-close model; multi-tier users save an O-press per tier and
+// keep their cognitive context inside the same popup.
 func (m *AppModel) commitSortFlow(direction string) tea.Cmd {
 	rt := m.sortFlowKind
 	column := m.sortFlowColumn
-	m.sortFlowKind = ""
+	// Only sortFlowColumn is consumed by the direction step;
+	// sortFlowKind stays set across the loop.
 	m.sortFlowColumn = ""
-	closeCmd := m.listPicker.Close()
+	// Defensive: same "popup stays open" rule as resetSortFlow —
+	// inconsistent state (missing kind / column / cfg / registry
+	// entry) is treated as a silent no-op so the user keeps the
+	// picker they invoked and can Esc out on their own terms.
 	if rt == "" || column == "" || m.cfg == nil {
-		return closeCmd
+		return nil
 	}
 	def := sortRegistry().Get(rt)
 	if def == nil {
-		return closeCmd
+		return nil
 	}
-	current := m.cfg.GetSort(def.KubectlName)
+	chain := m.cfg.GetSort(def.KubectlName)
 	switch direction {
 	case "unset":
-		if current == nil || current.Column != column {
-			return closeCmd
+		// Unset removes just THIS tier from the chain. UI hides
+		// Unset for not-in-chain columns, but the guard stays as
+		// belt-and-suspenders against stale picker state.
+		if chain.IndexOf(column) < 0 {
+			return m.openSortColumnPicker(rt)
 		}
-		m.cfg.UnsetSort(def.KubectlName)
+		m.cfg.UnsetSortColumn(def.KubectlName, column)
 	case config.SortDirectionAscending, config.SortDirectionDescending:
 		m.cfg.SetSort(def.KubectlName, column, direction)
 	default:
-		return closeCmd
+		return m.openSortColumnPicker(rt)
 	}
 	var saveErrCmd tea.Cmd
 	if err := m.cfg.Save(); err != nil {
 		// In-memory state already mutated — surface the disk-side
-		// failure via both the app log (full error) and a toast (so
-		// the user actually notices). Matches togglePinnedKind's
-		// behaviour; without this the user would think their sort
-		// stuck across restarts when it didn't.
+		// failure via both the app log (full error) and a toast.
 		m.appLog.Error("sort save failed: " + err.Error())
 		saveErrCmd = m.toast.Show("sort save failed")
 	}
 	// Re-apply sort to whatever's currently in panel 2 if this
-	// kind is the one being viewed — no point waiting for the next
-	// watcher tick.
+	// kind is the one being viewed — user sees the data reshape
+	// immediately while still in the picker.
 	if rt == m.currentResource {
 		m.syncTableSortIndicator()
 		m.applySortToItems()
 		rows := augmentRowsWithHelm(m.items, m.currentResource)
 		m.table.SetRows(rows)
 	}
-	return tea.Batch(closeCmd, saveErrCmd)
+	// Loop back to column picker — Open swaps content in place
+	// (listPicker stays open), the updated chain badges show the
+	// just-committed tier with its "(N)" priority + arrow.
+	reopenCmd := m.openSortColumnPicker(rt)
+	return tea.Batch(reopenCmd, saveErrCmd)
+}
+
+// resetSortFlow is the "Reset" shortcut wired to the column picker:
+// drop the entire chain for this kind, re-apply the fallback sort
+// to live items, then LOOP BACK to the column picker so the user
+// can keep building a fresh chain without re-invoking the flow.
+// Only reachable when the chain has at least one tier (the column
+// picker omits the row otherwise), so we don't need the
+// "reset-against-nothing is a no-op" guard that commitSortFlow has.
+//
+// Mirrors commitSortFlow's loop pattern: sortFlowKind stays set
+// across the swap; Esc on the re-opened picker is the canonical
+// "I'm done" exit.
+func (m *AppModel) resetSortFlow() tea.Cmd {
+	rt := m.sortFlowKind
+	// sortFlowColumn was already consumed by the column step that
+	// fired Reset; sortFlowKind stays set across the loop.
+	m.sortFlowColumn = ""
+	// Defensive: in inconsistent state (kind unset, config absent,
+	// registry no longer knows the kind) we can't refresh the
+	// picker — but Reset must never close the popup unilaterally,
+	// so just no-op and let the user Esc out on their own terms.
+	if rt == "" || m.cfg == nil {
+		return nil
+	}
+	def := sortRegistry().Get(rt)
+	if def == nil {
+		return nil
+	}
+	if len(m.cfg.GetSort(def.KubectlName)) == 0 {
+		// Defensive: nothing to reset. Refresh the picker (still
+		// in flat single-region state) so cursor lands sanely.
+		return m.openSortColumnPicker(rt)
+	}
+	m.cfg.ResetSort(def.KubectlName)
+	var saveErrCmd tea.Cmd
+	if err := m.cfg.Save(); err != nil {
+		m.appLog.Error("sort save failed: " + err.Error())
+		saveErrCmd = m.toast.Show("sort save failed")
+	}
+	if rt == m.currentResource {
+		m.syncTableSortIndicator()
+		m.applySortToItems()
+		rows := augmentRowsWithHelm(m.items, m.currentResource)
+		m.table.SetRows(rows)
+	}
+	// Loop back: the column picker re-renders without the chain
+	// badges, the Reset row, and the region headers (chain is now
+	// empty so multiRegion is false).
+	reopenCmd := m.openSortColumnPicker(rt)
+	return tea.Batch(reopenCmd, saveErrCmd)
 }
 
 // applySortToItems re-orders m.items per the current kind's saved
@@ -414,8 +505,8 @@ func (m *AppModel) applySortToItems() {
 	if def == nil {
 		return
 	}
-	sortCfg := m.cfg.GetSort(def.KubectlName)
-	if sortCfg == nil {
+	chain := m.cfg.GetSort(def.KubectlName)
+	if len(chain) == 0 {
 		sort.SliceStable(m.items, func(i, j int) bool {
 			if m.items[i].Namespace != m.items[j].Namespace {
 				return m.items[i].Namespace < m.items[j].Namespace
@@ -424,8 +515,14 @@ func (m *AppModel) applySortToItems() {
 		})
 		return
 	}
-	asc := sortCfg.Direction == config.SortDirectionAscending
-	k8s.SortItems(m.items, def.Columns, sortCfg.Column, asc)
+	tiers := make([]k8s.SortTier, len(chain))
+	for i, c := range chain {
+		tiers[i] = k8s.SortTier{
+			Column:    c.Column,
+			Ascending: c.Direction == config.SortDirectionAscending,
+		}
+	}
+	k8s.SortItemsChain(m.items, def.Columns, tiers)
 }
 
 // syncTableSortIndicator pushes the current kind's saved sort
@@ -435,19 +532,15 @@ func (m *AppModel) applySortToItems() {
 // empty config clears the indicator.
 func (m *AppModel) syncTableSortIndicator() {
 	if m.cfg == nil || m.currentResource == "" {
-		m.table.SetSortIndicator("", "")
+		m.table.SetSortIndicators(nil)
 		return
 	}
 	def := sortRegistry().Get(m.currentResource)
 	if def == nil {
-		m.table.SetSortIndicator("", "")
+		m.table.SetSortIndicators(nil)
 		return
 	}
-	if s := m.cfg.GetSort(def.KubectlName); s != nil {
-		m.table.SetSortIndicator(s.Column, s.Direction)
-		return
-	}
-	m.table.SetSortIndicator("", "")
+	m.table.SetSortIndicators(m.cfg.GetSort(def.KubectlName))
 }
 
 // buildSettingsItems snapshots the current config state into the row
@@ -672,6 +765,26 @@ const (
 	sortAscendingGlyph  = ""
 	sortDescendingGlyph = ""
 )
+
+// sortResetKey is the sentinel ListPickerItem.Key used for the
+// "Reset" shortcut row at the bottom of the column picker. Picking
+// it bypasses the direction step and unsets this kind's sort
+// outright. Internal-only — never persisted, never matched against
+// real column titles.
+const sortResetKey = "__sort_reset__"
+
+// resetIcon (U+F0E2, nf-fa-undo) is the Nerd Font glyph appended
+// to the sort column picker's "Reset" row. Undo arrow signals "back
+// to the previous (default) state" — matches Reset's semantic (drop
+// the sort entry, fall back to Name asc). Same label-with-trailing-
+// icon pattern as panel-2 menu's "Enter <drillDownIcon>" entry.
+const resetIcon = "\uF0E2"
+
+// sortPopupIcon (U+F0DC, nf-fa-sort) sits in the sort picker's title
+// border so the popup's purpose is recognisable at a glance — same
+// surface convention as hintpopup's titleIcon (km8 wheel) and
+// settingspopup's cog.
+const sortPopupIcon = "\uF0DC"
 
 // sortDirectionGlyph returns the right arrow glyph for a saved
 // direction string. Used by the column picker to badge the
@@ -1199,6 +1312,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseMsg:
+		// Sidebar drag mode: ANY mouse event (click, motion, wheel)
+		// is "anything else," which cancels the drag and reverts.
+		// Consume the event — don't propagate to focus shift / row
+		// selection / popup hit-test, mirroring the same intent as
+		// the keyboard cancel path.
+		//
+		// EXCEPT when the drop-only hint popup is up (Space mid-drag
+		// surfaced it): popup owns the click so the user can commit
+		// Drop via mouse or right-click to close back into bare drag.
+		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && !m.hintPopup.IsActive() {
+			cmd := m.sidebar.CancelDrag()
+			return m, cmd
+		}
 		// Mouse routing. Layered:
 		//   1. MouseEnabled gate — short-circuit when off, EXCEPT
 		//      for the Settings popup itself. Users who toggle Mouse
@@ -1325,6 +1451,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
+		// Sidebar drag-and-drop mode is modal: only j/k (swap),
+		// D (commit), and "anything else" (cancel) make sense. Route
+		// ALL keypresses to the sidebar first so global hotkeys like
+		// Tab / 1 / 2 / 3 / q can't slip past — pressing them mid-
+		// drag should cancel, not switch focus or quit. ctrl+c stays
+		// special: it still kills km8 (the sidebar's cancel will
+		// fire on the way out, harmless).
+		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && msg.String() != "ctrl+c" {
+			sidebar, cmd := m.sidebar.Update(msg)
+			m.sidebar = sidebar
+			return m, cmd
+		}
 		// When any panel is in search mode, only ctrl+c passes through.
 		searching := (m.activePanel == TablePanel && m.table.IsSearching()) ||
 			(m.activePanel == SidebarPanel && m.sidebar.IsSearching()) ||
@@ -1530,12 +1668,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
 			return m, waitForWatchUpdate(m.watcher, m.currentResource)
 		case "S":
-			// Panel-1: open Sort flow on the cursor's resource kind
-			// (mirror of direct `P` for pin). Cursor on a category
-			// header → silent no-op.
-			// Panel-2: Shell into the selected pod's container.
-			// Each panel owns its own meaning of S — same trade-off
-			// as P/N/C globals.
+			// Panel-1: open the sort column picker on the cursor's
+			// kind. Restores the v1.6 muscle memory — sort lives on S
+			// in panel 1 (no conflict with anything panel-1 specific).
+			// Panel-2 keeps S as Shell; panel-2 sort moves through O
+			// (see case "O" below).
 			if m.activePanel == SidebarPanel {
 				rt := m.sidebar.CursorResourceType()
 				if rt == "" {
@@ -1546,7 +1683,38 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel == TablePanel {
 				return m, m.execShell()
 			}
+		case "alt+S":
+			// Panel-2 only sort entry on Alt+Shift+S — bare S is
+			// already Shell on panel 2 and reverting wholesale (no
+			// sort hotkey here) would force the user back to panel 1
+			// just to reorder rows. The modifier carves out a panel-
+			// 2 sort gesture without colliding with Shell. Panel 1
+			// still uses plain S (v1.6 muscle memory).
+			if m.activePanel == TablePanel {
+				// Container drill view (panel 2 showing containers of a
+				// drilled pod): no-op. Matches E/D/C gating — row-level
+				// operations are blocked during drill so the picker
+				// title "Sort Pods by…" can't appear while the user is
+				// looking at containers.
+				if m.drillDownPod != nil {
+					return m, nil
+				}
+				if m.currentResource == "" {
+					return m, nil
+				}
+				return m, m.openSortColumnPicker(m.currentResource)
+			}
+			return m, nil
 		case "D":
+			// Panel-1: enter drag-and-drop reorder mode for the
+			// cursor's pinned kind. Mirrors the panel-meaning split
+			// used by S (panel 2 only: shell) and C (panel 2 only).
+			// Guards in EnterDrag — silent no-op when cursor isn't
+			// on a pinned row or there's <2 pins.
+			if m.activePanel == SidebarPanel {
+				_, cmd := m.sidebar.EnterDrag()
+				return m, cmd
+			}
 			if m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
 				idx := m.table.SelectedRow()
 				if idx >= 0 && idx < len(m.items) {
@@ -1644,12 +1812,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if def := m.k8sClient.Registry().Get(rt); def != nil {
 						label = def.DisplayName
 					}
+					// Build the two operation groups first so we can
+					// decide whether to emit region headers (only when
+					// the menu actually has BOTH groups — Drag is the
+					// only panel-level entry today, so its presence is
+					// the multi-region signal).
+					var itemOps, panelOps []hintAction
 					if m.sidebar.IsPinned(rt) {
-						actions = append(actions, hintAction{
+						itemOps = append(itemOps, hintAction{
 							label: "Unpin " + label, key: "P", action: "UnpinKind",
 						})
 					} else {
-						actions = append(actions, hintAction{
+						itemOps = append(itemOps, hintAction{
 							label: "Pin " + label, key: "P", action: "PinKind",
 						})
 					}
@@ -1657,11 +1831,42 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// least one column (every registered kind in
 					// practice). Commit routes through HintActionMsg
 					// → SortKind handler, which opens the column
-					// picker.
+					// picker. Hotkey stays on S (matches v1.6 panel-1
+					// muscle memory); label makes the cross-panel
+					// effect explicit so the user understands pressing
+					// S here reshapes panel 2's display.
 					if def := m.k8sClient.Registry().Get(rt); def != nil && len(def.Columns) > 0 {
-						actions = append(actions, hintAction{
-							label: "Sort " + label + "…", key: "S", action: "SortKind",
+						itemOps = append(itemOps, hintAction{
+							label:  "Sort panel 2 list",
+							key:    "S",
+							action: "SortKind",
 						})
+					}
+					// Drag-and-drop reorder — only meaningful when the
+					// cursor is on a pinned row AND there's at least
+					// one other pinned kind to swap with (matches the
+					// EnterDrag guard, so the menu entry can't lead to
+					// a no-op).
+					if m.sidebar.CursorPinned() && len(m.sidebar.PinnedKinds()) >= 2 {
+						panelOps = append(panelOps, hintAction{
+							label:  "Drag to reorder pinned item",
+							key:    "D",
+							action: "DragPinned",
+						})
+					}
+					if len(panelOps) > 0 {
+						// Two-region layout: label each group with a
+						// dim-grey header and split with a separator.
+						// Matches the sort picker and panel-2 menu.
+						actions = append(actions, hintAction{header: true, label: "item operation"})
+						actions = append(actions, itemOps...)
+						actions = append(actions, hintAction{separator: true})
+						actions = append(actions, hintAction{header: true, label: "panel operation"})
+						actions = append(actions, panelOps...)
+					} else {
+						// Single-region (no panel ops) — stay flat,
+						// no header chrome.
+						actions = itemOps
 					}
 				}
 				return m, m.hintPopup.OpenWithActions(title, actions, rows)
@@ -2309,6 +2514,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// switched away from the anchor's), so we don't need to
 			// double-guard here beyond the inCompareMode branch.
 			return m, m.compareHotkeyDispatch(resource, item)
+		case "alt+S":
+			// Open the sort column picker for the resource type
+			// whose menu was invoked — same picker the direct
+			// Alt+Shift+S hotkey + the panel-1 Space menu's Sort
+			// entry use.
+			return m, m.openSortColumnPicker(resource)
 		}
 		return m, nil
 
@@ -2330,6 +2541,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, m.openSortColumnPicker(rt)
+		case "DragPinned":
+			// Out-of-drag entry: cursor was on a pinned row when the
+			// Space menu opened; EnterDrag re-checks the guards in
+			// case state shifted between popup-open and commit.
+			_, cmd := m.sidebar.EnterDrag()
+			return m, cmd
+		case "DropPinned":
+			// In-drag entry: user opened the drop-only menu via Space
+			// and committed Drop. Same path as keyboard D / Enter.
+			return m, m.sidebar.CommitDrag()
 		}
 		return m, nil
 
@@ -2340,6 +2561,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// closes the picker.
 		switch msg.PickerID {
 		case "sort:column":
+			if msg.Key == sortResetKey {
+				return m, m.resetSortFlow()
+			}
 			return m, m.openSortDirectionPicker(m.sortFlowKind, msg.Key)
 		case "sort:direction":
 			return m, m.commitSortFlow(msg.Key)
@@ -2352,6 +2576,48 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// future setting added to the popup can be wired in one
 		// place without touching this routing.
 		return m, m.commitSettingsToggle(msg.Key)
+
+	case SidebarDragEnterMsg:
+		// Sticky toast so the keyboard contract stays on screen for
+		// the whole drag — paired with Dismiss() in the commit /
+		// cancel handlers below. Persistent reminder also covers
+		// users who don't catch the entry flash.
+		return m, m.toast.ShowSticky("Drag mode · j/k move · Enter or D drop · anything else cancels")
+
+	case SidebarDragCommitMsg:
+		// Take the sticky toast down first, THEN persist. Order
+		// doesn't matter for correctness but it reads as "drag
+		// finished → contract goes away → save happens." Failure
+		// surfaces via appLog + a fresh transient warn toast (which
+		// will outlive Dismiss because Show schedules its own tick).
+		m.toast.Dismiss()
+		if err := m.persistPinnedKinds(); err != nil {
+			m.appLog.Error("pin order save failed: " + err.Error())
+			return m, m.toast.Show("pin order save failed")
+		}
+		return m, nil
+
+	case SidebarDragCancelMsg:
+		// Sidebar already reverted its pinned slice from the
+		// snapshot. Just dismiss the sticky toast — no cancellation
+		// toast (cancelling shouldn't nag the user about something
+		// they decided not to do).
+		m.toast.Dismiss()
+		return m, nil
+
+	case SidebarDragRequestDropMenuMsg:
+		// Space mid-drag → drop-only menu. Single action surfaces the
+		// drop affordance for users who don't recall the D / Enter
+		// keyboard contract. Drag mode stays active across the
+		// popup: closing via Esc returns to bare drag (sticky toast
+		// + header indicator still visible); committing Drop fires
+		// HintActionMsg → CommitDrag.
+		m.hintPopup.SetSize(m.width, m.height)
+		title := " " + titleIcon + " Drag mode — confirm new order?"
+		actions := []hintAction{
+			{label: "Drop to confirm new order", key: "D", action: "DropPinned"},
+		}
+		return m, m.hintPopup.OpenWithActions(title, actions, nil)
 
 	case ListPickerCancelMsg:
 		// Esc at any sort step: drop in-flight kind/column so a
@@ -2494,6 +2760,16 @@ func (m AppModel) View() string {
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	}
 
+	// Sticky toasts composite BEFORE the popup stack so a popup the
+	// user opens AFTERWARDS sits on top. Mirrors the "displayed
+	// later wins" rule — a sticky toast goes up first (it's the
+	// background reminder of the current mode), so popups opened
+	// later must overlay it. Drag mode's keyboard-contract toast is
+	// the canonical case.
+	if m.toast.IsActive() && m.toast.IsSticky() {
+		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	}
+
 	if m.appLog.IsActive() {
 		m.appLog.SetSize(m.width, m.height)
 		mainView = overlay.Composite(m.appLog.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
@@ -2566,7 +2842,12 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.confirm.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
-	if m.toast.IsActive() {
+	// Non-sticky toasts composite AFTER the popup stack so a fresh
+	// transient message (error, save-failed status) interrupts
+	// whatever popup is on screen — the toast is the "later
+	// displayed" element. Sticky toasts were already rendered before
+	// the popups above.
+	if m.toast.IsActive() && !m.toast.IsSticky() {
 		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 

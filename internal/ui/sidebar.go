@@ -40,6 +40,12 @@ type visibleItem struct {
 // exactly one location, so the categoryIndex alone disambiguates.
 const pinnedCategoryIndex = -2
 
+// dragHandleGlyph (U+F0A50) is the Nerd Font drag-handle icon shown
+// next to the Pinned category header while drag-and-drop reorder
+// mode is active. Persistent visual cue — survives until commit /
+// cancel without consuming an extra row.
+const dragHandleGlyph = "\U000f0a50"
+
 // SidebarModel is the Bubble Tea model for the sidebar panel.
 type SidebarModel struct {
 	categories   []SidebarCategory
@@ -67,7 +73,42 @@ type SidebarModel struct {
 	// cursor logic simpler (snap by kind, no "which copy") and saves
 	// vertical space in a panel that's chronically tight.
 	pinned []k8s.ResourceType
+
+	// dragActive flips on when the user enters drag-and-drop reorder
+	// mode (capital D on a pinned row with >=2 pinned items). j/k
+	// then swap the dragged kind with its pinned neighbour instead
+	// of moving the cursor; D commits the new order (persisted by
+	// app.go via SidebarDragCommitMsg); any other input cancels and
+	// reverts to dragSnapshot.
+	dragActive   bool
+	draggedKind  k8s.ResourceType
+	dragSnapshot []k8s.ResourceType
 }
+
+// SidebarDragEnterMsg notifies app.go that drag mode just started so
+// the entry toast can fire. Sidebar already mutated its own state.
+type SidebarDragEnterMsg struct{ Kind k8s.ResourceType }
+
+// SidebarDragCommitMsg notifies app.go that the user pressed D to
+// commit. Sidebar.pinned is already in the new order; app.go calls
+// persistPinnedKinds() to flush to config.
+type SidebarDragCommitMsg struct{}
+
+// SidebarDragCancelMsg notifies app.go that drag mode ended without
+// committing. Sidebar already restored its pinned slice from
+// dragSnapshot — app.go has no work to do, the msg exists only so
+// future hooks (e.g. a "cancelled" toast) have a clean attachment
+// point.
+type SidebarDragCancelMsg struct{}
+
+// SidebarDragRequestDropMenuMsg notifies app.go that the user pressed
+// Space mid-drag and wants to see the drop-only menu (mirror of the
+// regular panel-1 Space cheatsheet, but trimmed to just the Drop
+// action). App.go responds by opening hintPopup with that single
+// action. Drag mode stays active across the popup's lifetime —
+// closing the popup (Esc) returns to normal drag; committing Drop
+// fires CommitDrag via the HintActionMsg path.
+type SidebarDragRequestDropMenuMsg struct{}
 
 // SetPinned replaces the pinned-kinds list — called at startup from
 // the config-loaded slice. Duplicates / unknown kinds are NOT filtered
@@ -193,6 +234,108 @@ func (m SidebarModel) IsPinned(rt k8s.ResourceType) bool {
 		}
 	}
 	return false
+}
+
+// IsDragging reports whether sidebar is currently in drag-and-drop
+// reorder mode. Used by app.go to gate global hotkeys (Tab / 1 / 2 /
+// 3 / etc.) and route them as "cancel drag" instead of their normal
+// behaviour.
+func (m SidebarModel) IsDragging() bool { return m.dragActive }
+
+// EnterDrag starts drag-and-drop reorder mode for the cursor's
+// pinned kind. Returns (true, cmd) on success, (false, nil) when
+// the entry conditions don't hold: already dragging, cursor not on
+// a pinned row, or fewer than 2 pinned kinds (single-item drag has
+// no swap target so it'd be pointless).
+//
+// On success, snapshots the current pinned slice so cancel paths
+// can revert; emits SidebarDragEnterMsg so app.go can show the
+// entry toast.
+func (m *SidebarModel) EnterDrag() (bool, tea.Cmd) {
+	if m.dragActive || !m.CursorPinned() || len(m.pinned) < 2 {
+		return false, nil
+	}
+	rt := m.CursorResourceType()
+	if rt == "" {
+		return false, nil
+	}
+	m.dragActive = true
+	m.draggedKind = rt
+	m.dragSnapshot = append([]k8s.ResourceType(nil), m.pinned...)
+	kind := rt
+	return true, func() tea.Msg { return SidebarDragEnterMsg{Kind: kind} }
+}
+
+// CommitDrag exits drag mode, keeping the current pinned order.
+// Emits SidebarDragCommitMsg so app.go can persist to config. No-op
+// when not currently dragging.
+func (m *SidebarModel) CommitDrag() tea.Cmd {
+	if !m.dragActive {
+		return nil
+	}
+	m.dragActive = false
+	m.draggedKind = ""
+	m.dragSnapshot = nil
+	return func() tea.Msg { return SidebarDragCommitMsg{} }
+}
+
+// CancelDrag exits drag mode and restores the pinned order from
+// the snapshot taken at EnterDrag. Re-snaps the cursor to the
+// dragged kind so the user lands back at their starting position.
+// Emits SidebarDragCancelMsg. No-op when not currently dragging.
+//
+// Called from app.go for every "any other operation" cancel path:
+// non-j/k/D keypress, focus shift, mouse event.
+func (m *SidebarModel) CancelDrag() tea.Cmd {
+	if !m.dragActive {
+		return nil
+	}
+	if m.dragSnapshot != nil {
+		m.pinned = append(m.pinned[:0], m.dragSnapshot...)
+	}
+	kind := m.draggedKind
+	m.dragActive = false
+	m.draggedKind = ""
+	m.dragSnapshot = nil
+	if kind != "" {
+		m.SnapCursorToKind(kind)
+	}
+	return func() tea.Msg { return SidebarDragCancelMsg{} }
+}
+
+// dragSwapDown swaps the dragged kind with the next pinned entry.
+// No-op when already at the bottom of the pinned list (no wrap —
+// boundary clamps, matching the "j past last cancels via no-op"
+// behaviour clarified during design). Cursor follows so the
+// highlight stays on the moving kind.
+func (m *SidebarModel) dragSwapDown() {
+	idx := m.pinnedIndex(m.draggedKind)
+	if idx < 0 || idx >= len(m.pinned)-1 {
+		return
+	}
+	m.pinned[idx], m.pinned[idx+1] = m.pinned[idx+1], m.pinned[idx]
+	m.SnapCursorToKind(m.draggedKind)
+}
+
+// dragSwapUp is the mirror of dragSwapDown.
+func (m *SidebarModel) dragSwapUp() {
+	idx := m.pinnedIndex(m.draggedKind)
+	if idx <= 0 {
+		return
+	}
+	m.pinned[idx], m.pinned[idx-1] = m.pinned[idx-1], m.pinned[idx]
+	m.SnapCursorToKind(m.draggedKind)
+}
+
+// pinnedIndex returns the position of rt within m.pinned, or -1 if
+// not found.
+func (m SidebarModel) pinnedIndex(rt k8s.ResourceType) int {
+	for i, kind := range m.pinned {
+		if kind == rt {
+			return i
+		}
+	}
+	return -1
 }
 
 // CursorPinned reports whether the cursor is currently parked on a
@@ -331,6 +474,9 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	if m.searching {
 		return m.handleSearchKey(msg)
 	}
+	if m.dragActive {
+		return m.handleDragKey(msg)
+	}
 
 	visible := m.visibleItems()
 	if len(visible) == 0 {
@@ -404,6 +550,45 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handleDragKey is the modal key router for drag-and-drop reorder
+// mode. Four keys do their "normal" thing — j (swap down), k (swap
+// up), D and Enter (commit). Every other input — Esc, Tab, any
+// letter, anything — cancels and reverts to the snapshot. The
+// cancel path consumes the input (does NOT propagate to whatever
+// the key would normally do); the user pressing Tab mid-drag has
+// to press Tab again to actually switch focus, which is the safe
+// interpretation when the user said "anything else cancels."
+//
+// Enter as commit aligns with km8's global "Enter = commit / into"
+// gesture (one of the four core gestures Tab/Enter/Esc/Space) — D
+// is the contextual entry key that also serves as exit.
+func (m SidebarModel) handleDragKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
+	if msg.Type == tea.KeyEnter {
+		return m, m.CommitDrag()
+	}
+	if msg.Type == tea.KeySpace || (msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == ' ') {
+		// Space is the universal "what can I do here" gesture (one of
+		// the four core gestures). In drag mode it opens the trimmed
+		// drop-only menu — it does NOT cancel like every other non-
+		// j/k/D/Enter key. Sidebar emits the request msg; app.go
+		// renders the popup.
+		return m, func() tea.Msg { return SidebarDragRequestDropMenuMsg{} }
+	}
+	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
+		switch msg.Runes[0] {
+		case 'j':
+			m.dragSwapDown()
+			return m, nil
+		case 'k':
+			m.dragSwapUp()
+			return m, nil
+		case 'D':
+			return m, m.CommitDrag()
+		}
+	}
+	return m, m.CancelDrag()
 }
 
 func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
@@ -639,6 +824,17 @@ func (m SidebarModel) View() string {
 		end = len(visible)
 	}
 
+	// Drag-mode visual: lavender (#b4befe) reverse highlight on the
+	// dragged row. Re-uses the Pinned category's accent colour so
+	// the row visually belongs to the section it's being reordered
+	// within — and contrasts with the regular cursor/select styles
+	// so the user can tell at a glance "this row is currently being
+	// dragged, not just sitting under the cursor."
+	dragRowStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#1e1e2e")).
+		Background(lipgloss.Color("#b4befe")).
+		Bold(true)
+
 	var lines []string
 	for i := m.scrollOffset; i < end; i++ {
 		item := visible[i]
@@ -647,20 +843,30 @@ func (m SidebarModel) View() string {
 		var line string
 		if item.isCategory {
 			style := categoryStyle
+			label := item.label
 			if item.categoryIndex == pinnedCategoryIndex {
 				style = pinnedCategoryStyle
+				if m.dragActive {
+					// Persistent mode indicator on the Pinned header —
+					// zero extra vertical space, always visible while
+					// dragging, vanishes on commit/cancel.
+					label = item.label + " " + dragHandleGlyph + " [D]rop"
+				}
 			}
-			line = style.Width(m.width).Render(truncateSidebarLabel(item.label, m.width))
+			line = style.Width(m.width).Render(truncateSidebarLabel(label, m.width))
 		} else {
 			label := "  " + truncateSidebarLabel(item.label, m.width-2)
 			unfocusedSelStyle := m.theme.SidebarUnfocusedSelectedStyle()
-			if isCursor && m.focused {
+			switch {
+			case m.dragActive && item.resourceType == m.draggedKind:
+				line = dragRowStyle.Width(m.width).Render(label)
+			case isCursor && m.focused:
 				line = selectedStyle.Width(m.width).Render(label)
-			} else if isCursor {
+			case isCursor:
 				line = unfocusedSelStyle.Width(m.width).Render(label)
-			} else if item.resourceType == m.selected {
+			case item.resourceType == m.selected:
 				line = unfocusedSelStyle.Width(m.width).Render(label)
-			} else {
+			default:
 				line = baseStyle.Width(m.width).Render(label)
 			}
 		}

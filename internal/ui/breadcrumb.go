@@ -79,13 +79,13 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			if m.cursor < len(m.chain)-1 {
-				m.cursor++
+			if len(m.chain) > 0 {
+				m.cursor = (m.cursor + 1) % len(m.chain)
 			}
 			return m, nil
 		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
+			if len(m.chain) > 0 {
+				m.cursor = (m.cursor - 1 + len(m.chain)) % len(m.chain)
 			}
 			return m, nil
 		case "g":

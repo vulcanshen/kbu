@@ -94,12 +94,12 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 		m.cursor = 0
 		return m, nil
 	case "j", "down":
-		if m.cursor < len(items)-1 {
-			m.cursor++
+		if len(items) > 0 {
+			m.cursor = (m.cursor + 1) % len(items)
 		}
 	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
+		if len(items) > 0 {
+			m.cursor = (m.cursor - 1 + len(items)) % len(items)
 		}
 	case "enter":
 		return m.selectCurrent(items)
@@ -134,13 +134,14 @@ func (m ContextPickerModel) handleSearchKey(msg tea.KeyMsg) (ContextPickerModel,
 		return m, nil
 	case msg.Type == tea.KeyDown:
 		items := m.filtered()
-		if m.cursor < len(items)-1 {
-			m.cursor++
+		if len(items) > 0 {
+			m.cursor = (m.cursor + 1) % len(items)
 		}
 		return m, nil
 	case msg.Type == tea.KeyUp:
-		if m.cursor > 0 {
-			m.cursor--
+		items := m.filtered()
+		if len(items) > 0 {
+			m.cursor = (m.cursor - 1 + len(items)) % len(items)
 		}
 		return m, nil
 	case msg.Type == tea.KeyRunes:

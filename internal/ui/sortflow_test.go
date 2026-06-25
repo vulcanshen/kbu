@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -146,13 +147,181 @@ func TestApplySortToItems_RestartsDescending_UsesIntComparator(t *testing.T) {
 	}
 }
 
+func TestOpenSortColumnPicker_EmptyChainSkipsRegionHeaders(t *testing.T) {
+	// No chain → single-region picker (just the column list). The
+	// "fields" / "all" headers are visual noise without a second
+	// region, so they get suppressed.
+	cfg := config.DefaultConfig()
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortColumnPicker(k8s.ResourcePods)
+
+	for _, it := range m.listPicker.items {
+		if it.Header {
+			t.Errorf("empty chain must not emit Header items, got %+v", it)
+		}
+		if it.Separator {
+			t.Errorf("empty chain must not emit Separator items, got %+v", it)
+		}
+	}
+}
+
+func TestOpenSortColumnPicker_NonEmptyChainEmitsRegionHeaders(t *testing.T) {
+	// Chain present → two regions split by a separator, each
+	// prefixed with its lowercase header ("fields", "all").
+	cfg := config.DefaultConfig()
+	cfg.SetSort("pod", "Name", config.SortDirectionAscending)
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortColumnPicker(k8s.ResourcePods)
+
+	var fieldsIdx, sepIdx, allIdx, resetIdx int = -1, -1, -1, -1
+	for i, it := range m.listPicker.items {
+		switch {
+		case it.Header && it.Label == "fields":
+			fieldsIdx = i
+		case it.Separator:
+			sepIdx = i
+		case it.Header && it.Label == "all":
+			allIdx = i
+		case it.Key == sortResetKey:
+			resetIdx = i
+		}
+	}
+	if fieldsIdx < 0 || sepIdx < 0 || allIdx < 0 || resetIdx < 0 {
+		t.Fatalf("expected fields header, separator, all header, reset; got items=%v", m.listPicker.items)
+	}
+	if !(fieldsIdx < sepIdx && sepIdx < allIdx && allIdx < resetIdx) {
+		t.Errorf("expected order fields(%d) < sep(%d) < all(%d) < reset(%d)", fieldsIdx, sepIdx, allIdx, resetIdx)
+	}
+}
+
+func TestOpenSortColumnPicker_TitleHasSortIcon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortColumnPicker(k8s.ResourcePods)
+	if !strings.HasPrefix(m.listPicker.title, sortPopupIcon) {
+		t.Errorf("title should start with sortPopupIcon, got %q", m.listPicker.title)
+	}
+}
+
+func TestOpenSortDirectionPicker_TitleHasSortIcon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
+	if !strings.HasPrefix(m.listPicker.title, sortPopupIcon) {
+		t.Errorf("direction picker title should start with sortPopupIcon, got %q", m.listPicker.title)
+	}
+}
+
+func TestOpenSortColumnPicker_SingleTierBadgeOmitsPriority(t *testing.T) {
+	// Single-tier chain: picker badge is just the arrow ("↑" / "↓"),
+	// no "(1)" — mirrors the table header collapse rule so picker
+	// and header read the same way.
+	cfg := config.DefaultConfig()
+	cfg.SetSort("pod", "Name", config.SortDirectionAscending)
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortColumnPicker(k8s.ResourcePods)
+
+	for _, it := range m.listPicker.items {
+		if it.Key == "Name" {
+			if strings.Contains(it.Badge, "(") {
+				t.Errorf("single-tier badge must omit priority paren, got %q", it.Badge)
+			}
+			if it.Badge == "" {
+				t.Errorf("single-tier badge must still show arrow, got empty")
+			}
+			return
+		}
+	}
+	t.Error("Name row not found in picker items")
+}
+
+func TestOpenSortColumnPicker_MultiTierBadgeShowsPriority(t *testing.T) {
+	// Multi-tier chain: badges show "(N) ↑/↓" so user can read the
+	// tier order off the picker without consulting the header.
+	cfg := config.DefaultConfig()
+	cfg.SetSort("pod", "Name", config.SortDirectionAscending)
+	cfg.SetSort("pod", "Age", config.SortDirectionDescending)
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortColumnPicker(k8s.ResourcePods)
+
+	got := map[string]string{}
+	for _, it := range m.listPicker.items {
+		if it.Key == "Name" || it.Key == "Age" {
+			got[it.Key] = it.Badge
+		}
+	}
+	if !strings.HasPrefix(got["Name"], "(1)") {
+		t.Errorf("primary tier (Name) badge should start with (1), got %q", got["Name"])
+	}
+	if !strings.HasPrefix(got["Age"], "(2)") {
+		t.Errorf("secondary tier (Age) badge should start with (2), got %q", got["Age"])
+	}
+}
+
+func TestAltSHotkey_DrillDown_NoOp(t *testing.T) {
+	// Container drill view: Alt+Shift+S must be a silent no-op so
+	// the user doesn't see a "Sort Pods by…" picker while viewing
+	// containers. Matches E/D/C drill-mode gating.
+	cfg := config.DefaultConfig()
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	m.activePanel = TablePanel
+	pod := k8s.ResourceItem{Name: "p", Namespace: "default"}
+	m.drillDownPod = &pod
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}, Alt: true})
+
+	if m.listPicker.IsActive() {
+		t.Error("Alt+S during container drill must be no-op; picker became active")
+	}
+	if cmd != nil {
+		t.Errorf("Alt+S during drill must return nil cmd, got %T (msg=%v)", cmd, cmd())
+	}
+}
+
+func TestOpenSortDirectionPicker_OmitsUnsetForNewColumn(t *testing.T) {
+	// Picking a column that's NOT in the chain → direction picker
+	// should only offer Ascending / Descending (no Unset, because
+	// unsetting a never-sorted column is a guaranteed no-op and
+	// surfacing it just clutters the picker).
+	cfg := config.DefaultConfig()
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
+
+	for _, it := range m.listPicker.items {
+		if it.Key == "unset" {
+			t.Errorf("Unset must be hidden for a column not in chain; items=%v", m.listPicker.items)
+		}
+	}
+}
+
+func TestOpenSortDirectionPicker_ShowsUnsetForInChainColumn(t *testing.T) {
+	// Picking a column already in the chain → Unset surfaces so the
+	// user can drop that tier. Matches the column step's Reset row,
+	// which only shows when there's something to reset.
+	cfg := config.DefaultConfig()
+	cfg.SetSort("pod", "Name", config.SortDirectionAscending)
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
+
+	found := false
+	for _, it := range m.listPicker.items {
+		if it.Key == "unset" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Unset must surface when column is in chain; items=%v", m.listPicker.items)
+	}
+}
+
 func TestSyncTableSortIndicator_NoConfig_ClearsIndicator(t *testing.T) {
 	items := []k8s.ResourceItem{makePod("a", 0)}
 	m := appWithCfg(items, config.DefaultConfig())
-	m.table.SetSortIndicator("Age", "desc")
+	m.table.SetSortIndicators([]config.SortConfig{{Column: "Age", Direction: "desc"}})
 	m.syncTableSortIndicator()
-	if m.table.sortColumn != "" || m.table.sortDirection != "" {
-		t.Errorf("missing config should clear indicator, got %q/%q", m.table.sortColumn, m.table.sortDirection)
+	if len(m.table.sortChain) != 0 {
+		t.Errorf("missing config should clear chain, got %+v", m.table.sortChain)
 	}
 }
 
@@ -162,8 +331,10 @@ func TestSyncTableSortIndicator_PushesSavedSort(t *testing.T) {
 	cfg.SetSort("pod", "Age", config.SortDirectionDescending)
 	m := appWithCfg(items, cfg)
 	m.syncTableSortIndicator()
-	if m.table.sortColumn != "Age" || m.table.sortDirection != "desc" {
-		t.Errorf("indicator = %q/%q, want Age/desc", m.table.sortColumn, m.table.sortDirection)
+	if len(m.table.sortChain) != 1 ||
+		m.table.sortChain[0].Column != "Age" ||
+		m.table.sortChain[0].Direction != "desc" {
+		t.Errorf("chain = %+v, want [{Age desc}]", m.table.sortChain)
 	}
 }
 
@@ -184,17 +355,41 @@ func TestCommitSortFlow_PersistsAndApplies(t *testing.T) {
 	// when the picker was never opened — that's fine for this test.
 	_ = m.commitSortFlow(config.SortDirectionAscending)
 
-	if got := cfg.GetSort("pod"); got == nil || got.Column != "Name" || got.Direction != "asc" {
-		t.Errorf("persisted sort = %+v, want {Column:Name Direction:asc}", got)
+	chain := cfg.GetSort("pod")
+	if len(chain) != 1 || chain[0].Column != "Name" || chain[0].Direction != "asc" {
+		t.Errorf("persisted chain = %+v, want [{Name asc}]", chain)
 	}
 	if m.items[0].Name != "aaa" {
 		t.Errorf("items not re-sorted on commit, first = %q, want aaa", m.items[0].Name)
 	}
-	if m.table.sortColumn != "Name" || m.table.sortDirection != "asc" {
-		t.Errorf("table indicator not updated: %q/%q", m.table.sortColumn, m.table.sortDirection)
+	if len(m.table.sortChain) != 1 || m.table.sortChain[0].Column != "Name" {
+		t.Errorf("table chain not updated: %+v", m.table.sortChain)
 	}
-	if m.sortFlowKind != "" || m.sortFlowColumn != "" {
-		t.Errorf("flow state must reset after commit, got kind=%q column=%q", m.sortFlowKind, m.sortFlowColumn)
+	// sortFlowKind stays set across the loop — the picker re-opens
+	// at the column step so the user can stack tiers. sortFlowColumn
+	// IS cleared (that step's column is consumed). Esc on the
+	// re-opened picker clears both via ListPickerCancelMsg.
+	if m.sortFlowKind == "" {
+		t.Error("sortFlowKind must remain set after commit (column picker loops back open)")
+	}
+	if m.sortFlowColumn != "" {
+		t.Errorf("sortFlowColumn must clear after commit, got %q", m.sortFlowColumn)
+	}
+}
+
+func TestCommitSortFlow_LoopsBackToColumnPicker(t *testing.T) {
+	// Direction commit re-opens the column picker (in place — Open
+	// swaps content) instead of closing. Lets the user stack tiers
+	// without re-pressing O between each.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := config.DefaultConfig()
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	m.sortFlowKind = k8s.ResourcePods
+	m.sortFlowColumn = "Name"
+	_ = m.commitSortFlow(config.SortDirectionAscending)
+
+	if m.listPicker.pickerID != "sort:column" {
+		t.Errorf("commit must loop back to sort:column picker, got pickerID=%q", m.listPicker.pickerID)
 	}
 }
 
@@ -214,8 +409,8 @@ func TestCommitSortFlow_UnsetOnUnrelatedColumn_NoOp(t *testing.T) {
 	_ = m.commitSortFlow("unset")
 
 	got := cfg.GetSort("pod")
-	if got == nil || got.Column != "Age" || got.Direction != "desc" {
-		t.Errorf("unrelated-column Unset must preserve sort, got %+v", got)
+	if len(got) != 1 || got[0].Column != "Age" || got[0].Direction != "desc" {
+		t.Errorf("unrelated-column Unset must preserve chain, got %+v", got)
 	}
 }
 
@@ -230,11 +425,11 @@ func TestCommitSortFlow_UnsetOnCurrentColumn_ClearsSort(t *testing.T) {
 
 	_ = m.commitSortFlow("unset")
 
-	if got := cfg.GetSort("pod"); got != nil {
-		t.Errorf("Unset on current column must clear sort, got %+v", got)
+	if got := cfg.GetSort("pod"); len(got) != 0 {
+		t.Errorf("Unset on sole-tier column must clear chain, got %+v", got)
 	}
-	if m.table.sortColumn != "" {
-		t.Errorf("table indicator must clear on Unset, got %q", m.table.sortColumn)
+	if len(m.table.sortChain) != 0 {
+		t.Errorf("table chain must clear after Unset, got %+v", m.table.sortChain)
 	}
 }
 
@@ -271,24 +466,110 @@ func TestCommitSortFlow_UnsetImmediatelyRevertsToNameAsc(t *testing.T) {
 	}
 }
 
-func TestTableModel_columnTitles_RendersArrowOnSortedColumn(t *testing.T) {
+func TestResetSortFlow_ClearsChainAndLoopsBack(t *testing.T) {
+	// Reset shortcut: drop the chain, re-apply the Name asc fallback
+	// to live items immediately, then LOOP BACK to the column picker
+	// so the user can start a fresh chain without re-invoking Sort.
+	// sortFlowKind stays set across the loop; only Esc on the
+	// re-opened picker clears it (via ListPickerCancelMsg).
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	items := []k8s.ResourceItem{makePod("zzz", 9), makePod("aaa", 1), makePod("mmm", 5)}
+	cfg := config.DefaultConfig()
+	cfg.SetSort("pod", "Restarts", config.SortDirectionDescending)
+	m := appWithCfg(items, cfg)
+	m.applySortToItems()
+
+	m.sortFlowKind = k8s.ResourcePods
+	m.sortFlowColumn = "" // column step shortcut: column is never picked
+	_ = m.resetSortFlow()
+
+	if got := cfg.GetSort("pod"); len(got) != 0 {
+		t.Errorf("Reset must remove the sort entry, got %+v", got)
+	}
+	if len(m.table.sortChain) != 0 {
+		t.Errorf("table chain must clear after Reset, got %+v", m.table.sortChain)
+	}
+	want := []string{"aaa", "mmm", "zzz"}
+	for i, w := range want {
+		if m.items[i].Name != w {
+			t.Errorf("post-Reset items[%d] = %q, want %q (Name asc fallback)", i, m.items[i].Name, w)
+		}
+	}
+	if m.sortFlowKind == "" {
+		t.Error("sortFlowKind must stay set after Reset (loop continues)")
+	}
+	if m.sortFlowColumn != "" {
+		t.Errorf("sortFlowColumn must clear after Reset, got %q", m.sortFlowColumn)
+	}
+	// Picker should have looped back to the column step.
+	if m.listPicker.pickerID != "sort:column" {
+		t.Errorf("Reset must loop back to sort:column picker, got pickerID=%q", m.listPicker.pickerID)
+	}
+}
+
+func TestResetSortFlow_NoSortSet_LoopsBack(t *testing.T) {
+	// Defensive guard: resetSortFlow on a kind with no sort entry
+	// must not blow up and must not persist a save. Still refreshes
+	// the picker so the user lands on a sane cursor.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, config.DefaultConfig())
+	m.sortFlowKind = k8s.ResourcePods
+
+	_ = m.resetSortFlow()
+
+	if got := m.cfg.GetSort("pod"); len(got) != 0 {
+		t.Errorf("no-op path must not introduce a sort entry, got %+v", got)
+	}
+	if m.listPicker.pickerID != "sort:column" {
+		t.Errorf("Reset must refresh sort:column picker even on no-op, got pickerID=%q", m.listPicker.pickerID)
+	}
+}
+
+func TestTableModel_columnTitles_SingleSort_RendersArrowOnly(t *testing.T) {
+	// Single-tier chain renders as "Age ↑/↓" — same look as v1.6,
+	// no priority "(N)" badge because there's only one column to
+	// disambiguate.
 	th := theme.DefaultTheme()
 	m := NewTableModel(th)
 	m.columns = []Column{{Title: "Name"}, {Title: "Ready"}, {Title: "Age"}}
-	m.SetSortIndicator("Age", "desc")
+	m.SetSortIndicators([]config.SortConfig{{Column: "Age", Direction: "desc"}})
 	got := m.columnTitles()
 	if got[0] != "Name" {
 		t.Errorf("non-sorted column got %q, want plain title", got[0])
 	}
 	if !strings.HasPrefix(got[2], "Age ") {
-		t.Errorf("sorted column %q should be 'Age ' + glyph", got[2])
+		t.Errorf("sorted column %q should be 'Age ' + arrow", got[2])
 	}
-	if len(got[2]) <= len("Age ") {
-		t.Errorf("sorted column %q missing glyph", got[2])
+	if strings.Contains(got[2], "(") {
+		t.Errorf("single-tier sort must not show priority badge, got %q", got[2])
 	}
-	m.SetSortIndicator("", "")
+	m.SetSortIndicators(nil)
 	got = m.columnTitles()
 	if got[2] != "Age" {
 		t.Errorf("after clear indicator, Age column = %q, want plain Age", got[2])
+	}
+}
+
+func TestTableModel_columnTitles_MultiSort_RendersPriorityBadges(t *testing.T) {
+	// Multi-tier chain renders priority "(N)" + arrow on each
+	// sorted column so the user can see the chain order at a glance.
+	th := theme.DefaultTheme()
+	m := NewTableModel(th)
+	m.columns = []Column{{Title: "Name"}, {Title: "Ready"}, {Title: "Age"}}
+	m.SetSortIndicators([]config.SortConfig{
+		{Column: "Age", Direction: "desc"},
+		{Column: "Name", Direction: "asc"},
+	})
+	got := m.columnTitles()
+	if !strings.Contains(got[2], "Age (1)") {
+		t.Errorf("primary column should show '(1)' badge, got %q", got[2])
+	}
+	if !strings.Contains(got[0], "Name (2)") {
+		t.Errorf("secondary column should show '(2)' badge, got %q", got[0])
+	}
+	if got[1] != "Ready" {
+		t.Errorf("non-sorted column should stay plain, got %q", got[1])
 	}
 }

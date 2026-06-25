@@ -113,13 +113,13 @@ func (m SettingsPopupModel) Update(msg tea.Msg) (SettingsPopupModel, tea.Cmd) {
 	}
 	switch keyMsg.String() {
 	case "j", "down":
-		if m.cursor < len(m.items)-1 {
-			m.cursor++
+		if len(m.items) > 0 {
+			m.cursor = (m.cursor + 1) % len(m.items)
 		}
 		return m, nil
 	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
+		if len(m.items) > 0 {
+			m.cursor = (m.cursor - 1 + len(m.items)) % len(m.items)
 		}
 		return m, nil
 	case "g":

@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/vulcanshen/km8/internal/config"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -37,14 +38,13 @@ type TableModel struct {
 	// (filter / watcher / drill-down) and calls SetLockedRow.
 	lockedRow int
 
-	// Sort indicator — column title currently sorted on (matches one
-	// of m.columns[i].Title) and its direction. Empty sortColumn = no
-	// arrow rendered in any header. Drives the panel-2 header glyph
-	// next to the sorted column name. AppModel calls SetSortIndicator
-	// on init, on kind switch, and on every sort commit so the
-	// header stays in lock-step with the saved config.
-	sortColumn    string
-	sortDirection string
+	// sortChain mirrors the kind's saved sort chain, one entry per
+	// sorted column (tier 0 = primary). Drives the panel-2 header:
+	// each sorted column renders its title + priority badge
+	// "(N)" + direction arrow. Empty chain = no badge anywhere.
+	// AppModel calls SetSortIndicators on init, on kind switch, and
+	// on every commit so the header stays in lock-step with config.
+	sortChain []config.SortConfig
 }
 
 // CopyableContent returns the current (filtered) table rows as plain text
@@ -173,15 +173,18 @@ func (m *TableModel) SetLockedRow(idx int) {
 	m.lockedRow = idx
 }
 
-// SetSortIndicator declares which column header should render an
-// arrow glyph and in what direction. Empty column = no indicator.
-// Direction strings match config.SortDirection* constants but the
-// table is decoupled from the config package — anything that isn't
-// the asc/desc string renders no glyph (defensive against stale
-// config strings).
-func (m *TableModel) SetSortIndicator(column, direction string) {
-	m.sortColumn = column
-	m.sortDirection = direction
+// SetSortIndicators declares which columns the panel-2 header
+// should badge — one entry per tier, index = priority. Empty / nil
+// chain clears all badges. The table renders priority "(N)" +
+// direction arrow on each matching column header; non-matching
+// columns stay plain. Defensive: stale config column names that
+// no longer map to any header render harmlessly (no badge).
+func (m *TableModel) SetSortIndicators(chain []config.SortConfig) {
+	if len(chain) == 0 {
+		m.sortChain = nil
+		return
+	}
+	m.sortChain = append(m.sortChain[:0], chain...)
 }
 
 // Init implements tea.Model.
@@ -497,14 +500,37 @@ func (m TableModel) View() string {
 
 func (m TableModel) columnTitles() []string {
 	titles := make([]string, len(m.columns))
+	// Build a lookup so each header render is O(1): column title →
+	// tier index in the sort chain. Multi-tier columns get a
+	// priority badge "(N)" + arrow; non-sorted columns stay plain.
+	tierByTitle := make(map[string]int, len(m.sortChain))
+	for i, c := range m.sortChain {
+		if c.Column != "" {
+			tierByTitle[c.Column] = i
+		}
+	}
 	for i, col := range m.columns {
 		title := col.Title
-		if title != "" && title == m.sortColumn {
-			switch m.sortDirection {
+		if title == "" {
+			titles[i] = title
+			continue
+		}
+		if idx, ok := tierByTitle[title]; ok {
+			c := m.sortChain[idx]
+			var arrow string
+			switch c.Direction {
 			case "asc":
-				title += " " + sortAscendingGlyph
+				arrow = sortAscendingGlyph
 			case "desc":
-				title += " " + sortDescendingGlyph
+				arrow = sortDescendingGlyph
+			}
+			// Only show "(N)" when the chain has more than one
+			// tier — single-column case stays visually simple
+			// (no parens) which matches the v1.6 look.
+			if len(m.sortChain) > 1 {
+				title = fmt.Sprintf("%s (%d) %s", title, idx+1, arrow)
+			} else if arrow != "" {
+				title = title + " " + arrow
 			}
 		}
 		titles[i] = title

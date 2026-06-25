@@ -46,19 +46,23 @@ func drainPanel2MenuToInteractive(t *testing.T, m *Panel2MenuPopupModel, openCmd
 // ── items shape ────────────────────────────────────────────────────────────
 
 func TestPanel2Menu_Items_PodHasShell(t *testing.T) {
-	// Pod has containers — Shell must appear. Order: hotkey group
-	// (Y/E/S/D) first, then Enter (drill) at the very end. Enter is
-	// at the bottom because it's a navigation action with no per-row
-	// payload; cursor opens on the first hotkey entry (the most
-	// commonly-used inspect action, Y).
+	// Pod has containers — Shell must appear. Order: row-targeted
+	// hotkey group (Y/E/S/D) first, then list-level Order, then
+	// Enter (drill) at the very end. Enter is at the bottom because
+	// it's a navigation action with no per-row payload; cursor opens
+	// on the first hotkey entry (the most commonly-used inspect
+	// action, Y).
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	wantKeys := []string{"Y", "E", "S", "D", "Enter"}
-	if len(items) != len(wantKeys) {
-		t.Fatalf("Pod menu len=%d, want %d (keys=%v)", len(items), len(wantKeys), wantKeys)
+	// itemKeys filters separators; comparing the filtered sequence
+	// keeps the test focused on commitable hotkeys.
+	gotKeys := itemKeys(items)
+	wantKeys := []string{"Y", "E", "S", "D", "Enter", "alt+S"}
+	if len(gotKeys) != len(wantKeys) {
+		t.Fatalf("Pod menu keys=%v, want %v", gotKeys, wantKeys)
 	}
 	for i, want := range wantKeys {
-		if items[i].key != want {
-			t.Errorf("Pod menu item[%d].key=%q, want %q", i, items[i].key, want)
+		if gotKeys[i] != want {
+			t.Errorf("Pod menu key[%d]=%q, want %q", i, gotKeys[i], want)
 		}
 	}
 }
@@ -101,12 +105,20 @@ func TestPanel2Menu_Items_HelmManagedRuleA(t *testing.T) {
 }
 
 func TestPanel2Menu_Items_EventsNoEditNoDelete(t *testing.T) {
-	// Events: system-generated immutable — E, D dropped. Events don't drill
-	// either, so no Enter entry. Result: YAML only.
+	// Events: system-generated immutable — E, D dropped. Events
+	// don't drill either, so no Enter entry. Order entry still
+	// applies (sorting events by Age / Last Seen / Reason is one of
+	// the highest-value Order use cases).
 	items := buildPanel2MenuItems(k8s.ResourceEvents, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	keys := itemKeys(items)
-	if len(keys) != 1 || keys[0] != "Y" {
-		t.Errorf("Events menu should be YAML only, got %v", keys)
+	want := []string{"Y", "alt+S"}
+	if len(keys) != len(want) {
+		t.Errorf("Events menu should be %v, got %v", want, keys)
+	}
+	for i, k := range want {
+		if i >= len(keys) || keys[i] != k {
+			t.Errorf("Events menu key[%d]=%q, want %q", i, keys[i], k)
+		}
 	}
 }
 
@@ -140,11 +152,20 @@ func TestPanel2Menu_Items_NamespacesEditNoDelete(t *testing.T) {
 }
 
 func TestPanel2Menu_Items_HelmManagedNoContainer(t *testing.T) {
-	// Helm-managed Service: only YAML remains.
+	// Helm-managed Service: row-level write actions (E/D) blocked by
+	// Rule A, no Shell (no container), no drill — Y remains. Order
+	// stays because it's a view-level operation (sorting a
+	// helm-managed list is still useful).
 	items := buildPanel2MenuItems(k8s.ResourceServices, k8s.ResourceItem{}, true, panel2CompareCtx{})
 	keys := itemKeys(items)
-	if len(keys) != 1 || keys[0] != "Y" {
-		t.Errorf("helm-managed Service should only have YAML, got %v", keys)
+	want := []string{"Y", "alt+S"}
+	if len(keys) != len(want) {
+		t.Errorf("helm-managed Service menu should be %v, got %v", want, keys)
+	}
+	for i, k := range want {
+		if i >= len(keys) || keys[i] != k {
+			t.Errorf("helm-managed Service key[%d]=%q, want %q", i, keys[i], k)
+		}
 	}
 }
 
@@ -234,30 +255,124 @@ func TestPanel2Menu_Items_CompareAnchoredKindMismatch_HidesC(t *testing.T) {
 }
 
 func TestPanel2Menu_Items_DeploymentDrillsToPods(t *testing.T) {
-	// Deployment drills to Pods — Enter entry sits at the very BOTTOM
-	// of the menu (the navigation tail, after the hotkey group); hint
-	// says "drill into pods" (KubectlName "pod" + "s").
+	// Deployment drills to Pods — Enter entry is the last row-level
+	// item (sits above the separator, before the panel-level Order
+	// entry); hint says "drill into pods" (KubectlName "pod" + "s").
 	items := buildPanel2MenuItems(k8s.ResourceDeployments, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	last := items[len(items)-1]
-	if last.key != "Enter" {
-		t.Fatalf("Deployment last item must be Enter (drill), got %q", last.key)
+	enter := findItemByKey(items, "Enter")
+	if enter == nil {
+		t.Fatalf("Deployment menu must contain an Enter entry, got %v", itemKeys(items))
 	}
-	if last.hint != "drill into pods" {
-		t.Errorf("Deployment Enter hint = %q, want %q", last.hint, "drill into pods")
+	if enter.hint != "drill into pods" {
+		t.Errorf("Deployment Enter hint = %q, want %q", enter.hint, "drill into pods")
 	}
 }
 
 func TestPanel2Menu_Items_PodDrillsToContainers(t *testing.T) {
 	// Pod drills to containers (special-cased — containers aren't a K8s
 	// API resource so we don't go through the registry's KubectlName).
-	// Enter is the LAST entry — Enter sits at the menu tail.
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
-	last := items[len(items)-1]
-	if last.key != "Enter" {
-		t.Fatalf("Pod last item must be Enter, got %q", last.key)
+	enter := findItemByKey(items, "Enter")
+	if enter == nil {
+		t.Fatalf("Pod menu must contain an Enter entry, got %v", itemKeys(items))
 	}
-	if last.hint != "drill into containers" {
-		t.Errorf("Pod Enter hint = %q, want %q", last.hint, "drill into containers")
+	if enter.hint != "drill into containers" {
+		t.Errorf("Pod Enter hint = %q, want %q", enter.hint, "drill into containers")
+	}
+}
+
+func TestPanel2Menu_Items_TwoRegionEmitsHeaders(t *testing.T) {
+	// Kinds with an Order entry render as two regions: "item
+	// operation" prepended above the row-targeted group, "panel
+	// operation" between separator and Order. Locks the labelled-
+	// region layout.
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
+	var itemHdrIdx, sepIdx, panelHdrIdx, orderIdx int = -1, -1, -1, -1
+	for i, it := range items {
+		switch {
+		case it.header && it.label == "item operation":
+			itemHdrIdx = i
+		case it.separator:
+			sepIdx = i
+		case it.header && it.label == "panel operation":
+			panelHdrIdx = i
+		case it.key == "alt+S":
+			orderIdx = i
+		}
+	}
+	if itemHdrIdx < 0 || sepIdx < 0 || panelHdrIdx < 0 || orderIdx < 0 {
+		t.Fatalf("expected item header, separator, panel header, Sort; got items=%+v", items)
+	}
+	if !(itemHdrIdx < sepIdx && sepIdx < panelHdrIdx && panelHdrIdx < orderIdx) {
+		t.Errorf("expected sort: item(%d) < sep(%d) < panel(%d) < sort(%d)", itemHdrIdx, sepIdx, panelHdrIdx, orderIdx)
+	}
+	if itemHdrIdx != 0 {
+		t.Errorf("item operation header must be at top, got idx=%d", itemHdrIdx)
+	}
+}
+
+func TestPanel2Menu_Items_NoOrderNoHeaders(t *testing.T) {
+	// Kinds without sort columns get no Order entry, so the menu
+	// stays single-region and skips the header chrome. Verify with
+	// a kind whose registry def lacks columns — Events with no
+	// edit/delete still gets Order because it has columns; use
+	// container-drill OpenForContainer path which bypasses
+	// buildPanel2MenuItems entirely. Instead, hammer
+	// buildPanel2MenuItems with a forged kind shape via the helm-
+	// managed Events case (Events still has columns, so Order
+	// appears; we can't easily force a no-columns kind from
+	// tests). Skipped — Order ubiquity in real kinds means this
+	// single-region branch is exercised only by container drill
+	// which doesn't call buildPanel2MenuItems. Left here as a
+	// placeholder for future kinds with empty Columns.
+	t.Skip("all registered kinds expose >=1 column; single-region branch is reachable only via OpenForContainer which uses a different code path")
+}
+
+func TestPanel2Menu_HeaderRowsAreSkipped(t *testing.T) {
+	// Initial cursor must land on the first commitable item (idx
+	// after the header) and j/k must skip headers + separator.
+	m := newPanel2Menu(t)
+	cmd := m.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "p", Namespace: "default"}, false, panel2CompareCtx{})
+	drainPanel2MenuToInteractive(t, &m, cmd)
+
+	// items[0] is the "item operation" header → cursor should be 1.
+	if m.cursor == 0 {
+		t.Fatalf("cursor must skip item-operation header on Open, got 0")
+	}
+	if m.items[m.cursor].header {
+		t.Errorf("cursor must not land on a header row, got idx=%d (%+v)", m.cursor, m.items[m.cursor])
+	}
+	// Walk to the end with G — must land on Sort (alt+S), not the
+	// "panel operation" header above it.
+	m, _ = m.Update(key("G"))
+	if m.items[m.cursor].header || m.items[m.cursor].separator {
+		t.Errorf("G must land on a selectable row, got %+v", m.items[m.cursor])
+	}
+	if m.items[m.cursor].key != "alt+S" {
+		t.Errorf("G must land on Sort (last selectable), got key=%q", m.items[m.cursor].key)
+	}
+}
+
+func TestPanel2Menu_Items_EnterPrecedesSeparator(t *testing.T) {
+	// Enter is row-level — must sit above the separator that splits
+	// row-targeted entries from panel-level (Order). Locks the
+	// layout decision so a future reorder can't push Enter past the
+	// boundary.
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
+	sepIdx, enterIdx := -1, -1
+	for i, it := range items {
+		if it.separator && sepIdx < 0 {
+			sepIdx = i
+		}
+		if it.key == "Enter" {
+			enterIdx = i
+		}
+	}
+	if sepIdx < 0 || enterIdx < 0 {
+		t.Fatalf("Pod menu must have both a separator and an Enter entry, got %v", itemKeys(items))
+	}
+	if enterIdx >= sepIdx {
+		t.Errorf("Enter (idx=%d) must precede the separator (idx=%d) — Enter is row-level, separator marks the row/panel boundary", enterIdx, sepIdx)
 	}
 }
 
@@ -329,17 +444,19 @@ func TestPanel2Menu_EnterEmitsActionMsg(t *testing.T) {
 }
 
 func TestPanel2Menu_CursorOnEnterRowCommitsEnter(t *testing.T) {
-	// Pod menu order: Y / E / S / D / Enter. G jumps cursor to the
-	// last item — Enter (drill) — and pressing Enter on it commits
-	// Action="Enter" → app.go dispatches enterDrillDown. Covers the
-	// navigation tail so a regression that re-sorts the items can't
-	// silently break the drill path.
+	// Pod menu order: Y / E / S / D / Enter / ── / O. G jumps to
+	// the last SELECTABLE row — Order. k from there backs up over
+	// the separator onto Enter (drill); committing it emits
+	// Action="Enter" → app.go dispatches enterDrillDown. Covers
+	// the navigation around the separator so a regression that
+	// reorders the items can't silently break the drill path.
 	m := newPanel2Menu(t)
 	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
 	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
-	m, _ = m.Update(key("G"))
+	m, _ = m.Update(key("G")) // last selectable = Order
+	m, _ = m.Update(key("k")) // back up to Enter (skips separator)
 	_, batchCmd := m.Update(key("enter"))
 	if batchCmd == nil {
 		t.Fatal("Enter must return a Cmd")
@@ -386,6 +503,56 @@ func TestPanel2Menu_HotkeyDirectTrigger(t *testing.T) {
 	})
 	if !found {
 		t.Error("E hotkey did not emit Panel2MenuActionMsg")
+	}
+}
+
+func TestPanel2Menu_AltSHotkeyEmitsSortAction(t *testing.T) {
+	// Alt+Shift+S while panel 2 menu is open must commit with
+	// Action "alt+S" so AppModel routes it to openSortColumnPicker
+	// — same path as cursor+Enter on the Sort entry.
+	m := newPanel2Menu(t)
+	item := k8s.ResourceItem{Name: "my-pod", Namespace: "default"}
+	cmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
+	drainPanel2MenuToInteractive(t, &m, cmd)
+
+	_, batchCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}, Alt: true})
+	if batchCmd == nil {
+		t.Fatal("Alt+S must emit a commit cmd")
+	}
+	found := false
+	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
+		am, ok := msg.(Panel2MenuActionMsg)
+		if !ok {
+			return false
+		}
+		if am.Action != "alt+S" {
+			t.Errorf("Alt+S should emit action alt+S, got %q", am.Action)
+		}
+		if am.Resource != k8s.ResourcePods {
+			t.Errorf("Alt+S action carries Resource=%q, want Pods", am.Resource)
+		}
+		found = true
+		return true
+	})
+	if !found {
+		t.Error("Alt+S did not emit Panel2MenuActionMsg")
+	}
+}
+
+func TestPanel2Menu_SortEntryUsesAltShiftSLabel(t *testing.T) {
+	// Panel-2 Sort entry renders the literal "[Alt][S]ort panel 2
+	// list" label (bracketHotkey is bypassed because the key is the
+	// multi-char chord "alt+S", so the pre-composed markers pass
+	// through). Locks the wording the popup-design mindset settled
+	// on for the panel-2 entry.
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
+	sort := findItemByKey(items, "alt+S")
+	if sort == nil {
+		t.Fatal("Pods menu must contain a Sort entry (key=alt+S)")
+	}
+	want := "[Alt][S]ort panel 2 list"
+	if sort.label != want {
+		t.Errorf("Sort label = %q, want %q", sort.label, want)
 	}
 }
 
@@ -525,10 +692,26 @@ func TestPanel2Menu_OpenForContainer_EscRowEmitsEsc(t *testing.T) {
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
+func findItemByKey(items []panel2MenuItem, key string) *panel2MenuItem {
+	for i := range items {
+		if items[i].key == key {
+			return &items[i]
+		}
+	}
+	return nil
+}
+
 func itemKeys(items []panel2MenuItem) []string {
-	out := make([]string, len(items))
-	for i, it := range items {
-		out[i] = it.key
+	// Separators and headers are visual-only chrome — excluded from
+	// the "what hotkeys does this menu expose" view so tests can
+	// reason about the commitable hotkey sequence without caring
+	// about the section labels around them.
+	var out []string
+	for _, it := range items {
+		if it.separator || it.header {
+			continue
+		}
+		out = append(out, it.key)
 	}
 	return out
 }

@@ -78,10 +78,10 @@ func TestContextPickerModel_NavigateDown(t *testing.T) {
 		t.Errorf("expected cursor=2 after j, got %d", m.cursor)
 	}
 
-	// Should not go past end.
+	// Past end should wrap to 0.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	if m.cursor != 2 {
-		t.Errorf("expected cursor=2 at bottom boundary, got %d", m.cursor)
+	if m.cursor != 0 {
+		t.Errorf("expected cursor=0 after j wraps at bottom, got %d", m.cursor)
 	}
 }
 
@@ -104,10 +104,10 @@ func TestContextPickerModel_NavigateUp(t *testing.T) {
 		t.Errorf("expected cursor=0 after k, got %d", m.cursor)
 	}
 
-	// Should not go below 0.
+	// Past top should wrap to last.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-	if m.cursor != 0 {
-		t.Errorf("expected cursor=0 at top boundary, got %d", m.cursor)
+	if m.cursor != 2 {
+		t.Errorf("expected cursor=2 after k wraps at top, got %d", m.cursor)
 	}
 }
 

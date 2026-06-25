@@ -157,13 +157,13 @@ func (m HelmDocMenuPopupModel) Update(msg tea.Msg) (HelmDocMenuPopupModel, tea.C
 	}
 	switch keyMsg.String() {
 	case "j", "down":
-		if m.cursor < len(m.items)-1 {
-			m.cursor++
+		if len(m.items) > 0 {
+			m.cursor = (m.cursor + 1) % len(m.items)
 		}
 		return m, nil
 	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
+		if len(m.items) > 0 {
+			m.cursor = (m.cursor - 1 + len(m.items)) % len(m.items)
 		}
 		return m, nil
 	case "g":

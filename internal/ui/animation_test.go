@@ -256,3 +256,71 @@ func TestCenterSlice_MoreThanTotal(t *testing.T) {
 		t.Errorf("expected all lines when n >= height, got %q", out)
 	}
 }
+
+func TestAnimator_Swap_TransitionsThroughBothPhases(t *testing.T) {
+	// Swap from PopupOpen runs Compress → Expand and returns to
+	// PopupOpen. Total tick count is swapHalfFrames * 2.
+	a := NewPopupAnimator("test", "#ffffff")
+	a.State = PopupOpen
+	cmd := a.Swap()
+	if cmd == nil {
+		t.Fatal("Swap from PopupOpen must return a tick cmd")
+	}
+	if a.State != PopupSwappingCompress {
+		t.Fatalf("Swap must set state to PopupSwappingCompress, got %v", a.State)
+	}
+	// Drive compress phase.
+	for i := 0; i < swapHalfFrames; i++ {
+		a.Tick()
+	}
+	if a.State != PopupSwappingExpand {
+		t.Errorf("after swapHalfFrames ticks, state should be PopupSwappingExpand, got %v", a.State)
+	}
+	// Drive expand phase.
+	for i := 0; i < swapHalfFrames; i++ {
+		a.Tick()
+	}
+	if a.State != PopupOpen {
+		t.Errorf("after full swap, state should be PopupOpen, got %v", a.State)
+	}
+}
+
+func TestAnimator_Swap_NoOpWhenNotOpen(t *testing.T) {
+	// Swap requires the popup be fully open. Calling it during any
+	// other state (Closed / opening / closing) is a silent no-op so
+	// the caller can blindly invoke Open which routes to either
+	// Swap or fresh Open based on current state.
+	for _, state := range []PopupAnimState{
+		PopupClosed, PopupOpeningLine, PopupOpeningExpand,
+		PopupClosingCompress, PopupClosingLine,
+	} {
+		a := NewPopupAnimator("test", "#ffffff")
+		a.State = state
+		cmd := a.Swap()
+		if cmd != nil {
+			t.Errorf("Swap from state %v must return nil cmd, got non-nil", state)
+		}
+		if a.State != state {
+			t.Errorf("Swap from state %v must not change state, got %v", state, a.State)
+		}
+	}
+}
+
+func TestAnimator_Finalize_DuringSwap(t *testing.T) {
+	// Finalize during a swap snaps back to PopupOpen — same end
+	// state the animation reaches naturally. Used by tests to skip
+	// the animation entirely.
+	a := NewPopupAnimator("test", "#ffffff")
+	a.State = PopupSwappingCompress
+	a.Frame = 1
+	a.Finalize()
+	if a.State != PopupOpen {
+		t.Errorf("Finalize during compress should land on PopupOpen, got %v", a.State)
+	}
+	a.State = PopupSwappingExpand
+	a.Frame = 2
+	a.Finalize()
+	if a.State != PopupOpen {
+		t.Errorf("Finalize during expand should land on PopupOpen, got %v", a.State)
+	}
+}

@@ -47,6 +47,19 @@ type panel2MenuItem struct {
 	label string // "YAML" / "Edit" / "Shell" / "Delete" (rendered + "(K)")
 	key   string // hotkey trigger letter "Y" / "E" / "S" / "D"
 	hint  string // short description shown next to the label, helmdocmenu-style
+
+	// separator marks a non-selectable visual divider. Other fields
+	// are ignored. j/k/g/G + mouse skip past it, Enter never commits
+	// it, direct hotkeys don't match it. Used to split row-targeted
+	// actions from list-level / panel-level entries.
+	separator bool
+
+	// header marks a non-selectable region label rendered in dim
+	// grey above the items it introduces. Same skip rules as
+	// separator. Used when the menu mixes operation kinds and
+	// wants to label each region (e.g. "item operation" /
+	// "panel operation").
+	header bool
 }
 
 // Panel2MenuActionMsg is emitted when the user commits a menu item (cursor
@@ -88,7 +101,7 @@ func (m *Panel2MenuPopupModel) Open(rt k8s.ResourceType, item k8s.ResourceItem, 
 			hint:  "back to parent list",
 		}}, m.items...)
 	}
-	m.cursor = 0
+	m.cursor = m.firstSelectable()
 	m.titleOverride = ""
 	return m.animator.Open()
 }
@@ -134,33 +147,34 @@ func (m Panel2MenuPopupModel) Update(msg tea.Msg) (Panel2MenuPopupModel, tea.Cmd
 	}
 	switch keyMsg.String() {
 	case "j", "down":
-		if m.cursor < len(m.items)-1 {
-			m.cursor++
-		}
+		m.cursor = m.nextSelectable(m.cursor)
 		return m, nil
 	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
+		m.cursor = m.prevSelectable(m.cursor)
 		return m, nil
 	case "g":
-		m.cursor = 0
+		m.cursor = m.firstSelectable()
 		return m, nil
 	case "G":
-		m.cursor = len(m.items) - 1
+		m.cursor = m.lastSelectable()
 		return m, nil
 	case "enter":
 		if m.cursor < 0 || m.cursor >= len(m.items) {
 			return m, nil
 		}
+		if m.items[m.cursor].separator || m.items[m.cursor].header {
+			return m, nil
+		}
 		return m, m.commit(m.items[m.cursor].key)
-	case "Y", "E", "S", "D", "C":
-		// Direct hotkey trigger — must match an item actually present in
-		// the menu (Rule A removed Edit/Delete for helm-managed rows; a
-		// hotkey shortcut shouldn't bypass that gate). C is the
-		// contextual Compare hotkey — its menu entry varies (Mark as
-		// anchor vs Show diff) but both bind to the same letter so the
-		// muscle memory is "C = compare action for the current row".
+	case "Y", "E", "S", "D", "C", "alt+S":
+		// Direct hotkey trigger — must match an item actually present
+		// in the menu (Rule A removed Edit/Delete for helm-managed
+		// rows; a hotkey shortcut shouldn't bypass that gate). C is
+		// the contextual Compare hotkey — its menu entry varies
+		// (Mark as anchor vs Show diff) but both bind to the same
+		// letter so the muscle memory is "C = compare action for the
+		// current row". Alt+Shift+S is the panel-2 Sort entry — bare
+		// S is Shell so the modifier carves out a separate hotkey.
 		// Unknown hotkey falls through to no-op so users don't
 		// accidentally close the popup with a stray press.
 		key := keyMsg.String()
@@ -191,12 +205,68 @@ func (m Panel2MenuPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int
 	}
 	switch msg.Button {
 	case tea.MouseButtonLeft:
+		if m.items[row].separator || m.items[row].header {
+			return m, nil
+		}
 		m.cursor = row
 		return m, m.commit(m.items[row].key)
 	case tea.MouseButtonRight:
 		return m, m.animator.Close()
 	}
 	return m, nil
+}
+
+// firstSelectable / lastSelectable / nextSelectable / prevSelectable
+// mirror the listpicker helpers: cursor navigation skips separator
+// items, cycles within the selectable subset. Same shape so the two
+// menus stay aligned visually and behaviourally.
+func (m Panel2MenuPopupModel) firstSelectable() int {
+	for i, it := range m.items {
+		if !it.separator && !it.header {
+			return i
+		}
+	}
+	return 0
+}
+
+func (m Panel2MenuPopupModel) lastSelectable() int {
+	for i := len(m.items) - 1; i >= 0; i-- {
+		if !m.items[i].separator && !m.items[i].header {
+			return i
+		}
+	}
+	if len(m.items) == 0 {
+		return 0
+	}
+	return len(m.items) - 1
+}
+
+func (m Panel2MenuPopupModel) nextSelectable(from int) int {
+	n := len(m.items)
+	if n == 0 {
+		return from
+	}
+	for step := 1; step <= n; step++ {
+		idx := (from + step) % n
+		if !m.items[idx].separator && !m.items[idx].header {
+			return idx
+		}
+	}
+	return from
+}
+
+func (m Panel2MenuPopupModel) prevSelectable(from int) int {
+	n := len(m.items)
+	if n == 0 {
+		return from
+	}
+	for step := 1; step <= n; step++ {
+		idx := (from - step + n) % n
+		if !m.items[idx].separator && !m.items[idx].header {
+			return idx
+		}
+	}
+	return from
 }
 
 // commit closes the popup AND emits the action msg. Trigger 後 menu popup
@@ -231,15 +301,15 @@ func (m Panel2MenuPopupModel) RenderPopup() string {
 //     meaningfully; Node deletion is admin-scope, not km8's audience).
 //  3. resourceHasContainer — Shell only on kinds with containers (Pod).
 //
-// The Enter entry is appended at the END (with a separator above) when the
-// kind supports drill-down — surfaces the drill action for discoverability,
-// Layout: menu-only items (multi-char "Enter" / "LockCompare" /
-// "CompareTo" / "ExitCompare") render at the TOP of the list, then
-// the hotkey-driven Y / E / S / D / C group in the MIDDLE, then
-// "Enter" drill at the very BOTTOM (Enter is navigation, not an
-// action on the item; user already presses Enter directly on the row
-// to focus into it, so the menu surfacing is the least valuable one
-// to sit at the cursor on open).
+// Layout (top → bottom):
+//   1. Row-targeted hotkey actions: Y / E / S / D / C in that order
+//   2. Row-targeted navigation: Enter (drill into cursor item's
+//      children) — last entry of the row-level group because it's
+//      a navigation gesture rather than a kubectl-style verb, and
+//      the user already has Enter on the row directly
+//   3. Separator (rendered as a purple horizontal rule)
+//   4. Panel-level entries: Order — operates on the list view, not
+//      the row, so visually demarcated by the separator above
 //
 // Exit compare mode is NOT a menu entry — Esc is the single canonical
 // gesture for "back out of compare", and a hint in panel 2's
@@ -303,7 +373,9 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 		})
 	}
 
-	// ── menu-only navigation, bottom ──
+	// Enter (drill) — last entry in the row-targeted group. Acts on
+	// the cursor's item (drills into ITS children), so it sits
+	// ABOVE the separator with the other per-row actions.
 	if rt.SupportsDrillDown() {
 		target := panel2DrillLabel(rt, item)
 		hint := "drill into " + target
@@ -314,6 +386,34 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 			label: "Enter " + drillDownIcon,
 			key:   "Enter",
 			hint:  hint,
+		})
+	}
+
+	// Sort entry — list-level (not row-level) operation. Sits BELOW
+	// a separator that visually demarcates "this acts on the panel,
+	// not on the row." Opens the same column picker the panel-1
+	// sidebar Space menu's Sort entry opens.
+	//
+	// Hotkey is Alt+Shift+S (rendered "[Alt][S]ort panel 2 list")
+	// because bare S on panel 2 is already Shell — the modifier
+	// carves out room for sort without breaking the existing Shell
+	// muscle memory. Label is pre-composed with literal "[Alt][S]"
+	// markers; bracketHotkey is bypassed for multi-key chords
+	// (len(key) > 1) so the markers pass through unchanged.
+	//
+	// When Sort is present the menu has two operation regions, so
+	// we prepend "item operation" + append "panel operation" labels
+	// so each region reads as a labelled group. Without Sort the
+	// menu stays flat (single region, no header to keep visually
+	// quiet).
+	if def := k8s.DefaultRegistry.Get(rt); def != nil && len(def.Columns) > 0 {
+		items = append([]panel2MenuItem{{header: true, label: "item operation"}}, items...)
+		items = append(items, panel2MenuItem{separator: true})
+		items = append(items, panel2MenuItem{header: true, label: "panel operation"})
+		items = append(items, panel2MenuItem{
+			label: "[Alt][S]ort panel 2 list",
+			key:   "alt+S",
+			hint:  "open sort column picker",
 		})
 	}
 	return items
@@ -470,8 +570,23 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	// by reverse-highlight alone (no leading arrow), so non-cursor rows
 	// align cleanly without a phantom marker column.
 	const gutter = "  "
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	var rows []string
 	for i, it := range m.items {
+		if it.header {
+			// Dim grey region label, indented by the gutter so it
+			// reads as a section heading above the items below.
+			rows = append(rows, " "+gutter+headerStyle.Render(it.label))
+			continue
+		}
+		if it.separator {
+			// Same purple horizontal rule the hintpopup uses to
+			// split its action region from the cheatsheet below —
+			// keeps every km8 popup's internal divider visually
+			// consistent.
+			rows = append(rows, bStyle.Render(strings.Repeat("─", innerW)))
+			continue
+		}
 		isCursor := i == m.cursor
 		labelDisplay := bracketHotkey(it.label, it.key)
 		labelW := lipgloss.Width(labelDisplay)

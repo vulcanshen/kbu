@@ -258,3 +258,58 @@ func TestHintPopup_Actions_SpaceClosesWithoutCommit(t *testing.T) {
 		return false
 	})
 }
+
+func TestHintPopup_HeaderRowsSkippedByNavigation(t *testing.T) {
+	// Header and separator rows are visual chrome — j/k must skip
+	// past them and Enter on either must no-op. Mirrors the listpicker
+	// and panel2menu behaviour so cursor navigation reads the same
+	// across every cursor-bearing popup.
+	m := newHintPopup(t)
+	actions := []hintAction{
+		{header: true, label: "item operation"},
+		{label: "Pin Pods", key: "P", action: "PinKind"},
+		{label: "Sort panel 2 list", key: "S", action: "SortKind"},
+		{separator: true},
+		{header: true, label: "panel operation"},
+		{label: "Drag to reorder", key: "D", action: "DragPinned"},
+	}
+	openCmd := m.OpenWithActions("title", actions, nil)
+	drainHintToInteractive(t, &m, openCmd)
+
+	// Initial cursor lands on first selectable (idx 1 = Pin), NOT
+	// on the header at idx 0.
+	if m.cursor != 1 {
+		t.Errorf("initial cursor = %d, want 1 (Pin row, skipping header)", m.cursor)
+	}
+	// j from Pin → SetOrder (idx 2).
+	m, _ = m.Update(key("j"))
+	if m.cursor != 2 {
+		t.Errorf("after j cursor = %d, want 2 (SetOrder)", m.cursor)
+	}
+	// j from SetOrder → Drag (idx 5), skipping separator (3) and
+	// header (4).
+	m, _ = m.Update(key("j"))
+	if m.cursor != 5 {
+		t.Errorf("j must skip separator AND header; cursor = %d, want 5", m.cursor)
+	}
+	// j from Drag wraps back to Pin (idx 1, skipping header at 0).
+	m, _ = m.Update(key("j"))
+	if m.cursor != 1 {
+		t.Errorf("j past last must wrap to first selectable (1); cursor = %d", m.cursor)
+	}
+}
+
+func TestHintPopup_EnterOnHeaderIsNoOp(t *testing.T) {
+	m := newHintPopup(t)
+	actions := []hintAction{
+		{header: true, label: "item operation"},
+		{label: "Pin Pods", key: "P", action: "PinKind"},
+	}
+	openCmd := m.OpenWithActions("title", actions, nil)
+	drainHintToInteractive(t, &m, openCmd)
+	m.cursor = 0 // force cursor onto header
+	_, batchCmd := m.Update(key("enter"))
+	if batchCmd != nil {
+		t.Errorf("Enter on header must not emit any cmd, got %T", batchCmd)
+	}
+}
