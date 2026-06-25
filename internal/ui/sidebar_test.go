@@ -732,6 +732,257 @@ func TestSidebarModel_InitDoesNotScrollPastTopCategories(t *testing.T) {
 	}
 }
 
+// ── Drag-and-drop reorder ──────────────────────────────────────────────────
+
+// pinnedDragSetup builds a sidebar with three pinned kinds in a
+// known order and the cursor parked on the middle one. Returns
+// the sidebar + the kinds in their initial order so tests can
+// assert reorder deltas explicitly.
+func pinnedDragSetup() (SidebarModel, []k8s.ResourceType) {
+	m := newTestSidebar()
+	kinds := []k8s.ResourceType{
+		k8s.ResourcePods,
+		k8s.ResourceDeployments,
+		k8s.ResourceServices,
+	}
+	m.SetPinned(kinds)
+	// Park cursor on the middle pinned kind (Deployments).
+	m.SnapCursorToKind(k8s.ResourceDeployments)
+	return m, kinds
+}
+
+func TestSidebarModel_EnterDrag_NonPinnedRow_NoOp(t *testing.T) {
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods, k8s.ResourceDeployments})
+	// Park cursor on a non-pinned row.
+	m.SnapCursorToKind(k8s.ResourceNamespaces)
+
+	ok, cmd := m.EnterDrag()
+	if ok || cmd != nil {
+		t.Errorf("EnterDrag on non-pinned row must be no-op, got ok=%v cmd!=nil=%v", ok, cmd != nil)
+	}
+	if m.IsDragging() {
+		t.Error("dragActive must remain false")
+	}
+}
+
+func TestSidebarModel_EnterDrag_SinglePinned_NoOp(t *testing.T) {
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods})
+	m.SnapCursorToKind(k8s.ResourcePods)
+
+	ok, _ := m.EnterDrag()
+	if ok {
+		t.Error("EnterDrag with <2 pinned must be no-op (no swap target)")
+	}
+	if m.IsDragging() {
+		t.Error("dragActive must remain false")
+	}
+}
+
+func TestSidebarModel_EnterDrag_ValidSetsStateAndEmitsMsg(t *testing.T) {
+	m, _ := pinnedDragSetup()
+
+	ok, cmd := m.EnterDrag()
+	if !ok {
+		t.Fatal("EnterDrag with cursor on pinned + 2+ pins must succeed")
+	}
+	if !m.IsDragging() {
+		t.Error("dragActive must be true after EnterDrag")
+	}
+	if m.draggedKind != k8s.ResourceDeployments {
+		t.Errorf("draggedKind = %q, want Deployments", m.draggedKind)
+	}
+	if cmd == nil {
+		t.Fatal("EnterDrag must return a cmd emitting SidebarDragEnterMsg")
+	}
+	msg := cmd()
+	em, ok := msg.(SidebarDragEnterMsg)
+	if !ok {
+		t.Fatalf("cmd emitted %T, want SidebarDragEnterMsg", msg)
+	}
+	if em.Kind != k8s.ResourceDeployments {
+		t.Errorf("SidebarDragEnterMsg.Kind = %q, want Deployments", em.Kind)
+	}
+}
+
+func TestSidebarModel_Drag_JSwapsDownAndCursorFollows(t *testing.T) {
+	m, _ := pinnedDragSetup()
+	m.EnterDrag()
+
+	m, _ = m.Update(keyMsg('j'))
+
+	want := []k8s.ResourceType{k8s.ResourcePods, k8s.ResourceServices, k8s.ResourceDeployments}
+	if !pinnedEqual(m.PinnedKinds(), want) {
+		t.Errorf("after j: pinned = %v, want %v", m.PinnedKinds(), want)
+	}
+	// Cursor must still be on Deployments (the dragged kind).
+	visible := m.visibleItems()
+	if visible[m.cursor].resourceType != k8s.ResourceDeployments {
+		t.Errorf("cursor follows dragged kind; on row %+v", visible[m.cursor])
+	}
+}
+
+func TestSidebarModel_Drag_KSwapsUp(t *testing.T) {
+	m, _ := pinnedDragSetup()
+	m.EnterDrag()
+
+	m, _ = m.Update(keyMsg('k'))
+
+	want := []k8s.ResourceType{k8s.ResourceDeployments, k8s.ResourcePods, k8s.ResourceServices}
+	if !pinnedEqual(m.PinnedKinds(), want) {
+		t.Errorf("after k: pinned = %v, want %v", m.PinnedKinds(), want)
+	}
+}
+
+func TestSidebarModel_Drag_BoundaryNoWrap(t *testing.T) {
+	m, _ := pinnedDragSetup()
+	// Force dragged kind to the LAST pinned then enter drag.
+	m.SnapCursorToKind(k8s.ResourceServices)
+	m.EnterDrag()
+	before := append([]k8s.ResourceType(nil), m.PinnedKinds()...)
+
+	m, _ = m.Update(keyMsg('j'))
+
+	if !pinnedEqual(m.PinnedKinds(), before) {
+		t.Errorf("j at last pinned must be no-op (no wrap), got %v", m.PinnedKinds())
+	}
+}
+
+func TestSidebarModel_Drag_DCommitsAndEmitsMsg(t *testing.T) {
+	m, _ := pinnedDragSetup()
+	m.EnterDrag()
+	m, _ = m.Update(keyMsg('j'))
+
+	committed, cmd := m.Update(keyMsg('D'))
+	if committed.IsDragging() {
+		t.Error("dragActive must be false after D commit")
+	}
+	want := []k8s.ResourceType{k8s.ResourcePods, k8s.ResourceServices, k8s.ResourceDeployments}
+	if !pinnedEqual(committed.PinnedKinds(), want) {
+		t.Errorf("post-commit pinned = %v, want %v", committed.PinnedKinds(), want)
+	}
+	if cmd == nil {
+		t.Fatal("commit must return SidebarDragCommitMsg cmd")
+	}
+	if _, ok := cmd().(SidebarDragCommitMsg); !ok {
+		t.Errorf("commit cmd emits %T, want SidebarDragCommitMsg", cmd())
+	}
+}
+
+func TestSidebarModel_Drag_EnterAlsoCommits(t *testing.T) {
+	// Enter is the global "commit / into" gesture in km8 — it must
+	// also drop a drag, mirroring D.
+	m, _ := pinnedDragSetup()
+	m.EnterDrag()
+	m, _ = m.Update(keyMsg('j'))
+
+	committed, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if committed.IsDragging() {
+		t.Error("Enter must exit drag mode (commit, not cancel)")
+	}
+	want := []k8s.ResourceType{k8s.ResourcePods, k8s.ResourceServices, k8s.ResourceDeployments}
+	if !pinnedEqual(committed.PinnedKinds(), want) {
+		t.Errorf("post-Enter-commit pinned = %v, want %v (same as D)", committed.PinnedKinds(), want)
+	}
+	if cmd == nil {
+		t.Fatal("Enter commit must emit SidebarDragCommitMsg")
+	}
+	if _, ok := cmd().(SidebarDragCommitMsg); !ok {
+		t.Errorf("Enter cmd emits %T, want SidebarDragCommitMsg", cmd())
+	}
+}
+
+func TestSidebarModel_Drag_EscCancelsAndReverts(t *testing.T) {
+	m, original := pinnedDragSetup()
+	m.EnterDrag()
+	m, _ = m.Update(keyMsg('j'))
+	// Mid-drag state IS different from the original.
+	if pinnedEqual(m.PinnedKinds(), original) {
+		t.Fatalf("setup: pinned should differ from original after one j, got %v", m.PinnedKinds())
+	}
+
+	reverted, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if reverted.IsDragging() {
+		t.Error("Esc must exit drag mode")
+	}
+	if !pinnedEqual(reverted.PinnedKinds(), original) {
+		t.Errorf("Esc must revert pinned to snapshot, got %v want %v", reverted.PinnedKinds(), original)
+	}
+	if cmd == nil {
+		t.Fatal("Esc cancel must emit SidebarDragCancelMsg")
+	}
+	if _, ok := cmd().(SidebarDragCancelMsg); !ok {
+		t.Errorf("cancel cmd emits %T, want SidebarDragCancelMsg", cmd())
+	}
+}
+
+func TestSidebarModel_Drag_SpaceOpensDropMenuNotCancel(t *testing.T) {
+	// Space is one of km8's core gestures (Tab/Enter/Esc/Space) — in
+	// drag mode it opens the drop-only menu instead of cancelling
+	// like every other non-j/k/D/Enter key. Sidebar emits the
+	// request msg; app.go renders the popup.
+	m, original := pinnedDragSetup()
+	m.EnterDrag()
+	m, _ = m.Update(keyMsg('j'))
+	// Mid-drag state differs from original.
+	if pinnedEqual(m.PinnedKinds(), original) {
+		t.Fatalf("setup: pinned should differ from original after one j")
+	}
+
+	stillDragging, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+	if !stillDragging.IsDragging() {
+		t.Error("Space mid-drag must NOT exit drag mode")
+	}
+	if pinnedEqual(stillDragging.PinnedKinds(), original) {
+		t.Error("Space mid-drag must NOT revert pinned (no cancel)")
+	}
+	if cmd == nil {
+		t.Fatal("Space must emit SidebarDragRequestDropMenuMsg")
+	}
+	if _, ok := cmd().(SidebarDragRequestDropMenuMsg); !ok {
+		t.Errorf("Space cmd emits %T, want SidebarDragRequestDropMenuMsg", cmd())
+	}
+}
+
+func TestSidebarModel_Drag_AnyOtherKeyCancels(t *testing.T) {
+	m, original := pinnedDragSetup()
+	m.EnterDrag()
+	m, _ = m.Update(keyMsg('j'))
+	// 'P' would normally toggle pin — during drag it must cancel.
+	reverted, _ := m.Update(keyMsg('P'))
+	if reverted.IsDragging() {
+		t.Error("non-j/k/D key must exit drag mode")
+	}
+	if !pinnedEqual(reverted.PinnedKinds(), original) {
+		t.Errorf("P during drag must revert pinned to snapshot, got %v", reverted.PinnedKinds())
+	}
+}
+
+func TestSidebarModel_Drag_CancelRestoresCursorOnDraggedKind(t *testing.T) {
+	m, _ := pinnedDragSetup()
+	m.EnterDrag()
+	m, _ = m.Update(keyMsg('j')) // dragged kind moves down
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	visible := m.visibleItems()
+	if visible[m.cursor].resourceType != k8s.ResourceDeployments {
+		t.Errorf("cursor must land back on dragged kind after cancel, on %+v", visible[m.cursor])
+	}
+}
+
+func pinnedEqual(a, b []k8s.ResourceType) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestSidebarModel_InitWithPinned_PinnedHeaderRemainsVisible(t *testing.T) {
 	// Same bug, with pins: cursor lands on Pinned/Pods (index 1) at
 	// init. Pre-fix scrollOffset got set to 1, hiding the Pinned

@@ -108,14 +108,15 @@ func TestHelmDocMenu_CursorJK(t *testing.T) {
 	if m.cursor != 4 {
 		t.Errorf("after 4xj: cursor=%d, want 4", m.cursor)
 	}
-	// At bottom, j is clamped.
+	// At bottom, j wraps to 0.
 	m, _ = m.Update(key("j"))
-	if m.cursor != 4 {
-		t.Errorf("j past bottom: cursor=%d, want clamp at 4", m.cursor)
+	if m.cursor != 0 {
+		t.Errorf("j past bottom: cursor=%d, want wrap to 0", m.cursor)
 	}
+	// At top, k wraps to last.
 	m, _ = m.Update(key("k"))
-	if m.cursor != 3 {
-		t.Errorf("after k: cursor=%d, want 3", m.cursor)
+	if m.cursor != 4 {
+		t.Errorf("k past top: cursor=%d, want wrap to 4", m.cursor)
 	}
 }
 

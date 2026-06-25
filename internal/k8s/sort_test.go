@@ -231,3 +231,67 @@ func TestSortItems_StableOnTies(t *testing.T) {
 		}
 	}
 }
+
+func TestSortItemsChain_PrimaryFirstTiebreakerNext(t *testing.T) {
+	// Primary tier = Restarts desc; tiebreaker = Name asc. The two
+	// "5 restarts" rows must break by Name (alpha asc), while "10
+	// restarts" sits at the top regardless of name.
+	items := []ResourceItem{
+		podItem("zzz", "1/1", "Running", "5", time.Hour),
+		podItem("aaa", "1/1", "Running", "5", time.Hour),
+		podItem("mmm", "1/1", "Running", "10", time.Hour),
+	}
+	SortItemsChain(items, podColumns, []SortTier{
+		{Column: "Restarts", Ascending: false},
+		{Column: "Name", Ascending: true},
+	})
+	want := []string{"mmm", "aaa", "zzz"}
+	if got := names(items); !sliceEq(got, want) {
+		t.Errorf("chain order = %v, want %v", got, want)
+	}
+}
+
+func TestSortItemsChain_DropsUnknownTier(t *testing.T) {
+	// Unknown tier (column not in the kind's column set) silently
+	// skipped — chain falls through to the next known tier rather
+	// than failing or producing garbage order.
+	items := []ResourceItem{
+		podItem("c", "1/1", "Running", "2", time.Hour),
+		podItem("a", "1/1", "Running", "1", time.Hour),
+		podItem("b", "1/1", "Running", "3", time.Hour),
+	}
+	SortItemsChain(items, podColumns, []SortTier{
+		{Column: "NoSuchColumn", Ascending: true},
+		{Column: "Name", Ascending: true},
+	})
+	want := []string{"a", "b", "c"}
+	if got := names(items); !sliceEq(got, want) {
+		t.Errorf("unknown tier should be skipped, got %v want %v", got, want)
+	}
+}
+
+func TestSortItemsChain_EmptyChainIsNoOp(t *testing.T) {
+	items := []ResourceItem{
+		podItem("c", "1/1", "Running", "1", time.Hour),
+		podItem("a", "1/1", "Running", "1", time.Hour),
+		podItem("b", "1/1", "Running", "1", time.Hour),
+	}
+	before := names(items)
+	SortItemsChain(items, podColumns, nil)
+	after := names(items)
+	if !sliceEq(before, after) {
+		t.Errorf("empty chain must not touch order, before=%v after=%v", before, after)
+	}
+}
+
+func sliceEq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

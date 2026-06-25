@@ -101,26 +101,28 @@ func TestNamespacePickerModel_NavigateUp(t *testing.T) {
 	}
 }
 
-func TestNamespacePickerModel_NavigateUp_ClampAtZero(t *testing.T) {
+func TestNamespacePickerModel_NavigateUp_WrapsAtZero(t *testing.T) {
 	m := newTestNamespacePicker()
 	openNamespacePicker(&m)
 
+	items := m.filtered()
 	m, _ = m.Update(keyMsg('k'))
-	if m.cursor != 0 {
-		t.Errorf("k at top must stay at 0, got %d", m.cursor)
+	if m.cursor != len(items)-1 {
+		t.Errorf("k at top must wrap to last (%d), got %d", len(items)-1, m.cursor)
 	}
 }
 
-func TestNamespacePickerModel_NavigateDown_ClampAtEnd(t *testing.T) {
+func TestNamespacePickerModel_NavigateDown_WrapsAtEnd(t *testing.T) {
 	m := newTestNamespacePicker()
 	openNamespacePicker(&m)
 
-	for i := 0; i < 20; i++ {
+	items := m.filtered()
+	for i := 0; i < len(items); i++ {
 		m, _ = m.Update(keyMsg('j'))
 	}
-	if m.cursor != len(m.namespaces)-1 {
-		t.Errorf("cursor must clamp at last item (%d), got %d",
-			len(m.namespaces)-1, m.cursor)
+	// After len(items) presses of j starting from 0, cursor should be back at 0.
+	if m.cursor != 0 {
+		t.Errorf("cursor must wrap to 0 after full cycle, got %d", m.cursor)
 	}
 }
 

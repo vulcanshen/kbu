@@ -41,10 +41,20 @@ type hintRow struct {
 // the popup. Key is the single-letter hotkey (bracketed in label via
 // bracketHotkey, dispatched directly on press). Action is the opaque
 // identifier emitted via HintActionMsg so the caller routes commits.
+//
+// separator marks a non-selectable visual divider WITHIN the action
+// region (distinct from the auto-rendered separator between actions
+// and the cheatsheet). header marks a non-selectable dim-grey
+// region label rendered above the items it introduces. Both follow
+// the same skip rules as listpicker / panel2menu: cursor nav,
+// Enter, mouse-click all bypass them; direct hotkeys naturally miss
+// because chrome rows carry no key.
 type hintAction struct {
-	label  string // "Pin Pods" / "Unpin Pods" / ...
-	key    string // single-letter hotkey, e.g. "P"
-	action string // commit identifier passed back in HintActionMsg
+	label     string // "Pin Pods" / "Unpin Pods" / ...
+	key       string // single-letter hotkey, e.g. "P"
+	action    string // commit identifier passed back in HintActionMsg
+	separator bool
+	header    bool
 }
 
 // HintActionMsg is emitted when the user commits one of the popup's
@@ -80,7 +90,7 @@ func (m *HintPopupModel) OpenWithActions(title string, actions []hintAction, row
 	m.title = title
 	m.rows = rows
 	m.actions = actions
-	m.cursor = 0
+	m.cursor = m.firstSelectable()
 	return m.animator.Open()
 }
 
@@ -123,22 +133,22 @@ func (m HintPopupModel) Update(msg tea.Msg) (HintPopupModel, tea.Cmd) {
 	}
 	switch key {
 	case "j", "down":
-		if m.cursor < len(m.actions)-1 {
-			m.cursor++
-		}
+		m.cursor = m.nextSelectable(m.cursor)
 	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
+		m.cursor = m.prevSelectable(m.cursor)
 	case "enter":
 		if m.cursor < 0 || m.cursor >= len(m.actions) {
+			return m, nil
+		}
+		if m.actions[m.cursor].separator || m.actions[m.cursor].header {
 			return m, nil
 		}
 		return m, m.commitAction(m.actions[m.cursor].action)
 	default:
 		// Direct hotkey trigger — must match an action's registered
 		// key (case-sensitive). Unknown keys fall through to no-op so
-		// stray presses don't close the popup.
+		// stray presses don't close the popup. Separator / header
+		// rows carry no key so they naturally don't match.
 		for _, a := range m.actions {
 			if a.key != "" && key == a.key {
 				return m, m.commitAction(a.action)
@@ -146,6 +156,59 @@ func (m HintPopupModel) Update(msg tea.Msg) (HintPopupModel, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// firstSelectable / lastSelectable / nextSelectable / prevSelectable
+// mirror the listpicker + panel2menu helpers so cursor nav skips
+// separator + header rows uniformly across every popup that owns a
+// cursor.
+func (m HintPopupModel) firstSelectable() int {
+	for i, a := range m.actions {
+		if !a.separator && !a.header {
+			return i
+		}
+	}
+	return 0
+}
+
+func (m HintPopupModel) lastSelectable() int {
+	for i := len(m.actions) - 1; i >= 0; i-- {
+		if !m.actions[i].separator && !m.actions[i].header {
+			return i
+		}
+	}
+	if len(m.actions) == 0 {
+		return 0
+	}
+	return len(m.actions) - 1
+}
+
+func (m HintPopupModel) nextSelectable(from int) int {
+	n := len(m.actions)
+	if n == 0 {
+		return from
+	}
+	for step := 1; step <= n; step++ {
+		idx := (from + step) % n
+		if !m.actions[idx].separator && !m.actions[idx].header {
+			return idx
+		}
+	}
+	return from
+}
+
+func (m HintPopupModel) prevSelectable(from int) int {
+	n := len(m.actions)
+	if n == 0 {
+		return from
+	}
+	for step := 1; step <= n; step++ {
+		idx := (from - step + n) % n
+		if !m.actions[idx].separator && !m.actions[idx].header {
+			return idx
+		}
+	}
+	return from
 }
 
 // HandleMouse routes a click against the popup. The popup has two
@@ -178,11 +241,17 @@ func (m HintPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (Hin
 	}
 	// Action rows live at lines 2..2+A-1 (top border + padding row
 	// above them). Cheatsheet rows below are non-interactive.
+	// Header / separator rows ALSO live in this band but are
+	// non-selectable — left-click on them is a silent no-op.
 	if len(m.actions) > 0 {
 		actionY := msg.Y - py - 2
 		if actionY >= 0 && actionY < len(m.actions) {
+			a := m.actions[actionY]
+			if a.separator || a.header {
+				return m, nil
+			}
 			m.cursor = actionY
-			return m, m.commitAction(m.actions[actionY].action)
+			return m, m.commitAction(a.action)
 		}
 	}
 	return m, nil
@@ -221,13 +290,15 @@ const titleIcon = "\U000f094b"
 
 func sidebarHintContent() (string, []hintRow) {
 	title := " " + titleIcon + " km8 — what can I do here?"
+	// P is intentionally omitted: the action area above already
+	// surfaces "[P]in <kind>" / "Unpin <kind>" contextually, so a
+	// separate cheatsheet row would just restate it.
 	rows := []hintRow{
 		{keys: "j/k", hint: "move cursor (also ↓/↑)"},
 		{keys: "1/2/3", hint: "switch focus (also Tab / Shift+Tab)"},
 		{keys: "/", hint: "search by name; type to filter"},
 		{keys: drillArrow + " Enter", hint: "while searching: lock the filter and exit search mode"},
 		{keys: drillArrow + " Esc", hint: "clear search / exit search mode"},
-		{keys: "P", hint: "toggle pinned — pin / unpin the cursor's resource kind"},
 		{keys: "N", hint: "switch namespace (global)"},
 		{keys: "C", hint: "switch context (global)"},
 	}
@@ -420,8 +491,28 @@ func (m HintPopupModel) renderFullPopup() string {
 		Foreground(lipgloss.Color("#1e1e2e")).
 		Background(bc).Bold(true)
 	actionStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	var actionRows []string
 	for i, a := range m.actions {
+		if a.separator {
+			// Same purple horizontal rule the listpicker / panel2menu
+			// use between regions — keeps every km8 popup's internal
+			// divider visually consistent.
+			actionRows = append(actionRows, bStyle.Render(strings.Repeat("─", innerW)))
+			continue
+		}
+		if a.header {
+			// Dim grey region label — reads as a section heading
+			// above the actions below.
+			label := " " + headerStyle.Render(a.label)
+			plainW := lipgloss.Width(label)
+			pad := ""
+			if plainW < innerW {
+				pad = strings.Repeat(" ", innerW-plainW)
+			}
+			actionRows = append(actionRows, label+pad)
+			continue
+		}
 		bracketed := bracketHotkey(a.label, a.key)
 		body := " " + bracketed
 		plainW := lipgloss.Width(body)

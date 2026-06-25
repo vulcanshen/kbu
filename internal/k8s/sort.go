@@ -9,42 +9,74 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SortItems sorts items in place by the column whose Title matches
-// columnTitle. ascending=true → small/early first; false → reversed.
-// Unknown column or empty title → no-op (caller stays defensive
-// against stale config referencing a column the kind no longer
-// surfaces).
-//
-// The comparator is picked by column Title (not index) so config
-// written for "Age" keeps working even if the kind reorders its
-// columns between versions. Title-based dispatch also lets the same
-// comparator serve every kind that has e.g. a "Ready" column without
-// each kind hand-wiring its own SortLess.
-//
-// Stable sort: rows whose keys tie keep their incoming relative
-// order, which is the natural fallback when the user picks a sort
-// column that doesn't fully disambiguate.
+// SortTier is one rung in a multi-column sort. Column is matched
+// against the kind's registered Column.Title (same dispatch as
+// single-column SortItems). Ascending toggles direction within the
+// tier only — each tier is independent.
+type SortTier struct {
+	Column    string
+	Ascending bool
+}
+
+// SortItems sorts items in place by a single column. Thin wrapper
+// over SortItemsChain — kept for callers that haven't migrated yet
+// and for the test surface where single-column is the natural case.
 func SortItems(items []ResourceItem, columns []Column, columnTitle string, ascending bool) {
-	if columnTitle == "" || len(items) < 2 {
+	SortItemsChain(items, columns, []SortTier{{Column: columnTitle, Ascending: ascending}})
+}
+
+// SortItemsChain sorts items in place by the ordered tier list.
+// Tier 0 is the primary sort, tier 1 the first tiebreaker, and so
+// on. A tier whose Column doesn't match any of the kind's columns
+// is silently skipped (defensive against stale config). Empty
+// chain, or a chain where every tier is unknown / non-discriminating,
+// degrades to the stable sort's natural fallback (incoming order).
+//
+// Comparator dispatch is per-tier — Age uses the time comparator,
+// Ready parses N/M, etc. — so mixing typed tiers (e.g. Restarts
+// desc + Age asc) works without per-call configuration.
+func SortItemsChain(items []ResourceItem, columns []Column, tiers []SortTier) {
+	if len(items) < 2 || len(tiers) == 0 {
 		return
 	}
-	colIdx := -1
-	for i, c := range columns {
-		if c.Title == columnTitle {
-			colIdx = i
-			break
+	type compiled struct {
+		less      func(a, b ResourceItem) int
+		ascending bool
+	}
+	chain := make([]compiled, 0, len(tiers))
+	for _, t := range tiers {
+		if t.Column == "" {
+			continue
 		}
+		colIdx := -1
+		for i, c := range columns {
+			if c.Title == t.Column {
+				colIdx = i
+				break
+			}
+		}
+		if colIdx < 0 {
+			continue
+		}
+		chain = append(chain, compiled{
+			less:      comparatorForColumn(t.Column, colIdx),
+			ascending: t.Ascending,
+		})
 	}
-	if colIdx < 0 {
+	if len(chain) == 0 {
 		return
 	}
-	less := comparatorForColumn(columnTitle, colIdx)
 	sort.SliceStable(items, func(i, j int) bool {
-		cmp := less(items[i], items[j])
-		if !ascending {
-			cmp = -cmp
+		for _, c := range chain {
+			cmp := c.less(items[i], items[j])
+			if !c.ascending {
+				cmp = -cmp
+			}
+			if cmp != 0 {
+				return cmp < 0
+			}
 		}
-		return cmp < 0
+		return false
 	})
 }
 
