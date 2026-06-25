@@ -276,16 +276,6 @@ func TestYamlPopup_CloseWithEsc(t *testing.T) {
 	}
 }
 
-func TestYamlPopup_CloseWithQ(t *testing.T) {
-	m := newTestYamlPopup()
-	m = openTestPopup(m, sampleYAML)
-	m, _ = m.Update(keyMsg('q'))
-	m.animator.Finalize()
-	if m.IsActive() {
-		t.Error("expected popup to be inactive after q")
-	}
-}
-
 func TestYamlPopup_SearchLockedStateRenders(t *testing.T) {
 	m := newTestYamlPopup()
 	m = openTestPopup(m, sampleYAML)

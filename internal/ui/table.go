@@ -428,12 +428,14 @@ func (m TableModel) View() string {
 		b.WriteString("\n")
 	}
 
-	// Render header — bright when focused, dim when not
+	// Render header — bright when focused, drop to overlay0 grey + bold
+	// when unfocused so it recedes with the rest of the panel chrome,
+	// matching the sidebar's category-header treatment.
 	headerStyle := m.theme.TableHeaderStyle()
 	if !m.focused {
-		headerStyle = m.theme.TableRowStyle().Bold(true)
+		headerStyle = m.theme.TableDimRowStyle().Bold(true)
 	}
-	header := m.renderRow(colWidths, m.columnTitles(), headerStyle, false)
+	header := m.renderRow(colWidths, m.columnTitles(), headerStyle)
 	b.WriteString(header)
 	b.WriteString("\n")
 
@@ -448,32 +450,36 @@ func (m TableModel) View() string {
 		end = len(m.rows)
 	}
 
+	dimRowStyle := m.theme.TableDimRowStyle()
 	for i := m.scrollOffset; i < end; i++ {
 		var style lipgloss.Style
-		// onLightBg signals stylizeCell to swap pastel status colors
-		// for darker variants — pastel green on the focused-cursor
-		// reverse-video row reads as "barely visible".
-		onLightBg := false
 		isLocked := i == m.lockedRow
-		if i == m.cursor && m.focused {
+		switch {
+		case i == m.cursor && m.focused:
 			style = m.theme.TableSelectedRowStyle()
-			onLightBg = true
-		} else if i == m.cursor {
+		case i == m.cursor:
+			// Lavender chip — single strong "remembered position"
+			// marker against the dimmed surrounding rows.
 			style = m.theme.TableUnfocusedSelectedRowStyle()
-		} else if isLocked {
+		case isLocked:
 			// Compare-mode lock background — same #9DDAEA cyan as the
 			// status-bar marker so the two signals visually connect.
-			// Dark foreground keeps text readable on the light bg.
+			// Stays full color even when the table is unfocused
+			// because compare is an intentional user state.
 			style = lipgloss.NewStyle().
 				Background(lipgloss.Color("#9DDAEA")).
 				Foreground(lipgloss.Color("#1e1e2e"))
-			onLightBg = true
-		} else if i%2 == 0 {
+		case !m.focused:
+			// Unfocused → flatten alternating-row striping into a
+			// single dim color so the cursor chip is the only
+			// surviving signal in the panel.
+			style = dimRowStyle
+		case i%2 == 0:
 			style = m.theme.TableAlternatingRowStyle()
-		} else {
+		default:
 			style = m.theme.TableRowStyle()
 		}
-		row := m.renderRow(colWidths, m.rows[i], style, onLightBg)
+		row := m.renderRow(colWidths, m.rows[i], style)
 		// Cursor sitting on top of the locked row keeps the reverse-
 		// video cursor style — the user's cursor position is the more
 		// transient signal (changes every j/k), the lock is fixed and
@@ -586,20 +592,20 @@ func (m TableModel) calcColumnWidths() []int {
 	return widths
 }
 
-func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.Style, onLightBg bool) string {
+func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.Style) string {
 	// Apply the row style to each cell + separator + trailing padding
-	// rather than wrapping the whole line. Per-cell ANSI prevents the
-	// stylizeCell reset (\x1b[0m, emitted after the colored STATUS span)
-	// from killing the row style for the rest of the row — which is why
-	// the selected-row highlight used to die at the STATUS column and
-	// leave Restarts/Age/Node uncolored.
+	// rather than wrapping the whole line. Per-cell ANSI dispatch was
+	// originally there so the Pod-Status reset (\x1b[0m, emitted after
+	// the colored STATUS span) wouldn't kill the row style for the rest
+	// of the row. Status-column coloring was removed in v1.7.x for
+	// cross-kind consistency; per-cell wrapping stays in case a future
+	// per-column highlight returns.
 	var parts []string
 	for i, w := range colWidths {
 		val := ""
 		if i < len(values) {
 			val = values[i]
 		}
-		raw := val // pre-truncation value — stylizeCell uses this for the color lookup
 		// Visual-width-aware truncation. The old code used byte-based
 		// len(val) and val[:w-1], which sliced UTF-8 mid-codepoint for any
 		// multi-byte content — e.g. the Nerd Font helm glyph "" is
@@ -620,11 +626,7 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		} else {
 			val = val + strings.Repeat(" ", w-vw)
 		}
-		// stylizeCell wraps a span of the cell with a per-cell fg
-		// override (e.g. Pod STATUS color). It composes ON TOP of the
-		// row style — the row style's bold/fg applies elsewhere in the
-		// cell, the status color only paints the trimmed text.
-		val = m.stylizeCell(i, val, raw, style, onLightBg)
+		val = style.Render(val)
 		parts = append(parts, val)
 	}
 
@@ -639,112 +641,6 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 	}
 
 	return line
-}
-
-// stylizeCell colors known semantic cells (currently only Pod STATUS) using
-// the theme's status palette. The injected ANSI codes do not change the
-// cell's visual width — padding has already happened.
-//
-// `raw` is the pre-truncation cell value; it feeds the color lookup so a
-// narrow STATUS column that truncates the status word (e.g.
-// "CrashLoopBackOff" → "CrashL…") still gets coloured — the visible
-// (possibly truncated) text gets the ANSI wrap, not the original.
-func (m TableModel) stylizeCell(colIdx int, padded, raw string, base lipgloss.Style, onLightBg bool) string {
-	// Dynamic Status-column lookup so the inserted helm-marker column
-	// (post-v1.5.1) doesn't statically shift the index. Was hard-coded
-	// to colIdx==2 before — now it's whichever index actually carries
-	// the "Status" title.
-	if m.resourceType != k8s.ResourcePods {
-		return base.Render(padded)
-	}
-	statusIdx := -1
-	for i, col := range m.columns {
-		if col.Title == "Status" {
-			statusIdx = i
-			break
-		}
-	}
-	if colIdx != statusIdx {
-		return base.Render(padded)
-	}
-	color := podStatusColor(strings.TrimSpace(raw), m.theme)
-	if onLightBg {
-		if dark := podStatusColorDark(strings.TrimSpace(raw)); dark != "" {
-			color = dark
-		}
-	}
-	if color == "" {
-		return base.Render(padded)
-	}
-	// Status cell — overlay the status color on top of the row's base
-	// style, but only on the visible (trimmed) span. Trailing spaces in
-	// the cell stay rendered with the plain base style so any highlight
-	// fills cleanly without colored-space bleed.
-	trimmed := strings.TrimSpace(padded)
-	if trimmed == "" {
-		return base.Render(padded)
-	}
-	idx := strings.Index(padded, trimmed)
-	if idx < 0 {
-		return base.Render(padded)
-	}
-	statusStyle := base.Foreground(lipgloss.Color(color))
-	out := ""
-	if idx > 0 {
-		out += base.Render(padded[:idx])
-	}
-	out += statusStyle.Render(trimmed)
-	if tail := padded[idx+len(trimmed):]; tail != "" {
-		out += base.Render(tail)
-	}
-	return out
-}
-
-// podStatusColor classifies a pod status string into one of the theme's
-// status color buckets. Unknown statuses return "" so the renderer leaves
-// them at the default foreground.
-func podStatusColor(status string, t *theme.Theme) string {
-	switch status {
-	case "Running", "Succeeded", "Completed":
-		return t.Status.Running
-	case "Pending", "ContainerCreating", "PodInitializing", "Init:PodInitializing":
-		return t.Status.Pending
-	case "CrashLoopBackOff", "Error", "ImagePullBackOff", "ErrImagePull",
-		"CreateContainerConfigError", "CreateContainerError",
-		"InvalidImageName", "Evicted", "OOMKilled", "Failed":
-		return t.Status.Error
-	case "Terminating", "Unknown":
-		return t.Status.Unknown
-	}
-	// Generic Init:<Reason> fallback: treat as error since unusual.
-	if strings.HasPrefix(status, "Init:") {
-		return t.Status.Error
-	}
-	return ""
-}
-
-// podStatusColorDark is the light-bg-readable counterpart of podStatusColor —
-// same status → colour buckets but with the Catppuccin Latte (darker)
-// variants. Used by stylizeCell on the focused-cursor row, whose reverse-
-// video bg makes the pastel Mocha greens / yellows wash out. Returns ""
-// for unknown statuses so the caller falls back to the row's base fg.
-func podStatusColorDark(status string) string {
-	switch status {
-	case "Running", "Succeeded", "Completed":
-		return "#40a02b" // Latte green
-	case "Pending", "ContainerCreating", "PodInitializing", "Init:PodInitializing":
-		return "#df8e1d" // Latte yellow
-	case "CrashLoopBackOff", "Error", "ImagePullBackOff", "ErrImagePull",
-		"CreateContainerConfigError", "CreateContainerError",
-		"InvalidImageName", "Evicted", "OOMKilled", "Failed":
-		return "#d20f39" // Latte red
-	case "Terminating", "Unknown":
-		return "#6c6f85" // Latte subtext0
-	}
-	if strings.HasPrefix(status, "Init:") {
-		return "#d20f39"
-	}
-	return ""
 }
 
 // SetColumns replaces the column definitions and resets the table state.

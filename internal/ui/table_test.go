@@ -589,32 +589,6 @@ func TestColumnsForResource(t *testing.T) {
 	}
 }
 
-func TestPodStatusColor_Classification(t *testing.T) {
-	th := theme.DefaultTheme()
-	cases := []struct {
-		status string
-		want   string // expected theme color
-		bucket string
-	}{
-		{"Running", th.Status.Running, "running"},
-		{"Succeeded", th.Status.Running, "running"},
-		{"Pending", th.Status.Pending, "pending"},
-		{"ContainerCreating", th.Status.Pending, "pending"},
-		{"CrashLoopBackOff", th.Status.Error, "error"},
-		{"ImagePullBackOff", th.Status.Error, "error"},
-		{"OOMKilled", th.Status.Error, "error"},
-		{"Init:CrashLoopBackOff", th.Status.Error, "error"},
-		{"Terminating", th.Status.Unknown, "unknown"},
-		{"SomeNovelStatus", "", "fallthrough"},
-	}
-	for _, c := range cases {
-		got := podStatusColor(c.status, th)
-		if got != c.want {
-			t.Errorf("podStatusColor(%q) → %q (bucket %s), want %q", c.status, got, c.bucket, c.want)
-		}
-	}
-}
-
 func TestTableModel_SetCursor_BasicAndOutOfRange(t *testing.T) {
 	m := newTestTable()
 	m.SetColumns(ColumnsForResource(k8s.ResourcePods))
@@ -683,7 +657,7 @@ func TestTableModel_RenderRow_VisualWidthTruncation(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			line := m.renderRow([]int{c.w}, []string{c.val}, style, false)
+			line := m.renderRow([]int{c.w}, []string{c.val}, style)
 			plain := ansiStrip(line)
 			if !utf8.ValidString(plain) {
 				t.Errorf("rendered cell is not valid UTF-8: %q", plain)

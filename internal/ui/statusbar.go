@@ -12,6 +12,7 @@ type StatusBarModel struct {
 	clusterInfo k8s.ClusterInfo
 	namespace   string
 	width       int
+	activePanel Panel
 	theme       *theme.Theme
 }
 
@@ -19,6 +20,7 @@ func NewStatusBarModel(t *theme.Theme, info k8s.ClusterInfo) StatusBarModel {
 	return StatusBarModel{
 		clusterInfo: info,
 		namespace:   "All Namespaces",
+		activePanel: SidebarPanel,
 		theme:       t,
 	}
 }
@@ -37,6 +39,15 @@ func (m *StatusBarModel) SetNamespace(ns string) {
 
 func (m *StatusBarModel) SetWidth(width int) {
 	m.width = width
+}
+
+// SetActivePanel lets the status bar adapt its bracket-hotkey markers to
+// the currently focused panel. The `C` accelerator is panel-aware (panel 2
+// hijacks it for Compare), so on panel 2 the `[C]ontext:` label drops its
+// brackets — `C` won't open the context picker from there. Other labels
+// stay bracketed because their hotkeys are global.
+func (m *StatusBarModel) SetActivePanel(p Panel) {
+	m.activePanel = p
 }
 
 // PtyMarker is the right-side indicator that a persistent PTY (KM8erm) is
@@ -67,31 +78,56 @@ func (m StatusBarModel) ViewWithBadge(unreadErrors int, successNotice string) st
 }
 
 // ViewFull renders the status bar with optional PTY + compare markers.
-// Markers sit in the LEFT segment after `ns:` so they don't fight the
-// error / success badge on the right for space.
+// Markers sit in the LEFT segment after the namespace label so they don't
+// fight the error / success badge on the right for space.
 func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *PtyMarker, compare *CompareMarker) string {
-	// Nerd Font glyphs replace "ctx:" / "cluster:" / "ns:" labels for a
-	// compact status bar consistent with the KM8erm marker style.
-	//   U+F0237 — context
-	//   U+F1856 — cluster
-	//   U+F51E — namespace
-	ctx := m.theme.StatusBarContextStyle().Render(fmt.Sprintf("󰈷 %s", m.clusterInfo.ContextName))
-	cluster := m.theme.StatusBarClusterStyle().Render(fmt.Sprintf("󱡖 %s", m.clusterInfo.ClusterName))
-	ns := m.theme.StatusBarNamespaceStyle().Render(fmt.Sprintf(" %s", m.namespace))
+	// `[C]ontext: <ctx>  [N]amespace: <ns>` — multi-segment rendering
+	// with semantic coloring instead of layout-shifting bracket markers:
+	//   • brackets `[ ]`: blue (theme ContextFg)
+	//   • hotkey letter `C` / `N` when ACTIVE: catppuccin green
+	//   • filler text `ontext:` / `amespace:`: catppuccin overlay1 grey
+	//   • hotkey letter when INACTIVE: same grey as filler
+	//   • values <ctx>/<ns>: catppuccin lavender — same accent as the
+	//     sidebar Pinned section, so the user-relevant identifiers
+	//     (this kube context, this namespace, your pinned kinds)
+	//     share a visual signature across the app
+	// `C` is panel-aware (panel 2 hijacks it for Compare). On panel 2
+	// the whole `[C]` (brackets + letter) collapses to grey — signals
+	// "not a shortcut here" without any width change. `N` is global,
+	// stays bright blue everywhere.
+	//
+	// Cluster slot dropped because context already binds (cluster, user)
+	// — surfacing both was duplicating the same signal. Previous NF
+	// glyphs (U+F0237 context, U+F51E namespace) migrated to the popup
+	// titles so the icon-to-concept association stays.
+	blueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.StatusBar.ContextFg))
+	greyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#b4befe"))
+
+	cBracketStyle := blueStyle
+	if m.activePanel == TablePanel {
+		cBracketStyle = greyStyle
+	}
+	ctx := cBracketStyle.Render("[C]") +
+		greyStyle.Render("ontext: ") + valueStyle.Render(m.clusterInfo.ContextName)
+	ns := blueStyle.Render("[N]") +
+		greyStyle.Render("amespace: ") + valueStyle.Render(m.namespace)
 
 	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
 	badgeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Bold(true)
 
-	left := fmt.Sprintf(" %s  %s  %s", ctx, cluster, ns)
+	left := fmt.Sprintf(" %s  %s", ctx, ns)
 	if pty != nil {
 		// Hidden KM8erm: same orange (#F0AE49) as the KM8erm popup border so
-		// the user can visually link "this chip" to "that popup". Used to be
-		// Catppuccin peach (#fab387) — close enough that it blended in;
-		// matching the border is unambiguous.
+		// the user can visually link "this chip" to "that popup".
+		// Lavender matches the popup border (KM8erm is your persistent
+		// shell — a user-state thing that outlives every other popup,
+		// same conceptual bucket as Pinned / statusbar values / the
+		// unfocused-selected chip).
 		// Attached (popup visible): green via Status.Running, kept for the
 		// rare cases ViewFull is called with Visible=true (current call
 		// site only sets pty when hidden).
-		color := "#F0AE49"
+		color := "#b4befe"
 		if pty.Visible {
 			color = m.theme.Status.Running
 		}

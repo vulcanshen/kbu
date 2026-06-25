@@ -74,7 +74,7 @@ type Panel2MenuActionMsg struct {
 func NewPanel2MenuPopupModel(t *theme.Theme) Panel2MenuPopupModel {
 	return Panel2MenuPopupModel{
 		theme:    t,
-		animator: NewPopupAnimator("panel2menu", lipgloss.Color("#cba6f7")),
+		animator: NewPopupAnimator("panel2menu", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -116,10 +116,9 @@ func (m *Panel2MenuPopupModel) OpenForContainer(podName, namespace, containerNam
 	m.resource = k8s.ResourcePods
 	m.item = k8s.ResourceItem{Name: podName, Namespace: namespace}
 	m.helmManaged = false
-	m.titleOverride = " container/" + containerName
+	m.titleOverride = " container/" + containerName
 	m.items = []panel2MenuItem{
 		{label: "Shell", key: "S", hint: "kubectl exec -it"},
-		{label: "Esc " + drillUpIcon, key: "Esc", hint: "back to pod list"},
 	}
 	m.cursor = 0
 	return m.animator.Open()
@@ -184,7 +183,7 @@ func (m Panel2MenuPopupModel) Update(msg tea.Msg) (Panel2MenuPopupModel, tea.Cmd
 			}
 		}
 		return m, nil
-	case "esc", "q", " ":
+	case "esc", " ":
 		return m, m.animator.Close()
 	}
 	return m, nil
@@ -517,7 +516,7 @@ func resourceHasContainer(rt k8s.ResourceType) bool {
 }
 
 func (m Panel2MenuPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color("#cba6f7")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

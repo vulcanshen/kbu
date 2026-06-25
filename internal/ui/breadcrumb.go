@@ -24,7 +24,7 @@ const (
 
 // BreadcrumbPopupModel lists the Relatives-tab drill chain and lets the user
 // jump back to any ancestor level via j/k + Enter. Opened by `b` on the
-// Relatives tab at depth > 1; closed by Esc / q / b.
+// Relatives tab at depth > 1; closed by Esc / b.
 //
 // On Enter the model emits RelativeJumpMsg{Level: 1-indexed level} so
 // AppModel can call detail.JumpToDrillLevel — popping intermediate
@@ -40,7 +40,7 @@ type BreadcrumbPopupModel struct {
 func NewBreadcrumbPopupModel(t *theme.Theme) BreadcrumbPopupModel {
 	return BreadcrumbPopupModel{
 		theme:    t,
-		animator: NewPopupAnimator("breadcrumb", lipgloss.Color("#cba6f7")),
+		animator: NewPopupAnimator("breadcrumb", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -109,7 +109,7 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 			// without committing. Aligns with the global rule "any menu
 			// popup Space = close".
 			return m, m.animator.Close()
-		case "esc", "q":
+		case "esc":
 			return m, m.animator.Close()
 		}
 	}
@@ -184,7 +184,7 @@ func (m BreadcrumbPopupModel) RenderPopup() string {
 }
 
 func (m BreadcrumbPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color("#cba6f7")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	levelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

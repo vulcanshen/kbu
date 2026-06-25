@@ -438,9 +438,12 @@ func TestAppModel_DualSlot_TxAlive_BlocksAnotherExec(t *testing.T) {
 // containers → back) repopulated the table with raw item.Row instead of
 // augmentRowsWithHelm. ColumnsForResource(Pods) always reserves index 1
 // for the helm marker, so raw rows shifted Status one column left and
-// stylizeCell — which colors by the column whose Title=="Status" —
-// looked at the wrong cell, killing the Running green until the user
-// switched resources.
+// the Pod-Status semantic-color path — which colored by the column
+// whose Title=="Status" — looked at the wrong cell, killing the
+// Running green until the user switched resources. The coloring
+// path was removed in v1.7.x (all kinds render plain) but the
+// column-alignment regression this test guards against is still
+// real for any future per-column treatment, so the test stays.
 func TestAppModel_ExitDrillDownFromContainers_RowsStayHelmAligned(t *testing.T) {
 	// Real Pod rows are 7 cells (Name/Ready/Status/Restarts/Age/IP/Node)
 	// per the Pod ResourceDefinition's Columns slice. Match that shape
@@ -475,8 +478,8 @@ func TestAppModel_ExitDrillDownFromContainers_RowsStayHelmAligned(t *testing.T) 
 		}
 	}
 	// Belt-and-braces: the cell under the Status column must read
-	// "Running" / "Pending", not the Name. If this fails, podStatusColor
-	// would have no chance of matching and the row would render plain.
+	// "Running" / "Pending", not the Name. Any future per-column
+	// treatment would also depend on this alignment.
 	statusIdx := -1
 	for i, col := range m.table.columns {
 		if col.Title == "Status" {

@@ -44,29 +44,25 @@ type hint struct {
 	desc string
 }
 
-// hints returns the keys surfaced on the status line. v1.5.x mental model:
-// only the universal navigation keys live here — anything else is reachable
-// via Space (per-row context menu, popup self-documents) or `?` (full
-// reference). Trigger letters (E/S/D/Y) live in the per-row Space menu, so
-// they're not duplicated here.
+// hints returns the keys surfaced on the status line. v1.7+ mental model:
+// only the universal cross-panel gestures live here — `?` for the full
+// reference, `Esc` / `Space` / `Enter` / `Tab` as the four core gestures
+// (per the popup-design mindset memo), plus the global KM8erm toggle.
 //
-// `/` filter only renders on panel 1/2 — panel 3 has no in-panel search
-// (retired in v1.5.0). Hiding it on panel 3 avoids the always-on hint
-// misleading users into trying.
+// Everything panel-specific (N namespace, C context, / filter, trigger
+// letters Y/E/S/D, sort hotkeys, ...) lives in the statusbar labels
+// (`[C]ontext:` / `[N]amespace:`) or the per-row Space menus / popups
+// that self-document — duplicating them here was noisy.
 func (m StatusLineModel) hints() []hint {
-	h := []hint{
+	return []hint{
 		{"?", "help"},
-		{"q", "quit"},
-		{"N", "ns"},
-		{"C", "ctx"},
-		{"space", "menu"},
-		{"enter", "into"},
+		{"Esc", "exit"},
+		{"Space", "menu"},
+		{"Enter", "commit/into"},
+		{"Tab", "cycle panel"},
 		{"Alt-t", "KM8erm"},
+		{">", "settings"},
 	}
-	if m.activePanel != DetailPanel {
-		h = append(h, hint{"/", "filter"})
-	}
-	return h
 }
 
 func (m StatusLineModel) renderedHints() []string {

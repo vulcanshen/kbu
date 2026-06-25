@@ -616,15 +616,17 @@ func TestPanel2Menu_EscCloses(t *testing.T) {
 
 // ── container drill (OpenForContainer) ─────────────────────────────────────
 
-func TestPanel2Menu_OpenForContainer_ShellAndBack(t *testing.T) {
-	// Container drill view: Shell (containers aren't standalone API objects
-	// so YAML/Edit/Delete don't apply) + Esc back row (with separator) so
-	// users discover they can pop back up.
+func TestPanel2Menu_OpenForContainer_ShellOnly(t *testing.T) {
+	// v1.7: container drill menu surfaces just Shell. The previous
+	// "Esc back to pod list" entry was a discoverability hint that
+	// duplicated the universal Esc gesture (any popup's Esc closes
+	// the popup, and exitDrillDown fires whether or not the menu is
+	// open). Removed per popup-design mindset — no redundant entries.
 	m := newPanel2Menu(t)
 	cmd := m.OpenForContainer("nginx-pod", "default", "nginx")
 	drainPanel2MenuToInteractive(t, &m, cmd)
 
-	wantKeys := []string{"S", "Esc"}
+	wantKeys := []string{"S"}
 	if len(m.items) != len(wantKeys) {
 		t.Fatalf("container menu len=%d, want %d (keys=%v)", len(m.items), len(wantKeys), itemKeys(m.items))
 	}
@@ -658,35 +660,6 @@ func TestPanel2Menu_OpenForContainer_EnterCommitsShell(t *testing.T) {
 	})
 	if !found {
 		t.Error("container Enter did not emit Panel2MenuActionMsg")
-	}
-}
-
-func TestPanel2Menu_OpenForContainer_EscRowEmitsEsc(t *testing.T) {
-	// Cursor j to the Esc row, then Enter commits Action="Esc" — app.go
-	// maps this to exitDrillDown (pop back to pod list).
-	m := newPanel2Menu(t)
-	cmd := m.OpenForContainer("nginx-pod", "default", "nginx")
-	drainPanel2MenuToInteractive(t, &m, cmd)
-
-	m, _ = m.Update(key("j"))
-	_, batchCmd := m.Update(key("enter"))
-	if batchCmd == nil {
-		t.Fatal("Enter on Esc row must return a commit cmd")
-	}
-	found := false
-	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
-		am, ok := msg.(Panel2MenuActionMsg)
-		if !ok {
-			return false
-		}
-		if am.Action != "Esc" {
-			t.Errorf("container Esc row must commit Esc, got %q", am.Action)
-		}
-		found = true
-		return true
-	})
-	if !found {
-		t.Error("container Esc row did not emit Panel2MenuActionMsg")
 	}
 }
 

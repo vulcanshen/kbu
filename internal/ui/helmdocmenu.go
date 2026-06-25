@@ -54,7 +54,7 @@ func NewHelmDocMenuPopupModel(t *theme.Theme) HelmDocMenuPopupModel {
 	return HelmDocMenuPopupModel{
 		theme:    t,
 		items:    helmDocMenuItems,
-		animator: NewPopupAnimator("helmdocmenu", lipgloss.Color("#cba6f7")),
+		animator: NewPopupAnimator("helmdocmenu", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -189,7 +189,7 @@ func (m HelmDocMenuPopupModel) Update(msg tea.Msg) (HelmDocMenuPopupModel, tea.C
 		// menu is still there to pick the next doc. Esc/q/Space dismisses
 		// the menu itself (Space = mirror open).
 		return m, func() tea.Msg { return req }
-	case "esc", "q", " ":
+	case "esc", " ":
 		return m, m.animator.Close()
 	}
 	return m, nil
@@ -229,7 +229,7 @@ func (m HelmDocMenuPopupModel) RenderPopup() string {
 }
 
 func (m HelmDocMenuPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color("#cba6f7")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

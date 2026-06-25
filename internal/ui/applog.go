@@ -57,7 +57,7 @@ func NewAppLogModel(t *theme.Theme) AppLogModel {
 	return AppLogModel{
 		maxEntries: 1000,
 		theme:      t,
-		animator:   NewPopupAnimator("applog", lipgloss.Color("#74c7ec")),
+		animator:   NewPopupAnimator("applog", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -131,7 +131,7 @@ func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc", "!", "q", " ":
+		case "esc", "!", " ":
 			return m, m.animator.Close()
 		case "j", "down":
 			if m.scrollOffset < m.maxScrollOffset() {
@@ -304,7 +304,7 @@ func (m AppLogModel) maxScrollOffset() int {
 }
 
 // HandleMouse routes a click against the app log viewer. Right-
-// click inside the popup closes it (mirror of Esc / q / !).
+// click inside the popup closes it (mirror of Esc / !).
 // Left-click is no-op — log lines aren't selectable. Wheel scroll
 // is handled at the AppModel layer (synthesizes u/d).
 func (m AppLogModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (AppLogModel, tea.Cmd) {
@@ -356,7 +356,7 @@ func (m AppLogModel) renderFullPopup() string {
 
 	body := strings.Join(lines, "\n")
 
-	bc := lipgloss.Color("#74c7ec")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 

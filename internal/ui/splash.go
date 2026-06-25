@@ -120,7 +120,7 @@ func (m SplashModel) Render(width, height int) string {
 	if done {
 		titleText = "K M 8"
 		taglineText = version.Display()
-		hintText = dimStyle.Render("press q or Esc to close")
+		hintText = dimStyle.Render("press Esc to close")
 	}
 	caption := "\n\n" +
 		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, titleText) +
@@ -140,7 +140,7 @@ func (m SplashModel) Update(msg tea.Msg) (SplashModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc", "q", "enter", " ":
+		case "esc", "enter", " ":
 			m.active = false
 			m.revealedCount = 0
 			m.pixelOrder = nil

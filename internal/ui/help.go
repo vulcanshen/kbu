@@ -22,7 +22,7 @@ type HelpModel struct {
 func NewHelpModel(t *theme.Theme) HelpModel {
 	return HelpModel{
 		theme:    t,
-		animator: NewPopupAnimator("help", lipgloss.Color("#74c7ec")),
+		animator: NewPopupAnimator("help", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -68,7 +68,7 @@ func (m HelpModel) Update(msg tea.Msg) (HelpModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc", "q", "?", " ":
+		case "esc", "?", " ":
 			return m, m.animator.Close()
 		case "j", "down":
 			content := m.helpContent()
@@ -100,7 +100,7 @@ func (m HelpModel) contentHeight() int {
 }
 
 // HandleMouse routes a click against the help cheatsheet. Right-
-// click inside the popup closes it (mirror of Esc / q / ?). Left-
+// click inside the popup closes it (mirror of Esc / ?). Left-
 // click is no-op — the cheatsheet is read-only. Wheel scrolls via
 // the AppModel-layer u/d synthesis.
 func (m HelpModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (HelpModel, tea.Cmd) {
@@ -168,7 +168,7 @@ func (m HelpModel) renderFullPopup() string {
 	}
 	colW := leftColW // tests + section sizing use the smaller side
 
-	bc := lipgloss.Color("#74c7ec")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 
@@ -457,26 +457,32 @@ type helpEntry struct {
 }
 
 func (m HelpModel) helpContent() []helpEntry {
-	// Minimal help — design 哲學: Space opens the menu, one look and
-	// you get it. Per-context trigger letters (Y/E/S/D) aren't listed:
-	// hit Space on the cursor row and the popup self-documents what's
-	// available. Same for popup menus — j/k Enter Esc Space are
+	// Minimal help — design philosophy: Space opens the menu, one look
+	// and you get it. Per-context trigger letters (Y/E/S/D) aren't
+	// listed: hit Space on the cursor row and the popup self-documents
+	// what's available. Same for popup menus — j/k Enter Esc Space are
 	// universal across every popup, no need to repeat per-popup.
+	//
+	// "Core" is the four cross-app gestures the user can rely on
+	// everywhere (Tab / Enter / Esc / Space). "Navigation" gathers
+	// cursor + panel movement keys. "Global" gathers app-level
+	// trigger letters.
 	return []helpEntry{
-		{isSection: true, text: "Core Navigation"},
+		{isSection: true, text: "Core"},
+		{key: "Tab", desc: "Cycle panels"},
 		{key: "Enter", desc: "Drill / commit (no focus shift)"},
-		{key: "Space", desc: "Open menu / close popup"},
-		{key: "h / l", desc: "Switch tab (panel 3)"},
 		{key: "Esc", desc: "Back / close"},
-		{isSection: true, text: "Vim Navigation"},
+		{key: "Space", desc: "Open menu / close popup"},
+		{isSection: true, text: "Navigation"},
 		{key: "j / k", desc: "Up / down"},
 		{key: "u / d", desc: "Page up / down"},
 		{key: "gg / G", desc: "Top / bottom"},
 		{key: "1 / 2 / 3", desc: "Switch panel"},
-		{key: "Tab", desc: "Cycle panels"},
+		{key: "h / l", desc: "Switch tab (panel 3)"},
 		{key: "/", desc: "Search (panel 1+2)"},
 		{isSection: true, text: "Global"},
 		{key: "N / C", desc: "Switch namespace / context"},
+		{key: ">", desc: "Open Settings popup (mouse, scroll direction, …)"},
 		{key: "Alt+t", desc: "Toggle KM8erm"},
 		{key: "y", desc: "Copy focused panel"},
 		{key: "z", desc: "Toggle expand panel"},
