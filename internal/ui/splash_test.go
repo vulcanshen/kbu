@@ -153,16 +153,6 @@ func TestSplashModel_CloseOnEsc(t *testing.T) {
 	}
 }
 
-func TestSplashModel_CloseOnQ(t *testing.T) {
-	m := newTestSplash()
-	m.Show()
-
-	m, _ = m.Update(keyMsg('q'))
-	if m.IsActive() {
-		t.Error("q must close the splash overlay")
-	}
-}
-
 func TestSplashModel_CloseResetsState(t *testing.T) {
 	m := newTestSplash()
 	m.Show()

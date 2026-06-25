@@ -1272,6 +1272,14 @@ func (m DetailModel) buildHistoryLines() []string {
 	cursorStyle := m.theme.TableSelectedRowStyle()
 	if !m.focused {
 		cursorStyle = m.theme.TableUnfocusedSelectedRowStyle()
+		// Mirror the sidebar/table treatment: non-cursor history rows
+		// collapse to overlay0 grey when the panel is unfocused, so
+		// the cursor revision's lavender chip is the only signal that
+		// survives. Header label keeps its dim grey too (it's chrome,
+		// not data).
+		dim := m.theme.TableDimRowStyle()
+		labelStyle = dim
+		valueStyle = dim
 	}
 
 	formatRow := func(marker, rev, status, date, chart, desc string) string {

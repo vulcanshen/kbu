@@ -10,7 +10,7 @@ import (
 )
 
 // SettingsPopupModel is the global app-settings popup opened by the
-// capital-M hotkey. Currently it carries a single row (Mouse on/off),
+// `>` (shift+.) hotkey. Currently it carries a single row (Mouse on/off),
 // but the structure is designed to grow — each row is a SettingsItem
 // with a label and a coloured value badge, cursor + Enter on a row
 // emits SettingsToggleMsg with that row's Key so AppModel can apply
@@ -34,7 +34,8 @@ type SettingsPopupModel struct {
 // SettingsToggleMsg; Label is the human-readable left-side text;
 // ValueText is the right-side badge ("ON" / "OFF" — caller supplies
 // the string so future non-boolean settings reuse the shape); ValueOn
-// drives the badge colour (green when true, grey when false).
+// drives the badge colour (lavender when true — "user-set persistent
+// state" mindset color; grey when false — inactive).
 type SettingsItem struct {
 	Key       string
 	Label     string
@@ -49,14 +50,17 @@ type SettingsToggleMsg struct {
 	Key string
 }
 
-// settingsAccent is the popup's signature color — distinct from the
-// mauve used by menu popups (panel2 menu / hint / listpicker /
-// breadcrumb) to mark Settings as an app-level, "system" surface
-// rather than a context-specific menu. Catppuccin blue, picked so
-// the ON green badge reads cleanly against it (mauve + green
-// was eye-fatiguing) and so it doesn't clash with the sky-blue
-// pickers (#74c7ec for namespace / context / confirm).
-var settingsAccent = lipgloss.Color("#89b4fa")
+// settingsAccent is the popup's signature color. Custom periwinkle
+// (#A4BAFC) sitting between catppuccin blue (#89b4fa, panel-border
+// / app-frame) and lavender (#b4befe, in-panel user-footprint) on
+// the blue-purple axis, slightly lavender-leaning. The unified
+// "popup overlay" accent shared by every generic popup, the info-
+// level toast, and the kubectl-edit pty border — anything that
+// floats above the panel layer reads as the same family. Compare
+// popup keeps cyan; KM8erm shell pty stays amber; exec pty stays
+// green — feature-specific colors that opt out of the unified
+// accent.
+var settingsAccent = lipgloss.Color(theme.Periwinkle)
 
 func NewSettingsPopupModel(t *theme.Theme) SettingsPopupModel {
 	return SettingsPopupModel{
@@ -134,7 +138,7 @@ func (m SettingsPopupModel) Update(msg tea.Msg) (SettingsPopupModel, tea.Cmd) {
 		}
 		key := m.items[m.cursor].Key
 		return m, func() tea.Msg { return SettingsToggleMsg{Key: key} }
-	case "esc", "q", " ", "M":
+	case "esc", " ", ">":
 		return m, m.animator.Close()
 	}
 	return m, nil
@@ -179,8 +183,8 @@ func (m SettingsPopupModel) renderFullPopup() string {
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
-	onStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1")).Bold(true)  // catppuccin green
-	offStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Bold(true) // catppuccin overlay1
+	onStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#b4befe")).Bold(true)  // lavender — user-set persistent state
+	offStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Bold(true) // catppuccin overlay1 — inactive
 
 	//  is the Nerd Font cog glyph (U+F013) — the canonical "settings"
 	// icon shared across most TUI / GUI apps. Leading + trailing space
@@ -212,15 +216,11 @@ func (m SettingsPopupModel) renderFullPopup() string {
 		innerW = maxInnerW
 	}
 
-	// Cursor row reuses the on/off foreground tones but layers them
-	// onto the cursor's accent background so the badge fills the bar
-	// instead of letting the terminal background bleed through.
-	// Without the explicit Background here the lipgloss styles
-	// onStyle/offStyle only set Foreground, leaving a visible gap on
-	// the highlighted row.
-	onStyleCursor := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1")).Background(bc).Bold(true)
-	offStyleCursor := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Background(bc).Bold(true)
-
+	// Cursor row collapses ON/OFF color distinction to the same dark
+	// text on the periwinkle accent background — the "ON"/"OFF" word
+	// itself carries the state signal, color stays uniform so the
+	// row reads as a single reverse-of-title chip (same pattern as
+	// other popups' cursor row).
 	var rows []string
 	for i, it := range m.items {
 		isCursor := i == m.cursor
@@ -232,12 +232,8 @@ func (m SettingsPopupModel) renderFullPopup() string {
 			gap = 2
 		}
 		if isCursor {
-			vStyle := offStyleCursor
-			if it.ValueOn {
-				vStyle = onStyleCursor
-			}
-			cursorLabel := " " + "  " + it.Label + strings.Repeat(" ", gap)
-			rows = append(rows, cursorStyle.Render(cursorLabel)+vStyle.Render(it.ValueText)+cursorStyle.Render("  "))
+			cursorLine := " " + "  " + it.Label + strings.Repeat(" ", gap) + it.ValueText + "  "
+			rows = append(rows, cursorStyle.Render(cursorLine))
 			continue
 		}
 		valueStyled := offStyle.Render(it.ValueText)

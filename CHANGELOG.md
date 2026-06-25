@@ -4,6 +4,136 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.1] - 2026-06-25
+
+Polish pass on top of v1.7.0 — no new features, just a sweep of
+visual + UX tightening that rolled into a coherent color mindset
+across the whole app: **blue = app frame / structure, lavender =
+user footprint / persistent preference, periwinkle = overlay
+layer**. Plus a hotkey cleanup, dim-on-unfocused-panel treatment,
+one Y bug fix, and a removed cross-kind Pod-Status special case.
+
+### Color mindset (shared across all the changes below)
+
+| Role | Color | Where |
+|---|---|---|
+| App frame / structure | catppuccin blue `#89b4fa` | Panel border (focused), Detail tab bar (focused), `[ ]` brackets in statusbar, table HeaderFg, Detail field labels, Relatives section header + drill arrow, sidebar categories (Pinned exception below) |
+| User footprint / persistent preference | catppuccin lavender `#b4befe` | Pinned category, statusbar `<ctx>` / `<ns>` values, unfocused-selected chip (all 3 panels), Listpicker "current" badge, Settings ON, KM8erm pty border + statusbar chip |
+| User current hand | catppuccin subtext1 `#bac2de` | Focused-selected chip (sidebar + table) |
+| Overlay layer (transient) | custom periwinkle `#A4BAFC` (new `theme.Periwinkle`) | Every generic popup (panel2menu, hintpopup, listpicker, breadcrumb, helmdocmenu, settings, namespace, context, confirm, applog, help, yamlpopup) + info-level toast + kubectl edit + kubectl exec pty borders |
+| Compare feature | cyan `#9DDAEA` | Locked row, statusbar compare chip, compare popup chrome |
+
+The 3-tier popup palette (mauve menus / blue Settings / sapphire
+pickers) collapses into one. Sapphire `#74c7ec` and mauve `#cba6f7`
+no longer carry chrome meaning — sapphire is gone, mauve only
+appears as one slot in the container-log color palette.
+
+### Added
+
+- **`theme.Periwinkle = "#A4BAFC"`.** Named constant for the
+  custom overlay accent (no catppuccin original sits between blue
+  and lavender on the blue-purple axis). 14 previously hardcoded
+  literals collapsed onto the constant.
+
+### Changed
+
+- **Panel border focused: double-line chars.** Unfocused panels
+  keep `╭─╮│╰╯`; focused swaps to `╔═╗║╚╝`. Same cell count, no
+  layout shift; pairs with the focused-color flip so panel focus
+  reads at a glance.
+- **Unfocused panels dim non-cursor content.** Panel 1 sidebar,
+  panel 2 table, and the Relatives + History tabs of panel 3 all
+  drop non-cursor non-locked rows to overlay0 grey when the panel
+  isn't focused. The cursor row stays as a single lavender chip —
+  the "remembered position" you can navigate back to. Category
+  headers (sidebar) and column header (table) also dim. Table
+  alternating-row striping flattens to a single dim color so the
+  cursor chip is the only signal that survives.
+- **Statusbar redesigned.** Cluster slot dropped (context binds
+  cluster + user — duplicate signal). The two NF glyphs (U+F0237
+  context, U+F51E namespace) migrated to the corresponding popup
+  titles so the icon-to-concept association stays. New layout is
+  `[C]ontext: <ctx>  [N]amespace: <ns>` with width panel-invariant
+  (no jitter on focus change). Coloring is consistent with the
+  cross-app mindset: blue brackets + lavender values + grey filler.
+  On panel 2, the whole `[C]` collapses to grey because `C` is
+  the Compare-anchor hotkey there.
+- **Sidebar selected chip → lavender.** Both the sidebar and the
+  table now render the unfocused-selected row as a lavender bg +
+  base-dark fg chip (matching Pinned, statusbar `<ctx>`/`<ns>`,
+  and the "user-selected / user-relevant" mindset accent).
+- **Settings popup ON badge → lavender.** Was catppuccin green;
+  now lavender to align with "user-set persistent state". OFF
+  stays overlay1 grey. Cursor row collapses to one uniform
+  dark-on-periwinkle chip; the "ON" / "OFF" word itself carries
+  the state. Drops the duplicate cursor-row styles.
+- **KM8erm pty border + statusbar chip: amber → lavender.**
+  KM8erm is your persistent personal shell, the only pty kind
+  that outlives its popup; same conceptual bucket as the other
+  user-state accents.
+- **kubectl exec pty border: green → periwinkle.** Edit + Exec
+  are both transient subprocess overlays — same color group. The
+  title bar (`kubectl edit pod/foo` vs `kubectl exec -it pod/foo`)
+  carries the kind distinction.
+- **Bottom hint line slimmed.** From `?:help q:quit N:ns C:ctx
+  space:menu enter:into Alt-t:KM8erm [/:filter]` to `? Esc Space
+  Enter Tab Alt-t > settings`. The retired keys all live elsewhere
+  now (`N` / `C` on the statusbar, `q` is a special "no popup
+  open" gesture, `/` is the per-panel search hint).
+- **Help popup reorganized.** New structure: **Core** (Tab /
+  Enter / Esc / Space — the four cross-app gestures), **Navigation**
+  (cursor + panel keys), **Global** (app-level letters), **KM8erm**.
+  Dropped the "Vim Navigation" framing — the cursor keys are
+  universal-tui, not vim-specific.
+- **Settings hotkey: `M` → `>` (shift+.).** `M` was an arbitrary
+  letter; `>` doesn't collide with anything and reads as "open
+  app preferences from here forward". Wired through statusline
+  cheatsheet + help popup + both READMEs.
+- **`q` reserved for app quit only.** Previously did double duty
+  as a popup-close alias alongside Esc across 13 popups; now Esc
+  is the universal close gesture and `q` only fires when no popup
+  is open, where it still triggers the ConfirmQuit dialog. Inside
+  any popup, `q` is a silent no-op (Esc out first, then `q`).
+  Also stripped from splash (`Esc` / `Enter` / `Space` still
+  dismiss it) and confirm dialogs (`Esc` / `n` / `Space` still
+  cancel).
+- **Sidebar categories: stay blue.** Briefly tried overlay1 grey
+  to match Relatives section headers; reverted after the
+  blue/lavender mindset settled — system categories are app
+  structure (blue), only Pinned takes the user-curated lavender
+  accent.
+- **Context / namespace popup titles got distinct icons.** Both
+  used to share `` (U+F4F3); now context popup uses `󰈷`
+  (U+F0237, identity-card glyph inherited from the statusbar) and
+  namespace popup uses `` (U+F51E, namespace glyph also
+  inherited).
+- **Container drill menu lost its `Esc` entry.** "Esc back to pod
+  list" duplicated the universal Esc gesture — removed per the
+  popup-design mindset (no redundant entries).
+- **Container drill menu title got an icon.** `container/<name>`
+  → ` container/<name>` (U+F4B7).
+- **Pod-Status semantic coloring removed.** Was the only kind
+  where the Status cell got a Running-green / Pending-yellow /
+  Error-red color; the other 26 kinds rendered Status / Ready /
+  Available / etc. in plain row color. Either every kind gets
+  diagnostic coloring or none — none won on simplicity. `kubectl
+  edit` / fetch errors / etc. still surface via the status-bar
+  badge.
+- **Orphan theme fields cleaned up.** `Sidebar.ClusterFg` +
+  `StatusBar.NamespaceFg` + their getters dropped; both became
+  dead code after the statusbar refactor.
+
+### Fixed
+
+- **Pressing `Y` from panel 1 (sidebar) no longer silently opens
+  the LAST panel-2-selected row's YAML.** Y is a panel-2 /
+  panel-3 affordance; now gated to those panels. E / D / S /
+  Alt+S already had the gate.
+- **`HintPopup` no longer draws a stray horizontal divider when
+  there's only one region.** Drop-only menu (Space mid-drag) had
+  actions but no cheatsheet rows; the divider was rendered
+  unconditionally.
+
 ## [v1.7.0] - 2026-06-25
 
 Polish release on top of v1.6.0. Two real new features — **multi-

@@ -1488,12 +1488,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confirm.Show(ConfirmQuit, "Quit km8?", "", quitCmd)
 		case "V":
 			return m, m.splash.Show()
-		case "M":
+		case ">":
 			// Global Settings popup. Opens from any panel; popups
-			// already-open intercept keys earlier so M while inside
+			// already-open intercept keys earlier so `>` while inside
 			// another popup is naturally a no-op. Items rebuilt
 			// from current config every Open so the badge reflects
-			// state on each re-entry.
+			// state on each re-entry. `>` (shift+.) picked because it
+			// doesn't collide with any letter trigger; mnemonic "open
+			// app preferences from here forward".
 			m.settingsPopup.SetSize(m.width, m.height)
 			return m, m.settingsPopup.Open(m.buildSettingsItems())
 		case "alt+t", "alt+T", "ctrl+t":
@@ -1759,6 +1761,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "y":
 			return m, copyToClipboardCmd(m.focusedPanelContent())
 		case "Y":
+			// Y is a panel-2 / panel-3 affordance — opens the YAML of
+			// the resource currently selected (panel 2) or drilled into
+			// (panel 3). Pressing Y from panel 1 with focus elsewhere
+			// would silently open the LAST panel-2 selection's YAML,
+			// which feels like an out-of-context jump — gate it.
+			if m.activePanel == SidebarPanel {
+				return m, nil
+			}
 			// Cursor-aware on the Relatives tab: if the cursor sits on a
 			// drillable entry, fetch + popup THAT entry's YAML (via
 			// RelativeDrillMsg). If no drillable cursor (empty / non-link
@@ -2468,11 +2478,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Same code path as pressing Enter on the row directly — the
 			// menu entry is purely a discoverability surface.
 			return m, m.enterDrillDown()
-		case "Esc":
-			// Mirror of the global Esc behavior — pop one drill level.
-			// Surfaced in the container menu so users know they can back
-			// out the same way other popups close.
-			return m, m.exitDrillDown()
 		case "Y":
 			yaml := m.detail.CurrentLevelYAML()
 			if yaml == "" {
@@ -3022,9 +3027,8 @@ func (m *AppModel) exitDrillDown() tea.Cmd {
 		// Restore current resource's table. Rows MUST be helm-augmented to
 		// stay in lockstep with ColumnsForResource (which always reserves
 		// an index-1 helm marker column for non-Releases kinds). Using raw
-		// item.Row here shifts Status one column left, so stylizeCell —
-		// which colors by column title — reads the wrong cell and the
-		// Running green disappears until the next resource switch.
+		// item.Row here shifts every column one to the left and breaks
+		// any future per-column treatment that resolves by column title.
 		m.table.SetColumns(ColumnsForResource(m.currentResource))
 		m.table.SetRows(augmentRowsWithHelm(m.items, m.currentResource))
 		m.statusLine.SetDrillDown(len(m.drillDownStack) > 0)
@@ -3469,6 +3473,7 @@ func (m *AppModel) updateFocus() {
 	m.detail.SetFocused(m.activePanel == DetailPanel)
 	m.statusLine.SetActivePanel(m.activePanel)
 	m.statusLine.SetDrillDown(m.drillDownPod != nil)
+	m.statusBar.SetActivePanel(m.activePanel)
 }
 
 // ScrollInfo holds position info for the "X of Y" indicator in a panel border.
@@ -3493,6 +3498,15 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	bc := lipgloss.Color(borderColor)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+
+	// Focused panel uses double-line box-drawing chars; unfocused uses
+	// light rounded chars. Same cell count, no layout shift — just a
+	// different glyph weight as a stronger focus signal. Both sets are
+	// widely supported by Nerd-Font monospaced terminal fonts.
+	tl, tr, bl, br, horiz, vert := "╭", "╮", "╰", "╯", "─", "│"
+	if focused {
+		tl, tr, bl, br, horiz, vert = "╔", "╗", "╚", "╝", "═", "║"
+	}
 
 	innerW := width - 2
 	innerH := height - 2
@@ -3521,19 +3535,19 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
-	b.WriteString(bStyle.Render("╭─"))
+	b.WriteString(bStyle.Render(tl + horiz))
 	b.WriteString(tStyle.Render(title))
-	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter)))
+	b.WriteString(bStyle.Render(strings.Repeat(horiz, dashesAfter)))
 	if topRight != "" {
 		b.WriteString(bStyle.Render(" "))
 		b.WriteString(tStyle.Render(topRight))
-		b.WriteString(bStyle.Render("─"))
+		b.WriteString(bStyle.Render(horiz))
 	}
-	b.WriteString(bStyle.Render("╮"))
+	b.WriteString(bStyle.Render(tr))
 	b.WriteString("\n")
 
-	leftBorder := bStyle.Render("│")
-	rightBorder := bStyle.Render("│")
+	leftBorder := bStyle.Render(vert)
+	rightBorder := bStyle.Render(vert)
 	emptyLine := strings.Repeat(" ", innerW)
 	for _, line := range lines {
 		lw := lipgloss.Width(line)
@@ -3561,7 +3575,7 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	leftHintVis := 0
 	if bottomLeft != "" {
 		leftHintVis = lipgloss.Width(bottomLeft) + 2 // dash + content + dash
-		leftHintRendered = bStyle.Render("─") + tStyle.Render(bottomLeft) + bStyle.Render("─")
+		leftHintRendered = bStyle.Render(horiz) + tStyle.Render(bottomLeft) + bStyle.Render(horiz)
 	}
 
 	if scroll != nil && scroll.Total > 0 {
@@ -3577,7 +3591,7 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 				dashes = 0
 			}
 		}
-		b.WriteString(bStyle.Render("╰") + leftHintRendered + bStyle.Render(strings.Repeat("─", dashes)+indicator+"╯"))
+		b.WriteString(bStyle.Render(bl) + leftHintRendered + bStyle.Render(strings.Repeat(horiz, dashes)+indicator+br))
 	} else {
 		dashes := innerW - leftHintVis
 		if dashes < 0 {
@@ -3585,7 +3599,7 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 			leftHintRendered = ""
 			dashes = innerW
 		}
-		b.WriteString(bStyle.Render("╰") + leftHintRendered + bStyle.Render(strings.Repeat("─", dashes)+"╯"))
+		b.WriteString(bStyle.Render(bl) + leftHintRendered + bStyle.Render(strings.Repeat(horiz, dashes)+br))
 	}
 
 	return b.String()

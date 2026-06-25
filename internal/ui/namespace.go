@@ -27,7 +27,7 @@ type NamespacePickerModel struct {
 func NewNamespacePickerModel(t *theme.Theme) NamespacePickerModel {
 	return NamespacePickerModel{
 		theme:    t,
-		animator: NewPopupAnimator("namespace", lipgloss.Color("#74c7ec")),
+		animator: NewPopupAnimator("namespace", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -263,7 +263,7 @@ func (m NamespacePickerModel) RenderPopup() string {
 }
 
 func (m NamespacePickerModel) renderFullPopup() string {
-	bc := lipgloss.Color("#74c7ec")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	selectedStyle := m.theme.SidebarSelectedStyle()
@@ -301,7 +301,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 	body := strings.Join(lines, "\n")
 
-	title := " Namespaces"
+	title := " Namespaces"
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0

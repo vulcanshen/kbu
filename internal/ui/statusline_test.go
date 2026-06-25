@@ -14,59 +14,38 @@ func newTestStatusLine() StatusLineModel {
 
 // ── hints by panel ─────────────────────────────────────────────────────────
 //
-// v1.5.x status-line mental model: keep only universal navigation keys
-// (`?`/`q` + `N`/`C` + space/enter, plus panel-scoped `/` filter on panels
-// 1+2). Trigger letters (E/S/D/Y) live in the per-row Space context menu,
-// not on the status line — the menu surfaces them in context, the status
-// line doesn't duplicate.
+// v1.7+ status-line mental model: only the universal cross-panel gestures
+// stay here. `?` for the full reference + the four core gestures
+// (Esc/Space/Enter/Tab, per the popup-design mindset) + Alt-t KM8erm.
+// Everything panel-specific (N/C, `/`, trigger letters) lives in the
+// statusbar labels or the per-row Space menus / popups.
 
 func TestStatusLineModel_Hints_Universal(t *testing.T) {
-	// `?` help, `q` quit, `N` ns, `C` ctx, space menu, enter into —
-	// the always-on core, present on every panel.
+	// The five core gestures + help + KM8erm + settings — present on
+	// every panel, independent of activePanel state.
+	want := []string{"?", "Esc", "Space", "Enter", "Tab", "Alt-t", ">"}
 	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
 		m := newTestStatusLine()
 		m.SetActivePanel(p)
 		keys := hintKeys(m.hints())
-		mustContain(t, keys, "?", "panel must show help hint")
-		mustContain(t, keys, "q", "panel must show quit hint")
-		mustContain(t, keys, "N", "panel must show namespace hint")
-		mustContain(t, keys, "C", "panel must show context hint")
-		mustContain(t, keys, "space", "panel must show space (menu) hint")
-		mustContain(t, keys, "enter", "panel must show enter (into) hint")
-	}
-}
-
-func TestStatusLineModel_Hints_FilterOnPanels12Only(t *testing.T) {
-	// `/` filter only renders on panel 1 and panel 2 — panel 3's in-panel
-	// search was retired in v1.5.0, so showing the hint on panel 3 would
-	// mislead users.
-	for _, p := range []Panel{SidebarPanel, TablePanel} {
-		m := newTestStatusLine()
-		m.SetActivePanel(p)
-		keys := hintKeys(m.hints())
-		mustContain(t, keys, "/", "panel 1/2 must show filter hint")
-	}
-	m := newTestStatusLine()
-	m.SetActivePanel(DetailPanel)
-	keys := hintKeys(m.hints())
-	for _, k := range keys {
-		if k == "/" {
-			t.Errorf("panel 3 must NOT show filter hint (search retired in v1.5.0), got hints=%v", keys)
+		for _, k := range want {
+			mustContain(t, keys, k, "panel must show "+k+" hint")
 		}
 	}
 }
 
-func TestStatusLineModel_Hints_TriggerLettersHiddenFromStatusLine(t *testing.T) {
-	// Trigger letters (E edit, S shell, D delete, Y yaml) are surfaced
-	// via the per-row Space context menu — the status line no longer
-	// duplicates them. Same for h/l (tab switch) and =/- (now z).
+func TestStatusLineModel_Hints_RetiredKeysNotSurfaced(t *testing.T) {
+	// Keys retired from the status-line in v1.7: q (close gesture is
+	// universal Esc), N/C (now `[N]amespace:` / `[C]ontext:` on the
+	// statusbar above), `/` filter, and the panel-specific trigger
+	// letters (E/S/D/Y, h/l, =/-, z) that always lived in popups.
 	m := newTestStatusLine()
 	m.SetActivePanel(TablePanel)
 	keys := hintKeys(m.hints())
-	for _, banned := range []string{"E", "S", "D", "Y", "h/l", "=/-", "z"} {
+	for _, banned := range []string{"q", "N", "C", "/", "E", "S", "D", "Y", "h/l", "=/-", "z"} {
 		for _, k := range keys {
 			if k == banned {
-				t.Errorf("status line must NOT show %q (lives in context menu / ? help), got hints=%v", banned, keys)
+				t.Errorf("status line must NOT show %q (retired in v1.7 — see statusbar / context menu / ? help), got hints=%v", banned, keys)
 			}
 		}
 	}

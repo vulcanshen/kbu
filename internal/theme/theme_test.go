@@ -20,12 +20,11 @@ func TestDefaultTheme(t *testing.T) {
 	assertNonEmpty(t, "Sidebar.CategoryFg", th.Sidebar.CategoryFg)
 
 	// Table colors
-	assertNonEmpty(t, "Table.HeaderBg", th.Table.HeaderBg)
 	assertNonEmpty(t, "Table.HeaderFg", th.Table.HeaderFg)
 	assertNonEmpty(t, "Table.RowFg", th.Table.RowFg)
 	assertNonEmpty(t, "Table.SelectedRowBg", th.Table.SelectedRowBg)
 	assertNonEmpty(t, "Table.SelectedRowFg", th.Table.SelectedRowFg)
-	// AlternatingBg is intentionally empty for terminal transparency
+	// HeaderBg and AlternatingBg are intentionally empty for terminal transparency
 
 	// Detail colors
 	assertNonEmpty(t, "Detail.BorderColor", th.Detail.BorderColor)
@@ -37,8 +36,6 @@ func TestDefaultTheme(t *testing.T) {
 
 	// StatusBar colors (Background intentionally empty for transparency)
 	assertNonEmpty(t, "StatusBar.Foreground", th.StatusBar.Foreground)
-	assertNonEmpty(t, "StatusBar.ClusterFg", th.StatusBar.ClusterFg)
-	assertNonEmpty(t, "StatusBar.NamespaceFg", th.StatusBar.NamespaceFg)
 	assertNonEmpty(t, "StatusBar.ContextFg", th.StatusBar.ContextFg)
 
 	// StatusLine colors (Background intentionally empty for transparency)
@@ -69,8 +66,6 @@ func TestDefaultTheme_StyleMethods(t *testing.T) {
 	_ = th.DetailTabActiveStyle()
 	_ = th.DetailTabInactiveStyle()
 	_ = th.StatusBarStyle()
-	_ = th.StatusBarClusterStyle()
-	_ = th.StatusBarNamespaceStyle()
 	_ = th.StatusBarContextStyle()
 	_ = th.StatusLineStyle()
 	_ = th.StatusRunningStyle()

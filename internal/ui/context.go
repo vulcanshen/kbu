@@ -23,7 +23,7 @@ type ContextPickerModel struct {
 func NewContextPickerModel(t *theme.Theme) ContextPickerModel {
 	return ContextPickerModel{
 		theme:    t,
-		animator: NewPopupAnimator("context", lipgloss.Color("#74c7ec")),
+		animator: NewPopupAnimator("context", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -222,7 +222,7 @@ func (m ContextPickerModel) RenderPopup() string {
 }
 
 func (m ContextPickerModel) renderFullPopup() string {
-	bc := lipgloss.Color("#74c7ec")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	selectedStyle := m.theme.SidebarSelectedStyle()
@@ -262,7 +262,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 	}
 	body := strings.Join(lines, "\n")
 
-	title := " Contexts"
+	title := "󰈷 Contexts"
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0

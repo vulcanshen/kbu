@@ -14,7 +14,7 @@ import (
 // YamlPopupModel renders the full YAML of a resource in a large overlay popup.
 // Supports j/k/u/d/gg/G scroll, / search (Enter commits; n/N step through
 // matches), e to dispatch kubectl edit on the same resource (no confirm — user
-// already inspected before pressing), and Esc/q to close.
+// already inspected before pressing), and Esc to close.
 type YamlPopupModel struct {
 	yaml string
 	// rawLines is the source YAML split by newline. searchQuery matches
@@ -56,7 +56,7 @@ type YamlPopupModel struct {
 func NewYamlPopupModel(t *theme.Theme) YamlPopupModel {
 	return YamlPopupModel{
 		theme:    t,
-		animator: NewPopupAnimator("yamlpopup", lipgloss.Color("#74c7ec")),
+		animator: NewPopupAnimator("yamlpopup", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -171,7 +171,7 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 	}
 
 	switch keyMsg.String() {
-	case "esc", "q", " ":
+	case "esc", " ":
 		m.pendingG = false
 		return m, m.animator.Close()
 	case "j", "down":
@@ -390,7 +390,7 @@ func (m YamlPopupModel) maxScrollOffset() int {
 // HandleMouse routes a click against the YAML viewer. Wheel scroll
 // is already translated to u/d at the AppModel layer; this method
 // only handles discrete buttons. Right-click inside the popup
-// closes it (mirror of Esc / q). Left-click is no-op — YAML has
+// closes it (mirror of Esc). Left-click is no-op — YAML has
 // no row cursor.
 func (m YamlPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (YamlPopupModel, tea.Cmd) {
 	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
@@ -414,7 +414,7 @@ func (m YamlPopupModel) RenderPopup() string {
 }
 
 func (m YamlPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color("#74c7ec")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	// matchRowStyle highlights the line under the search cursor with the same

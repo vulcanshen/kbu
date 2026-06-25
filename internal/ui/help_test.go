@@ -59,18 +59,6 @@ func TestHelpModel_CloseWithEsc(t *testing.T) {
 	}
 }
 
-func TestHelpModel_CloseWithQ(t *testing.T) {
-	m := newTestHelp()
-	m.Toggle()
-	m.animator.Finalize()
-
-	m, _ = m.Update(keyMsg('q'))
-	m.animator.Finalize()
-	if m.IsActive() {
-		t.Error("expected help to be inactive after q")
-	}
-}
-
 func TestHelpModel_CloseWithQuestionMark(t *testing.T) {
 	m := newTestHelp()
 	m.Toggle()
@@ -90,12 +78,13 @@ func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 
 	view := m.View()
 
-	// v1.5.1 trimmed help is intentionally minimal — "Space opens the
+	// v1.7+ trimmed help is intentionally minimal — "Space opens the
 	// menu, 一看就懂" eliminates the need to spell out per-context
-	// triggers. Verify the universal mental-model + vim core keys.
+	// triggers. Section names: Core (4 universal gestures) / Navigation
+	// (cursor + panel) / Global (app-level) / KM8erm.
 	expectedSections := []string{
+		"Core",
 		"Navigation",
-		"Vim",
 		"Global",
 	}
 	for _, section := range expectedSections {
@@ -105,12 +94,14 @@ func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 	}
 
 	expectedKeys := []string{
+		"Tab",
 		"Enter",
+		"Esc",
 		"Space",
 		"h / l",
-		"Esc",
 		"j / k",
 		"gg / G",
+		">",
 		"?",
 	}
 	for _, key := range expectedKeys {

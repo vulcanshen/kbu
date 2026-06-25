@@ -177,6 +177,15 @@ func renderRelativeEntries(entries []relativeEntry, cursor int, width int, t *th
 	cursorRowStyle := t.TableSelectedRowStyle()
 	if !focused {
 		cursorRowStyle = t.TableUnfocusedSelectedRowStyle()
+		// Mirror the sidebar/table treatment: when the panel is
+		// unfocused, every non-cursor row collapses to overlay0 grey
+		// so the cursor row's lavender chip is the single surviving
+		// "remembered position" marker. Section headers stay bold so
+		// the structural hierarchy is still legible.
+		labelStyle = dimStyle
+		valueStyle = dimStyle
+		drillStyle = dimStyle
+		sectionStyle = dimStyle.Bold(true)
 	}
 
 	const labelW = 18

@@ -15,6 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"github.com/hinshun/vt10x"
+
+	"github.com/vulcanshen/km8/internal/theme"
 )
 
 // ptyTickMsg is the 50ms heartbeat each PtyView uses to poll its done flag
@@ -523,21 +525,27 @@ func (p *PtyView) RenderPopup() string {
 	}
 	p.mu.Unlock()
 
-	// Three-color scheme — with dual-slot PTY (KM8erm shell + transient
-	// edit/exec can coexist), each kind needs its own border color so the
-	// active popup's provenance is unambiguous:
-	//   - PtyKindShell (KM8erm)    : Catppuccin peach #F0AE49
-	//   - PtyKindExec  (kubectl exec) : Catppuccin green #a6e3a1
-	//   - PtyKindEdit  (kubectl edit) : Catppuccin sky #74c7ec
+	// Two-color scheme along the user-state vs overlay split:
+	//   - PtyKindShell (KM8erm)       : lavender #b4befe — your
+	//                                   persistent shell, user-state
+	//                                   (same accent as Pinned /
+	//                                   statusbar values / unfocused-
+	//                                   selected chip)
+	//   - PtyKindEdit  (kubectl edit) : periwinkle — transient
+	//                                   subprocess overlay
+	//   - PtyKindExec  (kubectl exec) : periwinkle — transient
+	//                                   subprocess overlay
+	// Edit + Exec share the unified popup overlay periwinkle because
+	// both are "km8 spawns an external process, user does their thing,
+	// process exits, popup closes". The title (`kubectl edit pod/foo`
+	// vs `kubectl exec -it pod/foo`) carries the kind distinction.
 	// Border and title share one color (title is bold) for a consistent frame.
 	var borderColor lipgloss.Color
 	switch p.kind {
 	case PtyKindShell:
-		borderColor = lipgloss.Color("#F0AE49")
-	case PtyKindExec:
-		borderColor = lipgloss.Color("#a6e3a1")
-	default: // PtyKindEdit
-		borderColor = lipgloss.Color("#74c7ec")
+		borderColor = lipgloss.Color("#b4befe")
+	default: // PtyKindEdit, PtyKindExec
+		borderColor = lipgloss.Color(theme.Periwinkle)
 	}
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 	titleStyle := borderStyle.Bold(true)

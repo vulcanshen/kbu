@@ -67,7 +67,7 @@ type HintActionMsg struct {
 func NewHintPopupModel(t *theme.Theme) HintPopupModel {
 	return HintPopupModel{
 		theme:    t,
-		animator: NewPopupAnimator("hintpopup", lipgloss.Color("#cba6f7")),
+		animator: NewPopupAnimator("hintpopup", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -107,7 +107,7 @@ func (m *HintPopupModel) HandleTick(msg AnimTickMsg) tea.Cmd {
 }
 
 // Update handles close keys + (when actions present) cursor navigation
-// and commit. Mirror the panel2 menu's close set (Esc / q / Space).
+// and commit. Mirror the panel2 menu's close set (Esc / Space).
 // Enter closes only when there are no actions — with actions, Enter
 // commits the cursor item.
 func (m HintPopupModel) Update(msg tea.Msg) (HintPopupModel, tea.Cmd) {
@@ -120,7 +120,7 @@ func (m HintPopupModel) Update(msg tea.Msg) (HintPopupModel, tea.Cmd) {
 	}
 	key := keyMsg.String()
 	switch key {
-	case "esc", "q", " ":
+	case "esc", " ":
 		return m, m.animator.Close()
 	}
 	if len(m.actions) == 0 {
@@ -407,10 +407,14 @@ func (m HintPopupModel) RenderPopup() string {
 }
 
 func (m HintPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color("#cba6f7")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Bold(true)
+	// Cheatsheet key letter — catppuccin blue, matching the "app
+	// structure" color story: the cheatsheet IS the app telling you
+	// "press this letter to do that". Same blue as panel borders,
+	// statusbar bracket markers, Relatives section headers, etc.
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa")).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	title := m.title
@@ -535,11 +539,12 @@ func (m HintPopupModel) renderFullPopup() string {
 	for _, line := range actionRows {
 		b.WriteString(left + line + right + "\n")
 	}
-	if len(actionRows) > 0 {
+	if len(actionRows) > 0 && len(rows) > 0 {
 		// Visual separator between the action region and the read-only
 		// cheatsheet below — same dim-grey horizontal rule the popup
 		// border uses, inset by one column on each side so it reads
-		// as an internal divider, not a re-doubled border.
+		// as an internal divider, not a re-doubled border. Skip when
+		// only one region exists (e.g. drop-only drag menu).
 		sep := bStyle.Render(strings.Repeat("─", innerW))
 		b.WriteString(left + sep + right + "\n")
 	}

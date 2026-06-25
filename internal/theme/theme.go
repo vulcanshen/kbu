@@ -8,6 +8,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Periwinkle is the custom overlay accent — a blue-purple sitting
+// between catppuccin blue (#89b4fa, panel-frame) and lavender
+// (#b4befe, in-panel user-footprint) on the cool-tone axis, slightly
+// lavender-leaning. Used as the unified accent for everything that
+// "floats above" the panel layer: popups (border + title), info-
+// level toast border, kubectl edit pty border. Not part of the
+// catppuccin Mocha palette — km8-specific, named in the same
+// "color name" family as catppuccin's own lavender / mauve /
+// flamingo.
+const Periwinkle = "#A4BAFC"
+
 // Theme defines colors for all UI elements in km8.
 type Theme struct {
 	Sidebar    SidebarColors    `yaml:"sidebar"`
@@ -53,11 +64,9 @@ type DetailColors struct {
 
 // StatusBarColors defines colors for the top status bar.
 type StatusBarColors struct {
-	Background  string `yaml:"background"`
-	Foreground  string `yaml:"foreground"`
-	ClusterFg   string `yaml:"cluster_fg"`
-	NamespaceFg string `yaml:"namespace_fg"`
-	ContextFg   string `yaml:"context_fg"`
+	Background string `yaml:"background"`
+	Foreground string `yaml:"foreground"`
+	ContextFg  string `yaml:"context_fg"`
 }
 
 // StatusLineColors defines colors for the bottom hints bar.
@@ -82,18 +91,18 @@ func DefaultTheme() *Theme {
 			Foreground:          "#cdd6f4",
 			SelectedBg:          "#bac2de", // Catppuccin Mocha subtext1 — muted blue-grey, reads "light highlight" without "white block"
 			SelectedFg:          "#1e1e2e", // Catppuccin Mocha base — high contrast, palette-native
-			UnfocusedSelectedBg: "#353648", // between surface0 + surface1 — visible but softer than focused
-			UnfocusedSelectedFg: "#cdd6f4", // Catppuccin text — light fg, paired with darker unfocused bg
+			UnfocusedSelectedBg: "#b4befe", // Catppuccin Mocha lavender — same accent as the sidebar Pinned section and the statusbar [C]ontext/[N]amespace values, so the "user-selected / user-relevant" marker reads the same across the app
+			UnfocusedSelectedFg: "#1e1e2e", // Catppuccin Mocha base — high contrast against the lavender chip
 			CategoryFg:          "#89b4fa",
 		},
 		Table: TableColors{
-			HeaderBg:               "#313244",
+			HeaderBg:               "", // no bg by default — the bold colored fg carries the header; bg is opt-in via theme.yaml
 			HeaderFg:               "#89b4fa",
 			RowFg:                  "#cdd6f4",
 			SelectedRowBg:          "#bac2de", // Catppuccin Mocha subtext1
 			SelectedRowFg:          "#1e1e2e", // Catppuccin Mocha base
-			UnfocusedSelectedRowBg: "#353648", // between surface0 + surface1 — visible but softer than focused
-			UnfocusedSelectedRowFg: "#cdd6f4", // Catppuccin text — light fg
+			UnfocusedSelectedRowBg: "#b4befe", // Catppuccin Mocha lavender — matches the sidebar unfocused-selected chip so "user-selected" reads identically across the two panels
+			UnfocusedSelectedRowFg: "#1e1e2e", // Catppuccin Mocha base — high contrast against the lavender chip
 			AlternatingBg:          "",
 		},
 		Detail: DetailColors{
@@ -105,11 +114,9 @@ func DefaultTheme() *Theme {
 			TabInactiveFg: "#6c7086",
 		},
 		StatusBar: StatusBarColors{
-			Background:  "",
-			Foreground:  "#cdd6f4",
-			ClusterFg:   "#a6e3a1",
-			NamespaceFg: "#f9e2af",
-			ContextFg:   "#89b4fa",
+			Background: "",
+			Foreground: "#cdd6f4",
+			ContextFg:  "#89b4fa",
 		},
 		StatusLine: StatusLineColors{
 			Background: "",
@@ -190,12 +197,28 @@ func (t *Theme) SidebarCategoryStyle() lipgloss.Style {
 		Bold(true)
 }
 
-// TableHeaderStyle returns the style for table column headers.
+// SidebarDimRowStyle returns the dim style applied to non-cursor sidebar
+// rows while the sidebar is unfocused. Catppuccin overlay0 (#6c7086) —
+// dim enough to recede so the cursor row stands out as the single
+// "remembered position" marker, light enough to stay legible if the
+// user glances over.
+func (t *Theme) SidebarDimRowStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+}
+
+// TableHeaderStyle returns the style for table column headers. Bg is
+// opt-in (empty = no bg, header sits on the panel canvas) — same
+// pattern as TableAlternatingRowStyle. Default theme leaves bg empty
+// so the bold colored fg alone signals "header"; a theme.yaml override
+// can set header_bg to bring the bar back.
 func (t *Theme) TableHeaderStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Background(lipgloss.Color(t.Table.HeaderBg)).
+	s := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Table.HeaderFg)).
 		Bold(true)
+	if t.Table.HeaderBg != "" {
+		s = s.Background(lipgloss.Color(t.Table.HeaderBg))
+	}
+	return s
 }
 
 // TableRowStyle returns the style for a normal table row.
@@ -221,6 +244,14 @@ func (t *Theme) TableUnfocusedSelectedRowStyle() lipgloss.Style {
 		Background(lipgloss.Color(t.Table.UnfocusedSelectedRowBg)).
 		Foreground(lipgloss.Color(t.Table.UnfocusedSelectedRowFg)).
 		Bold(true)
+}
+
+// TableDimRowStyle returns the dim style applied to non-cursor non-locked
+// table rows and the column header while the table is unfocused. Same
+// overlay0 grey as SidebarDimRowStyle so the two panels' unfocused
+// treatments read consistently.
+func (t *Theme) TableDimRowStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 }
 
 // TableAlternatingRowStyle returns the style for alternating table rows.
@@ -272,19 +303,6 @@ func (t *Theme) StatusBarStyle() lipgloss.Style {
 	return lipgloss.NewStyle().
 		Background(lipgloss.Color(t.StatusBar.Background)).
 		Foreground(lipgloss.Color(t.StatusBar.Foreground))
-}
-
-// StatusBarClusterStyle returns the style for the cluster name in the status bar.
-func (t *Theme) StatusBarClusterStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.StatusBar.ClusterFg)).
-		Bold(true)
-}
-
-// StatusBarNamespaceStyle returns the style for the namespace in the status bar.
-func (t *Theme) StatusBarNamespaceStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.StatusBar.NamespaceFg))
 }
 
 // StatusBarContextStyle returns the style for the context in the status bar.

@@ -36,7 +36,7 @@ func (m *ConfirmModel) SetSize(w, h int) {
 func NewConfirmModel(t *theme.Theme) ConfirmModel {
 	return ConfirmModel{
 		theme:    t,
-		animator: NewPopupAnimator("confirm", lipgloss.Color("#74c7ec")),
+		animator: NewPopupAnimator("confirm", lipgloss.Color(theme.Periwinkle)),
 	}
 }
 
@@ -75,7 +75,7 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 			m.onConfirm = nil
 			closeCmd := m.animator.Close()
 			return m, tea.Batch(cmd, closeCmd)
-		case "esc", "n", "q", " ":
+		case "esc", "n", " ":
 			// Space cancels too — the same key that opens the confirm
 			// (Relatives-tab space-jump) re-pressed by reflex should
 			// dismiss rather than re-trigger.
@@ -115,7 +115,7 @@ func (m ConfirmModel) RenderPopup() string {
 }
 
 func (m ConfirmModel) renderFullPopup() string {
-	bc := lipgloss.Color("#74c7ec")
+	bc := lipgloss.Color(theme.Periwinkle)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	msgStyle := lipgloss.NewStyle().Bold(true)

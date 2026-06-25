@@ -45,7 +45,7 @@ func (l CompareLayout) String() string {
 //	g g              jump to top
 //	G                jump to bottom
 //	Space            open the in-popup action menu
-//	Esc / q          close the popup
+//	Esc              close the popup
 //
 // Action menu (in-popup, Space-triggered):
 //
@@ -177,7 +177,7 @@ func (m CompareYamlPopupModel) Update(msg tea.Msg) (CompareYamlPopupModel, tea.C
 
 func (m CompareYamlPopupModel) handlePopupKey(keyMsg tea.KeyMsg) (CompareYamlPopupModel, tea.Cmd) {
 	switch keyMsg.String() {
-	case "esc", "q":
+	case "esc":
 		m.pendingG = false
 		return m, m.animator.Close()
 	case " ":
@@ -248,7 +248,7 @@ func (m CompareYamlPopupModel) menuItems() []string {
 func (m CompareYamlPopupModel) handleMenuKey(keyMsg tea.KeyMsg) (CompareYamlPopupModel, tea.Cmd) {
 	items := m.menuItems()
 	switch keyMsg.String() {
-	case "esc", "q", " ":
+	case "esc", " ":
 		// Space / Esc close the menu but leave the popup open — gives
 		// the user an "oops" path back without restarting the compare.
 		m.menuOpen = false
@@ -583,7 +583,7 @@ func centerNoDiff(width int, t *theme.Theme) string {
 // HandleMouse routes a click against the compare popup. Wheel
 // scroll already gets translated to u/d at the AppModel layer, so
 // this only needs to cover the discrete button gestures.
-// Right-click inside the popup closes it (mirror of Esc / q). The
+// Right-click inside the popup closes it (mirror of Esc). The
 // in-popup Space menu stays keyboard-only — left-click is no-op
 // on both the diff body and the menu overlay to avoid accidental
 // layout toggles.
@@ -648,7 +648,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 		bodyRows[i] = vbar + row + vbar
 	}
 
-	hint := " Space: menu  j/k: scroll  Esc/q: close "
+	hint := " Space: menu  j/k: scroll  Esc: close "
 	hintW := lipgloss.Width(hint)
 	// Bottom border target width = innerW + 2 (matches top: ╭ + innerW
 	// dashes-or-title + ╮). The earlier "╰─" lead consumed 2 chars but

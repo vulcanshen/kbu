@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -38,23 +40,100 @@ func TestStatusBarModel_SetNamespace_Stores(t *testing.T) {
 
 // ── View content ───────────────────────────────────────────────────────────
 
-func TestStatusBarModel_View_ContainsContextAndCluster(t *testing.T) {
+func TestStatusBarModel_View_ContainsContextLabelAndName(t *testing.T) {
 	m := newTestStatusBar()
 	view := m.View()
 
+	if !strings.Contains(view, "[C]ontext:") {
+		t.Errorf("status bar must show bracket-hotkey context label, got %q", view)
+	}
 	if !strings.Contains(view, "test-ctx") {
 		t.Error("status bar must show context name")
 	}
-	if !strings.Contains(view, "test-cluster") {
-		t.Error("status bar must show cluster name")
+}
+
+func TestStatusBarModel_View_BracketMarkersPresentOnAllPanels(t *testing.T) {
+	// Multi-segment colored rendering keeps the bracket markers literal
+	// on every panel — width stays fixed, no jitter. Per-panel signal
+	// is conveyed by COLOR (green active vs grey inactive) of the hotkey
+	// letter, not by adding/removing the bracket frame.
+	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
+		m := newTestStatusBar()
+		m.SetActivePanel(p)
+		view := m.View()
+		if !strings.Contains(view, "[") || !strings.Contains(view, "C") || !strings.Contains(view, "]") {
+			t.Errorf("panel %v: status bar must contain `[`, `C`, `]` literals, got %q", p, view)
+		}
+		if !strings.Contains(view, "N") || !strings.Contains(view, "amespace:") {
+			t.Errorf("panel %v: status bar must contain `N`, `amespace:` literals, got %q", p, view)
+		}
+		if !strings.Contains(view, "test-ctx") {
+			t.Errorf("panel %v: status bar must contain context value, got %q", p, view)
+		}
 	}
 }
 
-func TestStatusBarModel_View_ContainsNamespace(t *testing.T) {
+func TestStatusBarModel_View_WidthInvariantAcrossPanels(t *testing.T) {
+	// The user-facing invariant we care about: switching focus between
+	// panels must NOT cause statusbar text to jitter horizontally. The
+	// panel-aware C-letter coloring (green ↔ grey) must keep the same
+	// visual width on every panel. Width-only assertion is stable
+	// regardless of ANSI rendering profile (test env strips colors).
+	widths := map[Panel]int{}
+	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
+		m := newTestStatusBar()
+		m.SetActivePanel(p)
+		widths[p] = lipgloss.Width(m.View())
+	}
+	want := widths[SidebarPanel]
+	for p, w := range widths {
+		if w != want {
+			t.Errorf("status bar width must be panel-invariant (no jitter), got widths=%v", widths)
+			break
+		}
+		_ = p
+	}
+}
+
+func TestStatusBarModel_View_NamespaceHotkeyAlwaysActive(t *testing.T) {
+	// `N` has no panel-specific override (no panel hijacks N for
+	// something else). All three panels must render the N hotkey
+	// identically — which means the namespace SEGMENT bytes are
+	// identical across panels.
+	views := make(map[Panel]string)
+	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
+		m := newTestStatusBar()
+		m.SetActivePanel(p)
+		views[p] = m.View()
+	}
+	// Same namespace token must appear in all views — proxy for "same
+	// rendering" since N is global.
+	for p, v := range views {
+		if !strings.Contains(v, "amespace:") || !strings.Contains(v, "All Namespaces") {
+			t.Errorf("panel %v: namespace segment must render with N letter + value, got %q", p, v)
+		}
+	}
+}
+
+func TestStatusBarModel_View_DoesNotShowCluster(t *testing.T) {
+	// v1.7: cluster slot dropped (context binds cluster+user, surfacing
+	// both was duplicating the same signal).
+	m := newTestStatusBar()
+	view := m.View()
+
+	if strings.Contains(view, "test-cluster") {
+		t.Errorf("v1.7 status bar must NOT surface cluster name, got %q", view)
+	}
+}
+
+func TestStatusBarModel_View_ContainsNamespaceLabelAndName(t *testing.T) {
 	m := newTestStatusBar()
 	m.SetNamespace("staging")
 	view := m.View()
 
+	if !strings.Contains(view, "[N]amespace:") {
+		t.Errorf("status bar must show bracket-hotkey namespace label, got %q", view)
+	}
 	if !strings.Contains(view, "staging") {
 		t.Errorf("status bar must show current namespace, got %q", view)
 	}

@@ -313,3 +313,32 @@ func TestHintPopup_EnterOnHeaderIsNoOp(t *testing.T) {
 		t.Errorf("Enter on header must not emit any cmd, got %T", batchCmd)
 	}
 }
+
+func TestHintPopup_ActionsOnly_NoSeparatorBelowActions(t *testing.T) {
+	// Drop-only menu (drag mode's Space affordance) is a single-region
+	// popup — only actions, no cheatsheet rows. The auto-rendered
+	// divider between regions must not appear, otherwise the popup
+	// reads as "two regions with one empty" instead of "one region."
+	m := newHintPopup(t)
+	actions := []hintAction{
+		{label: "Drop to confirm new order", key: "D", action: "DropPinned"},
+	}
+	openCmd := m.OpenWithActions("title", actions, nil)
+	drainHintToInteractive(t, &m, openCmd)
+
+	rendered := m.renderFullPopup()
+	// The internal divider is a run of ─ inside the popup body. The
+	// top/bottom borders also contain ─ but the divider line is the
+	// only one that sits between │ on both sides. Looking for any
+	// long ─ run flanked by │ catches the regression without coupling
+	// to exact widths.
+	for _, line := range strings.Split(rendered, "\n") {
+		if !strings.HasPrefix(line, "│") || !strings.HasSuffix(line, "│") {
+			continue
+		}
+		body := strings.TrimSuffix(strings.TrimPrefix(line, "│"), "│")
+		if strings.Count(body, "─") > 4 {
+			t.Errorf("single-region popup must not draw a divider line, got: %q", line)
+		}
+	}
+}

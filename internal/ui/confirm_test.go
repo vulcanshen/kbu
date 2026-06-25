@@ -133,18 +133,6 @@ func TestConfirmModel_N_Cancels(t *testing.T) {
 	}
 }
 
-func TestConfirmModel_Q_Cancels(t *testing.T) {
-	m := newTestConfirm()
-	openConfirm(&m, func() tea.Msg { return nil })
-
-	m, _ = m.Update(keyMsg('q'))
-	m.animator.Finalize()
-
-	if m.IsActive() {
-		t.Error("q must close the dialog")
-	}
-}
-
 // ── Close ─────────────────────────────────────────────────────────────────
 
 func TestConfirmModel_Close_ClearsOnConfirm(t *testing.T) {

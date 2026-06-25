@@ -808,14 +808,19 @@ func (m SidebarModel) View() string {
 	baseStyle := m.theme.SidebarStyle()
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	categoryStyle := m.theme.SidebarCategoryStyle()
-	// Pinned category header in Catppuccin Mocha lavender — same hue
-	// family as the blue system categories so it reads as "same kind
-	// of header" while still being distinguishable as the user-
-	// curated section. Earlier picks: peach (#fab387) collided with
-	// the KM8erm status-bar marker and read too loud; mauve (#cba6f7)
-	// was distinct but the popup-border association pulled it
-	// conceptually toward "this is interactive" — too much for a
-	// passive category label.
+	// Dim style for unfocused-panel content: applied to non-cursor
+	// rows (and the "active resource" highlight) when the sidebar
+	// doesn't have focus, so the cursor row is the single visually-
+	// strong "remembered position" marker the user can navigate back
+	// to. Category headers also swap to dim when unfocused so nothing
+	// competes with the cursor chip.
+	dimRowStyle := m.theme.SidebarDimRowStyle()
+	// Pinned category header in Catppuccin Mocha lavender — the
+	// user-curated section gets the "your state" accent that matches
+	// Pinned's role in the user-footprint color story (statusbar
+	// `<ctx>`/`<ns>`, unfocused-selected chip). System categories
+	// below use the default categoryStyle blue — same "app structure"
+	// color as the Relatives section headers + panel borders.
 	pinnedCategoryStyle := categoryStyle.Foreground(lipgloss.Color("#b4befe"))
 
 	viewH := m.viewportHeight()
@@ -853,10 +858,26 @@ func (m SidebarModel) View() string {
 					label = item.label + " " + dragHandleGlyph + " [D]rop"
 				}
 			}
+			// Unfocused → dim every category header (Pinned + system)
+			// down to the same overlay0 grey as the dimmed item rows.
+			// The cursor row stays as the single bright "remembered
+			// position" marker; categories are decoration that should
+			// fade with the rest.
+			if !m.focused {
+				style = dimRowStyle.Bold(true)
+			}
 			line = style.Width(m.width).Render(truncateSidebarLabel(label, m.width))
 		} else {
 			label := "  " + truncateSidebarLabel(item.label, m.width-2)
 			unfocusedSelStyle := m.theme.SidebarUnfocusedSelectedStyle()
+			// Background row style (used for any non-cursor row): the
+			// active-resource highlight + every plain row share this
+			// in unfocused mode, so the cursor row is the only
+			// surviving full-color marker.
+			rowStyle := baseStyle
+			if !m.focused {
+				rowStyle = dimRowStyle
+			}
 			switch {
 			case m.dragActive && item.resourceType == m.draggedKind:
 				line = dragRowStyle.Width(m.width).Render(label)
@@ -864,10 +885,10 @@ func (m SidebarModel) View() string {
 				line = selectedStyle.Width(m.width).Render(label)
 			case isCursor:
 				line = unfocusedSelStyle.Width(m.width).Render(label)
-			case item.resourceType == m.selected:
+			case item.resourceType == m.selected && m.focused:
 				line = unfocusedSelStyle.Width(m.width).Render(label)
 			default:
-				line = baseStyle.Width(m.width).Render(label)
+				line = rowStyle.Width(m.width).Render(label)
 			}
 		}
 		lines = append(lines, line)

@@ -30,8 +30,8 @@ const (
 	toastInfoGlyph = "󰵅 "
 	toastWarnGlyph = "󰀦 "
 
-	toastInfoColor = "#74c7ec" // Catppuccin Sky — neutral confirmation
-	toastWarnColor = "#fab387" // Catppuccin Peach — caution, action blocked
+	toastInfoColor = theme.Periwinkle // shared overlay accent (same as popups + pty edit)
+	toastWarnColor = "#fab387"        // Catppuccin Peach — caution, action blocked
 )
 
 // ToastModel renders a transient centered popup that auto-dismisses.
