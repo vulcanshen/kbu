@@ -657,7 +657,7 @@ func TestTableModel_RenderRow_VisualWidthTruncation(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			line := m.renderRow([]int{c.w}, []string{c.val}, style)
+			line := m.renderRow([]int{c.w}, []string{c.val}, style, false)
 			plain := ansiStrip(line)
 			if !utf8.ValidString(plain) {
 				t.Errorf("rendered cell is not valid UTF-8: %q", plain)
@@ -690,3 +690,147 @@ func ansiStrip(s string) string {
 	}
 	return b.String()
 }
+
+// TestStatusCellColor_HealthyReturnsEmpty pins the "color is signal" rule:
+// healthy / normal states must return "" so the renderer falls back to the
+// row's base foreground. Anything that emits color here is a regression
+// toward decorating instead of signaling.
+func TestStatusCellColor_HealthyReturnsEmpty(t *testing.T) {
+	th := theme.DefaultTheme()
+	cases := []struct {
+		kind     k8s.ResourceType
+		colTitle string
+		raw      string
+	}{
+		// Pod healthy
+		{k8s.ResourcePods, "Status", "Running"},
+		{k8s.ResourcePods, "Status", "Succeeded"},
+		{k8s.ResourcePods, "Status", "Completed"},
+		// Node healthy
+		{k8s.ResourceNodes, "Status", "Ready"},
+		// Namespace healthy
+		{k8s.ResourceNamespaces, "Status", "Active"},
+		// PVC healthy
+		{k8s.ResourcePersistentVolumeClaims, "Status", "Bound"},
+		// PV healthy
+		{k8s.ResourcePersistentVolumes, "Status", "Available"},
+		{k8s.ResourcePersistentVolumes, "Status", "Bound"},
+		// Helm healthy
+		{k8s.ResourceReleases, "Status", "deployed"},
+		{k8s.ResourceReleases, "Status", "superseded"},
+		// Event normal
+		{k8s.ResourceEvents, "Type", "Normal"},
+		// Ready column never colored — replicas-mismatch isn't signal
+		// worth painting (Status surfaces the same condition when
+		// it's actually wrong).
+		{k8s.ResourcePods, "Ready", "1/1"},
+		{k8s.ResourcePods, "Ready", "0/1"},
+		{k8s.ResourceDeployments, "Ready", "1/3"},
+		// Empty cell
+		{k8s.ResourcePods, "Status", ""},
+		{k8s.ResourcePods, "Status", "   "},
+		// Non-status column
+		{k8s.ResourcePods, "Name", "anything"},
+		{k8s.ResourcePods, "Restarts", "0"},
+		// Type column on non-Events kind ignored
+		{k8s.ResourcePods, "Type", "Warning"},
+	}
+	for _, c := range cases {
+		t.Run(string(c.kind)+"/"+c.colTitle+"/"+c.raw, func(t *testing.T) {
+			if got := statusCellColor(c.kind, c.colTitle, c.raw, th, false); got != "" {
+				t.Errorf("statusCellColor(%v, %q, %q) = %q, want \"\" (healthy/unknown must not emit color)",
+					c.kind, c.colTitle, c.raw, got)
+			}
+		})
+	}
+}
+
+// TestStatusCellColor_YellowPending pins the abnormal-yellow set. Pending
+// is yellow with no time threshold — a healthy Pod briefly Pending still
+// flashes yellow, and that's fine: the steady state is healthy and quiet,
+// so the brief yellow is noise the user can ignore.
+func TestStatusCellColor_YellowPending(t *testing.T) {
+	th := theme.DefaultTheme()
+	wantYellow := th.Status.Pending
+	cases := []struct {
+		kind     k8s.ResourceType
+		colTitle string
+		raw      string
+	}{
+		// Pod transitional
+		{k8s.ResourcePods, "Status", "Pending"},
+		{k8s.ResourcePods, "Status", "ContainerCreating"},
+		{k8s.ResourcePods, "Status", "PodInitializing"},
+		{k8s.ResourcePods, "Status", "Terminating"},
+		// Node degraded
+		{k8s.ResourceNodes, "Status", "SchedulingDisabled"},
+		// Namespace
+		{k8s.ResourceNamespaces, "Status", "Terminating"},
+		// PV transitional
+		{k8s.ResourcePersistentVolumes, "Status", "Released"},
+		// Helm transitional
+		{k8s.ResourceReleases, "Status", "pending-install"},
+		{k8s.ResourceReleases, "Status", "pending-upgrade"},
+		{k8s.ResourceReleases, "Status", "uninstalling"},
+	}
+	for _, c := range cases {
+		t.Run(string(c.kind)+"/"+c.colTitle+"/"+c.raw, func(t *testing.T) {
+			if got := statusCellColor(c.kind, c.colTitle, c.raw, th, false); got != wantYellow {
+				t.Errorf("statusCellColor(%v, %q, %q) = %q, want %q",
+					c.kind, c.colTitle, c.raw, got, wantYellow)
+			}
+		})
+	}
+}
+
+// TestStatusCellColor_RedFailure pins the abnormal-red set. Anything that
+// turns red here should be a state where the user genuinely needs to act —
+// not a transient hiccup the controller will resolve in seconds.
+func TestStatusCellColor_RedFailure(t *testing.T) {
+	th := theme.DefaultTheme()
+	wantRed := th.Status.Error
+	cases := []struct {
+		kind     k8s.ResourceType
+		colTitle string
+		raw      string
+	}{
+		{k8s.ResourcePods, "Status", "CrashLoopBackOff"},
+		{k8s.ResourcePods, "Status", "Error"},
+		{k8s.ResourcePods, "Status", "ImagePullBackOff"},
+		{k8s.ResourcePods, "Status", "ErrImagePull"},
+		{k8s.ResourcePods, "Status", "Failed"},
+		{k8s.ResourcePods, "Status", "Evicted"},
+		{k8s.ResourcePods, "Status", "OOMKilled"},
+		{k8s.ResourcePods, "Status", "Init:CrashLoopBackOff"}, // Init:* falls through to red
+		{k8s.ResourceNodes, "Status", "NotReady"},
+		{k8s.ResourcePersistentVolumeClaims, "Status", "Lost"},
+		{k8s.ResourcePersistentVolumes, "Status", "Failed"},
+		{k8s.ResourceReleases, "Status", "failed"},
+		{k8s.ResourceEvents, "Type", "Warning"},
+	}
+	for _, c := range cases {
+		t.Run(string(c.kind)+"/"+c.colTitle+"/"+c.raw, func(t *testing.T) {
+			if got := statusCellColor(c.kind, c.colTitle, c.raw, th, false); got != wantRed {
+				t.Errorf("statusCellColor(%v, %q, %q) = %q, want %q",
+					c.kind, c.colTitle, c.raw, got, wantRed)
+			}
+		})
+	}
+}
+
+// TestStatusCellColor_OnLightBgUsesLatte verifies the cursor / locked-row
+// reverse-video bg gets the darker Latte variant — the default Mocha
+// pastel (#f9e2af / #f38ba8) washes out on a light bg and would read as
+// "barely visible status text".
+func TestStatusCellColor_OnLightBgUsesLatte(t *testing.T) {
+	th := theme.DefaultTheme()
+	wantYellowDark := "#df8e1d"
+	wantRedDark := "#d20f39"
+	if got := statusCellColor(k8s.ResourcePods, "Status", "Pending", th, true); got != wantYellowDark {
+		t.Errorf("onLightBg Pending = %q, want %q", got, wantYellowDark)
+	}
+	if got := statusCellColor(k8s.ResourcePods, "Status", "CrashLoopBackOff", th, true); got != wantRedDark {
+		t.Errorf("onLightBg CrashLoopBackOff = %q, want %q", got, wantRedDark)
+	}
+}
+
