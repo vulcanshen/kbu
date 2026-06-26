@@ -479,7 +479,34 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	}
 
 	visible := m.visibleItems()
+	// Empty visible set typically means a locked filter outlived its
+	// underlying data — e.g. user searched + locked to "Pinned", then
+	// unpinned every match. j/k/G/...  all index into `visible` so they
+	// stay gated. But `/` (re-enter search) and Esc (clear the stale
+	// filter) MUST stay live — they're the only escape routes back to
+	// a navigable state without leaving the panel.
 	if len(visible) == 0 {
+		// Clear any buffered g-prefix while we're in the dead state.
+		// Without this, a `g` pressed BEFORE visible emptied (e.g. the
+		// user pressed g, then unpinned the last match → drained list →
+		// they paged away and came back) would leave pendingG=true on
+		// re-entry, so the next single `g` would fire as gg without
+		// the user pressing g a second time.
+		m.pendingG = false
+		switch msg.Type {
+		case tea.KeyRunes:
+			if len(msg.Runes) == 1 && msg.Runes[0] == '/' {
+				m.searching = true
+				m.searchQuery = ""
+				return m, nil
+			}
+		case tea.KeyEscape:
+			if m.searchQuery != "" {
+				m.searchQuery = ""
+				m.restoreCursorToSelected()
+				return m, nil
+			}
+		}
 		return m, nil
 	}
 

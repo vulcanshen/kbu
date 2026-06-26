@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -24,6 +25,30 @@ type Config struct {
 	// Editor overrides $EDITOR for kubectl edit operations.
 	// Empty string means fall back to $EDITOR, then platform default.
 	Editor string `yaml:"editor"`
+
+	// KM8ermShell overrides $SHELL for the KM8erm internal terminal
+	// popup. Empty string means fall back to $SHELL, then /bin/sh —
+	// the typical case where the user wants the same login shell as
+	// their host terminal. Resolved via Go's exec.Command(name, args)
+	// — bare names (e.g. `fish`) are looked up on $PATH at popup-open
+	// time; absolute paths are used verbatim. Distinct from `Editor`
+	// so users can pick e.g. `fish` for an interactive km8erm while
+	// keeping vim/$EDITOR for kubectl edit.
+	KM8ermShell string `yaml:"km8erm_shell"`
+
+	// KM8ermLoginShell launches the KM8erm shell with `-l` so it
+	// sources login dotfiles (~/.zprofile, ~/.bash_profile, /etc/
+	// profile). Default false because the login path on macOS bash
+	// force-sets PS1 from /etc/profile and clobbered the user's clean
+	// prompt; the v1.7.2 baseline runs non-login interactive so
+	// .bashrc / .zshrc still loads but no PS1 surprise.
+	//
+	// Flip true when km8 is launched from a NON-login parent shell
+	// (Raycast / Alfred / cron / tmux configured non-login) and your
+	// PATH lives in .zprofile / .bash_profile rather than .zshrc —
+	// without `-l` those dotfiles never run and KM8erm sees a
+	// stripped PATH that can't find brew/asdf/mise binaries.
+	KM8ermLoginShell bool `yaml:"km8erm_login_shell"`
 
 	// Compare carries settings for the YAML compare popup.
 	Compare CompareConfig `yaml:"compare"`
@@ -261,7 +286,24 @@ func ConfigDir() string {
 }
 
 // ConfigPath returns the full path to the km8 config file.
+//
+// $KM8__CONFIGPATH wins outright — lets the user point km8 at a config
+// file outside the normal config-dir layout (e.g. a per-project YAML
+// committed to a repo, or a tmpfs path on CI). Theme file is NOT
+// affected — it still lives at ConfigDir()/theme.yaml. Absolute path
+// recommended; a relative value resolves against CWD at load/save time.
+//
+// Leading / trailing whitespace is TrimSpace'd before the empty
+// check — without that, `KM8__CONFIGPATH=" /path/cfg.yaml"` (leading
+// space from copy-paste or a sourced .env) would slip through and
+// reach os.ReadFile verbatim → ENOENT → silent fallback to defaults
+// on load, plus a literal-space directory created under CWD on save.
+// The trim is the single source of truth so other readers of the env
+// (e.g. the NewAppModel startup notice) don't have to repeat it.
 func ConfigPath() string {
+	if p := strings.TrimSpace(os.Getenv("KM8__CONFIGPATH")); p != "" {
+		return p
+	}
 	return filepath.Join(ConfigDir(), "config.yaml")
 }
 

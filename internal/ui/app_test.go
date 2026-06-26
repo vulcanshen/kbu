@@ -9,35 +9,141 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hinshun/vt10x"
 
+	"github.com/vulcanshen/km8/internal/config"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
-func TestBuildShellTerminalCmd_UsesShellEnv(t *testing.T) {
-	orig := os.Getenv("SHELL")
-	defer os.Setenv("SHELL", orig)
+// unsetEnvForTest clears `key` for the test's lifetime, restoring the
+// previous state (set-to-original OR unset) on cleanup. Use this for
+// the precedence tests that need to PROVE a var is absent — t.Setenv
+// only handles the "set to X" case, not the "guaranteed-unset" case.
+//
+// Previously these tests used `orig := os.Getenv(key); defer
+// os.Setenv(key, orig)`, which polluted a runner where `key` started
+// unset (orig = "" → defer sets key=""). The pollution only surfaces
+// for code paths that distinguish unset from empty (os.LookupEnv),
+// so the build kept passing — but the trap was real.
+func unsetEnvForTest(t *testing.T, key string) {
+	t.Helper()
+	orig, had := os.LookupEnv(key)
+	os.Unsetenv(key)
+	t.Cleanup(func() {
+		if had {
+			os.Setenv(key, orig)
+		} else {
+			os.Unsetenv(key)
+		}
+	})
+}
 
-	os.Setenv("SHELL", "/usr/bin/fish")
-	cmd := buildShellTerminalCmd()
+func TestBuildShellTerminalCmd_UsesShellEnv(t *testing.T) {
+	unsetEnvForTest(t, "KM8__SHELL")
+	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	t.Setenv("SHELL", "/usr/bin/fish")
+
+	cmd := buildShellTerminalCmd("", false)
 	if cmd == nil {
 		t.Fatal("buildShellTerminalCmd returned nil")
 	}
 	if cmd.Args[0] != "/usr/bin/fish" {
 		t.Errorf("expected /usr/bin/fish, got %q", cmd.Args[0])
 	}
-	if len(cmd.Args) < 2 || cmd.Args[1] != "-l" {
-		t.Errorf("expected login shell flag, got args %v", cmd.Args)
+	if len(cmd.Args) != 1 {
+		t.Errorf("expected no extra args (non-login interactive), got %v", cmd.Args)
 	}
 }
 
 func TestBuildShellTerminalCmd_FallbackWhenShellUnset(t *testing.T) {
-	orig := os.Getenv("SHELL")
-	defer os.Setenv("SHELL", orig)
+	unsetEnvForTest(t, "KM8__SHELL")
+	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	unsetEnvForTest(t, "SHELL")
 
-	os.Unsetenv("SHELL")
-	cmd := buildShellTerminalCmd()
+	cmd := buildShellTerminalCmd("", false)
 	if cmd.Args[0] != "/bin/sh" {
 		t.Errorf("expected /bin/sh fallback, got %q", cmd.Args[0])
+	}
+}
+
+func TestBuildShellTerminalCmd_ConfigOverridesShellEnv(t *testing.T) {
+	// km8erm_shell config wins over $SHELL — the user wants fish inside
+	// km8erm but their host shell is still zsh.
+	unsetEnvForTest(t, "KM8__SHELL")
+	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	t.Setenv("SHELL", "/bin/zsh")
+
+	cmd := buildShellTerminalCmd("/opt/homebrew/bin/fish", false)
+	if cmd.Args[0] != "/opt/homebrew/bin/fish" {
+		t.Errorf("expected config shell to win over $SHELL, got %q", cmd.Args[0])
+	}
+}
+
+func TestBuildShellTerminalCmd_KM8ShellEnvOverridesEverything(t *testing.T) {
+	// $KM8__SHELL is the top of the precedence stack: it beats both the
+	// km8erm_shell config AND $SHELL. Use case: one-shot
+	// `KM8__SHELL=/bin/bash km8` to test a different shell without
+	// touching the persisted config.
+	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	t.Setenv("SHELL", "/bin/zsh")
+	t.Setenv("KM8__SHELL", "/bin/bash")
+
+	cmd := buildShellTerminalCmd("/opt/homebrew/bin/fish", false)
+	if cmd.Args[0] != "/bin/bash" {
+		t.Errorf("expected $KM8__SHELL to win over config and $SHELL, got %q", cmd.Args[0])
+	}
+}
+
+func TestBuildShellTerminalCmd_TrimsWhitespaceFromEnv(t *testing.T) {
+	// Leading / trailing whitespace from a copy-pasted env value or a
+	// sourced .env file would previously slip past the empty-check and
+	// reach exec.Command verbatim → LookPath ENOENT, KM8erm refuses to
+	// open with no obvious reason. TrimSpace closes the trap.
+	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	t.Setenv("KM8__SHELL", "  /opt/homebrew/bin/fish\t")
+
+	cmd := buildShellTerminalCmd("", false)
+	if cmd.Args[0] != "/opt/homebrew/bin/fish" {
+		t.Errorf("expected whitespace stripped from $KM8__SHELL, got %q", cmd.Args[0])
+	}
+}
+
+func TestBuildShellTerminalCmd_LoginConfigAppendsDashEll(t *testing.T) {
+	// km8erm_login_shell: true should spawn the shell with `-l`,
+	// matching what the v1.7.1 baseline did unconditionally.
+	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	unsetEnvForTest(t, "KM8__SHELL")
+	t.Setenv("SHELL", "/bin/zsh")
+
+	cmd := buildShellTerminalCmd("", true)
+	if len(cmd.Args) != 2 || cmd.Args[1] != "-l" {
+		t.Errorf("expected [shell -l] args, got %v", cmd.Args)
+	}
+}
+
+func TestBuildShellTerminalCmd_LoginEnvOverridesConfig(t *testing.T) {
+	// $KM8__LOGIN_SHELL=true forces login even when config says false.
+	// Use case: ad-hoc rescue when launched from a non-login parent.
+	unsetEnvForTest(t, "KM8__SHELL")
+	t.Setenv("SHELL", "/bin/zsh")
+	t.Setenv("KM8__LOGIN_SHELL", "true")
+
+	cmd := buildShellTerminalCmd("", false)
+	if len(cmd.Args) != 2 || cmd.Args[1] != "-l" {
+		t.Errorf("expected $KM8__LOGIN_SHELL=true to force login mode, got %v", cmd.Args)
+	}
+}
+
+func TestBuildShellTerminalCmd_LoginEnvFalseOverridesConfig(t *testing.T) {
+	// $KM8__LOGIN_SHELL is treated as set-but-truthy-check, so a value
+	// other than the canonical truthy set DISABLES login mode even
+	// when config opted in.
+	unsetEnvForTest(t, "KM8__SHELL")
+	t.Setenv("SHELL", "/bin/zsh")
+	t.Setenv("KM8__LOGIN_SHELL", "false")
+
+	cmd := buildShellTerminalCmd("", true)
+	if len(cmd.Args) != 1 {
+		t.Errorf("expected $KM8__LOGIN_SHELL=false to override cfgLogin=true, got %v", cmd.Args)
 	}
 }
 
@@ -69,6 +175,13 @@ func appWithItems(items []k8s.ResourceItem, cursor int) AppModel {
 		table:           tbl,
 		detail:          d,
 		theme:           th,
+		// cfg is non-nil to match production NewAppModel — every other
+		// m.cfg reader in app.go nil-guards, but the ctrl+t handler
+		// (line ~1539) reads m.cfg.KM8ermShell/KM8ermLoginShell raw.
+		// A test that dispatches Ctrl+T against an appWithItems-built
+		// model would NPE without this; matching the production
+		// invariant is cleaner than gating the hot-path handler.
+		cfg:             &config.Config{},
 		shellPty:        NewPtyView(),
 		txPty:           NewPtyView(),
 		toast:           NewToastModel(th),

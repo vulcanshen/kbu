@@ -159,6 +159,13 @@ type aggregateLogsReadyMsg struct {
 // populated when streaming from a workload's multiple pods (aggregate mode)
 // so the detail panel can render `<pod-hash>│<container>│<text>` prefixes.
 type LogLineMsg struct {
+	// StreamID is the LogStreamer epoch the producer was tagged with.
+	// The handler compares against k8s.LogStreamer.CurrentStreamID()
+	// to drop stale lines from a closed prior stream's buffered
+	// residue — without this guard, rapid row changes in workload
+	// kinds could bleed 1-2 old lines into the new context's
+	// detail.logLines before the new stream's first line arrives.
+	StreamID  int64
 	Pod       string
 	Container string
 	Text      string

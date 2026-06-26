@@ -104,8 +104,12 @@ func ColumnsForResource(rt k8s.ResourceType) []Column {
 	out := make([]Column, 0, len(cols)+1)
 	out = append(out, cols[0])
 	// Always-present empty column even for non-helm rows, so column
-	// alignment stays consistent. Cell value is ASCII (HelmRowMark)
-	// to avoid runewidth ambiguity drift across rows.
+	// alignment stays consistent. Cell value is k8s.HelmRowMark() — a
+	// Nerd Font PUA glyph (nf-md-ship_wheel, U+F0833) on the Helm-
+	// managed rows, empty string elsewhere. PUA has ambiguous cell
+	// width across terminals — go-runewidth reports 1 cell, but
+	// terminals running EAW-double / NF non-Mono variants paint 2 —
+	// MinWidth: 2 keeps the column slot wide enough either way.
 	out = append(out, Column{Title: "", MinWidth: 2})
 	out = append(out, cols[1:]...)
 	return out

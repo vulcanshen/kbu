@@ -266,6 +266,58 @@ func TestDetailModel_LogsTab_NonPodResource(t *testing.T) {
 	}
 }
 
+func TestDetailModel_WorkloadKinds_AllGetLogsTab(t *testing.T) {
+	// supportsLogs + SetResourceType extended in this iteration to cover
+	// every workload kind that k8s.PodsForWorkload routes — StatefulSet,
+	// DaemonSet, Job, CronJob — not just Deployment. README claim about
+	// "aggregate logs for all workload kinds" used to be ahead of code;
+	// this test pins the gate so the next refactor can't silently regress.
+	cases := []struct {
+		name string
+		rt   k8s.ResourceType
+	}{
+		{"StatefulSet", k8s.ResourceStatefulSets},
+		{"DaemonSet", k8s.ResourceDaemonSets},
+		{"Job", k8s.ResourceJobs},
+		{"CronJob", k8s.ResourceCronJobs},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := newTestDetail()
+			m.SetResourceType(c.rt)
+
+			if !supportsLogs(c.rt) {
+				t.Errorf("supportsLogs(%v) = false; expected true for workload kind", c.rt)
+			}
+			if !isAggregateLogsKind(c.rt) {
+				t.Errorf("isAggregateLogsKind(%v) = false; expected true for non-Pod workload", c.rt)
+			}
+			foundLogs := false
+			for _, tab := range m.tabs {
+				if tab == "Logs" {
+					foundLogs = true
+					break
+				}
+			}
+			if !foundLogs {
+				t.Errorf("tabs %v missing Logs tab for kind %v", m.tabs, c.rt)
+			}
+		})
+	}
+}
+
+func TestDetailModel_PodIsNotAggregateLogsKind(t *testing.T) {
+	// Pods take the single-pod streaming path in app.go's dispatch, not
+	// the aggregate route. The helper must say so explicitly so callers
+	// don't accidentally fire PodsForWorkload against a Pod.
+	if !supportsLogs(k8s.ResourcePods) {
+		t.Error("Pods must supportsLogs (single-stream path)")
+	}
+	if isAggregateLogsKind(k8s.ResourcePods) {
+		t.Error("Pods must NOT be classed as an aggregate-logs kind")
+	}
+}
+
 func TestDetailModel_Deployment_TabOrderLogsFirst(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourceDeployments)

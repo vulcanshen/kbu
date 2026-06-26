@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,14 @@ import (
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
+
+// aggregateLogsRetryInterval throttles re-attempts of failed aggregate
+// log stream starts. 10s strikes the balance: transient pod-rollover
+// errors recover within one or two windows; persistent RBAC denials
+// log one warning + one kubectl-equivalent API call per window instead
+// of one per watcher tick. Row-cursor change clears the throttle
+// (different row may have different RBAC outcomes).
+const aggregateLogsRetryInterval = 10 * time.Second
 
 type resourceSwitchTickMsg struct {
 	seq int
@@ -90,6 +99,18 @@ type AppModel struct {
 	items           []k8s.ResourceItem
 	ready           bool
 	logsActive      bool
+	// nextAggregateRetry throttles automatic re-attempts of aggregate
+	// log streaming after a failure (RBAC denial, zero pods, transient
+	// API error). Without it, the ResourceDataMsg watcher gate would
+	// re-fire startAggregateLogs on every watcher tick until the
+	// user navigated away — one duplicated AppLog warning + one
+	// kubectl-equivalent API call per tick, sustained for the
+	// session. The throttle window is short enough that legitimate
+	// transient failures (pods mid-rollout) recover within a few
+	// seconds; permanent failures (RBAC) get one entry per window
+	// instead of one per tick. Cleared on row change so a new row
+	// gets an immediate fresh attempt.
+	nextAggregateRetry time.Time
 	detailExpanded  bool
 	tableExpanded   bool
 	switchSeq       int
@@ -934,6 +955,23 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 	newCompareModel := NewCompareYamlPopupModel(t)
 	newCompareModel.SetDefaultLayout(parseCompareLayout(cfg.Compare.Layout))
 
+	// Build appLog up-front so we can surface startup notices — chiefly
+	// a $KM8__CONFIGPATH override warning so the user knows pin / sort
+	// persistence will land at the override path, not the default
+	// config dir. Without this nudge, a leftover env var from a debug
+	// session silently writes the user's mutations to /tmp and the
+	// next session sees pristine config; the user assumes pins were
+	// lost. `!` opens the App Log popup where this message lives.
+	appLog := NewAppLogModel(t)
+	if p := strings.TrimSpace(os.Getenv("KM8__CONFIGPATH")); p != "" {
+		// Use Info (not Warn) — Warn increments errorCount and arms
+		// the status bar's red `! N errors` badge every launch with
+		// the env legitimately set. The point is a discoverable
+		// nudge in the App Log popup (`!`), not a recurring error
+		// signal for a setup the user chose.
+		appLog.Info(fmt.Sprintf("config: $KM8__CONFIGPATH=%s — loads AND saves redirected here, not the default config dir", p))
+	}
+
 	return AppModel{
 		sidebar:         sidebar,
 		table:           NewTableModel(t),
@@ -943,7 +981,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 		namespacePicker: NewNamespacePickerModel(t),
 		contextPicker:   NewContextPickerModel(t),
 		help:            NewHelpModel(t),
-		appLog:          NewAppLogModel(t),
+		appLog:          appLog,
 		confirm:         NewConfirmModel(t),
 		splash:          NewSplashModel(),
 		toast:           NewToastModel(t),
@@ -1524,7 +1562,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.shellPty.Show(m.width, m.height)
 				return m, nil
 			}
-			cmd := buildShellTerminalCmd()
+			cmd := buildShellTerminalCmd(m.cfg.KM8ermShell, m.cfg.KM8ermLoginShell)
 			return m, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell)
 		case "?":
 			m.help.SetSize(m.width, m.height)
@@ -2041,6 +2079,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.drillDownContainers = nil
 		m.logStreamer.Stop()
 		m.logsActive = false
+		// Throttle is per-target — kind switch invalidates the prior
+		// kind's RBAC / pod-existence outcome, so the new kind gets a
+		// fresh attempt. Same rationale as RowSelectedMsg's nextAggregateRetry
+		// reset; applies to every navigation handler that flips
+		// logsActive=false. Repeated in NamespaceChangedMsg,
+		// ContextChangedMsg, drillDownMsg, exitDrillDown.
+		m.nextAggregateRetry = time.Time{}
 		m.watcher.Stop()
 		m.detail.ClearDetail()
 		m.detail.SetResourceType(msg.Type)
@@ -2112,8 +2157,22 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.logsActive = true
 						cmds = append(cmds, waitForLogLine(m.logStreamer))
 					}
-				case msg.Type == k8s.ResourceDeployments && !m.logsActive:
+				case isAggregateLogsKind(msg.Type) && !m.logsActive && time.Now().After(m.nextAggregateRetry):
+					// Workload kinds funnel Pods through k8s.PodsForWorkload
+					// into one aggregate stream — see supportsLogs() for the
+					// canonical kind set. Flip logsActive=true at dispatch
+					// time (not at aggregateLogsReadyMsg arrival) so a
+					// follow-up ResourceDataMsg watcher tick in the
+					// dispatch-to-Ready gap doesn't re-fire this case and
+					// queue a duplicate startAggregateLogs.
+					//
+					// nextAggregateRetry throttles re-attempts after a
+					// failure (zero pods, RBAC denial, transient API
+					// error) — without the throttle, every watcher
+					// tick would re-fire the same failing call until
+					// the user navigated away.
 					m.detail.logLines = nil
+					m.logsActive = true
 					cmds = append(cmds, startAggregateLogs(m.k8sClient, msg.Type, item))
 				}
 			}
@@ -2147,12 +2206,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// user doesn't briefly see the previous row's drill state while
 			// the new detail fetch is in flight.
 			m.detail.ResetDrillStack()
+			// Clear aggregate-logs retry throttle — the new row gets
+			// an immediate fresh attempt regardless of how the prior
+			// row's stream failed (RBAC denial on row A doesn't
+			// imply the same for row B).
+			m.nextAggregateRetry = time.Time{}
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
 			if c := m.detail.BeginRefetch(); c != nil {
 				cmds = append(cmds, c)
 			}
-			switch m.currentResource {
-			case k8s.ResourcePods:
+			switch {
+			case m.currentResource == k8s.ResourcePods:
 				containers := k8s.ContainerNames(item.Raw)
 				if len(containers) > 0 {
 					m.detail.logLines = nil
@@ -2160,10 +2224,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.logsActive = true
 					cmds = append(cmds, waitForLogLine(m.logStreamer))
 				}
-			case k8s.ResourceDeployments:
+			case isAggregateLogsKind(m.currentResource):
+				// Row change inside a workload kind — restart the
+				// aggregate stream against the new row's managed Pods.
+				// logsActive is held HIGH across the Stop → Start
+				// transition so a ResourceDataMsg watcher tick in the
+				// dispatch-to-aggregateLogsReadyMsg gap can't see a
+				// false `!m.logsActive` and queue a duplicate stream
+				// (race fixed alongside the ResourceDataMsg branch's
+				// dispatch-time flip above).
 				m.logStreamer.Stop()
-				m.logsActive = false
 				m.detail.logLines = nil
+				m.logsActive = true
 				cmds = append(cmds, startAggregateLogs(m.k8sClient, m.currentResource, item))
 			default:
 				m.logStreamer.Stop()
@@ -2268,10 +2340,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.appLog.Warn("aggregate logs: " + msg.err.Error())
+			// Reset logsActive + arm the retry throttle. Without
+			// throttling, dispatch-time logsActive=true would stay
+			// HIGH on failure (blocking the watcher gate forever),
+			// and a naive reset to false would let every watcher
+			// tick re-fire the same failing call — RBAC-denied
+			// rows would spam one warning + one API call per tick.
+			m.logsActive = false
+			m.nextAggregateRetry = time.Now().Add(aggregateLogsRetryInterval)
 			return m, nil
 		}
 		if len(msg.targets) == 0 {
 			m.appLog.Info("aggregate logs: no pods running")
+			// Same retry throttle as the err branch — pods may
+			// legitimately appear later (mid-rollout) but we don't
+			// want to re-list on every watcher tick until they do.
+			m.logsActive = false
+			m.nextAggregateRetry = time.Now().Add(aggregateLogsRetryInterval)
 			return m, nil
 		}
 		m.logStreamer.StartMulti(msg.targets)
@@ -2279,6 +2364,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForLogLine(m.logStreamer)
 
 	case LogLineMsg:
+		// Stream-epoch guard: a LogLine in the closed prior stream's
+		// buffered residue can still wake the parked reader after Stop
+		// closed the channel (Go closed-buffered-channel semantics).
+		// Without this check, that residue would AppendLogLine into the
+		// new context's logLines buffer — visible as 1-2 stale lines
+		// from the previous pod/workload bleeding into the new row's
+		// Logs tab on rapid j/k through aggregate kinds. The producer
+		// captured its streamID at goroutine spawn; we drop msgs whose
+		// epoch doesn't match the streamer's current one.
+		if msg.StreamID != m.logStreamer.CurrentStreamID() {
+			return m, nil
+		}
 		m.detail.AppendLogLine(msg.Pod, msg.Container, msg.Text)
 		if m.logsActive {
 			cmds = append(cmds, waitForLogLine(m.logStreamer))
@@ -2324,6 +2421,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.SetNamespace(msg.Namespace)
 		m.logStreamer.Stop()
 		m.logsActive = false
+		m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
 		m.detail.ClearDetail()
 		m.watcher.Start(m.currentResource, msg.Namespace)
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
@@ -2342,6 +2440,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.watcher.Stop()
 		m.logStreamer.Stop()
 		m.logsActive = false
+		m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
 		newClient.Registry().ClearDynamic()
 		m.k8sClient = newClient
 		m.watcher = k8s.NewWatcher(newClient.Clientset())
@@ -2376,19 +2475,41 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table.SetColumns(ColumnsForResource(msg.childType))
 		m.table.SetRows(augmentRowsWithHelm(m.items, msg.childType))
 		m.statusLine.SetDrillDown(true)
+		// Drilling changes the panel-2 resource kind, which means
+		// every piece of m.detail (logs, structured detail body, the
+		// Relatives drill chain, events) describes the PARENT row and
+		// would render under the child kind's tab list. Clear all of
+		// it unconditionally so the child gets a clean slate; the
+		// kind-specific re-arm below stays gated on items>0 since it
+		// needs m.items[0]. Hoisted OUT of the items>0 block — the
+		// previous placement leaked the parent's aggregate stream
+		// when child kind had zero rows (CronJob → Jobs with no
+		// retained Jobs), and also left the parent's structured
+		// detail visible under the new tab list (Relatives entries
+		// describing the parent, conditions, events, ...).
+		m.logStreamer.Stop()
+		m.logsActive = false
+		m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
+		m.detail.ClearDetail()
 		if len(m.items) > 0 {
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.childType, m.items[0]))
 			if c := m.detail.BeginRefetch(); c != nil {
 				cmds = append(cmds, c)
 			}
-			if msg.childType == k8s.ResourcePods {
+			switch {
+			case msg.childType == k8s.ResourcePods:
 				containers := k8s.ContainerNames(m.items[0].Raw)
 				if len(containers) > 0 {
-					m.detail.logLines = nil
 					m.logStreamer.Start(m.items[0].Name, m.items[0].Namespace, containers)
 					m.logsActive = true
 					cmds = append(cmds, waitForLogLine(m.logStreamer))
 				}
+			case isAggregateLogsKind(msg.childType):
+				// Workload kinds funnel their Pods through
+				// PodsForWorkload — same path RowSelectedMsg /
+				// ResourceDataMsg use for top-level rows.
+				m.logsActive = true
+				cmds = append(cmds, startAggregateLogs(m.k8sClient, msg.childType, m.items[0]))
 			}
 		}
 		return m, tea.Batch(cmds...)
@@ -3018,6 +3139,7 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 func (m *AppModel) exitDrillDown() tea.Cmd {
 	m.logStreamer.Stop()
 	m.logsActive = false
+	m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
 	m.detail.logLines = nil
 
 	// If at container level, go back to pod list
@@ -3081,7 +3203,8 @@ func (m *AppModel) refreshDetailForCurrent() tea.Cmd {
 	if c := m.detail.BeginRefetch(); c != nil {
 		cmds = append(cmds, c)
 	}
-	if m.currentResource == k8s.ResourcePods {
+	switch {
+	case m.currentResource == k8s.ResourcePods:
 		containers := k8s.ContainerNames(item.Raw)
 		if len(containers) > 0 {
 			m.detail.logLines = nil
@@ -3089,6 +3212,24 @@ func (m *AppModel) refreshDetailForCurrent() tea.Cmd {
 			m.logsActive = true
 			cmds = append(cmds, waitForLogLine(m.logStreamer))
 		}
+	case isAggregateLogsKind(m.currentResource):
+		// Drill-up from a Pods child back into a workload-kind parent
+		// must restart the aggregate stream — exitDrillDown stopped
+		// whatever was running but never re-armed for non-Pods. Before
+		// this branch, drilling Deployment → Pods → Esc left the
+		// Deployment row's Logs tab silent until the user nudged the
+		// cursor (next RowSelectedMsg restarted). The feat(logs)
+		// extension widened the gap from Deployment-only to all 5
+		// workload kinds (StatefulSet / DaemonSet / Job / CronJob).
+		// dispatch-time logsActive=true mirrors RowSelectedMsg/
+		// ResourceDataMsg so a watcher tick in the gap can't double-fire.
+		// Throttle clear matches RowSelectedMsg too — user-initiated
+		// drill-up deserves a fresh attempt; stale timer from prior
+		// failure would otherwise gate subsequent watcher tick.
+		m.detail.logLines = nil
+		m.logsActive = true
+		m.nextAggregateRetry = time.Time{}
+		cmds = append(cmds, startAggregateLogs(m.k8sClient, m.currentResource, item))
 	}
 	return tea.Batch(cmds...)
 }
@@ -3287,14 +3428,52 @@ func buildKubectlExecCmd(podName, namespace, container, contextName string) *exe
 // internal terminal popup. Inherits env / cwd from km8 so the user's aliases,
 // PATH, and current directory are exactly what they'd see in a regular
 // terminal — like `ssh localhost` but embedded.
-func buildShellTerminalCmd() *exec.Cmd {
-	sh := os.Getenv("SHELL")
+//
+// Shell precedence: $KM8__SHELL > cfgShell (km8erm_shell config) >
+// $SHELL > /bin/sh. The env-var slot is for ad-hoc overrides (one-shot
+// `KM8__SHELL=... km8`) without editing the config; cfgShell is for
+// persistent per-user preference; $SHELL is the host fallback.
+//
+// Login precedence: $KM8__LOGIN_SHELL > cfgLogin (km8erm_login_shell).
+// Default is non-login interactive — sources .bashrc / .zshrc, skips
+// /etc/profile so macOS bash doesn't clobber the user's PS1. Flip true
+// when launched from a non-login parent (Raycast/Alfred/cron/non-default
+// tmux) and PATH lives in .zprofile / .bash_profile — without `-l`
+// those dotfiles don't run and KM8erm sees a stripped PATH.
+//
+// All env-derived candidates are TrimSpace'd before the empty-string
+// check; otherwise a stray `KM8__SHELL=" /opt/.../fish"` (leading
+// space from copy-paste or a sourced .env) would fall through to
+// exec.Command verbatim and error with ENOENT.
+func buildShellTerminalCmd(cfgShell string, cfgLogin bool) *exec.Cmd {
+	sh := strings.TrimSpace(os.Getenv("KM8__SHELL"))
+	if sh == "" {
+		sh = strings.TrimSpace(cfgShell)
+	}
+	if sh == "" {
+		sh = strings.TrimSpace(os.Getenv("SHELL"))
+	}
 	if sh == "" {
 		sh = "/bin/sh"
 	}
-	// -l → login shell, sources .zprofile/.bash_profile/etc. so the user
-	// gets the same environment as a fresh terminal tab.
-	return exec.Command(sh, "-l")
+
+	login := cfgLogin
+	if v := strings.TrimSpace(os.Getenv("KM8__LOGIN_SHELL")); v != "" {
+		// strconv.ParseBool covers the Go-canonical truthy set
+		// {1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False}
+		// — same set kubectl + most Go CLIs accept. The previous
+		// literal whitelist {true, 1, yes, TRUE, YES} silently
+		// dropped `True`/`Yes`/`t`/`on` etc., which looked like Go-
+		// idiomatic spellings to the user. Unrecognized values
+		// leave login=cfgLogin (no override).
+		if b, err := strconv.ParseBool(v); err == nil {
+			login = b
+		}
+	}
+	if login {
+		return exec.Command(sh, "-l")
+	}
+	return exec.Command(sh)
 }
 
 // terminalTitle returns the popup title for the internal terminal — the
@@ -3772,12 +3951,38 @@ func startAggregateLogs(client *k8s.Client, resource k8s.ResourceType, item k8s.
 }
 
 func waitForLogLine(ls *k8s.LogStreamer) tea.Cmd {
+	// Capture the channel reference at Cmd-construction time, NOT inside
+	// the goroutine body. Bubble Tea may process another message (e.g.
+	// RowSelectedMsg's default branch, NamespaceChangedMsg, exitDrillDown)
+	// between this Cmd's dispatch and its goroutine first instruction;
+	// that Update can call ls.Stop() which closes the channel AND nils
+	// ls.lines. If we read ls.Lines() inside the goroutine, we'd get
+	// nil and `<-nil` blocks forever (Go spec) — one parked goroutine
+	// leaked per race occurrence. Reading at construction-time binds
+	// the closed-old-channel; the receive then unblocks with !ok and
+	// we return nil cleanly.
+	//
+	// Nil-channel short-circuit: if Stop has already nilled ls.lines
+	// (Stop→StartMulti async gap during a LogLineMsg re-arm), return
+	// a nil Cmd. Bubble Tea skips nil Cmds without spawning a
+	// goroutine; equivalent to a no-op without the unnecessary
+	// goroutine + channel send + msg-drop cycle the closure form
+	// would introduce.
+	ch := ls.Lines()
+	if ch == nil {
+		return nil
+	}
 	return func() tea.Msg {
-		line, ok := <-ls.Lines()
+		line, ok := <-ch
 		if !ok {
 			return nil
 		}
-		return LogLineMsg{Pod: line.Pod, Container: line.Container, Text: line.Text}
+		return LogLineMsg{
+			StreamID:  line.StreamID,
+			Pod:       line.Pod,
+			Container: line.Container,
+			Text:      line.Text,
+		}
 	}
 }
 
