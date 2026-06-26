@@ -809,12 +809,14 @@ func (m *DetailModel) ClearDetail() {
 
 // SetResourceType sets the current resource type and adjusts available tabs.
 //
-// Tab order convention — Relatives is always first when present, so the
-// space-hotkey jump-to-this-resource lands on the same tab the user came
-// from (no visual whiplash). Logs follows because users on a Pod/Deployment
-// almost always want logs once they've oriented themselves.
+// Tab order convention — Logs goes first for kinds that have it because
+// switching rows in panel 2 is most often a "show me what this thing is
+// doing right now" gesture, not "show me what it's related to" (Relatives
+// is a deliberate drill action that warrants the extra tab-switch). For
+// kinds without Logs, Relatives stays first so the space-hotkey jump
+// lands on the same tab the user came from (no visual whiplash).
 //
-//   - Pods / Deployments: Relatives → Logs → Events
+//   - Pods / workloads:   Logs → Relatives → Events
 //   - Events:             Relatives alone
 //   - !relativesApplicable:   Events only (Namespace — Relatives tab dropped)
 //   - everything else:    Relatives → Events
@@ -836,7 +838,7 @@ func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 		// (Deployment via current ReplicaSet; StatefulSet / DaemonSet /
 		// Job via selector; CronJob across all currently-retained Jobs).
 		// k8s.PodsForWorkload already routes each kind to its resolver.
-		m.tabs = []string{"Relatives", "Logs", "Events"}
+		m.tabs = []string{"Logs", "Relatives", "Events"}
 	case rt == k8s.ResourceEvents:
 		m.tabs = []string{"Relatives"}
 	case rt == k8s.ResourceReleases:

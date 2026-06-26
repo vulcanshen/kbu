@@ -90,23 +90,23 @@ func TestDetailModel_SetDetail(t *testing.T) {
 
 func TestDetailModel_SwitchTab(t *testing.T) {
 	m := newTestDetail()
-	m.SetResourceType(k8s.ResourcePods) // 4 tabs: Relatives, Logs, Events, Conditions
+	m.SetResourceType(k8s.ResourcePods) // 4 tabs: Logs, Relatives, Events, Conditions
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	if m.activeTab != 0 {
-		t.Fatalf("expected activeTab=0 (Relatives), got %d", m.activeTab)
+		t.Fatalf("expected activeTab=0 (Logs), got %d", m.activeTab)
 	}
-	if m.ActiveTabName() != "Relatives" {
-		t.Fatalf("expected default tab=Relatives for Pod, got %s", m.ActiveTabName())
-	}
-
-	// ']' cycles Relatives → Logs
-	m, _ = m.Update(keyMsg(']'))
 	if m.ActiveTabName() != "Logs" {
-		t.Errorf("expected Logs after first ']', got %s", m.ActiveTabName())
+		t.Fatalf("expected default tab=Logs for Pod, got %s", m.ActiveTabName())
 	}
 
-	// ']' cycles Logs → Events
+	// ']' cycles Logs → Relatives
+	m, _ = m.Update(keyMsg(']'))
+	if m.ActiveTabName() != "Relatives" {
+		t.Errorf("expected Relatives after first ']', got %s", m.ActiveTabName())
+	}
+
+	// ']' cycles Relatives → Events
 	m, _ = m.Update(keyMsg(']'))
 	if m.ActiveTabName() != "Events" {
 		t.Errorf("expected Events after second ']', got %s", m.ActiveTabName())
@@ -118,26 +118,26 @@ func TestDetailModel_SwitchTab(t *testing.T) {
 		t.Errorf("expected Conditions after third ']', got %s", m.ActiveTabName())
 	}
 
-	// ']' wraps Conditions → Relatives
+	// ']' wraps Conditions → Logs
 	m, _ = m.Update(keyMsg(']'))
-	if m.ActiveTabName() != "Relatives" {
-		t.Errorf("expected Relatives after wrap ']', got %s", m.ActiveTabName())
+	if m.ActiveTabName() != "Logs" {
+		t.Errorf("expected Logs after wrap ']', got %s", m.ActiveTabName())
 	}
 
-	// '[' wraps Relatives → Conditions (backward to last tab)
+	// '[' wraps Logs → Conditions (backward to last tab)
 	m, _ = m.Update(keyMsg('['))
 	if m.ActiveTabName() != "Conditions" {
-		t.Errorf("expected Conditions after '[' from Relatives, got %s", m.ActiveTabName())
+		t.Errorf("expected Conditions after '[' from Logs, got %s", m.ActiveTabName())
 	}
 }
 
 func TestDetailModel_ScrollDown(t *testing.T) {
 	m := newTestDetail()
-	m.SetResourceType(k8s.ResourcePods) // tabs: Relatives, Logs, Events
+	m.SetResourceType(k8s.ResourcePods) // tabs: Logs, Relatives, Events
 	m.SetDetail(sampleDetail(), sampleEvents())
 	// Logs tab scrolls by line — Relatives tab uses j/k for cursor
 	// navigation, so use Logs as the scroll-mechanics testbed.
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -166,7 +166,7 @@ func TestDetailModel_ScrollUp(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), sampleEvents())
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -200,7 +200,7 @@ func TestDetailModel_GG(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), sampleEvents())
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -235,7 +235,7 @@ func TestDetailModel_ShiftG(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), sampleEvents())
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -322,16 +322,16 @@ func TestDetailModel_Deployment_TabOrderLogsFirst(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourceDeployments)
 	if len(m.tabs) != 4 {
-		t.Fatalf("expected 4 tabs for Deployment (Relatives/Logs/Events/Conditions), got %d (%v)", len(m.tabs), m.tabs)
+		t.Fatalf("expected 4 tabs for Deployment (Logs/Relatives/Events/Conditions), got %d (%v)", len(m.tabs), m.tabs)
 	}
-	wantOrder := []string{"Relatives", "Logs", "Events", "Conditions"}
+	wantOrder := []string{"Logs", "Relatives", "Events", "Conditions"}
 	for i, want := range wantOrder {
 		if m.tabs[i] != want {
 			t.Errorf("tab %d: expected %q, got %q", i, want, m.tabs[i])
 		}
 	}
 	if m.activeTab != 0 {
-		t.Errorf("Deployment default activeTab must be 0 (Relatives), got %d", m.activeTab)
+		t.Errorf("Deployment default activeTab must be 0 (Logs), got %d", m.activeTab)
 	}
 }
 
@@ -340,7 +340,7 @@ func TestDetailModel_AppendLogLine_AggregatePrefix(t *testing.T) {
 	m.SetResourceType(k8s.ResourceDeployments)
 	// Aggregate mode: pod name carries through to the prefix.
 	m.AppendLogLine("nginx-abc123-xyz45", "web", "hello from pod1")
-	m = m.switchToTab(1) // Logs — index 1 after Relatives
+	m = m.switchToTab(0) // Logs
 
 	if len(m.contentLines) == 0 {
 		t.Fatal("expected log lines rendered")
@@ -376,7 +376,7 @@ func TestDetailModel_RelativesTab_RendersDrillableRefs(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(1) // Relatives
 
 	joined := strings.Join(m.contentLines, "\n")
 	for _, want := range []string{"Owner", "Node", "ServiceAccount", "worker-3", "nginx-sa"} {
@@ -394,7 +394,7 @@ func TestDetailModel_LinksCursor_LandsOnFirstSelectable(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(1) // Relatives
 
 	if m.relativeCursor < 0 || m.relativeCursor >= len(m.relativeEntries) {
 		t.Fatalf("cursor out of bounds: %d (entries %d)", m.relativeCursor, len(m.relativeEntries))
@@ -412,7 +412,7 @@ func TestDetailModel_LinksCursor_JKMovesBetweenSelectable(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(1) // Relatives
 
 	// Initial: Owner
 	if m.relativeEntries[m.relativeCursor].label != "Owner" {
@@ -439,7 +439,7 @@ func TestDetailModel_LinksEnter_EmitsPushMsg(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(1) // Relatives
 
 	// Cursor on Owner; Enter now drills into the link chain (push), not the
 	// YAML popup. Y is the new key for cursor-pointed YAML.
@@ -589,7 +589,7 @@ func TestDetailModel_TabTitle_ShowsLevelWhenDrilled(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(1) // Relatives
 	if got := m.ActiveTabTitle(); got != "Relatives" {
 		t.Errorf("at root, ActiveTabTitle should be 'Relatives', got %q", got)
 	}
@@ -629,7 +629,7 @@ func TestDetailModel_RelativesTab_LongValueWrapsConsistently(t *testing.T) {
 	m.SetSize(40, 20) // narrow panel forces wrap
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(detail, nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(1) // Relatives
 
 	joined := strings.Join(m.contentLines, "\n")
 	// Wrap broke the long name at character boundary, so the substring
@@ -656,7 +656,7 @@ func TestDetailModel_BorderTopRightHint(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0)
+	m = m.switchToTab(1)
 
 	if got := m.BorderTopRightHint(); got != "" {
 		t.Errorf("depth 1 should have no hint, got %q", got)
@@ -677,7 +677,7 @@ func TestDetailModel_RelativesH_Retired(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0)
+	m = m.switchToTab(1)
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
@@ -697,7 +697,7 @@ func TestDetailModel_RelativesB_Retired(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0)
+	m = m.switchToTab(1)
 	m.PushDrillFrame(
 		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
 		k8s.ResourceItem{}, k8s.ResourceDetail{},
@@ -739,7 +739,7 @@ func TestDetailModel_RelativesL_Retired(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(0)
+	m = m.switchToTab(1)
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	if cmd != nil {
@@ -792,7 +792,7 @@ func TestDetailModel_RelativesTab_LastCursorScrollsViewport(t *testing.T) {
 	m.SetSize(80, 8) // viewport smaller than full content
 	m.SetResourceType(k8s.ResourceNodes)
 	m.SetDetail(detail, nil)
-	m = m.switchToTab(0)
+	m = m.switchToTab(0) // Relatives (Nodes: 2-tab layout, no Logs)
 
 	// Drive cursor to the last selectable entry — stop as soon as the
 	// cursor stops advancing (because every j past that point also
@@ -835,7 +835,7 @@ func TestDetailModel_RelativesTab_EmptyShowsPlaceholder(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourceConfigMaps) // supported, but instance has no consumers
 	m.SetDetail(k8s.ResourceDetail{Name: "x", Namespace: "default", Kind: "ConfigMap"}, nil)
-	m = m.switchToTab(0) // Relatives
+	m = m.switchToTab(0) // Relatives (ConfigMaps: 2-tab layout, no Logs)
 
 	joined := strings.Join(m.contentLines, "\n")
 	if !strings.Contains(joined, "no relatives to show") {
@@ -888,7 +888,7 @@ func TestDetailModel_LogsTab_PodWaiting(t *testing.T) {
 	m.SetDetail(sampleDetail(), sampleEvents())
 
 	// Switch to Logs tab — no log lines yet.
-	m = m.switchToTab(1) // Logs tab for Pods is index 0 (was 1 before YAML→Y popup migration)
+	m = m.switchToTab(0) // Logs
 
 	if len(m.contentLines) != 1 {
 		t.Fatalf("expected 1 content line, got %d", len(m.contentLines))
@@ -929,7 +929,7 @@ func TestDetailModel_AppendLogLine_WrapsLongText(t *testing.T) {
 	}
 
 	// Render-time wrap: switch to Logs tab and inspect contentLines.
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	if len(m.contentLines) < 2 {
 		t.Fatalf("expected long log to wrap to multiple content lines, got %d", len(m.contentLines))
 	}
@@ -946,7 +946,7 @@ func TestDetailModel_Logs_ReflowOnResize(t *testing.T) {
 	m := newTestDetail() // width=80
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	longText := strings.Repeat("foo bar baz ", 20)
 	m.AppendLogLine("", "nginx", longText)
 
@@ -990,7 +990,7 @@ func TestDetailModel_LogsTab_WithLogLines(t *testing.T) {
 	m.AppendLogLine("", "sidecar", "log entry 2")
 
 	// Switch to Logs tab.
-	m = m.switchToTab(1) // Logs tab for Pods is index 0 (was 1 before YAML→Y popup migration)
+	m = m.switchToTab(0) // Logs
 
 	if len(m.contentLines) != 2 {
 		t.Fatalf("expected 2 content lines on Logs tab, got %d", len(m.contentLines))
@@ -1087,7 +1087,7 @@ func TestDetailModel_CopyableContent_StripsANSI(t *testing.T) {
 	// non-Deployment kinds; Events is a reliable source of styled content.
 	m := newTestDetail()
 	m.SetDetail(sampleDetail(), sampleEvents())
-	m = m.switchToTab(1) // Events (index 1 for default 2-tab layout)
+	m = m.switchToTab(1) // Events (default 2-tab layout: Relatives, Events)
 
 	plain := m.CopyableContent()
 	if plain == "" {
@@ -1142,7 +1142,7 @@ func TestDetailModel_FollowTail_AppendSnapsToBottom(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 
 	// Spam enough lines that scroll has somewhere to go.
 	for i := 0; i < 100; i++ {
@@ -1161,7 +1161,7 @@ func TestDetailModel_FollowTail_AppendDoesNotMoveWhenPaused(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs, followTail=true at bottom
+	m = m.switchToTab(0) // Logs, followTail=true at bottom
 
 	// Fill some lines, then user scrolls up — disables follow.
 	for i := 0; i < 50; i++ {
@@ -1187,8 +1187,8 @@ func TestDetailModel_FollowTail_ScrollUpDisablesOnLogsOnly(t *testing.T) {
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
 
-	// Relatives tab (index 0): scrollUp must NOT touch followTail.
-	m = m.switchToTab(0) // Relatives
+	// Relatives tab: scrollUp must NOT touch followTail.
+	m = m.switchToTab(1) // Relatives
 	if m.ActiveTabName() != "Relatives" {
 		t.Fatalf("expected Relatives active, got %s", m.ActiveTabName())
 	}
@@ -1197,8 +1197,8 @@ func TestDetailModel_FollowTail_ScrollUpDisablesOnLogsOnly(t *testing.T) {
 		t.Error("scrolling up on Relatives tab must not disable followTail")
 	}
 
-	// Logs tab (index 1): scrollUp disables.
-	m = m.switchToTab(1) // Logs
+	// Logs tab: scrollUp disables.
+	m = m.switchToTab(0) // Logs
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -1212,7 +1212,7 @@ func TestDetailModel_FollowTail_GReEnables(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -1249,7 +1249,7 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(0) // Logs
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -1259,8 +1259,8 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 	}
 
 	// Leave Logs and return → state resets to follow.
-	m = m.switchToTab(0) // Relatives
-	m = m.switchToTab(1) // Logs
+	m = m.switchToTab(1) // Relatives
+	m = m.switchToTab(0) // Logs
 	if !m.followTail {
 		t.Error("re-entering Logs tab must reset followTail to true")
 	}
@@ -1274,7 +1274,7 @@ func TestDetailModel_TabTitle_LogsFollowNoArrowMarker(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Logs, followTail starts true
+	m = m.switchToTab(0) // Logs, followTail starts true
 
 	if !m.FollowTail() {
 		t.Fatal("setup: expected followTail=true initially after switching to Logs")
@@ -1303,6 +1303,7 @@ func TestDetailModel_BorderBottomLeftHint_RelativesDrillDepth(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(1) // Relatives — hint logic gates on ActiveTabName()=="Relatives"
 
 	// depth=1 on Relatives → no hint (nothing to pop).
 	if got := m.BorderBottomLeftHint(); got != "" {
