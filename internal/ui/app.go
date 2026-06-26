@@ -27,8 +27,33 @@ import (
 // (different row may have different RBAC outcomes).
 const aggregateLogsRetryInterval = 10 * time.Second
 
+// rowSwitchDebounce coalesces rapid j/k mashing in panel 2: every
+// RowSelectedMsg bumps m.rowSeq and schedules a tick this far in the
+// future, and the heavy work (fetchResourceDetail, logStreamer.Start,
+// startAggregateLogs) only fires when the tick lands on the latest
+// rowSeq. Without this, a 10-row scroll would Start/Stop 10 log
+// streams and queue 10 detail fetches against the API. Mirrors the
+// switchSeq pattern used by resourceSwitchTickMsg for sidebar kind
+// switches; 300ms matches that constant for muscle-memory consistency.
+const rowSwitchDebounce = 300 * time.Millisecond
+
 type resourceSwitchTickMsg struct {
 	seq int
+}
+
+// rowSwitchTickMsg lands rowSwitchDebounce after a RowSelectedMsg. The
+// handler drops it when seq != m.rowSeq — that's the debounce primitive:
+// every subsequent nav (RowSelectedMsg, ResourceSelectedMsg, namespace
+// switch, context switch, drill-down, drill-up) bumps m.rowSeq so any
+// older in-flight tick falls on the floor. kind+item snapshot the row
+// at nav time so the handler doesn't race against intervening kind/ns
+// switches. drillContainer is non-nil for container-level drill-down
+// rows; kind+item are ignored in that path.
+type rowSwitchTickMsg struct {
+	seq            int
+	kind           k8s.ResourceType
+	item           k8s.ResourceItem
+	drillContainer *k8s.ContainerInfo
 }
 
 type drillDownMsg struct {
@@ -114,6 +139,10 @@ type AppModel struct {
 	detailExpanded  bool
 	tableExpanded   bool
 	switchSeq       int
+	// rowSeq is bumped by RowSelectedMsg and every nav handler that
+	// resets nextAggregateRetry, so any in-flight rowSwitchTickMsg from
+	// before the nav drops on receipt (seq comparison). See rowSwitchTickMsg.
+	rowSeq          int
 
 	// Drill-down state
 	drillDownStack      []drillDownEntry
@@ -2094,6 +2123,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		m.syncTableSortIndicator()
 		m.switchSeq++
+		m.rowSeq++ // invalidate any in-flight rowSwitchTickMsg from the prior kind
 		seq := m.switchSeq
 		cmds = append(cmds, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
 			return resourceSwitchTickMsg{seq: seq}
@@ -2187,60 +2217,79 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case RowSelectedMsg:
+		// Immediate dispatch: cheap model mutations + Stop the previous
+		// stream + lie-lock logsActive=true so any ResourceDataMsg watcher
+		// tick in the rowSwitchDebounce window can't see !m.logsActive and
+		// queue a duplicate startAggregateLogs / logStreamer.Start. The
+		// expensive work (fetchResourceDetail + new stream Start) defers
+		// to the rowSwitchTickMsg handler. See rowSwitchTickMsg doc.
 		if m.drillDownPod != nil {
-			// In drill-down: selected a container
 			if msg.Index >= 0 && msg.Index < len(m.drillDownContainers) {
 				c := m.drillDownContainers[msg.Index]
 				detail := containerToDetail(c, *m.drillDownPod)
 				m.detail.SetDetail(detail, nil)
+				m.logStreamer.Stop()
 				m.detail.logLines = nil
-				m.logStreamer.Start(m.drillDownPod.Name, m.drillDownPod.Namespace, []string{c.Name})
 				m.logsActive = true
-				cmds = append(cmds, waitForLogLine(m.logStreamer))
+				m.rowSeq++
+				seq := m.rowSeq
+				container := c
+				cmds = append(cmds, tea.Tick(rowSwitchDebounce, func(time.Time) tea.Msg {
+					return rowSwitchTickMsg{seq: seq, drillContainer: &container}
+				}))
 			}
 			return m, tea.Batch(cmds...)
 		}
 		if msg.Index >= 0 && msg.Index < len(m.items) && len(m.table.rows) > 0 {
 			item := m.items[msg.Index]
-			// Reset Relatives-tab drill chain immediately on row change so the
-			// user doesn't briefly see the previous row's drill state while
-			// the new detail fetch is in flight.
 			m.detail.ResetDrillStack()
-			// Clear aggregate-logs retry throttle — the new row gets
-			// an immediate fresh attempt regardless of how the prior
-			// row's stream failed (RBAC denial on row A doesn't
-			// imply the same for row B).
 			m.nextAggregateRetry = time.Time{}
-			cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
+			m.logStreamer.Stop()
+			m.detail.logLines = nil
+			m.logsActive = true
 			if c := m.detail.BeginRefetch(); c != nil {
 				cmds = append(cmds, c)
 			}
-			switch {
-			case m.currentResource == k8s.ResourcePods:
-				containers := k8s.ContainerNames(item.Raw)
-				if len(containers) > 0 {
-					m.detail.logLines = nil
-					m.logStreamer.Start(item.Name, item.Namespace, containers)
-					m.logsActive = true
-					cmds = append(cmds, waitForLogLine(m.logStreamer))
-				}
-			case isAggregateLogsKind(m.currentResource):
-				// Row change inside a workload kind — restart the
-				// aggregate stream against the new row's managed Pods.
-				// logsActive is held HIGH across the Stop → Start
-				// transition so a ResourceDataMsg watcher tick in the
-				// dispatch-to-aggregateLogsReadyMsg gap can't see a
-				// false `!m.logsActive` and queue a duplicate stream
-				// (race fixed alongside the ResourceDataMsg branch's
-				// dispatch-time flip above).
-				m.logStreamer.Stop()
-				m.detail.logLines = nil
-				m.logsActive = true
-				cmds = append(cmds, startAggregateLogs(m.k8sClient, m.currentResource, item))
-			default:
-				m.logStreamer.Stop()
+			m.rowSeq++
+			seq := m.rowSeq
+			kind := m.currentResource
+			cmds = append(cmds, tea.Tick(rowSwitchDebounce, func(time.Time) tea.Msg {
+				return rowSwitchTickMsg{seq: seq, kind: kind, item: item}
+			}))
+		}
+		return m, tea.Batch(cmds...)
+
+	case rowSwitchTickMsg:
+		// Stale tick: user has navigated since we scheduled this; drop
+		// without side effects. Without the seq compare, rapid j/k
+		// would fire one fetchResourceDetail + logStreamer.Start per
+		// row instead of one for the row the user actually settled on.
+		if msg.seq != m.rowSeq {
+			return m, nil
+		}
+		if msg.drillContainer != nil {
+			m.logStreamer.Start(m.drillDownPod.Name, m.drillDownPod.Namespace, []string{msg.drillContainer.Name})
+			cmds = append(cmds, waitForLogLine(m.logStreamer))
+			return m, tea.Batch(cmds...)
+		}
+		cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.kind, msg.item))
+		switch {
+		case msg.kind == k8s.ResourcePods:
+			containers := k8s.ContainerNames(msg.item.Raw)
+			if len(containers) > 0 {
+				m.logStreamer.Start(msg.item.Name, msg.item.Namespace, containers)
+				cmds = append(cmds, waitForLogLine(m.logStreamer))
+			} else {
+				// Pod row with no containers (impossible in practice
+				// but the producer code guards): the immediate-dispatch
+				// lie-lock left logsActive=true; flip it back so the
+				// state matches reality.
 				m.logsActive = false
 			}
+		case isAggregateLogsKind(msg.kind):
+			cmds = append(cmds, startAggregateLogs(m.k8sClient, msg.kind, msg.item))
+		default:
+			m.logsActive = false
 		}
 		return m, tea.Batch(cmds...)
 
@@ -2422,6 +2471,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logStreamer.Stop()
 		m.logsActive = false
 		m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
+		m.rowSeq++                         // invalidate any in-flight rowSwitchTickMsg from the prior namespace
 		m.detail.ClearDetail()
 		m.watcher.Start(m.currentResource, msg.Namespace)
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
@@ -2441,6 +2491,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logStreamer.Stop()
 		m.logsActive = false
 		m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
+		m.rowSeq++                         // invalidate any in-flight rowSwitchTickMsg from the prior context
 		newClient.Registry().ClearDynamic()
 		m.k8sClient = newClient
 		m.watcher = k8s.NewWatcher(newClient.Clientset())
@@ -2490,6 +2541,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logStreamer.Stop()
 		m.logsActive = false
 		m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
+		m.rowSeq++                         // invalidate any in-flight rowSwitchTickMsg from the parent kind
 		m.detail.ClearDetail()
 		if len(m.items) > 0 {
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.childType, m.items[0]))
@@ -3140,6 +3192,7 @@ func (m *AppModel) exitDrillDown() tea.Cmd {
 	m.logStreamer.Stop()
 	m.logsActive = false
 	m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
+	m.rowSeq++                         // invalidate any in-flight rowSwitchTickMsg from the child kind
 	m.detail.logLines = nil
 
 	// If at container level, go back to pod list
