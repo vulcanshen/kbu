@@ -252,6 +252,51 @@ func TestAppModel_ResourceDetailMsg_DropsStale(t *testing.T) {
 	}
 }
 
+// TestAppModel_RowSelectedMsg_DebouncesViaSeq pins the rowSwitchTickMsg
+// debounce: every RowSelectedMsg bumps m.rowSeq + schedules a tick. A
+// stale tick (seq < current m.rowSeq) MUST drop early — without that
+// guard, rapid j/k mashing would fire one fetchResourceDetail + one
+// logStreamer.Start per row instead of just for the row the user
+// settled on, hammering the API server and orphaning N-1 short-lived
+// stream goroutines. ConfigMaps is used so the default case in the
+// tick handler skips the log-stream Start (which would NPE on the
+// nil-clientset LogStreamer); Stop in the immediate-dispatch path is
+// safe with a nil clientset.
+func TestAppModel_RowSelectedMsg_DebouncesViaSeq(t *testing.T) {
+	items := []k8s.ResourceItem{
+		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
+		{Name: "c", UID: "uid-c", Row: []string{"c"}},
+	}
+	m := appWithItems(items, 0)
+	m.currentResource = k8s.ResourceConfigMaps
+	m.logStreamer = k8s.NewLogStreamer(nil)
+
+	for _, idx := range []int{0, 1, 2} {
+		next, cmd := m.Update(RowSelectedMsg{Index: idx})
+		m = next.(AppModel)
+		if cmd == nil {
+			t.Fatalf("RowSelectedMsg{Index:%d}: expected tea.Cmd (tick scheduled), got nil", idx)
+		}
+	}
+	if m.rowSeq != 3 {
+		t.Errorf("rowSeq = %d, want 3 (one bump per RowSelectedMsg)", m.rowSeq)
+	}
+
+	// Stale tick — seq=1 against m.rowSeq=3 — must drop. fetchResourceDetail
+	// would NPE on the nil k8sClient, so reaching it is the test failure.
+	staleTick := rowSwitchTickMsg{
+		seq:  1,
+		kind: k8s.ResourceConfigMaps,
+		item: items[0],
+	}
+	next, cmd := m.Update(staleTick)
+	m = next.(AppModel)
+	if cmd != nil {
+		t.Errorf("stale rowSwitchTickMsg must return nil Cmd, got %v", cmd)
+	}
+}
+
 // TestAppModel_LinkPushMsg_CycleBlocked verifies that drilling into a
 // resource already on the chain is blocked with a toast — prevents
 // infinite-loop navigation like Pod -> ConfigMap -> Pod (same pod).
