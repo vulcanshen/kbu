@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -53,8 +52,6 @@ type DetailModel struct {
 	maxLogLines  int
 	resourceType k8s.ResourceType
 	followTail   bool // Logs tab: stick to bottom on new lines until user scrolls up
-	refetching   bool // true while fetchResourceDetail is in-flight; drives spinner
-	spinnerFrame int
 
 	// Relatives tab state: entries are the logical rows (drillable + info +
 	// section headers); relativeCursor is the index of the currently-selected
@@ -90,47 +87,6 @@ type drillFrame struct {
 	item   k8s.ResourceItem
 	detail k8s.ResourceDetail
 	cursor int
-}
-
-type detailSpinnerTickMsg struct{}
-
-var detailSpinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
-
-// BeginRefetch marks the panel as refetching and returns a Cmd that drives
-// the spinner animation. AppModel calls this whenever it dispatches
-// fetchResourceDetail; SetDetail clears the flag when the new data arrives.
-func (m *DetailModel) BeginRefetch() tea.Cmd {
-	if m.refetching {
-		return nil // already ticking
-	}
-	m.refetching = true
-	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
-		return detailSpinnerTickMsg{}
-	})
-}
-
-// IsRefetching reports whether the spinner should be shown.
-func (m DetailModel) IsRefetching() bool { return m.refetching }
-
-// SpinnerSuffix returns " <frame>" while refetching, or "" otherwise. Embed in
-// the panel border title so the user has a visible "loading" affordance.
-func (m DetailModel) SpinnerSuffix() string {
-	if !m.refetching {
-		return ""
-	}
-	return " " + string(detailSpinnerFrames[m.spinnerFrame%len(detailSpinnerFrames)])
-}
-
-// advanceSpinner moves to the next frame and returns the next tick command,
-// or nil when refetching has finished.
-func (m *DetailModel) advanceSpinner() tea.Cmd {
-	if !m.refetching {
-		return nil
-	}
-	m.spinnerFrame++
-	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
-		return detailSpinnerTickMsg{}
-	})
 }
 
 // IsSearching is kept as a no-op for cross-package API symmetry with
@@ -190,9 +146,6 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	case ResourceDetailMsg:
 		m.SetDetail(msg.Detail, msg.Events)
 		return m, nil
-
-	case detailSpinnerTickMsg:
-		return m, m.advanceSpinner()
 
 	case tea.KeyMsg:
 		if !m.focused {
@@ -646,7 +599,6 @@ func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventIte
 	m.detail = detail
 	m.events = events
 	m.hasData = true
-	m.refetching = false // fresh data arrived — stop the spinner
 	m.buildContentLines()
 }
 
@@ -667,7 +619,6 @@ func (m *DetailModel) PushDrillFrame(ref k8s.RefTarget, item k8s.ResourceItem, d
 	})
 	m.relativeCursor = -1
 	m.scrollOffset = 0
-	m.refetching = false
 	m.buildContentLines()
 }
 
@@ -738,16 +689,21 @@ func (m DetailModel) TabTitle() string {
 	var parts []string
 	for i, tab := range m.tabs {
 		label := m.tabLabel(tab)
-		if DetailTab(i) == m.activeTab {
-			if tab == "Logs" {
-				marker := logsPausedGlyph
-				if m.followTail {
-					marker = logsLiveGlyph
-				}
-				parts = append(parts, tStyle.Render("["+label+" "+marker+"]"))
-			} else {
-				parts = append(parts, tStyle.Render("["+label+"]"))
+		// Logs tab carries its live/paused marker glyph regardless of
+		// active state — when only the active tab shows the marker,
+		// switching tabs makes the tab bar contract / expand by 2
+		// cells, which propagates up through panel 3's border and
+		// shows as a horizontal jitter on every tab change. Keeping
+		// the glyph always-on locks tab-bar width per resource kind.
+		if tab == "Logs" {
+			marker := logsPausedGlyph
+			if m.followTail {
+				marker = logsLiveGlyph
 			}
+			label = label + " " + marker
+		}
+		if DetailTab(i) == m.activeTab {
+			parts = append(parts, tStyle.Render("["+label+"]"))
 		} else {
 			parts = append(parts, bStyle.Render(" "+label+" "))
 		}
@@ -784,12 +740,8 @@ func (m DetailModel) tabLabel(name string) string {
 }
 
 // BorderTopRightHint returns a short string to render at the top-right
-// of panel 3's border, or "" when no hint applies.
-//
-// v1.5.x: now always returns "". Inline `[b]readcrumbs` hint was retired
-// alongside the `b` key — Space is the single menu entry point under the
-// new mental model, and the help popup (`?`) carries the full reference.
-// Kept as a method so callers don't break.
+// of panel 3's border, or "" when no hint applies. Currently always "".
+// Kept as a method so callers don't break if a future hint surfaces.
 func (m DetailModel) BorderTopRightHint() string {
 	return ""
 }

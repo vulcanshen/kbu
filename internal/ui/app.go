@@ -1078,15 +1078,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// detailSpinnerTickMsg drives the panel 3 refetch spinner; routed
-	// unconditionally regardless of focus so the spinner keeps animating even
-	// while the user is on Sidebar/Table panels.
-	if _, ok := msg.(detailSpinnerTickMsg); ok {
-		var cmd tea.Cmd
-		m.detail, cmd = m.detail.Update(msg)
-		return m, cmd
-	}
-
 	// PtyExitMsg arrives AFTER ptyView has already Stop()ed itself, so this
 	// handler lives outside the IsActive() guard — it cleans up app-level
 	// state when the subprocess finishes.
@@ -2175,9 +2166,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if idx >= 0 && idx < len(m.items) {
 				item := m.items[idx]
 				cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.Type, item))
-				if c := m.detail.BeginRefetch(); c != nil {
-					cmds = append(cmds, c)
-				}
 				switch {
 				case msg.Type == k8s.ResourcePods && !m.logsActive:
 					containers := k8s.ContainerNames(item.Raw)
@@ -2247,9 +2235,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logStreamer.Stop()
 			m.detail.logLines = nil
 			m.logsActive = true
-			if c := m.detail.BeginRefetch(); c != nil {
-				cmds = append(cmds, c)
-			}
 			m.rowSeq++
 			seq := m.rowSeq
 			kind := m.currentResource
@@ -2337,11 +2322,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			k8s.EnrichRelatives(ctx, client.Clientset(), ref.Type, item, &detail)
 			return relativeDrillFetchedMsg{ref: ref, sourceUID: sourceUID, item: item, detail: detail}
 		}
-		batch := []tea.Cmd{fetchCmd}
-		if c := m.detail.BeginRefetch(); c != nil {
-			batch = append(batch, c)
-		}
-		return m, tea.Batch(batch...)
+		return m, fetchCmd
 
 	case relativeDrillFetchedMsg:
 		if msg.sourceUID != m.currentItemUID() {
@@ -2545,9 +2526,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail.ClearDetail()
 		if len(m.items) > 0 {
 			cmds = append(cmds, fetchResourceDetail(m.k8sClient, msg.childType, m.items[0]))
-			if c := m.detail.BeginRefetch(); c != nil {
-				cmds = append(cmds, c)
-			}
 			switch {
 			case msg.childType == k8s.ResourcePods:
 				containers := k8s.ContainerNames(m.items[0].Raw)
@@ -2882,12 +2860,14 @@ func (m AppModel) View() string {
 	}
 	var compareMarker *CompareMarker
 	if m.inCompareMode() {
-		// Compare anchor only works within panel 2 — the user is
-		// already on the kind that matches the anchor's kind. So the
-		// kind prefix would just duplicate context already on screen;
-		// the bare name is enough.
+		// Fixed-width "Compare" label — the locked resource name was
+		// previously interpolated here but resource names are unbounded
+		// (some pod names easily exceed the available statusbar width),
+		// and the compare popup itself already shows "left vs right".
+		// The icon alone signals "compare anchor active"; the popup
+		// carries the names when the user actually engages.
 		compareMarker = &CompareMarker{
-			Label: fmt.Sprintf("\U000f08aa %s", m.compareLock.name),
+			Label: "\U000f08aa Compare",
 		}
 	}
 	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker, compareMarker)
@@ -2899,7 +2879,7 @@ func (m AppModel) View() string {
 		panelH := m.height - 1 - m.statusLine.LineCount()
 		panelW := m.width - 2*panelHMargin
 		m.detail.SetSize(panelW-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle()+m.detail.SpinnerSuffix(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
 		hMargin := blankColumn(panelHMargin, panelH)
 		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, fullPanel, hMargin)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
@@ -2910,7 +2890,7 @@ func (m AppModel) View() string {
 		m.detail.SetSize(panelW-2, detailH-2)
 		tabTitle := "[2] " + m.breadcrumb()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle()+m.detail.SpinnerSuffix(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
 		middle := joinTableAndDetail(tablePanel, detailPanel, panelW)
 		fullH := upperH + panelVSpace + detailH
 		hMargin := blankColumn(panelHMargin, fullH)
@@ -2926,7 +2906,7 @@ func (m AppModel) View() string {
 		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", "")
 		tabTitle := "[2] " + m.breadcrumb()
 		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle()+m.detail.SpinnerSuffix(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
 
 		rightSide := joinTableAndDetail(tablePanel, detailPanel, rw)
 
@@ -3253,9 +3233,6 @@ func (m *AppModel) refreshDetailForCurrent() tea.Cmd {
 	item := m.items[idx]
 	var cmds []tea.Cmd
 	cmds = append(cmds, fetchResourceDetail(m.k8sClient, m.currentResource, item))
-	if c := m.detail.BeginRefetch(); c != nil {
-		cmds = append(cmds, c)
-	}
 	switch {
 	case m.currentResource == k8s.ResourcePods:
 		containers := k8s.ContainerNames(item.Raw)

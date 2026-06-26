@@ -135,10 +135,11 @@ func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *Pt
 		left = left + "  " + ptyChip
 	}
 	if compare != nil && compare.Label != "" {
-		// Compare-mode chip: same #9DDAEA cyan that highlights the
-		// locked row in panel 2 so the status-bar marker and the
-		// row glow read as one signal.
-		compareChip := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA")).Bold(true).Render(compare.Label)
+		// Compare-mode chip: Mocha lavender, matching the locked
+		// row's bg in panel 2 and the rest of the "in-panel user-set
+		// state" surfaces (pinned, ON toggle). Reads as one signal
+		// with the panel-2 lock highlight.
+		compareChip := lipgloss.NewStyle().Foreground(lipgloss.Color("#b4befe")).Bold(true).Render(compare.Label)
 		left = left + "  " + compareChip
 	}
 

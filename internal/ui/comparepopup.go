@@ -109,7 +109,7 @@ type CompareYamlPopupModel struct {
 func NewCompareYamlPopupModel(t *theme.Theme) CompareYamlPopupModel {
 	return CompareYamlPopupModel{
 		theme:    t,
-		animator: NewPopupAnimator("comparepopup", lipgloss.Color("#9DDAEA")),
+		animator: NewPopupAnimator("comparepopup", lipgloss.Color(theme.Periwinkle)),
 		layout:   CompareLayoutUnified,
 	}
 }
@@ -424,7 +424,7 @@ func renderUnifiedDiff(left, right, leftLabel, rightLabel string, width int, t *
 	}
 	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Running))
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Error))
-	hunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA")).Bold(true)
+	hunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle)).Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	var out []string
 	if banner := truncationBanner(truncL, truncR, width); banner != "" {
@@ -463,7 +463,7 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Error))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA")).Bold(true)
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle)).Bold(true)
 
 	// capDiffInput caps both sides to splitDiffLineLimit and reports
 	// per-side truncation. Shared with the unified path so the OOM /
@@ -724,30 +724,43 @@ func (m CompareYamlPopupModel) RenderPopup() string {
 func (m CompareYamlPopupModel) renderFrame() string {
 	popupW := m.popupWidth()
 	popupH := m.popupHeight()
-	borderColor := lipgloss.Color("#9DDAEA")
+	borderColor := lipgloss.Color(theme.Periwinkle)
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 	titleStyle := lipgloss.NewStyle().Foreground(borderColor).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 
-	title := fmt.Sprintf(" \U000f08aa Compare — %s vs %s (%s) ",
-		m.leftLabel, m.rightLabel, m.layout.String())
+	title := fmt.Sprintf(" \U000f08aa %s vs %s ",
+		m.leftLabel, m.rightLabel)
 	titleW := lipgloss.Width(title)
 	innerW := popupW - 2
 	if innerW < 10 {
 		innerW = 10
 	}
 	leadDashCount := 2
+	truncated := false
 	if titleW+leadDashCount+1 > innerW {
+		// Reserve 1 cell for "…" so a narrow-terminal truncation reads
+		// as cut, not as the literal trailing fragment (the long
+		// "demo/demo-app-…-xyz (unified)" right-end got snipped at "(u"
+		// on small windows, indistinguishable from a real label).
 		titleW = innerW - leadDashCount - 1
-		title = ansiTruncate(title, titleW)
+		title = ansiTruncate(title, titleW-1)
+		truncated = true
 	}
 	leadDashes := strings.Repeat("─", leadDashCount)
 	trailLen := innerW - leadDashCount - titleW
 	if trailLen < 1 {
 		trailLen = 1
 	}
+	titleRender := titleStyle.Render(title)
+	if truncated {
+		// Append "…" via a separate Render call so the ellipsis carries
+		// titleStyle — ansiTruncate emits a \x1b[0m at the end, which
+		// would otherwise drop the ellipsis to the default fg color.
+		titleRender += titleStyle.Render("…")
+	}
 	top := borderStyle.Render("╭"+leadDashes) +
-		titleStyle.Render(title) +
+		titleRender +
 		borderStyle.Render(strings.Repeat("─", trailLen)+"╮")
 
 	body := m.renderBody(innerW, popupH-2)
@@ -811,10 +824,10 @@ func (m CompareYamlPopupModel) overlayMenu(frame string) string {
 	if len(items) == 0 {
 		return frame
 	}
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA"))
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA")).Bold(true)
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle))
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle)).Bold(true)
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).
-		Background(lipgloss.Color("#9DDAEA")).Bold(true)
+		Background(lipgloss.Color(theme.Periwinkle)).Bold(true)
 	rowStyle := lipgloss.NewStyle()
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 

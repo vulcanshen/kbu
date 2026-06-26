@@ -1336,18 +1336,35 @@ func TestDetailModel_TabTitle_LogsFollowGlyph(t *testing.T) {
 	}
 }
 
-// TestDetailModel_TabTitle_NonLogsTabNoGlyph guards against the glyph
-// leaking onto inactive tabs or other tabs' active state — the marker
-// only makes sense on the active Logs tab.
-func TestDetailModel_TabTitle_NonLogsTabNoGlyph(t *testing.T) {
+// TestDetailModel_TabTitle_LogsGlyphPersistsWhenInactive pins the
+// width-stability invariant: the Logs tab carries its live/paused
+// glyph regardless of active state. Without this, switching off Logs
+// contracts the tab bar by 2 cells and switching back expands it by
+// 2 cells, which propagates to panel 3's border and shows as a
+// horizontal jitter on every tab change.
+func TestDetailModel_TabTitle_LogsGlyphPersistsWhenInactive(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(1) // Relatives
+	m = m.switchToTab(1) // Relatives — Logs is now INACTIVE
+
+	title := m.TabTitle()
+	if !strings.Contains(title, logsLiveGlyph) && !strings.Contains(title, logsPausedGlyph) {
+		t.Errorf("inactive Logs tab MUST still carry the follow-tail glyph (width-stability), got %q", title)
+	}
+}
+
+// TestDetailModel_TabTitle_NoLogsGlyphForKindsWithoutLogsTab guards that the
+// glyph only attaches to a Logs tab — non-workload kinds (no Logs tab in
+// tabs list) must not have the glyph appear anywhere.
+func TestDetailModel_TabTitle_NoLogsGlyphForKindsWithoutLogsTab(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourceConfigMaps) // no Logs tab
+	m.SetDetail(sampleDetail(), nil)
 
 	title := m.TabTitle()
 	if strings.Contains(title, logsLiveGlyph) || strings.Contains(title, logsPausedGlyph) {
-		t.Errorf("non-Logs active tab must NOT carry the follow-tail glyph, got %q", title)
+		t.Errorf("kind without Logs tab must NOT carry the glyph anywhere, got %q", title)
 	}
 }
 
@@ -1402,39 +1419,3 @@ func TestContainerLogColor_Distinguishes(t *testing.T) {
 	}
 }
 
-func TestDetailModel_SpinnerLifecycle(t *testing.T) {
-	m := newTestDetail()
-
-	if m.IsRefetching() {
-		t.Fatal("new model must not be refetching")
-	}
-	if got := m.SpinnerSuffix(); got != "" {
-		t.Errorf("SpinnerSuffix when not refetching = %q, want empty", got)
-	}
-
-	cmd := m.BeginRefetch()
-	if cmd == nil {
-		t.Fatal("BeginRefetch must return a tick Cmd")
-	}
-	if !m.IsRefetching() {
-		t.Error("after BeginRefetch, IsRefetching must be true")
-	}
-	if got := m.SpinnerSuffix(); got == "" {
-		t.Error("SpinnerSuffix while refetching must be non-empty")
-	}
-
-	// SetDetail clears the spinner.
-	m.SetDetail(k8s.ResourceDetail{}, nil)
-	if m.IsRefetching() {
-		t.Error("SetDetail must clear refetching")
-	}
-	if got := m.SpinnerSuffix(); got != "" {
-		t.Errorf("SpinnerSuffix after SetDetail = %q, want empty", got)
-	}
-
-	// BeginRefetch is idempotent — second call returns nil.
-	_ = m.BeginRefetch()
-	if c := m.BeginRefetch(); c != nil {
-		t.Error("BeginRefetch while already refetching must return nil")
-	}
-}
