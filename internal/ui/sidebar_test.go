@@ -59,6 +59,60 @@ func TestSidebarModel_SearchEnterNoMatchClearsFilter(t *testing.T) {
 	}
 }
 
+func TestSidebarModel_LockedFilterEmptiedByUnpin_SlashStillEntersSearch(t *testing.T) {
+	// Bug: lock a search filter on the Pinned section, then unpin
+	// every match until visible is empty. The locked filter outlives
+	// its data; handleKey's empty-visible guard then swallowed every
+	// key including `/`. Only escape was switching panel. `/` must
+	// stay live so the user can refine the search out of the dead state.
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods})
+
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "pinned" {
+		m, _ = m.Update(keyMsg(r))
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.searchQuery == "" {
+		t.Fatal("setup: filter expected to be locked with non-empty query")
+	}
+
+	// Drop the only pinned item → the Pinned virtual category disappears
+	// → visible items becomes empty under the still-locked "pinned" query.
+	m.RemovePinned(k8s.ResourcePods)
+	if vis := m.visibleItems(); len(vis) != 0 {
+		t.Fatalf("setup: expected empty visible, got %d items", len(vis))
+	}
+
+	m, _ = m.Update(keyMsg('/'))
+	if !m.searching {
+		t.Error("`/` must re-enter search mode even when locked filter has emptied visible")
+	}
+}
+
+func TestSidebarModel_LockedFilterEmptiedByUnpin_EscClearsFilter(t *testing.T) {
+	// Esc must also escape the dead state — drop the locked filter and
+	// repopulate the panel from the full registry.
+	m := newTestSidebar()
+	m.SetPinned([]k8s.ResourceType{k8s.ResourcePods})
+
+	m, _ = m.Update(keyMsg('/'))
+	for _, r := range "pinned" {
+		m, _ = m.Update(keyMsg(r))
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.RemovePinned(k8s.ResourcePods)
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+
+	if m.searchQuery != "" {
+		t.Errorf("Esc must clear searchQuery, got %q", m.searchQuery)
+	}
+	if vis := m.visibleItems(); len(vis) == 0 {
+		t.Error("Esc must restore visible items by dropping the locked filter")
+	}
+}
+
 func TestSidebarModel_CopyableContent(t *testing.T) {
 	m := newTestSidebar()
 	got := m.CopyableContent()

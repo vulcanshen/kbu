@@ -35,6 +35,16 @@ func TestConfigDir(t *testing.T) {
 }
 
 func TestConfigPath(t *testing.T) {
+	// Isolate from a possibly-set KM8__CONFIGPATH in the runner env;
+	// this test asserts the default-layout shape.
+	orig, had := os.LookupEnv("KM8__CONFIGPATH")
+	os.Unsetenv("KM8__CONFIGPATH")
+	defer func() {
+		if had {
+			os.Setenv("KM8__CONFIGPATH", orig)
+		}
+	}()
+
 	path := ConfigPath()
 
 	if path == "" {
@@ -46,6 +56,42 @@ func TestConfigPath(t *testing.T) {
 	// ConfigPath should be under ConfigDir
 	if filepath.Dir(path) != ConfigDir() {
 		t.Errorf("ConfigPath() dir: got %q, want %q", filepath.Dir(path), ConfigDir())
+	}
+}
+
+func TestConfigPath_RespectsKM8ConfigPathEnv(t *testing.T) {
+	// $KM8__CONFIGPATH wins outright — caller is responsible for the
+	// path validity, we just thread it through.
+	orig, had := os.LookupEnv("KM8__CONFIGPATH")
+	defer func() {
+		if had {
+			os.Setenv("KM8__CONFIGPATH", orig)
+		} else {
+			os.Unsetenv("KM8__CONFIGPATH")
+		}
+	}()
+
+	os.Setenv("KM8__CONFIGPATH", "/tmp/custom-km8.yaml")
+	if got := ConfigPath(); got != "/tmp/custom-km8.yaml" {
+		t.Errorf("ConfigPath() with env: got %q, want %q", got, "/tmp/custom-km8.yaml")
+	}
+}
+
+func TestConfigPath_EmptyEnvFallsBack(t *testing.T) {
+	// Empty string = treat as unset; fall back to the default layout.
+	orig, had := os.LookupEnv("KM8__CONFIGPATH")
+	defer func() {
+		if had {
+			os.Setenv("KM8__CONFIGPATH", orig)
+		} else {
+			os.Unsetenv("KM8__CONFIGPATH")
+		}
+	}()
+
+	os.Setenv("KM8__CONFIGPATH", "")
+	got := ConfigPath()
+	if filepath.Base(got) != "config.yaml" || filepath.Dir(got) != ConfigDir() {
+		t.Errorf("empty env must fall back to default layout, got %q", got)
 	}
 }
 

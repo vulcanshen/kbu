@@ -13,7 +13,9 @@
 
 **Language**: [English](README.md) · 繁體中文
 
-以 **Relatives 關聯導覽** 為核心的 scout-style Kubernetes TUI。
+**一個視窗搞定 Kubernetes** — `Tab` / `Space` / `Enter` / `Esc` 四鍵驅動一切，不用背快捷鍵、不用設定、零學習成本。Relatives 關聯導覽、YAML compare、常駐 shell 全都內建；其他你信任的 terminal 工具靠那個 shell 都能掛進來一起用。
+
+> _遇事不決，就按_ **`Space`**。
 
 ## Demo
 
@@ -28,6 +30,10 @@
 ### 透過 Space menu 編輯叢集中的資源
 
 ![yaml-edit](docs/demo-yaml-edit.gif)
+
+### 並排比對兩個 resource
+
+![compare](docs/demo-compare.gif)
 
 ### Helm 是第一級的 resource
 
@@ -118,7 +124,9 @@ km8 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 ## Features
 
-- **Pinned resource kinds（`P` + `D` drag-and-drop）** — Panel 1 sidebar 頂端新增 Pinned 區段。在任何 resource row 按 `P` 切換 pin / unpin，順序會持久化到 config。Pin 採「**移動**」語意，不是複製 — 被 pin 的 kind 會從原本類別消失、出現在 Pinned 區，所以每個 kind 永遠只有一個位置。兩個以上 pinned kind 時，在 pinned row 按 `D` 進入 modal drag-and-drop：`j` / `k` 跟相鄰 pinned 互換、`Enter` 或 `D` 確認新順序、`Esc` 或任何其他輸入 revert 回進入時的 snapshot。Header 顯示 `Pinned ⇅ [D]rop`、dragged row 染成 lavender、sticky toast 全程帶著鍵盤提示；drag 中按 `Space` 會開一個只剩 Drop entry 的 mini menu，給忘記合約的時候用。pin / sort / 其他 per-kind 設定共享同一個 config 區塊，CRD 短暫消失（operator 重裝等）時 pin 跟 sort 會被靜默保留、CRD 回來時自動還原
+- **零學習成本** — 所有操作都會在 `Space` menu 揭露。進階快捷鍵（`P` pin / `S` sort / `C` compare / `Y` YAML / `E` edit / `N` ns / `>` settings / ...）只是加速器、你可以完全略過 — `Space` 會在當下 context 帶你走同樣的選單。完整 onboarding 文件：*「遇事不決，就按 Space」*
+- **Compose，不重做** — KM8erm（內嵌常駐 shell、`Alt+t`）讓任何你原本得跳出 km8 才能跑的 terminal 工具都能在 km8 裡同居。km8 負責導覽和檢查，需要 write 動作時用你信任的工具 — 沒有 scrollback 切割、沒有 context switch，KM8erm 在 `Alt+t` 切換之間 env / cwd / shell history 全程保留
+- **Pinned resource kinds（`P` + `D` drag-and-drop）** — Panel 1 sidebar 頂端新增 Pinned 區段。在任何 resource row 按 `P` 切換 pin / unpin，順序會持久化到 config。Pin 採「**移動**」語意，不是複製 — 被 pin 的 kind 會從原本類別消失、出現在 Pinned 區，所以每個 kind 永遠只有一個位置。兩個以上 pinned kind 時，在 pinned row 按 `D` 進入 modal drag-and-drop：`j` / `k` 跟相鄰 pinned 互換、`Enter` 或 `D` 確認新順序、`Esc` 或任何其他輸入 revert 回進入時的 snapshot。Header 顯示 `Pinned 󰩐 [D]rop`、dragged row 染成 lavender、sticky toast 全程帶著鍵盤提示；drag 中按 `Space` 會開一個只剩 Drop entry 的 mini menu，給忘記合約的時候用。pin / sort / 其他 per-kind 設定共享同一個 config 區塊，CRD 短暫消失（operator 重裝等）時 pin 跟 sort 會被靜默保留、CRD 回來時自動還原
 - **YAML Compare popup（`C`）** — Panel 2 列級的 diff。`C` 在 row 上把它標成 **compare anchor**（status bar 出現 glyph 標示鎖定哪一列）；`C` 在同 kind 的另一列開啟 side-by-side 或 unified 的 YAML diff；`C` 在 anchor 自己身上則取消 — 同一個鍵切三態（mark / diff / cancel）。Diff popup 有自己的 action menu（`Space`）可以即時切 layout，預設 layout（Unified）也會持久化。Compare YAML 已預先 clean（status / managedFields / resourceVersion / uid 等都拔掉），diff 聚焦在使用者真正寫的東西上
 - **List-view sort（sidebar 上的 `S`、panel 2 上的 `Alt+Shift+S`）** — per-kind 多欄排序、跨 restart 持久化。選 column → 方向 → picker 自動 swap 回 column 步驟讓你直接加下一個 tier，不用重 trigger flow。每個 tier 在 panel 2 header 顯示優先順序跟方向（`Name (1) ↑ · Restarts (2) ↓ …`）；單 tier chain 收摺成只有箭頭、跟 v1.6 視覺一致。Reset row 一次清掉整條 chain；direction step 的 `Unset` 只移除一個 tier。`Esc` 是唯一的離開方式 — picker 操作中不會自動關。Comparator 自動依型別選擇：`Age` / `Updated` 用底層的 timestamp（不是顯示出來的 "5d3h" 字串）；`Ready` 解析 "N/M" 成兩個整數；`Restarts`、`Desired`、`Current`、`Up-to-date`、`Available`、`Active`、`Rev` 走 int 比較，所以 "10" 會排在 "2" 上面。Unknown column 靜默 skip，stale config 不會破壞排序。沒有 sort 設定 = `(namespace, name)` ascending，跟 kubectl 跨 namespace 的預設一致
 - **滑鼠支援** — 點 panel 切焦點 + 移 cursor、雙擊鑽入（synth `Enter`）、右鍵開 row 的 context menu（synth `Space`）、滾輪半頁滾動（synth `u` / `d`）。13 個 popup 都吃滑鼠：list popup 左鍵 commit、viewer popup（YAML / Compare / App Log / Help）保留滾輪、confirm dialog 刻意把左鍵設為 no-op，避免誤觸觸發破壞性的 delete / quit / rollback。可在 Settings popup（`>`）關閉 mouse，以及用 `scroll_direction: natural | reverse` 翻轉滾輪方向
@@ -131,24 +139,23 @@ km8 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 - **Relatives tab — Lens 風格的關聯導覽** — 每個 detail panel（除了 Namespaces）都列出該 resource 可以跳轉的 reference（owners、selected pods、scaleTargetRef、mounted-by pods 等）。`Enter` 鑽入游標指向的 ref — panel 會重新繪製顯示「那個 resource」的 Relatives，形成一條鑽入鏈（Deployment → Pod → ConfigMap → 使用該 ConfigMap 的 Pods、...）。`Esc` 退回一層。`Space` 開啟 breadcrumb popup，讓你直接跳回鏈條中任何上層節點（會先確認）。Tab 標題在 depth>1 時會顯示 `Relatives N`。`Y` 開啟游標所在那筆的 YAML。內建 cycle 偵測，阻擋重複造訪祖先；fetch 失敗會 toast 通知但不改變 panel 狀態。27 種 resource 已覆蓋 26 種 — ConfigMaps / Secrets / ServiceAccounts 顯示「反向」reference（哪些 Pods 用我、哪些 RoleBindings 把這個 SA 當 subject、...）；Helm release 顯示 `Deployed Resources`，讓 chart 部署出來的每個 K8s 物件一鑽即達
 - **Helm releases（當 `helm` 在 `PATH` 時）** — 專屬的 `Helm > Releases` sidebar 類別列出叢集中所有 release（每 3 秒輪詢 `helm list -A`；Helm 沒有 watch API）。Panel 2 欄位：`NAME / NAMESPACE / CHART / APP VER / REV / STATUS / UPDATED`。在 release row 上按 `Space` 開啟文件 menu（Manifest / Creator Notes / User Values / Merged Values / Hooks）；`Enter` 選定後透過 `helm get ...` fetch 並在 YAML popup 中顯示。Menu 保持在 YAML 後方，所以連續查不同文件不用重開 menu。Panel 3 把 Events 換成 `History` tab — 表格顯示每次 revision（REV / STATUS / DATE / CHART / DESCRIPTION），當前已部署的版號以 `●` 標記。在非當前 row 上按 `Space` 會問是否要 rollback；確認後彈出 popup 顯示確切的 `helm rollback` 命令並非同步執行，結果以 toast 通知。Helm 管理的 K8s 物件（label `app.kubernetes.io/managed-by: Helm` 或 annotation `meta.helm.sh/release-name`）在 panel 2 會標記 `` glyph，並擋掉 `E`（kubectl edit）顯示「Helm-managed (read-only)」toast — 請改用 `helm upgrade` / `rollback`。在非 Releases 的 panel 2 list 按 `.` 可隱藏所有 helm-managed 物件（panel 2 左下角永遠有 `.: toggle helm` 提示）
 - **YAML popup（`Y`）** — 全螢幕 overlay 顯示 `kubectl get -o yaml` 的原始輸出，支援 `j/k/u/d/gg/G` 捲動、`/` 搜尋（`n`/`N` 跳到下/上一個 match、整列高亮）、`y` 把整份 YAML 複製到剪貼簿、`E` 直接從 popup 觸發 `kubectl edit`。YAML 放在 popup 而非 detail panel，避免長 YAML 在直向 layout 中換行擠成一團
-- **Pod log 串流，自動 follow** — 多 container 支援，格式為 `<container>|<log>`；Logs tab 預設黏在底部（`[3] Logs ▼` 的 `▼` 標記代表 follow 中）。往上捲（`k`/`↑`/`u`/`gg`）會暫停 follow 讓你看歷史；按 `G` 跳到最新並恢復 follow
+- **Pod log 串流，自動 follow** — 多 container 支援，格式為 `<container>|<log>`；Logs tab 預設黏在底部，follow 中 `[Logs]` 標題會變綠色（Status.Running 配色）。往上捲（`k`/`↑`/`u`/`gg`）會暫停 follow 讓你看歷史；按 `G` 跳到最新並恢復 follow
 - **Deployment 的聚合 log** — 選到 Deployment 時，會把當前 ReplicaSet 中的**每個 pod** 的 log 串到同一個 Logs tab（也是 Deployment detail 的預設 tab）。每行的前綴 `<pod-hash>│<container>│<text>`，各段都有穩定獨立顏色，rollout 時可以一眼看出哪個 pod 在丟錯，不必鑽下去。rollout 中 pod 變動：stream 是 row-select 當下的 snapshot；重新選 Deployment row 即可刷新。若無法查到 current ReplicaSet（如 RBAC 不允許讀 ReplicaSet）會退回用 Deployment selector
 - **透過內嵌 PTY 進行 edit / shell exec** — `E` 執行 `kubectl edit`、`S` 執行 `kubectl exec -it -- /bin/sh`，兩者都在 in-app 的 virtual terminal 中跑，編輯器和 shell session 都不會污染 host terminal 的 scrollback。Editor 遵循 `$KUBE_EDITOR` / `$EDITOR`（或 `config.yaml editor`）
 - **KM8erm 內嵌終端機** — `Alt+t` 在 km8 內切換一個 embedded shell（login shell、完整 env / cwd）— 像在 popup 裡 `ssh localhost`。可以執行 `kubectl apply -f`、`helm`，所有平常你會跳出 km8 才能跑的東西。這個 shell 是**常駐**的：在 popup 顯示中按 `Alt+t` 只會隱藏而不殺 shell；再按一次恢復（cwd、history、env、背景 job 全部保留）。Status bar 右側的 `KM8erm` chip 顯示 shell 是否在背景活著。與 `kubectl edit` / `kubectl exec` 獨立 — 你可以同時讓 KM8erm 跑著、又在另一個 popup 編輯 resource 或 exec 進 container
-- **PTY popup border 用顏色標示種類** — KM8erm 是橘色、`kubectl exec` 是綠色、`kubectl edit` 是天藍色。當 KM8erm 被臨時的 exec/edit popup 蓋住時特別有用
+- **PTY popup border 用顏色標示種類** — KM8erm 用 user-state 系列的 lavender（跟 Pinned、statusbar 的 context/namespace value 同色）；`kubectl edit` 跟 `kubectl exec` 共用 periwinkle，跟其他 transient overlay popup 同色，靠標題（`kubectl edit pod/foo` vs `kubectl exec -it pod/foo`）區分用途。當 KM8erm 被臨時的 exec/edit popup 蓋住時特別有用
 - **PTY scrollback** — 所有 PTY popup（KM8erm、shell exec、edit）都有 10k 行歷史。`PgUp` / `PgDn` 翻頁、`Home` / `End` 跳到頂端 / live。在 alt-screen 應用（vim、less、htop）中停用，讓那些應用自己處理翻頁
-- **Pod 狀態上色** — `Running` 綠、`Pending` 黃、`CrashLoopBackOff` / `ImagePullBackOff` / `OOMKilled` 紅、`Terminating` 灰。STATUS 欄顯示的是 kubectl 等效的 reason，不是原始的 `Pod.Status.Phase`
 - **每個 container 的 log label 各自上色** — 多 container pod 在 log 中可以逐行區分；穩定 per-container-name 上色
 - **資源刪除** — `D`（大寫，hotkey 和 `Space` menu 都可觸發），附確認 dialog
 - **搜尋 / 過濾** — `/` 在 sidebar、table panel、以及 namespace / context picker popup 中搜尋。Sidebar 搜尋也會比對類別名稱（例如打 "cluster" 會展開 Cluster 類別）。焦點移到其他 panel 時搜尋自動清除 — 選取會保留，filter 不會
 - **剪貼簿複製（`y`）** — 透過 OSC 52 複製焦點 panel 的內容（可穿透 tmux/SSH，不需 `xclip`/`pbcopy`）。在 App Log popup（`!`）中 `y` 複製整份 log；在 YAML popup 中 `y` 複製整份 YAML
-- **分級 Toast 通知** — info（1 秒、sky-blue）用於像「Copied!」這類確認；warning（2 秒、peach、附 `󰀦`）用於被擋掉的動作如 Relatives cycle 偵測、drill 失敗
+- **分級 Toast 通知** — info（1 秒、periwinkle，跟 popup + edit/exec PTY 共用 overlay 主色）用於像「Copied!」這類確認；warning（2 秒、Catppuccin Peach、附 `󰀦`）用於被擋掉的動作如 Relatives cycle 偵測、drill 失敗
 - **Namespace 與 context 切換** — `N` 切 namespace、`C` 切 context（大寫 — trigger key 一律大寫以避免在 `/` 搜尋輸入時誤觸）
 - **Session-local context** — 在 km8 中切 context 不會碰 `~/.kube/config`。可以同時在另一個終端機跑 `kubectl` 而不互相影響
-- **面板感知的選取樣式** — 有焦點的 panel cursor row 用明亮的 reverse-video 高亮；*無焦點* 的 panel 選取 row 保留柔和的 bg + 粗體，這樣不管你在哪個 panel 工作，都能看清楚每個 panel「記得」哪個 resource。當 Pod STATUS 落在亮色高亮 row 上時，會切到較暗的 palette 變體，讓綠/黃/紅還能讀
+- **面板感知的選取樣式** — 有焦點的 panel cursor row 用明亮的 lavender chip；*無焦點* 的 panel 選取 row 保留柔和的 bg + 粗體，這樣不管你在哪個 panel 工作，都能看清楚每個 panel「記得」哪個 resource。無焦點 panel 整體 dim 到 overlay 灰，視覺重心自然落在當前焦點 panel 上，但其他 panel 的「記憶位置」仍然可見
 - **Detail tabs** — K8s resource：`Relatives` / `Logs`（Pods + Deployments）/ `Events`；Helm release：`Relatives` / `History`。有 Relatives 時它永遠在最前面，這樣 `Space` 跳回時會落在你進來時那個 tab。Panel 3 沒有 `/` 搜尋 — cursor-based tab（Relatives / History）不適合 row 過濾、Logs 也是直接看 follow-tail 比較順；要搜大段內容請用 `Y` + 你的編輯器
 - **長字串自動換行、不截斷** — YAML、Events、Logs 都適用；panel 大小變動時換行點會重新計算
-- **Panel 全螢幕展開** — `=`/`-` 切換 Table 或 Detail panel 的全螢幕
+- **Panel 全螢幕展開** — `z` 切換有焦點的 Table 或 Detail panel 全螢幕；再按一次 `z` 還原 3-panel 配置
 - **Theme 系統** — 在 config 目錄丟一個 `theme.yaml` 覆寫顏色
 - **Help 與 App Log overlay** — `?` / `!` 在主 UI 上方彈出 popup
 - **錯誤通知** — status bar badge + status line 訊息
@@ -296,6 +303,17 @@ default_context: ""      # kubeconfig context（預設：current-context）
 default_namespace: ""    # namespace 過濾（預設：all namespaces）
 editor: ""               # 以 $KUBE_EDITOR 形式 export 給 kubectl
                          # （預設：kubectl 會 fallback 到 $EDITOR → vi / notepad）
+km8erm_shell: ""         # KM8erm 啟動的 shell（預設：$SHELL → /bin/sh）。
+                         # 純名字（如 `fish`）在 popup 開啟時走 $PATH 查找
+                         # （Go `exec.Command` 語意）、絕對路徑直接使用。
+                         # 可在 km8erm 內用 fish 但 host shell 維持 zsh。
+km8erm_login_shell: false # 設 true 時 KM8erm 用 `-l` 啟動、會 source
+                         # ~/.zprofile / ~/.bash_profile / /etc/profile。
+                         # 預設 false 對齊 v1.7.2 基線（non-login interactive
+                         # — .bashrc/.zshrc 仍會跑、但不會被 /etc/profile
+                         # 強塞 PS1）。當 km8 是從非 login 父 shell 啟動
+                         # （Raycast、Alfred、cron、非預設 tmux）且 PATH
+                         # 在 .zprofile 而不是 .zshrc 時請開啟。
 
 # Compare popup 預設值（v1.6+）。`layout` 選 diff render：
 # "unified"（預設）是單欄附 -/+ 標記，"split" 是左右並排。
@@ -329,6 +347,26 @@ resource_kind_config:
     sort:                    # 單一 tier chain 也合法
       - column: Age
         direction: desc
+```
+
+### 環境變數
+
+兩個變數都會 override 對應的 config 欄位，用於不改 YAML 的一次性執行 — 適合 CI、demo 腳本、臨時試另一個 shell 的場合。
+
+| 變數 | 作用 | 優先順序 |
+|---|---|---|
+| `KM8__CONFIGPATH` | 改用這個檔案作為 config file，繞過預設 layout（`$XDG_CONFIG_HOME/km8/config.yaml` 等）。Theme file 路徑**不受影響**、仍在 OS config 目錄下。建議用絕對路徑；相對路徑會在 load/save 當下對 CWD 解析。 | `KM8__CONFIGPATH` > 預設 layout |
+| `KM8__SHELL` | 改用這個 binary 作為 KM8erm 的 shell。純名字會在 popup 開啟時走 `$PATH` 查找（Go `exec.Command` 語意）、絕對路徑直接 exec。前後空白會被 trim。 | `KM8__SHELL` > `km8erm_shell` config > `$SHELL` > `/bin/sh` |
+| `KM8__LOGIN_SHELL` | 強制 KM8erm shell 進入或退出 login mode（`-l`）。Truthy 值：`true` / `1` / `yes`（大小寫都接受）。其他值關閉 login mode。當從非 login 父 shell 啟動而 PATH 在 `.zprofile` 時使用。 | `KM8__LOGIN_SHELL` > `km8erm_login_shell` config > `false` |
+
+範例：
+
+```sh
+# 不改 config.yaml、臨時在 KM8erm 試 fish
+KM8__SHELL=/opt/homebrew/bin/fish km8
+
+# 指向專案內 config（例如 commit 到 repo 的 .km8.yaml）
+KM8__CONFIGPATH="$PWD/.km8.yaml" km8
 ```
 
 ### theme.yaml
@@ -386,6 +424,7 @@ status:
 - **kubectl** 在 `$PATH` 上（給 edit、delete、shell exec 用）
 - 有效的 **kubeconfig**（`~/.kube/config` 或 `$KUBECONFIG`）
 - 一個運作中的 Kubernetes cluster
+- **Nerd Font 的 Mono 變體**（例：JetBrains Mono Nerd Font Mono、FiraCode Nerd Font Mono）。km8 的 popup title + row marker 使用 Material Design 系列的 NF glyph，Mono 變體把每個 glyph 設計成正好 1 cell，column / border 對齊穩定。非 Mono（proportional）變體或 East-Asian-Ambiguous=double 的 terminal（部分 tmux + iTerm2 的 CJK 設定）會把這些 glyph 畫成 2 cell — km8 還能跑、但 helm-managed row + popup 頂邊可能差 1 cell。看到對齊跑掉就換 Mono 變體或把 ambiguous-width 設成 single。
 
 ## License
 

@@ -235,9 +235,14 @@ func (m HelmDocMenuPopupModel) renderFullPopup() string {
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
 
-	// Title shows the targeted release so the user can't lose track when
-	// the popup overlays a busy panel.  is the Nerd Font Helm glyph.
-	title := " Helm: " + m.releaseName
+	// Title shows the targeted release so the user can’t lose track
+	// when the popup overlays a busy panel. k8s.HelmIcon() — the
+	// nf-md-ship_wheel PUA glyph (U+F0833) — is the same source the
+	// panel 2 row marker uses, so the helm-managed signal stays
+	// visually consistent between row and popup. NF is km8's
+	// baseline icon design language; terminals without NF render a
+	// fallback box here, same as every other popup title.
+	title := k8s.HelmIcon() + " Helm: " + m.releaseName
 	if m.releaseNS != "" {
 		title += " (" + m.releaseNS + ")"
 	}
@@ -255,9 +260,15 @@ func (m HelmDocMenuPopupModel) renderFullPopup() string {
 	if w := len(hint) + 4; w > innerW {
 		innerW = w
 	}
+	// Width calc MUST mirror the render gap formula (max(2, 16-labelW))
+	// — using a fixed gap=4 here used to under-count innerW when a row
+	// had a short label + long hint ("Hooks" + "install/upgrade hook
+	// resources"), so the cursor row's reverse-highlight bar overflowed
+	// past the right border. Same trap panel2menu hit before.
 	for _, it := range m.items {
-		// " > Manifest    rendered chart "
-		w := 1 + 2 + lipgloss.Width(it.label) + 4 + lipgloss.Width(it.hint) + 1
+		labelW := lipgloss.Width(it.label)
+		gap := max(2, 16-labelW)
+		w := 1 + 2 + labelW + gap + lipgloss.Width(it.hint) + 1
 		if w > innerW {
 			innerW = w
 		}
@@ -266,16 +277,21 @@ func (m HelmDocMenuPopupModel) renderFullPopup() string {
 		innerW = maxInnerW
 	}
 
+	// Constant 2-space gutter on every row — cursor row is differentiated
+	// by reverse-highlight alone, matching panel2menu / listpicker.
+	// Previously the cursor row had a "▶ " prefix; dropped because
+	//   1) it doubled the cursor signal (highlight already says "this one"),
+	//   2) it broke the popup-wide convention, and
+	//   3) ▶ (U+25B6) gets inconsistent width treatment between
+	//      go-runewidth (1 cell) and many terminal renderers (2 cells),
+	//      causing the highlight bar to overflow the right border.
+	const gutter = "  "
 	var rows []string
 	for i, it := range m.items {
 		isCursor := i == m.cursor
-		marker := "  "
-		if isCursor {
-			marker = "▶ "
-		}
 		labelW := lipgloss.Width(it.label)
 		gap := strings.Repeat(" ", max(2, 16-labelW))
-		bodyPlain := " " + marker + it.label + gap + it.hint
+		bodyPlain := " " + gutter + it.label + gap + it.hint
 		padW := innerW - 1 - lipgloss.Width(bodyPlain)
 		if padW < 0 {
 			padW = 0
@@ -286,7 +302,7 @@ func (m HelmDocMenuPopupModel) renderFullPopup() string {
 			continue
 		}
 		// Non-cursor rows: dim the hint so the label dominates.
-		rows = append(rows, " "+marker+it.label+gap+hintStyle.Render(it.hint)+pad)
+		rows = append(rows, " "+gutter+it.label+gap+hintStyle.Render(it.hint)+pad)
 	}
 
 	dashesAfter := innerW - 1 - lipgloss.Width(title)

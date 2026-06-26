@@ -825,7 +825,17 @@ func (m *DetailModel) ClearDetail() {
 func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 	m.resourceType = rt
 	switch {
-	case rt == k8s.ResourcePods, rt == k8s.ResourceDeployments:
+	case rt == k8s.ResourcePods,
+		rt == k8s.ResourceDeployments,
+		rt == k8s.ResourceStatefulSets,
+		rt == k8s.ResourceDaemonSets,
+		rt == k8s.ResourceJobs,
+		rt == k8s.ResourceCronJobs:
+		// All workload kinds get a Logs tab: Pods stream single-pod,
+		// the rest funnel their managed Pods into one aggregate stream
+		// (Deployment via current ReplicaSet; StatefulSet / DaemonSet /
+		// Job via selector; CronJob across all currently-retained Jobs).
+		// k8s.PodsForWorkload already routes each kind to its resolver.
 		m.tabs = []string{"Relatives", "Logs", "Events"}
 	case rt == k8s.ResourceEvents:
 		m.tabs = []string{"Relatives"}
@@ -1508,13 +1518,32 @@ func (m DetailModel) buildLogLines() []string {
 	return lines
 }
 
+// isAggregateLogsKind reports whether a workload kind funnels its Pods
+// through k8s.PodsForWorkload into a single aggregate Logs stream. Pods
+// themselves don't qualify — they take the single-pod streaming path in
+// app.go's dispatch switches. Mirrors supportsLogs minus Pods.
+func isAggregateLogsKind(rt k8s.ResourceType) bool {
+	return rt != k8s.ResourcePods && supportsLogs(rt)
+}
+
 // supportsLogs reports whether a resource type has a Logs tab in its detail
-// panel. Pods stream single-pod; Deployments stream aggregate from the
-// current-generation ReplicaSet pods. Other workload kinds (StatefulSet,
-// DaemonSet, Job) follow the same aggregate pattern but are out of scope
-// for this iteration.
+// panel. Pods stream single-pod; all other workload kinds stream aggregate
+// from their managed Pods via k8s.PodsForWorkload (Deployment → current
+// ReplicaSet; StatefulSet / DaemonSet / Job → selector; CronJob → all
+// retained Jobs' Pods). The set MUST stay in sync with the workload-kind
+// cases in SetResourceType (tab construction) and the dispatch switches
+// in app.go (ResourceDetailMsg / RowSelectedMsg handlers).
 func supportsLogs(rt k8s.ResourceType) bool {
-	return rt == k8s.ResourcePods || rt == k8s.ResourceDeployments
+	switch rt {
+	case k8s.ResourcePods,
+		k8s.ResourceDeployments,
+		k8s.ResourceStatefulSets,
+		k8s.ResourceDaemonSets,
+		k8s.ResourceJobs,
+		k8s.ResourceCronJobs:
+		return true
+	}
+	return false
 }
 
 // sortedKeys returns the keys of a map sorted alphabetically.

@@ -12,6 +12,15 @@ import (
 	"github.com/vulcanshen/km8/internal/theme"
 )
 
+// splitDiffLineLimit caps the per-side input to the line-LCS alignment in
+// renderSplitDiff. The DP table is O(n*m) ints; 2000*2000 = 4M ints ≈ 32MB
+// — a safe upper bound that finishes inside a frame budget while still
+// rendering a useful diff for the realistic worst case (two helm-deployed
+// resources whose `kubectl.kubernetes.io/last-applied-configuration`
+// annotations carry the full chart manifest). Lines above the limit are
+// dropped with a banner announcing the truncation.
+const splitDiffLineLimit = 2000
+
 // CompareLayout selects how a diff renders. Split shows old/new side-by-side
 // (git diff --side-by-side); Unified shows a single column with -/+ markers
 // (git diff default). Persisted in the user config so the choice survives
@@ -349,12 +358,68 @@ func (m CompareYamlPopupModel) maxScrollOffset() int {
 	return max
 }
 
+// capDiffInput truncates each side to splitDiffLineLimit lines and
+// reports per-side truncation. Shared by renderSplitDiff and
+// renderUnifiedDiff so the OOM/perf protection applies regardless of
+// which layout the user picks — fix #1 originally only capped the
+// split path's line-LCS, leaving the unified path's udiff.Unified call
+// as an uncapped escape hatch on the same large input.
+func capDiffInput(left, right string) (cappedLeft, cappedRight string, truncL, truncR bool) {
+	if left == "" && right == "" {
+		return "", "", false, false
+	}
+	ll := strings.Split(strings.TrimRight(left, "\n"), "\n")
+	rl := strings.Split(strings.TrimRight(right, "\n"), "\n")
+	if left == "" {
+		ll = nil
+	}
+	if right == "" {
+		rl = nil
+	}
+	truncL = len(ll) > splitDiffLineLimit
+	truncR = len(rl) > splitDiffLineLimit
+	if truncL {
+		ll = ll[:splitDiffLineLimit]
+	}
+	if truncR {
+		rl = rl[:splitDiffLineLimit]
+	}
+	return strings.Join(ll, "\n"), strings.Join(rl, "\n"), truncL, truncR
+}
+
+// truncationBanner formats the peach ⚠ row that announces which sides
+// got clipped at splitDiffLineLimit. Returns "" when neither side was
+// truncated so callers can omit the row entirely.
+func truncationBanner(truncL, truncR bool, width int) string {
+	if !truncL && !truncR {
+		return ""
+	}
+	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fab387")).Bold(true)
+	var msg string
+	switch {
+	case truncL && truncR:
+		msg = fmt.Sprintf(" ⚠ both sides truncated to first %d lines (diff cap; Esc + Y on the row for full YAML)", splitDiffLineLimit)
+	case truncL:
+		msg = fmt.Sprintf(" ⚠ left truncated to first %d lines (diff cap; Esc + Y on the row for full YAML)", splitDiffLineLimit)
+	default:
+		msg = fmt.Sprintf(" ⚠ right truncated to first %d lines (diff cap; Esc + Y on the row for full YAML)", splitDiffLineLimit)
+	}
+	return warnStyle.Render(ansiTruncate(msg, width))
+}
+
 // renderUnifiedDiff returns display lines for unified-diff mode. Wraps
 // go-udiff's Unified() output with lipgloss colouring: red on `-`,
 // green on `+`, dimmed on `@@` hunk headers, default on context.
 func renderUnifiedDiff(left, right, leftLabel, rightLabel string, width int, t *theme.Theme) []string {
-	diff := udiff.Unified(leftLabel, rightLabel, left, right)
+	cappedLeft, cappedRight, truncL, truncR := capDiffInput(left, right)
+	diff := udiff.Unified(leftLabel, rightLabel, cappedLeft, cappedRight)
 	if diff == "" {
+		// Even when udiff produces nothing, surface the truncation
+		// notice — otherwise the user sees "(identical — no config
+		// diff)" against a silently-clipped input and misreads it.
+		if banner := truncationBanner(truncL, truncR, width); banner != "" {
+			return []string{banner, centerNoDiff(width, t)}
+		}
 		return []string{centerNoDiff(width, t)}
 	}
 	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Running))
@@ -362,6 +427,9 @@ func renderUnifiedDiff(left, right, leftLabel, rightLabel string, width int, t *
 	hunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA")).Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	var out []string
+	if banner := truncationBanner(truncL, truncR, width); banner != "" {
+		out = append(out, banner)
+	}
 	for _, raw := range strings.Split(strings.TrimRight(diff, "\n"), "\n") {
 		// Truncate to body width to avoid wrap drift between hunks.
 		truncated := ansiTruncate(raw, width)
@@ -397,18 +465,25 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA")).Bold(true)
 
-	leftLines := strings.Split(strings.TrimRight(left, "\n"), "\n")
-	rightLines := strings.Split(strings.TrimRight(right, "\n"), "\n")
-	if left == "" {
+	// capDiffInput caps both sides to splitDiffLineLimit and reports
+	// per-side truncation. Shared with the unified path so the OOM /
+	// perf protection applies regardless of which layout is active.
+	cappedLeft, cappedRight, truncatedLeft, truncatedRight := capDiffInput(left, right)
+	leftLines := strings.Split(strings.TrimRight(cappedLeft, "\n"), "\n")
+	rightLines := strings.Split(strings.TrimRight(cappedRight, "\n"), "\n")
+	if cappedLeft == "" {
 		leftLines = nil
 	}
-	if right == "" {
+	if cappedRight == "" {
 		rightLines = nil
 	}
 
-	// Compute LCS-style alignment via go-udiff's Edit list.
-	edits := udiff.Strings(left, right)
-	pairs := alignSplitDiff(leftLines, rightLines, edits)
+	// Compute line-level LCS alignment directly. go-udiff's Edit list
+	// is byte-oriented and breaks down for sub-line changes (a single
+	// `accent: '#0066FF'` → `accent: '#00CC66'` edit yielded `+ CC`
+	// fragments instead of a clean full-line replacement). Line-LCS
+	// is the right abstraction for a side-by-side YAML diff anyway.
+	pairs := alignSplitDiff(leftLines, rightLines)
 
 	// fit clips s to colW and right-pads with spaces — split-view column
 	// alignment depends on EVERY cell being exactly colW wide. The shared
@@ -421,7 +496,7 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 		}
 		return padRight(s, colW)
 	}
-	out := make([]string, 0, len(pairs)+2)
+	out := make([]string, 0, len(pairs)+3)
 	// Header row: locked label on the left, compare label on the right.
 	out = append(out, headerStyle.Render(fit(leftLabel))+
 		sepStyle.Render(" │ ")+
@@ -429,6 +504,13 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 	out = append(out, sepStyle.Render(strings.Repeat("─", colW))+
 		sepStyle.Render("─┼─")+
 		sepStyle.Render(strings.Repeat("─", colW)))
+	// Truncation banner sits between the header row and the diff body so
+	// the user immediately sees that the LCS bypassed lines beyond the
+	// cap. truncationBanner() emits "" when neither side was clipped,
+	// so the append is unconditional but cheap.
+	if banner := truncationBanner(truncatedLeft, truncatedRight, width); banner != "" {
+		out = append(out, banner)
+	}
 
 	if len(pairs) == 0 {
 		out = append(out, centerNoDiff(width, t))
@@ -436,17 +518,17 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 	}
 	for _, p := range pairs {
 		var ls, rs string
-		switch {
-		case p.left == "" && p.right != "":
+		switch p.kind {
+		case splitPairInsert:
 			ls = dimStyle.Render(fit(""))
 			rs = addStyle.Render(fit("+ " + p.right))
-		case p.left != "" && p.right == "":
+		case splitPairDelete:
 			ls = delStyle.Render(fit("- " + p.left))
 			rs = dimStyle.Render(fit(""))
-		case p.changed:
+		case splitPairChanged:
 			ls = delStyle.Render(fit("- " + p.left))
 			rs = addStyle.Render(fit("+ " + p.right))
-		default:
+		default: // splitPairContext
 			ls = fit("  " + p.left)
 			rs = fit("  " + p.right)
 		}
@@ -455,119 +537,152 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 	return out
 }
 
+// splitPairKind tags a splitPair so the renderer doesn't have to infer
+// the row's role from empty-string heuristics. The earlier `changed
+// bool` + `left/right == ""` predicates silently swallowed a perfectly
+// valid case: an inserted/deleted line whose own content was the empty
+// string (e.g. a blank separator line added to one side). With the
+// kind-tag the renderer's switch is exhaustive — blank insertions
+// render as `+` rows on the right column instead of disappearing into
+// the default context branch.
+type splitPairKind byte
+
+const (
+	splitPairContext splitPairKind = iota // unchanged on both sides
+	splitPairChanged                      // present on both sides but different
+	splitPairInsert                       // right-only line (left column gets the dim placeholder)
+	splitPairDelete                       // left-only line (right column gets the dim placeholder)
+)
+
 // splitPair is one synchronized row in the split-diff view. left/right
-// is the raw line text; changed = both sides present but differ;
-// blank-left / blank-right denote insert / delete with the other side
-// showing an empty placeholder.
+// is the raw line text; kind drives renderer styling.
 type splitPair struct {
-	left    string
-	right   string
-	changed bool
+	left  string
+	right string
+	kind  splitPairKind
 }
 
-// alignSplitDiff walks both line slices using the go-udiff Edit list as
-// a guide. Lines outside of any edit are paired 1:1 (context). Inside
-// an edit, we line up insertions on the right and deletions on the
-// left; if both happen at the same edit boundary we mark them as
-// "changed" so the renderer can colour both sides.
-func alignSplitDiff(leftLines, rightLines []string, edits []udiff.Edit) []splitPair {
-	if len(edits) == 0 {
-		// No diff — pair lines 1:1.
-		pairs := make([]splitPair, 0, len(leftLines))
-		for i := range leftLines {
-			r := ""
-			if i < len(rightLines) {
-				r = rightLines[i]
+// changed reports whether the pair is the both-present-but-different
+// case. Kept as a method so existing tests that assert `p.changed`
+// don't have to be rewritten for the kind enum.
+func (p splitPair) changed() bool { return p.kind == splitPairChanged }
+
+// alignSplitDiff produces side-by-side pairs via a line-level LCS:
+// equal lines pair 1:1 as context; runs of left-only / right-only
+// lines surface as delete / insert; adjacent delete + insert at the
+// same boundary collapse into a single `changed` pair so the renderer
+// can paint both columns in their respective colours.
+//
+// Line-LCS replaced an earlier byte-level approach that walked go-
+// udiff's Edit list. The byte approach had two bugs the user saw on
+// near-twin ConfigMaps:
+//
+//  1. Context lines paired leftLines[i] with itself on both sides,
+//     so the right column rendered the left content verbatim — a
+//     `accent: '#0066FF'` from the LEFT showed up where the RIGHT's
+//     `accent: '#00CC66'` should have been.
+//  2. Sub-line edits (e.g. replacing `0066FF` with `00CC66` inside
+//     one line) produced char-fragment pairs (`+ CC`, `+ f`, `+ r`,
+//     ...) because go-udiff's Edit spanned a few bytes within a
+//     line, oldChunk was empty, and newChunk was the orphan fragment.
+//
+// O(n*m) memory/time — fine for typical K8s YAMLs (≤ a few hundred
+// lines). If we ever hit pathological inputs we can swap to Myers.
+func alignSplitDiff(leftLines, rightLines []string) []splitPair {
+	n, m := len(leftLines), len(rightLines)
+	// LCS DP table.
+	lcs := make([][]int, n+1)
+	for i := range lcs {
+		lcs[i] = make([]int, m+1)
+	}
+	for i := 1; i <= n; i++ {
+		for j := 1; j <= m; j++ {
+			if leftLines[i-1] == rightLines[j-1] {
+				lcs[i][j] = lcs[i-1][j-1] + 1
+			} else if lcs[i-1][j] >= lcs[i][j-1] {
+				lcs[i][j] = lcs[i-1][j]
+			} else {
+				lcs[i][j] = lcs[i][j-1]
 			}
-			pairs = append(pairs, splitPair{left: leftLines[i], right: r})
 		}
-		return pairs
 	}
-	// Convert byte-offset edits into line-index edits by walking left
-	// text and recording each edit's start/end line.
-	leftRaw := strings.Join(leftLines, "\n")
-	li := buildLineIndex(leftRaw)
-	type lineEdit struct {
-		startLine int
-		endLine   int
-		newText   string
+	// Backtrack — record (context / delete / insert) ops in forward order.
+	type opKind byte
+	const (
+		opContext opKind = iota
+		opDelete
+		opInsert
+	)
+	type op struct {
+		kind  opKind
+		left  string
+		right string
 	}
-	lineEdits := make([]lineEdit, 0, len(edits))
-	for _, e := range edits {
-		lineEdits = append(lineEdits, lineEdit{
-			startLine: li.lineAt(e.Start),
-			endLine:   li.lineAt(e.End),
-			newText:   e.New,
-		})
+	ops := make([]op, 0, n+m)
+	i, j := n, m
+	for i > 0 && j > 0 {
+		switch {
+		case leftLines[i-1] == rightLines[j-1]:
+			ops = append(ops, op{kind: opContext, left: leftLines[i-1], right: rightLines[j-1]})
+			i--
+			j--
+		case lcs[i-1][j] >= lcs[i][j-1]:
+			ops = append(ops, op{kind: opDelete, left: leftLines[i-1]})
+			i--
+		default:
+			ops = append(ops, op{kind: opInsert, right: rightLines[j-1]})
+			j--
+		}
 	}
-	pairs := make([]splitPair, 0, len(leftLines)+len(rightLines))
-	li2 := 0
-	for _, le := range lineEdits {
-		for ; li2 < le.startLine && li2 < len(leftLines); li2++ {
-			pairs = append(pairs, splitPair{left: leftLines[li2], right: leftLines[li2]})
+	for i > 0 {
+		ops = append(ops, op{kind: opDelete, left: leftLines[i-1]})
+		i--
+	}
+	for j > 0 {
+		ops = append(ops, op{kind: opInsert, right: rightLines[j-1]})
+		j--
+	}
+	for a, b := 0, len(ops)-1; a < b; a, b = a+1, b-1 {
+		ops[a], ops[b] = ops[b], ops[a]
+	}
+
+	// Collapse adjacent delete+insert runs into `changed` pairs. We
+	// pair them positionally: 1st delete ↔ 1st insert, 2nd ↔ 2nd, ...
+	// Any leftover from the longer side trails as pure delete or insert.
+	pairs := make([]splitPair, 0, len(ops))
+	k := 0
+	for k < len(ops) {
+		if ops[k].kind == opContext {
+			pairs = append(pairs, splitPair{left: ops[k].left, right: ops[k].right, kind: splitPairContext})
+			k++
+			continue
 		}
-		oldChunk := leftLines[le.startLine:min(le.endLine, len(leftLines))]
-		newChunk := strings.Split(strings.TrimRight(le.newText, "\n"), "\n")
-		if le.newText == "" {
-			newChunk = nil
-		}
-		// Pair as many as we can; the longer side gets blanks on the
-		// other column. Same-index pairs are marked changed because the
-		// edit replaced one with the other.
-		max := len(oldChunk)
-		if len(newChunk) > max {
-			max = len(newChunk)
-		}
-		for i := 0; i < max; i++ {
-			var ls, rs string
-			if i < len(oldChunk) {
-				ls = oldChunk[i]
+		// Gather the contiguous run of deletes + inserts (in any order).
+		var dels, ins []string
+		for k < len(ops) && ops[k].kind != opContext {
+			switch ops[k].kind {
+			case opDelete:
+				dels = append(dels, ops[k].left)
+			case opInsert:
+				ins = append(ins, ops[k].right)
 			}
-			if i < len(newChunk) {
-				rs = newChunk[i]
-			}
-			pairs = append(pairs, splitPair{left: ls, right: rs, changed: ls != "" && rs != ""})
+			k++
 		}
-		li2 = le.endLine
-	}
-	for ; li2 < len(leftLines); li2++ {
-		pairs = append(pairs, splitPair{left: leftLines[li2], right: leftLines[li2]})
+		paired := len(dels)
+		if len(ins) < paired {
+			paired = len(ins)
+		}
+		for p := 0; p < paired; p++ {
+			pairs = append(pairs, splitPair{left: dels[p], right: ins[p], kind: splitPairChanged})
+		}
+		for p := paired; p < len(dels); p++ {
+			pairs = append(pairs, splitPair{left: dels[p], kind: splitPairDelete})
+		}
+		for p := paired; p < len(ins); p++ {
+			pairs = append(pairs, splitPair{right: ins[p], kind: splitPairInsert})
+		}
 	}
 	return pairs
-}
-
-// lineIndex maps byte offsets in a string to line numbers. Built once
-// per diff so the per-edit lookup is O(log n) (binary search).
-type lineIndex struct {
-	lineStartOffsets []int
-}
-
-func buildLineIndex(s string) lineIndex {
-	offsets := []int{0}
-	for i, c := range s {
-		if c == '\n' {
-			offsets = append(offsets, i+1)
-		}
-	}
-	return lineIndex{lineStartOffsets: offsets}
-}
-
-// lineAt returns the 0-based line index containing byte offset `off`.
-// Out-of-range offsets clamp to the last line.
-func (li lineIndex) lineAt(off int) int {
-	lo, hi := 0, len(li.lineStartOffsets)
-	for lo < hi {
-		mid := (lo + hi) / 2
-		if li.lineStartOffsets[mid] <= off {
-			lo = mid + 1
-		} else {
-			hi = mid
-		}
-	}
-	if lo > 0 {
-		return lo - 1
-	}
-	return 0
 }
 
 func centerNoDiff(width int, t *theme.Theme) string {
@@ -697,18 +812,30 @@ func (m CompareYamlPopupModel) overlayMenu(frame string) string {
 		return frame
 	}
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA"))
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9DDAEA")).Bold(true)
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).
 		Background(lipgloss.Color("#9DDAEA")).Bold(true)
 	rowStyle := lipgloss.NewStyle()
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 
+	// Same icon as the parent compare-popup title so the overlay menu
+	// reads as "this is the compare popup's menu" — same family, not a
+	// new popup with its own identity. Matches the title-in-top-border
+	// convention every other km8 popup uses (helmdocmenu, hintpopup,
+	// settings, ...).
+	title := " \U000f08aa Diff "
 	hint := " enter: select  esc: cancel "
 	hintW := lipgloss.Width(hint)
-	// Inner width must accommodate the widest item (+2 padding for the
-	// leading/trailing single space inside the row) AND the bottom hint
-	// — otherwise the bottom border stretches past the side bars and
-	// the corners no longer line up vertically.
+	titleW := lipgloss.Width(title)
+	// Inner width must accommodate the title (+ 2 lead dashes + 1
+	// trailing dash minimum), the widest item (+2 padding for the
+	// leading/trailing single space inside the row), AND the bottom
+	// hint — otherwise the borders stretch past the side bars and the
+	// corners no longer line up vertically.
 	innerW := hintW
+	if w := titleW + 3; w > innerW {
+		innerW = w
+	}
 	for _, it := range items {
 		w := lipgloss.Width(it) + 2 // leading + trailing spaces
 		if w > innerW {
@@ -716,7 +843,15 @@ func (m CompareYamlPopupModel) overlayMenu(frame string) string {
 		}
 	}
 
-	rows := []string{borderStyle.Render("╭" + strings.Repeat("─", innerW) + "╮")}
+	leadDashCount := 2
+	trailDashCount := innerW - leadDashCount - titleW
+	if trailDashCount < 1 {
+		trailDashCount = 1
+	}
+	top := borderStyle.Render("╭"+strings.Repeat("─", leadDashCount)) +
+		titleStyle.Render(title) +
+		borderStyle.Render(strings.Repeat("─", trailDashCount)+"╮")
+	rows := []string{top}
 	for i, it := range items {
 		text := " " + it + strings.Repeat(" ", innerW-1-lipgloss.Width(it))
 		if i == m.menuCursor {
@@ -740,11 +875,4 @@ func (m CompareYamlPopupModel) overlayMenu(frame string) string {
 	// per-line width measurement on multi-line bordered content gets
 	// confused by ANSI styling.
 	return overlay.Composite(menuBlock, frame, overlay.Center, overlay.Center, 0, 0)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

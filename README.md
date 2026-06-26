@@ -13,7 +13,9 @@
 
 **Language**: English · [繁體中文](README-zh_TW.md)
 
-A scout-style Kubernetes TUI built around **Relatives navigation**.
+**A single-pane Kubernetes workspace** — `Tab` / `Space` / `Enter` / `Esc` drive everything. No hotkey memorization, no setup, no learning curve. Relatives navigation, YAML compare, and an embedded persistent shell are built in; any other terminal tool you trust rides along through the shell.
+
+> _When in doubt, hit_ **`Space`**.
 
 ## Demo
 
@@ -28,6 +30,10 @@ A scout-style Kubernetes TUI built around **Relatives navigation**.
 ### Edit live resources via the Space menu
 
 ![yaml-edit](docs/demo-yaml-edit.gif)
+
+### Diff two resources side-by-side
+
+![compare](docs/demo-compare.gif)
 
 ### Helm as a first-class resource
 
@@ -118,7 +124,9 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 
 ## Features
 
-- **Pinned resource kinds (`P` + `D` drag-and-drop)** -- panel 1's sidebar grows a Pinned section at the top. `P` on any resource row toggles pin / unpin, and the order persists into the config file. Pins **move** rather than duplicate — a pinned kind disappears from its original category and reappears under Pinned, so each kind has exactly one home. With two or more pinned kinds, press `D` on a pinned row to enter modal drag-and-drop: `j`/`k` swap the locked kind with its neighbour, `Enter` or `D` commits the new order, `Esc` and anything else reverts to the snapshot taken at entry. The header reads `Pinned ⇅ [D]rop` while dragging, the dragged row paints lavender, and a sticky toast carries the keyboard contract; `Space` mid-drag opens a trimmed drop-only menu if the contract slips out of memory. Pin / sort / future-per-kind settings share the same per-kind config block, so a CRD that briefly goes away (operator reinstall, etc.) keeps its pin and sort silently and restores both the moment it comes back
+- **Zero learning curve** -- every action surfaces through the `Space` menu. Power-user hotkeys (`P` pin / `S` sort / `C` compare / `Y` YAML / `E` edit / `N` ns / `>` settings / ...) exist for speed but you can ignore the whole cheat sheet — `Space` walks you through the same menus, in context, every time. Onboarding doc: *"When in doubt, hit Space."*
+- **Compose, don't replace** -- KM8erm (the embedded persistent shell, `Alt+t`) means any other terminal tool you'd normally drop out of km8 for rides along inside it. Use km8 for navigation and inspection; use whatever you trust for write-side operations — no scrollback split, no context switch, and KM8erm keeps env / cwd / shell history intact across `Alt+t` toggles
+- **Pinned resource kinds (`P` + `D` drag-and-drop)** -- panel 1's sidebar grows a Pinned section at the top. `P` on any resource row toggles pin / unpin, and the order persists into the config file. Pins **move** rather than duplicate — a pinned kind disappears from its original category and reappears under Pinned, so each kind has exactly one home. With two or more pinned kinds, press `D` on a pinned row to enter modal drag-and-drop: `j`/`k` swap the locked kind with its neighbour, `Enter` or `D` commits the new order, `Esc` and anything else reverts to the snapshot taken at entry. The header reads `Pinned 󰩐 [D]rop` while dragging, the dragged row paints lavender, and a sticky toast carries the keyboard contract; `Space` mid-drag opens a trimmed drop-only menu if the contract slips out of memory. Pin / sort / future-per-kind settings share the same per-kind config block, so a CRD that briefly goes away (operator reinstall, etc.) keeps its pin and sort silently and restores both the moment it comes back
 - **YAML Compare popup (`C`)** -- panel 2 row-level diff. `C` on a row marks it as the **compare anchor** (status-bar glyph shows which row is locked); `C` on a different row of the same kind opens a side-by-side or unified YAML diff. `C` on the anchor itself cancels — the same key toggles all three states (mark / diff / cancel). The diff popup has its own action menu (`Space`) to switch layout live, and the default layout (Unified) is persisted in config. Compare YAML is pre-cleaned (status / managedFields / resourceVersion / uid stripped) so the diff focuses on what the user actually authored
 - **List-view sort (`S` on sidebar, `Alt+Shift+S` on panel 2)** -- per-kind multi-column sort persisted across restarts. Pick a column → direction → the picker loops back to the column step so additional tiers can be stacked without re-invoking the flow. Each tier renders its priority and direction in the panel-2 header (`Name (1) ↑ · Restarts (2) ↓ …`); single-tier chains collapse to just the arrow to keep the simple case visually quiet. Reset row at the bottom drops the entire chain in one shot; per-column `Unset` removes a single tier from the direction step. `Esc` is the only way out — the picker never closes itself between operations. Comparators are type-aware: `Age` / `Updated` use the underlying timestamp (not the rendered "5d3h" string); `Ready` parses "N/M" as a pair of ints; `Restarts`, `Desired`, `Current`, `Up-to-date`, `Available`, `Active`, `Rev` use the int form so "10" sorts above "2". Unknown columns silently skip so a stale config doesn't break the sort. No saved sort = `(namespace, name)` ascending, matching kubectl's cross-namespace default
 - **Mouse support** -- click a panel to focus it + move the cursor, double-click to drill (synthesizes `Enter`), right-click to open the row's context menu (synthesizes `Space`), wheel scrolls half-page (synthesizes `u` / `d`). 13 popups respond too: list popups commit on left-click, viewer popups (YAML / Compare / App Log / Help) keep wheel scroll, the confirm dialog deliberately makes left-click a no-op so a stray click can't trigger a destructive delete / quit / rollback. Mouse can be turned off in the Settings popup (`>`) and a `scroll_direction: natural | reverse` setting flips the wheel for users who prefer the inverse mapping
@@ -137,20 +145,19 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 - **Conditions tab** -- new detail-panel tab showing `.status.conditions` as a `TYPE / STATUS / REASON / MESSAGE / AGE` table (same as `kubectl describe`'s Conditions section). Status `False` rows highlighted red. Appears for kinds that populate conditions (Pod / Node / PVC / Deployment / StatefulSet / DaemonSet / Job / HPA / Ingress); hidden for kinds without (ConfigMap, Secret, Service, etc.). Critical when events have expired past TTL — conditions reflect *current* state, events reflect *recent* state
 - **Edit & shell exec via embedded PTY** -- `E` runs `kubectl edit` and `S` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
 - **KM8erm internal terminal** -- `Alt+t` toggles an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do. The shell is **persistent**: pressing `Alt+t` while the popup is visible hides it without killing the shell; pressing it again reattaches (cwd, history, env, background jobs all preserved). A `KM8erm` chip on the right of the status bar shows when the shell is alive in the background. Independent of `kubectl edit` / `kubectl exec` — you can keep KM8erm running while editing a resource or exec'ing into a container in a separate popup
-- **PTY popup borders signal kind at a glance** -- KM8erm is orange, `kubectl exec` is green, `kubectl edit` is sky blue. Useful when KM8erm is hidden behind a transient exec/edit popup
+- **PTY popup borders signal kind at a glance** -- KM8erm wears the lavender that marks the rest of the user-state surface (Pinned, statusbar context/namespace values); `kubectl edit` and `kubectl exec` share the periwinkle of every other transient overlay popup, and the title (`kubectl edit pod/foo` vs `kubectl exec -it pod/foo`) carries the kind distinction. Useful when KM8erm is hidden behind a transient exec/edit popup
 - **PTY scrollback** -- 10k-line history for all PTY popups (KM8erm, shell exec, edit). `PgUp` / `PgDn` page, `Home` / `End` jump to top / live. Disabled in alt-screen apps (vim, less, htop) so they keep their own paging
-- **Colored Pod status** -- `Running` green, `Pending` yellow, `CrashLoopBackOff` / `ImagePullBackOff` / `OOMKilled` red, `Terminating` gray. STATUS column shows the kubectl-equivalent reason, not raw `Pod.Status.Phase`
 - **Per-container colored log labels** -- multi-container pods are visually distinguishable line-by-line; stable color per container name
 - **Resource deletion** -- `D` (uppercase, both as a hotkey and via the `Space` menu) with confirmation dialog
 - **Search/filter** -- `/` to search in the sidebar and table panels, and in the namespace/context picker popups. Sidebar search also matches category names (e.g. "cluster" expands the Cluster category). Search clears automatically when focus moves to another panel — selection persists, the filter doesn't
 - **Clipboard copy (`y`)** -- copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required). Inside the App Log popup (`!`), `y` copies the full log; inside the YAML popup, `y` copies the full YAML
-- **Toast notifications with levels** -- info-level (1s sky-blue) for confirmations like "Copied!"; warning-level (2s peach with `󰀦`) for blocked actions like Relatives cycle detection or drill failures
+- **Toast notifications with levels** -- info-level (1s periwinkle, shared overlay accent with popups + edit/exec PTY) for confirmations like "Copied!"; warning-level (2s Catppuccin Peach with `󰀦`) for blocked actions like Relatives cycle detection or drill failures
 - **Namespace and context switching** -- `N` for namespace, `C` for context (uppercase — trigger keys are uppercase to avoid mis-triggering while typing search queries)
 - **Session-local context** -- switching context in km8 doesn't touch `~/.kube/config`. Run `kubectl` in another terminal in parallel without interference
-- **Panel-aware selection styling** -- the focused panel's cursor row gets a bright reverse-video highlight; the *unfocused* panel's selected row keeps a softer bg + bold so you can always see which resource each panel "remembers" while you work in another. Pod STATUS uses a darker palette variant when it lands on a light-bg highlighted row so the green/yellow/red stays readable
+- **Panel-aware selection styling** -- the focused panel's cursor row gets a bright lavender chip; the *unfocused* panel's selected row keeps a softer bg + bold so you can always see which resource each panel "remembers" while you work in another. Unfocused panels dim down to a muted overlay grey so the eye lands on the focused panel without losing the "you are here" memory of the other two
 - **Detail tabs** -- `Relatives` / `Logs` (Pods + Deployments) / `Events` / `Conditions` (for kinds that populate them) for K8s resources; `Relatives` / `History` for Helm releases. Relatives is always first when present, so `Space` jumps land on the same tab you came from. Panel 3 has no `/` search — cursor tabs (Relatives / History) don't tolerate row filtering, and Logs read better as a plain follow-tail view; use `Y` + your editor to grep large content
 - **Long values wrap, never truncate** -- applies to YAML, Events, and Logs; wrap points reflow on panel resize
-- **Panel expand** -- `=`/`-` to toggle full-screen Table or Detail panel
+- **Panel expand** -- `z` toggles full-screen on the focused Table or Detail panel; pressing `z` again restores the 3-panel layout
 - **Theme system** -- drop a `theme.yaml` into config directory to override colors
 - **Help & App Log overlays** -- `?` / `!` popup on top of main UI
 - **Error notifications** -- status bar badge + status line message
@@ -304,6 +311,19 @@ default_context: ""      # kubeconfig context (default: current-context)
 default_namespace: ""    # namespace filter (default: all namespaces)
 editor: ""               # exposed to kubectl as $KUBE_EDITOR
                          # (default: kubectl falls back to $EDITOR → vi / notepad)
+km8erm_shell: ""         # shell launched by KM8erm (default: $SHELL → /bin/sh).
+                         # Bare names are resolved via $PATH at popup-open time
+                         # (Go exec.Command semantics); absolute paths are used
+                         # verbatim. Lets you pick e.g. fish inside km8erm
+                         # while keeping zsh as host shell.
+km8erm_login_shell: false # Flip true to launch KM8erm with `-l` so it sources
+                         # ~/.zprofile / ~/.bash_profile / /etc/profile.
+                         # Default false matches the v1.7.2 baseline (non-login
+                         # interactive — .bashrc/.zshrc still loads, no
+                         # /etc/profile PS1 surprise). Set true when km8 is
+                         # launched from a non-login parent (Raycast, Alfred,
+                         # cron, tmux configured non-login) and your PATH
+                         # lives in .zprofile rather than .zshrc.
 
 # Compare popup defaults (v1.6+). `layout` picks the diff render —
 # "unified" (default) is a single column with -/+ markers,
@@ -342,6 +362,26 @@ resource_kind_config:
     sort:                    # single-tier chain also valid
       - column: Age
         direction: desc
+```
+
+### Environment variables
+
+Both override the corresponding config slot for one-shot runs without editing the YAML — useful for CI / scripted demos / quick "try this shell" sessions.
+
+| Variable | Effect | Precedence |
+|---|---|---|
+| `KM8__CONFIGPATH` | Use this file as the config file instead of the default layout (`$XDG_CONFIG_HOME/km8/config.yaml` etc.). Theme file path is NOT affected — it still lives under the OS config directory. Absolute path recommended; relative path resolves against CWD at load/save time. | `KM8__CONFIGPATH` > default layout |
+| `KM8__SHELL` | Use this binary as the KM8erm shell. Bare names are looked up on `$PATH` at popup-open time (Go `exec.Command` semantics); absolute paths run verbatim. Leading / trailing whitespace is trimmed. | `KM8__SHELL` > `km8erm_shell` config > `$SHELL` > `/bin/sh` |
+| `KM8__LOGIN_SHELL` | Force the KM8erm shell into login mode (`-l`) or out of it. Truthy values: `true` / `1` / `yes` (and uppercase). Any other value disables login mode. Use when launched from a non-login parent and your PATH is set in `.zprofile`. | `KM8__LOGIN_SHELL` > `km8erm_login_shell` config > `false` |
+
+Example:
+
+```sh
+# Try fish in KM8erm without editing config.yaml
+KM8__SHELL=/opt/homebrew/bin/fish km8
+
+# Point km8 at a per-project config (e.g. checked into the repo)
+KM8__CONFIGPATH="$PWD/.km8.yaml" km8
 ```
 
 ### theme.yaml
@@ -399,6 +439,7 @@ status:
 - **kubectl** on `$PATH` (for edit, delete, and shell exec)
 - A valid **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`)
 - A running Kubernetes cluster
+- **A Nerd Font Mono variant** for the terminal (e.g. JetBrains Mono Nerd Font Mono, FiraCode Nerd Font Mono). km8's popup titles + row markers use Nerd Font glyphs from the Material Design icon range; the Mono variants are designed to render every glyph at exactly 1 cell, so column / border alignment is stable. The proportional (non-Mono) variants and terminals running East-Asian-Ambiguous=double (some tmux + iTerm2 CJK setups) can paint these glyphs at 2 cells — km8 still works, but helm-managed rows + popup top borders may sit 1 cell off-grid. Switch to the Mono variant or set ambiguous-width=single if you see drift.
 
 ## License
 

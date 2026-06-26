@@ -536,8 +536,10 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 	hint := " j/k: move  Space: close "
 
 	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.
-	// Row shape: " ▶ [K]rest   hint " — vim-help style hotkey bracketing,
-	// no separate color since the [] already marks the key.
+	// Row shape: "   [K]rest   hint " — constant 2-space gutter, no leading
+	// arrow; cursor row uses reverse-highlight alone (matches listpicker
+	// + helmdocmenu after their unification). Hotkey gets vim-help-style
+	// bracketing; no separate color since [] already marks the key.
 	maxInnerW := 60
 	if m.screenW > 0 {
 		maxInnerW = m.screenW * 85 / 100
