@@ -431,10 +431,19 @@ func (m YamlPopupModel) renderFullPopup() string {
 	if m.item.Namespace != "" {
 		title += " (" + m.item.Namespace + ")"
 	}
+	truncated := false
 	if lipgloss.Width(title) > innerW-1 {
-		title = ansiTruncate(title, innerW-1)
+		// Reserve 1 cell for "…" — mirrors the comparepopup fix so
+		// narrow-terminal title cuts read as cut, not as a literal
+		// trailing fragment.
+		title = ansiTruncate(title, innerW-2)
+		truncated = true
 	}
-	dashesAfter := innerW - 1 - lipgloss.Width(title)
+	titleVisualW := lipgloss.Width(title)
+	if truncated {
+		titleVisualW++ // the "…" we'll append
+	}
+	dashesAfter := innerW - 1 - titleVisualW
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -442,6 +451,12 @@ func (m YamlPopupModel) renderFullPopup() string {
 	var b strings.Builder
 	b.WriteString(bStyle.Render("╭─"))
 	b.WriteString(tStyle.Render(title))
+	if truncated {
+		// Append "…" via a separate Render call so the ellipsis carries
+		// titleStyle — ansiTruncate's trailing \x1b[0m otherwise drops
+		// it to the default fg color.
+		b.WriteString(tStyle.Render("…"))
+	}
 	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter) + "╮"))
 	b.WriteString("\n")
 

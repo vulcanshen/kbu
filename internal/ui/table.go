@@ -473,13 +473,17 @@ func (m TableModel) View() string {
 			style = m.theme.TableUnfocusedSelectedRowStyle()
 			onLightBg = true
 		case isLocked:
-			// Compare-mode lock background — same #9DDAEA cyan as the
-			// status-bar marker so the two signals visually connect.
-			// Stays full color even when the table is unfocused
-			// because compare is an intentional user state.
+			// Compare-mode lock background — Mocha lavender, the
+			// established "in-panel user-set state" color (pinned,
+			// unfocused-selected, ON toggle). Bold matches the cursor
+			// row styles so locking doesn't visually demote a row from
+			// "highlighted" to "highlighted but thinner". exitCompareOnLeave
+			// drops the lock the instant focus leaves panel 2, so the
+			// unfocused-cursor / lock both-lavender clash can't arise.
 			style = lipgloss.NewStyle().
-				Background(lipgloss.Color("#9DDAEA")).
-				Foreground(lipgloss.Color("#1e1e2e"))
+				Background(lipgloss.Color("#b4befe")).
+				Foreground(lipgloss.Color("#1e1e2e")).
+				Bold(true)
 			onLightBg = true
 		case !m.focused:
 			// Unfocused → flatten alternating-row striping into a
