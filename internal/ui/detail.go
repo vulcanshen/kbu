@@ -629,17 +629,23 @@ func (m DetailModel) ScrollInfo() *ScrollInfo {
 // (RowSelectedMsg) calls ResetDrillStack() explicitly before dispatch;
 // namespace/context switches go through ClearDetail() which resets too.
 func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventItem) {
-	// Different underlying resource → reset per-tab cursors so the
-	// auto-land logic in buildContentLines re-fires for the new item.
-	// Same UID (polling refresh of the same release / pod / ...) keeps
-	// the cursor where the user put it.
-	if m.detail.UID != detail.UID {
+	// Different underlying resource → reset per-tab cursors AND scroll so
+	// the auto-land logic in buildContentLines re-fires for the new item
+	// and the viewport starts at the top of the new content. Same UID
+	// (watcher polling refresh of the same release / pod / ...) preserves
+	// BOTH cursor and scroll position — without the scroll guard, Logs
+	// viewing at tail / Relatives mid-list / Events scrolled-down would
+	// snap back to top every watcher tick (most visible on Logs of an
+	// idle pod, where no incoming line arrives to push scroll back down
+	// after the reset).
+	sameItem := m.detail.UID != "" && m.detail.UID == detail.UID
+	if !sameItem {
 		m.historyCursor = -1
+		m.scrollOffset = 0
 	}
 	m.detail = detail
 	m.events = events
 	m.hasData = true
-	m.scrollOffset = 0
 	m.refetching = false // fresh data arrived — stop the spinner
 	m.buildContentLines()
 }
@@ -708,17 +714,19 @@ func (m *DetailModel) ResetDrillStack() {
 }
 
 // TabTitle returns the tab bar string for embedding in the panel border.
-// Active tab is bracketed; the active Logs tab's label is rendered in green
-// when auto-follow is engaged (replaces the earlier ▼ marker); Relatives
-// gets a chain-level suffix when drilled. Embed in Panel 3's border title —
+// Active tab is bracketed; the active Logs tab carries an inline live (▶) /
+// paused (⏸) glyph suffix to surface the follow-tail state. Relatives gets
+// a chain-level suffix when drilled. Embed in Panel 3's border title —
 // Panel 2 stays clean with just its breadcrumb.
 //
-// Each piece is rendered with its own complete style (border-color for
-// separators/inactive, border-color+bold for active brackets, green for the
-// Logs label). The outer caller's title style would otherwise reset to
-// terminal default after the green's ANSI reset and lose the border color
-// for everything after [Logs] — pre-styling every piece keeps the colors
-// stable across that boundary.
+// The follow-tail marker is intentionally a glyph, not a color: km8's color
+// vocabulary is reserved for "this row / cell needs your attention"
+// (abnormal status, cursor, lock). Painting the Logs label green to mean
+// "follow on" would have overloaded color with a fourth meaning ("a state
+// flag is set"), so v1.7.x+ uses the Nerd Font MDI glyphs U+F0753 / U+F0754
+// for live / paused — no color, just an inline icon. Falls back gracefully
+// in non-NF terminals to a tofu box, which still signals "something is here"
+// without misreading as a different color category.
 func (m DetailModel) TabTitle() string {
 	borderHex := m.theme.Detail.BorderColor
 	if m.focused {
@@ -731,14 +739,12 @@ func (m DetailModel) TabTitle() string {
 	for i, tab := range m.tabs {
 		label := m.tabLabel(tab)
 		if DetailTab(i) == m.activeTab {
-			if tab == "Logs" && m.followTail {
-				// Brackets keep the active tab styling (border-color +
-				// bold); only the inner label switches to green.
-				greenLabel := lipgloss.NewStyle().
-					Foreground(lipgloss.Color(m.theme.Status.Running)).
-					Bold(true).
-					Render(label)
-				parts = append(parts, tStyle.Render("[")+greenLabel+tStyle.Render("]"))
+			if tab == "Logs" {
+				marker := logsPausedGlyph
+				if m.followTail {
+					marker = logsLiveGlyph
+				}
+				parts = append(parts, tStyle.Render("["+label+" "+marker+"]"))
 			} else {
 				parts = append(parts, tStyle.Render("["+label+"]"))
 			}
@@ -748,6 +754,15 @@ func (m DetailModel) TabTitle() string {
 	}
 	return strings.Join(parts, bStyle.Render("─"))
 }
+
+// Nerd Font Material Design Icons: play (live) + pause (paused). Picked
+// over the older ▼ marker because the play/pause pair conveys both states
+// instead of just "follow on"; picked over a color-only signal because
+// color is reserved for attention-grabbing semantics (see TabTitle doc).
+const (
+	logsLiveGlyph   = "\U000F0753"
+	logsPausedGlyph = "\U000F0754"
+)
 
 // ActiveTabTitle is kept as a thin wrapper for callers that still expect
 // the single-tab-name format. v1.5.1 moved the full tab bar to Panel 3,

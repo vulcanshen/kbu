@@ -88,6 +88,36 @@ func TestDetailModel_SetDetail(t *testing.T) {
 	}
 }
 
+// TestDetailModel_SetDetail_PreservesScrollOnSameUID pins the watcher-tick
+// scroll-reset bug fix: SetDetail must keep the user's scroll position
+// when the same row is being refreshed (UID match). Without the guard,
+// the watcher's ~3s polling tick would snap Logs back to top every cycle
+// — most visible on an idle pod where no incoming line arrives to push
+// scroll back down, but the same regression silently affected Relatives,
+// Events, History scrolling too.
+func TestDetailModel_SetDetail_PreservesScrollOnSameUID(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	d := sampleDetail()
+	d.UID = "uid-A"
+	m.SetDetail(d, nil)
+	m.scrollOffset = 5 // user scrolled down
+
+	// Polling refresh: same UID, fresher data
+	m.SetDetail(d, nil)
+	if m.scrollOffset != 5 {
+		t.Errorf("same-UID SetDetail must preserve scrollOffset; want 5, got %d", m.scrollOffset)
+	}
+
+	// Row change: different UID resets scroll
+	d2 := sampleDetail()
+	d2.UID = "uid-B"
+	m.SetDetail(d2, nil)
+	if m.scrollOffset != 0 {
+		t.Errorf("different-UID SetDetail must reset scrollOffset to 0; got %d", m.scrollOffset)
+	}
+}
+
 func TestDetailModel_SwitchTab(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods) // 4 tabs: Logs, Relatives, Events, Conditions
@@ -1266,11 +1296,13 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 	}
 }
 
-func TestDetailModel_TabTitle_LogsFollowNoArrowMarker(t *testing.T) {
-	// v1.5.x+: active Logs tab with auto-follow uses green color (rendered
-	// in production terminal) instead of the old ▼ marker. ANSI color
-	// emission is profile-dependent and stripped in tests, so we only
-	// assert the ▼ marker is gone — visual green verification is manual.
+// TestDetailModel_TabTitle_LogsFollowGlyph pins the v1.7.x+ live/paused
+// glyph contract: active Logs tab carries U+F0753 (mdi-play, live) when
+// followTail is true and U+F0754 (mdi-pause, paused) when scrolled up.
+// Color was used as the indicator in v1.5–v1.7.2 but conflicted with the
+// "color = signal" mindset (color reserved for abnormal status / cursor
+// / lock), so the live/paused state is now a Nerd Font glyph instead.
+func TestDetailModel_TabTitle_LogsFollowGlyph(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
 	m.SetDetail(sampleDetail(), nil)
@@ -1279,14 +1311,15 @@ func TestDetailModel_TabTitle_LogsFollowNoArrowMarker(t *testing.T) {
 	if !m.FollowTail() {
 		t.Fatal("setup: expected followTail=true initially after switching to Logs")
 	}
-	if strings.Contains(m.TabTitle(), "▼") {
-		t.Errorf("TabTitle must not carry ▼ marker any more, got %q", m.TabTitle())
+	if !strings.Contains(m.TabTitle(), logsLiveGlyph) {
+		t.Errorf("followTail=true: TabTitle must carry the live glyph (%q), got %q",
+			logsLiveGlyph, m.TabTitle())
 	}
-	if strings.Contains(m.ActiveTabTitle(), "▼") {
-		t.Errorf("ActiveTabTitle must not carry ▼ marker any more, got %q", m.ActiveTabTitle())
+	if strings.Contains(m.TabTitle(), logsPausedGlyph) {
+		t.Errorf("followTail=true: TabTitle must NOT carry the paused glyph, got %q", m.TabTitle())
 	}
 
-	// Pause via scroll up.
+	// Pause via scroll up — glyph flips to paused.
 	for i := 0; i < 50; i++ {
 		m.AppendLogLine("", "nginx", fmt.Sprintf("line %d", i))
 	}
@@ -1294,8 +1327,27 @@ func TestDetailModel_TabTitle_LogsFollowNoArrowMarker(t *testing.T) {
 	if m.FollowTail() {
 		t.Fatal("expected followTail=false after k scroll")
 	}
-	if strings.Contains(m.TabTitle(), "▼") {
-		t.Errorf("TabTitle must not carry ▼ marker when paused either, got %q", m.TabTitle())
+	if !strings.Contains(m.TabTitle(), logsPausedGlyph) {
+		t.Errorf("followTail=false: TabTitle must carry the paused glyph (%q), got %q",
+			logsPausedGlyph, m.TabTitle())
+	}
+	if strings.Contains(m.TabTitle(), logsLiveGlyph) {
+		t.Errorf("followTail=false: TabTitle must NOT carry the live glyph, got %q", m.TabTitle())
+	}
+}
+
+// TestDetailModel_TabTitle_NonLogsTabNoGlyph guards against the glyph
+// leaking onto inactive tabs or other tabs' active state — the marker
+// only makes sense on the active Logs tab.
+func TestDetailModel_TabTitle_NonLogsTabNoGlyph(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(1) // Relatives
+
+	title := m.TabTitle()
+	if strings.Contains(title, logsLiveGlyph) || strings.Contains(title, logsPausedGlyph) {
+		t.Errorf("non-Logs active tab must NOT carry the follow-tail glyph, got %q", title)
 	}
 }
 
