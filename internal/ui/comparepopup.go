@@ -77,10 +77,12 @@ type CompareYamlPopupModel struct {
 	contentLines []string
 	scrollOffset int
 
-	// menuOpen + menuCursor drive the in-popup Space menu. Two items
-	// (toggle, close), no submenu nesting.
-	menuOpen   bool
-	menuCursor int
+	// menuAnimator + menuCursor drive the in-popup Space menu. Two items
+	// (toggle, close), no submenu nesting. menuAnimator owns the
+	// open/close animation so the menu lifecycle matches the rest of the
+	// popup stack (Line → Expand on open, Compress → Line on close).
+	menuAnimator PopupAnimator
+	menuCursor   int
 
 	width    int
 	height   int
@@ -108,9 +110,10 @@ type CompareYamlPopupModel struct {
 // before Open if the user's config carries a different preference.
 func NewCompareYamlPopupModel(t *theme.Theme) CompareYamlPopupModel {
 	return CompareYamlPopupModel{
-		theme:    t,
-		animator: NewPopupAnimator("comparepopup", lipgloss.Color(theme.Periwinkle)),
-		layout:   CompareLayoutUnified,
+		theme:        t,
+		animator:     NewPopupAnimator("comparepopup", lipgloss.Color(theme.Periwinkle)),
+		menuAnimator: NewPopupAnimator("comparepopup_menu", lipgloss.Color(theme.Periwinkle)),
+		layout:       CompareLayoutUnified,
 	}
 }
 
@@ -138,7 +141,8 @@ func (m *CompareYamlPopupModel) Open(left, right, leftLabel, rightLabel string) 
 	m.leftLabel = leftLabel
 	m.rightLabel = rightLabel
 	m.scrollOffset = 0
-	m.menuOpen = false
+	m.menuAnimator.State = PopupClosed
+	m.menuAnimator.Frame = 0
 	m.menuCursor = 0
 	m.pendingG = false
 	m.rebuildContent()
@@ -150,13 +154,16 @@ func (m CompareYamlPopupModel) IsActive() bool        { return m.animator.IsActi
 func (m CompareYamlPopupModel) IsInteractive() bool   { return m.animator.IsInteractive() }
 func (m CompareYamlPopupModel) ScrollOffset() int     { return m.scrollOffset }
 func (m CompareYamlPopupModel) Layout() CompareLayout { return m.layout }
-func (m CompareYamlPopupModel) MenuOpen() bool        { return m.menuOpen }
+func (m CompareYamlPopupModel) MenuOpen() bool        { return m.menuAnimator.IsActive() }
 
 func (m *CompareYamlPopupModel) HandleTick(msg AnimTickMsg) tea.Cmd {
-	if msg.Target != m.animator.Target {
-		return nil
+	if msg.Target == m.animator.Target {
+		return m.animator.Tick()
 	}
-	return m.animator.Tick()
+	if msg.Target == m.menuAnimator.Target {
+		return m.menuAnimator.Tick()
+	}
+	return nil
 }
 
 func (m *CompareYamlPopupModel) SetSize(w, h int) {
@@ -178,7 +185,10 @@ func (m CompareYamlPopupModel) Update(msg tea.Msg) (CompareYamlPopupModel, tea.C
 	if !ok {
 		return m, nil
 	}
-	if m.menuOpen {
+	if m.menuAnimator.IsActive() {
+		if !m.menuAnimator.IsInteractive() {
+			return m, nil
+		}
 		return m.handleMenuKey(keyMsg)
 	}
 	return m.handlePopupKey(keyMsg)
@@ -190,10 +200,9 @@ func (m CompareYamlPopupModel) handlePopupKey(keyMsg tea.KeyMsg) (CompareYamlPop
 		m.pendingG = false
 		return m, m.animator.Close()
 	case " ":
-		m.menuOpen = true
 		m.menuCursor = 0
 		m.pendingG = false
-		return m, nil
+		return m, m.menuAnimator.Open()
 	case "j", "down":
 		if m.scrollOffset < m.maxScrollOffset() {
 			m.scrollOffset++
@@ -260,8 +269,7 @@ func (m CompareYamlPopupModel) handleMenuKey(keyMsg tea.KeyMsg) (CompareYamlPopu
 	case "esc", " ":
 		// Space / Esc close the menu but leave the popup open — gives
 		// the user an "oops" path back without restarting the compare.
-		m.menuOpen = false
-		return m, nil
+		return m, m.menuAnimator.Close()
 	case "j", "down":
 		if m.menuCursor < len(items)-1 {
 			m.menuCursor++
@@ -285,11 +293,9 @@ func (m CompareYamlPopupModel) handleMenuKey(keyMsg tea.KeyMsg) (CompareYamlPopu
 			}
 			m.scrollOffset = 0
 			m.rebuildContent()
-			m.menuOpen = false
-			return m, nil
+			return m, m.menuAnimator.Close()
 		case 1:
-			m.menuOpen = false
-			return m, m.animator.Close()
+			return m, tea.Batch(m.menuAnimator.Close(), m.animator.Close())
 		}
 	}
 	return m, nil
@@ -795,7 +801,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	parts = append(parts, bodyRows...)
 	parts = append(parts, bot)
 	frame := strings.Join(parts, "\n")
-	if m.menuOpen {
+	if m.menuAnimator.IsActive() {
 		frame = m.overlayMenu(frame)
 	}
 	return frame
@@ -887,5 +893,10 @@ func (m CompareYamlPopupModel) overlayMenu(frame string) string {
 	// earlier attempt — it broke up the border across the popup because
 	// per-line width measurement on multi-line bordered content gets
 	// confused by ANSI styling.
-	return overlay.Composite(menuBlock, frame, overlay.Center, overlay.Center, 0, 0)
+	//
+	// Wrap menuBlock with the menu animator's RenderFrame so the
+	// in-popup menu shares the Line → Expand / Compress → Line lifecycle
+	// every other km8 popup uses. During PopupClosed the animator emits
+	// "", and Composite then no-ops cleanly.
+	return overlay.Composite(m.menuAnimator.RenderFrame(menuBlock), frame, overlay.Center, overlay.Center, 0, 0)
 }
