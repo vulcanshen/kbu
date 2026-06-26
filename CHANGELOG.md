@@ -4,6 +4,109 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.2] - 2026-06-26
+
+Feature pass on top of v1.7.1. Three real additions — **Compare
+diff alignment rewrite**, **aggregate logs widened to all 5
+workload kinds**, and **shell / config env-var overrides** — plus
+README repositioning around the Zero Learning Curve + Tab/Space/
+Enter/Esc + Compose-don't-Replace mindset, and a sidebar dead-state
+fix. The Compare tab gets a noticeable upgrade: near-twin ConfigMaps
+now line up vs each other instead of splintering into character
+fragments.
+
+### Added
+
+- **Compare diff: line-LCS alignment.** Compare's split-view used to
+  run a byte-level edit list against the two YAMLs, which on
+  near-twin inputs (two ConfigMaps with the same keys but a few
+  different values) splintered changed lines into `+ CC`, `+ f`,
+  `+ r`, ... character fragments — visually unreadable. Replaced
+  with a line-LCS alignment pass: changed lines surface as
+  full-line-left vs full-line-right, context lines pair line-by-
+  line, pure insertions/deletions render in their own column.
+  Blank-line inserts no longer get swallowed by the context branch
+  (previously fell through because the disambiguator used
+  `left/right == ""` predicates — replaced with an explicit
+  `splitPairKind` enum: Context / Changed / Insert / Delete).
+- **Compare diff: OOM cap.** Both split and unified diff paths cap
+  per-side input at 2000 lines before allocating the DP table.
+  Above the cap, the renderer surfaces a truncation banner row so
+  the user knows the diff was clipped — at the cap, the DP table is
+  ~4M ints, which is the largest size that's comfortable on a
+  laptop without risking a TUI OOM on a Deployment with a giant
+  last-applied-configuration annotation.
+- **Aggregate log streaming widened to all 5 workload kinds.**
+  Previously Deployment-only; now StatefulSet, DaemonSet, Job, and
+  CronJob also stream their managed pods' logs into the Logs tab.
+  Owner-ref walk via `k8s.PodsForWorkload` handles the kind
+  uniformly. Per-pod color tag carries through so multi-replica
+  workloads stay readable.
+- **Env-var config overrides.**
+  - `$KM8__CONFIGPATH` — point km8 at a config file outside
+    `~/.config/km8/config.yaml`. Useful for split per-cluster configs
+    or running a custom config without touching the default.
+  - `$KM8__SHELL` — override KM8erm's shell (skip the default
+    detection, strip the `-l` login flag so the prompt stays clean).
+  - `$KM8__LOGIN_SHELL` — opt back into login mode (`true` /
+    `1` / `yes`); default is non-login for a faster, quieter prompt.
+- **`km8erm_shell` + `km8erm_login_shell` config keys.** Persistent
+  equivalents of the env vars above. Empty string = fall through to
+  platform default (`$SHELL` → `/bin/zsh` → `/bin/bash`).
+- **`docs/demo-compare.gif`.** Walks Space + Enter + Space + Enter
+  to lock two ConfigMaps and toggles between unified and split.
+
+### Changed
+
+- **README repositioned around Zero Learning Curve + Tab/Space/
+  Enter/Esc + Compose-don't-Replace.** Tagline rewrites to
+  "Single-pane Kubernetes workspace — Tab/Space/Enter/Esc drive
+  everything". New hero quote: 「遇事不決，就按 Space」/ "When in
+  doubt, hit Space". Features list leads with ZLC and Compose
+  (KM8erm runs other TUIs — k9s, btop, lazygit — not a replacement
+  pitch). Env-var section added in both EN and 繁中 READMEs. Pinned
+  drag glyph swapped from `⇅` to `󰩐` (U+F0A50). KM8erm border +
+  edit/exec pty colors documented as lavender + periwinkle (matches
+  v1.7.1 color mindset). Panel expand hotkey corrected from `=`/
+  `-` to `z`. Toast info color corrected from sky-blue to
+  periwinkle. Stale "Colored Pod status" bullet removed (was
+  dropped in v1.7.1). NF Mono variant recommendation added to
+  Requirements.
+- **Helm + Keybindings popup icons → NF Material Design glyphs.**
+  Helm: `󰠳` → `󰠳` (U+F0833, helm wheel). Keybindings:
+  retired the cap+key composite for `󰘢` (U+F0633, keyboard
+  shortcuts). Both popups now match the cross-popup icon pattern
+  (system-relevant glyph in the title chip).
+- **Compare overlay menu title: `Diff` + family icon.** Compare's
+  toggle popup used to render without a title; now shows `󰢫 Diff`
+  (U+F08AB) so the popup's purpose reads at a glance, matching
+  every other popup family.
+- **Helm popup polish.** Cursor `▶` arrow dropped (the row chip
+  alone signals selection), icon synced to the Material Design
+  glyph, highlight overflow contained so long release names don't
+  bleed past the popup edge.
+- **Demo gifs re-recorded.** All 5 prior demos (basics, relatives,
+  helm, yaml-edit, km8erm) re-recorded for v1.7.1's visual changes,
+  plus the new compare gif. Tape recording got a Sleep + Wait +
+  Sleep pacing pattern so panel-1 actions that trigger panel-2
+  reload wait on the actual content marker, not the border-title
+  flicker.
+
+### Fixed
+
+- **Sidebar dead state when filter empties all visible items.**
+  Pressing `/` and typing a filter string that matched nothing
+  used to leave the sidebar in a stuck state — cursor pointed at
+  no row, no `Esc` or backspace path. Now `/` and `Esc` both
+  remain as escape hatches when the visible-items list is empty;
+  the stale `gg` pending state also clears so a follow-up `gg`
+  doesn't mis-fire after the filter is dismissed.
+- **Internal log-stream + aggregate-retry hardening.** Multi-round
+  sweep of log streamer lifecycle, stale-message handling on
+  rapid row changes, and aggregate-logs retry throttling across
+  navigation. No user-facing behavior change vs v1.7.1; if you
+  weren't hitting these edges, you won't notice anything.
+
 ## [v1.7.1] - 2026-06-25
 
 Polish pass on top of v1.7.0 — no new features, just a sweep of
