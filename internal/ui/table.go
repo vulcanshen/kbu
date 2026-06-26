@@ -439,7 +439,7 @@ func (m TableModel) View() string {
 	if !m.focused {
 		headerStyle = m.theme.TableDimRowStyle().Bold(true)
 	}
-	header := m.renderRow(colWidths, m.columnTitles(), headerStyle)
+	header := m.renderRow(colWidths, m.columnTitles(), headerStyle, false)
 	b.WriteString(header)
 	b.WriteString("\n")
 
@@ -458,13 +458,20 @@ func (m TableModel) View() string {
 	for i := m.scrollOffset; i < end; i++ {
 		var style lipgloss.Style
 		isLocked := i == m.lockedRow
+		// onLightBg flags rows whose base style sets a light Background
+		// so stylizeCell can pick the darker Latte status variant — the
+		// pastel Mocha colors wash out on the selected / locked row's
+		// reverse-video bg.
+		onLightBg := false
 		switch {
 		case i == m.cursor && m.focused:
 			style = m.theme.TableSelectedRowStyle()
+			onLightBg = true
 		case i == m.cursor:
 			// Lavender chip — single strong "remembered position"
 			// marker against the dimmed surrounding rows.
 			style = m.theme.TableUnfocusedSelectedRowStyle()
+			onLightBg = true
 		case isLocked:
 			// Compare-mode lock background — same #9DDAEA cyan as the
 			// status-bar marker so the two signals visually connect.
@@ -473,6 +480,7 @@ func (m TableModel) View() string {
 			style = lipgloss.NewStyle().
 				Background(lipgloss.Color("#9DDAEA")).
 				Foreground(lipgloss.Color("#1e1e2e"))
+			onLightBg = true
 		case !m.focused:
 			// Unfocused → flatten alternating-row striping into a
 			// single dim color so the cursor chip is the only
@@ -483,7 +491,7 @@ func (m TableModel) View() string {
 		default:
 			style = m.theme.TableRowStyle()
 		}
-		row := m.renderRow(colWidths, m.rows[i], style)
+		row := m.renderRow(colWidths, m.rows[i], style, onLightBg)
 		// Cursor sitting on top of the locked row keeps the reverse-
 		// video cursor style — the user's cursor position is the more
 		// transient signal (changes every j/k), the lock is fixed and
@@ -596,20 +604,20 @@ func (m TableModel) calcColumnWidths() []int {
 	return widths
 }
 
-func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.Style) string {
+func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.Style, onLightBg bool) string {
 	// Apply the row style to each cell + separator + trailing padding
-	// rather than wrapping the whole line. Per-cell ANSI dispatch was
-	// originally there so the Pod-Status reset (\x1b[0m, emitted after
-	// the colored STATUS span) wouldn't kill the row style for the rest
-	// of the row. Status-column coloring was removed in v1.7.x for
-	// cross-kind consistency; per-cell wrapping stays in case a future
-	// per-column highlight returns.
+	// rather than wrapping the whole line. Per-cell ANSI prevents the
+	// stylizeCell reset (\x1b[0m, emitted after a colored status span)
+	// from killing the row style for the rest of the row — which is
+	// why earlier-version selected-row highlights died at the STATUS
+	// column and left subsequent cells uncolored.
 	var parts []string
 	for i, w := range colWidths {
 		val := ""
 		if i < len(values) {
 			val = values[i]
 		}
+		raw := val // pre-truncation; stylizeCell uses this for color lookup
 		// Visual-width-aware truncation. The old code used byte-based
 		// len(val) and val[:w-1], which sliced UTF-8 mid-codepoint for any
 		// multi-byte content — e.g. the Nerd Font helm glyph "" is
@@ -630,7 +638,7 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		} else {
 			val = val + strings.Repeat(" ", w-vw)
 		}
-		val = style.Render(val)
+		val = m.stylizeCell(i, val, raw, style, onLightBg)
 		parts = append(parts, val)
 	}
 
@@ -800,4 +808,137 @@ func (m TableModel) visibleRows() int {
 		return 0
 	}
 	return v
+}
+
+// stylizeCell overlays the abnormal-status color on a padded cell value
+// when the cell belongs to a known status-bearing column (Status / Type /
+// Ready) and `raw` is recognised as abnormal (yellow / red). Returns
+// base.Render(padded) otherwise — healthy states stay at the row's base
+// foreground so the color carries signal, not decoration.
+//
+// `raw` is the pre-truncation cell value so a narrow Status column that
+// shortens "CrashLoopBackOff" to "CrashL…" still gets colored — the lookup
+// keys off the full string, the visible (possibly truncated) span receives
+// the ANSI wrap.
+//
+// The color is overlaid only on the trimmed (visible) span; trailing pad
+// spaces stay rendered with the base style so a selected / locked row's
+// background fills cleanly to the column edge without colored-space bleed.
+func (m TableModel) stylizeCell(colIdx int, padded, raw string, base lipgloss.Style, onLightBg bool) string {
+	if colIdx >= len(m.columns) {
+		return base.Render(padded)
+	}
+	color := statusCellColor(m.resourceType, m.columns[colIdx].Title, raw, m.theme, onLightBg)
+	if color == "" {
+		return base.Render(padded)
+	}
+	trimmed := strings.TrimSpace(padded)
+	if trimmed == "" {
+		return base.Render(padded)
+	}
+	idx := strings.Index(padded, trimmed)
+	if idx < 0 {
+		return base.Render(padded)
+	}
+	statusStyle := base.Foreground(lipgloss.Color(color))
+	out := ""
+	if idx > 0 {
+		out += base.Render(padded[:idx])
+	}
+	out += statusStyle.Render(trimmed)
+	if tail := padded[idx+len(trimmed):]; tail != "" {
+		out += base.Render(tail)
+	}
+	return out
+}
+
+// statusCellColor returns the abnormal-state color for cell `raw` at column
+// `colTitle` of a row from resource `rt`, or "" for healthy / unknown
+// values. Only Status (every kind that has one) and Events.Type are in
+// scope — Ready / replicas count columns stay uncolored because their
+// "X/Y" transient mismatch during routine rollouts isn't signal worth
+// painting (Status surfaces the same condition when it's actually wrong).
+//
+// The convention is "color is signal" — only yellow (transitional or
+// degraded) and red (failure) states emit color; healthy + unknown fall
+// through to the row's base foreground so the eye is drawn ONLY to rows
+// that need attention. Pending=yellow with no time threshold (a brief
+// healthy Pending still flashes yellow, which is fine — the steady
+// state is healthy and quiet).
+//
+// onLightBg=true swaps the Mocha pastel for its Latte (darker) variant —
+// the cursor / locked row's reverse-video bg washes out pastels.
+func statusCellColor(rt k8s.ResourceType, colTitle, raw string, t *theme.Theme, onLightBg bool) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var color string
+	switch colTitle {
+	case "Status":
+		color = statusValueColor(raw, t)
+	case "Type":
+		if rt == k8s.ResourceEvents && raw == "Warning" {
+			color = t.Status.Error
+		}
+	}
+	if color == "" {
+		return ""
+	}
+	if onLightBg {
+		return darkenStatusColor(color)
+	}
+	return color
+}
+
+// statusValueColor maps a Status-column value to a theme color, returning
+// "" for healthy and unrecognised values.
+//
+//   - Pending (yellow): transitional / degraded across kinds — Pod
+//     {Pending, ContainerCreating, PodInitializing, Init:PodInitializing,
+//     Terminating}, Namespace {Terminating}, Node {SchedulingDisabled},
+//     PV {Released}, Helm {pending-install, pending-upgrade,
+//     pending-rollback, uninstalling}.
+//   - Error (red): outright failure — Pod {CrashLoopBackOff, Error,
+//     ImagePullBackOff, ErrImagePull, CreateContainerConfigError,
+//     CreateContainerError, InvalidImageName, Evicted, OOMKilled,
+//     Failed, Init:*}, Node {NotReady}, PVC {Lost}, PV {Failed}, Helm
+//     {failed}.
+//   - "" (no color): Running, Succeeded, Completed, Ready, Active,
+//     Bound, Available, Deployed, Superseded, Unknown, and any
+//     unrecognised value.
+func statusValueColor(status string, t *theme.Theme) string {
+	switch status {
+	case "Pending", "ContainerCreating", "PodInitializing", "Init:PodInitializing",
+		"Terminating", "SchedulingDisabled", "Released",
+		"pending-install", "pending-upgrade", "pending-rollback", "uninstalling":
+		return t.Status.Pending
+	case "CrashLoopBackOff", "Error", "ImagePullBackOff", "ErrImagePull",
+		"CreateContainerConfigError", "CreateContainerError",
+		"InvalidImageName", "Evicted", "OOMKilled", "Failed",
+		"Lost", "NotReady",
+		"failed":
+		return t.Status.Error
+	}
+	if strings.HasPrefix(status, "Init:") {
+		return t.Status.Error
+	}
+	return ""
+}
+
+// darkenStatusColor swaps the default Mocha pastel status colors for
+// their Latte (darker) variants so cells stay legible on the cursor /
+// locked row's reverse-video light background. Custom themes that
+// override the default Status.{Pending,Error} hex codes pass through
+// unchanged — they keep their own color, which may wash out on the
+// selected row; that's accepted as a deliberate trade-off for keeping
+// the theme schema simple (one color per status, not two).
+func darkenStatusColor(mochaHex string) string {
+	switch mochaHex {
+	case "#f9e2af":
+		return "#df8e1d"
+	case "#f38ba8":
+		return "#d20f39"
+	}
+	return mochaHex
 }
