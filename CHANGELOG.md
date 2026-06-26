@@ -4,6 +4,135 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.3] - 2026-06-26
+
+Polish pass on top of v1.7.2. Three real additions — **row switch
+debounce**, **Logs as first tab for workload kinds**, and
+**abnormal-only status coloring** — plus a comprehensive color
+mindset cleanup, two visible bug fixes (popup shake on watcher
+tick / scroll snap-to-top on refresh), and the K-character icon
+re-chamfered.
+
+### Added
+
+- **Row switch debounce (300ms).** Mashing j/k through panel 2 used
+  to fire one detail fetch + one log-stream Start per row, even
+  for the 49 rows the cursor flew past. Each RowSelectedMsg now
+  bumps a `rowSeq` counter and schedules a tea.Tick for 300ms; only
+  the latest tick (matching seq) actually dispatches the fetch +
+  stream Start. The immediate dispatch still does the cheap state
+  mutations (Stop previous stream, lock `logsActive` against
+  ResourceDataMsg double-fire, clear the aggregate-retry throttle)
+  so the lie-as-lock invariant is preserved across the debounce
+  window. Constant `rowSwitchDebounce` matches the existing
+  `switchSeq` sidebar-debounce window for muscle-memory
+  consistency.
+- **Logs is the first tab on workload kinds.** Pods / Deployments /
+  StatefulSets / DaemonSets / Jobs / CronJobs reorder their panel-3
+  tabs from `[Relatives, Logs, Events]` to `[Logs, Relatives,
+  Events]`. Switching rows in panel 2 is most often a "what is this
+  thing doing right now" gesture — Relatives is a deliberate drill
+  action that warrants the extra tab-switch. Non-workload kinds
+  (ConfigMap / Service / Node / etc.) keep Relatives first; the
+  Relatives-tab Space-jump still lands on the same tab the user
+  came from.
+- **Status coloring (abnormal-only, yellow + red).** Restored for
+  Status column on every kind that has one (Pod, Node, Namespace,
+  PVC, PV, Helm Release) plus Events Type column. Pending /
+  Terminating / SchedulingDisabled / Released / pending-*
+  → yellow; Failed / Error / CrashLoopBackOff / ImagePullBackOff /
+  NotReady / Lost / Warning / Init:* → red. Healthy states
+  (Running / Bound / Active / Deployed / Normal / ...) stay at
+  the row's base foreground — "color is signal", not decoration.
+  Cursor / lock rows pick the darker Latte variant so pastel Mocha
+  doesn't wash out on the reverse-video bg.
+
+### Changed
+
+- **Color mindset — three accent colors, one role each:**
+  - **Blue** `#89b4fa` — structural (panel category headers,
+    popup-key hints, statusbar `[C]ontext` / `[N]amespace`).
+  - **Lavender** `#b4befe` — in-panel user-set state (pinned items,
+    Settings ON toggle, **compare anchor row + statusbar chip**,
+    unfocused-cursor chip).
+  - **Periwinkle** `#A4BAFC` — floating-overlay layer (every
+    popup's border + animator: hintpopup, breadcrumb, helmdocmenu,
+    panel2menu, listpicker, **comparepopup**).
+  
+  The pre-v1.7.3 compare cyan `#9DDAEA` was the only non-palette
+  accent in active use; it's gone from the codebase entirely.
+- **Compare popup title — `Compare` word removed.** Was `<icon>
+  Compare — left vs right (unified)`; now just `<icon> left vs
+  right`. The statusbar chip already says `<icon> Compare`, and the
+  layout (split vs unified) is visible from the diff content
+  itself.
+- **Statusbar compare chip — fixed-width "Compare" label.** Was
+  `<icon> <resource-name>`; now `<icon> Compare`. Resource names
+  are unbounded (some pod names easily exceed the available chip
+  width); the popup itself carries the names when the user engages.
+- **Follow-tail marker on the Logs tab — color → glyph.**
+  v1.5.x – v1.7.2 painted the active `Logs` label green when
+  auto-follow was on. Color is now reserved for "this row / cell
+  needs your attention" — the live / paused state moves to a Nerd
+  Font glyph (U+F0753 mdi-play / U+F0754 mdi-pause) inline in the
+  tab label. The glyph shows on the Logs tab regardless of active
+  state so the tab bar width stays constant across tab changes.
+- **Compare anchor row picks up Bold.** Switching the anchor color
+  to lavender visually demoted the row from "highlighted" to
+  "highlighted but thinner" without the Bold to match the cursor
+  styles — added back.
+- **K icon: arm corners chamfered.** `docs/icon.svg` re-cut so the
+  K's upper / lower arms get a 1-cell taper at the outer corner,
+  with a single interior pixel a row above / below. Synced to
+  `internal/ui/splash.go logoPixels` (the easter egg) and the
+  1280×640 GitHub social preview.
+
+### Fixed
+
+- **Panel 3 viewport snap-to-top on watcher refresh.** SetDetail
+  unconditionally reset `scrollOffset` to 0, which the watcher's
+  periodic ResourceDataMsg ticked into every few seconds — Logs
+  viewing at tail / Relatives scrolled mid-list / Events scrolled
+  down all silently snapped back to top on every refresh. Most
+  visible on Logs of an idle pod where no incoming line arrived
+  to push scroll back to bottom. Fixed via a same-UID guard:
+  different-UID SetDetail (= actual row change) still resets,
+  same-UID refresh preserves scroll position + `historyCursor`.
+- **Popup shake on watcher tick.** Centered popups (Compare /
+  YAML / AppLog / breadcrumb) appeared to "vibrate" by 1 cell on
+  each watcher refresh in narrow terminals. Two causes:
+  - The refetch spinner (` ⠋`, 2 cells) was appended to panel 3's
+    border title and toggled on / off with each fetch dispatch
+    and arrival, intermittently inflating panel 3's rendered
+    width by 2 cells. This propagated through the horizontal
+    join to `mainView`'s width, shifting `overlay.Composite`'s
+    Center calculation by 1 cell per render.
+  - Symmetrical bug in the tab bar: the Logs tab glyph was only
+    attached when Logs was the active tab, so switching to
+    Relatives / Events / Conditions contracted the tab bar by
+    2 cells and switching back expanded it — same shake
+    mechanism via tab bar instead of spinner.
+  Both fixed by removing the spinner outright and pinning the
+  Logs glyph always-on.
+- **Narrow-terminal popup title truncation gets `…`.** Both
+  comparepopup and yamlpopup truncated long titles by hard cut
+  without an ellipsis indicator — `... default/nginx vs demo/demo-
+  app-…-nwx78 (u─╮` read as a literal label fragment rather than
+  a cut. Now appends `…` in the title style so the cut is
+  obvious.
+
+### Removed
+
+- **Panel 3 refetch spinner.** The braille spinner that appeared in
+  the panel 3 border title during fetchResourceDetail dispatch is
+  gone (along with `BeginRefetch` / `SpinnerSuffix` /
+  `IsRefetching` / `advanceSpinner` / `detailSpinnerTickMsg` /
+  `detailSpinnerFrames`). The per-row detail refresh either
+  arrives or it doesn't — the user doesn't need a "loading"
+  affordance for it. Side benefit: panel 3's title reported width
+  no longer flickers on each fetch toggle, which is what fixes
+  the popup shake above.
+
 ## [v1.7.2] - 2026-06-26
 
 Feature pass on top of v1.7.1. Three real additions — **Compare
