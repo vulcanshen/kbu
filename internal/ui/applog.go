@@ -334,7 +334,8 @@ func (m AppLogModel) renderFullPopup() string {
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 
 	boxW := m.popupWidth()
-	contentH := m.popupHeight() - 2
+	// Body content area = total height - 2 borders - 2 padRows.
+	contentH := m.popupHeight() - 4
 	innerW := boxW - 2
 
 	var lines []string
@@ -372,15 +373,15 @@ func (m AppLogModel) renderFullPopup() string {
 	b.WriteString(bStyle.Render(strings.Repeat("─", dashes) + "╮"))
 	b.WriteString("\n")
 
-	leftBorder := bStyle.Render("│")
-	rightBorder := bStyle.Render("│")
-	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
-	bodyLines = append(bodyLines, "")
-	panelH := m.popupHeight()
-	for len(bodyLines) < panelH-2 {
-		bodyLines = append(bodyLines, "")
+	left := bStyle.Render("│")
+	right := bStyle.Render("│")
+	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
+	contentLines := strings.Split(body, "\n")
+	for len(contentLines) < contentH {
+		contentLines = append(contentLines, "")
 	}
-	for _, line := range bodyLines[:panelH-2] {
+	b.WriteString(padRow) // top padding row
+	for _, line := range contentLines[:contentH] {
 		lw := lipgloss.Width(line)
 		if lw > innerW {
 			line = ansiTruncate(line, innerW)
@@ -391,12 +392,13 @@ func (m AppLogModel) renderFullPopup() string {
 			pad = strings.Repeat(" ", innerW-lw)
 		}
 		if line == "" {
-			b.WriteString(leftBorder + strings.Repeat(" ", innerW) + rightBorder)
+			b.WriteString(left + strings.Repeat(" ", innerW) + right)
 		} else {
-			b.WriteString(leftBorder + line + pad + rightBorder)
+			b.WriteString(left + line + pad + right)
 		}
 		b.WriteString("\n")
 	}
+	b.WriteString(padRow) // bottom padding row
 	hint := " Space:close j/k u/d y:copy D:clear "
 	indicator := ""
 	if totalLines := len(allLines); totalLines > 0 {

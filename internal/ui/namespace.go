@@ -310,24 +310,26 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	var b strings.Builder
 	b.WriteString(bStyle.Render("╭─") + tStyle.Render(title) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
 
-	leftBorder := bStyle.Render("│")
-	rightBorder := bStyle.Render("│")
+	left := bStyle.Render("│")
+	right := bStyle.Render("│")
+	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
 
-	bodyLines := []string{""}
+	var contentLines []string
 	if m.searching || m.searchQuery != "" {
-		bodyLines = append(bodyLines, strings.Split(renderSearchBox(m.searchQuery, m.searching, innerW, m.theme), "\n")...)
+		contentLines = append(contentLines, strings.Split(renderSearchBox(m.searchQuery, m.searching, innerW, m.theme), "\n")...)
 	}
-	bodyLines = append(bodyLines, strings.Split(body, "\n")...)
-	bodyLines = append(bodyLines, "")
+	contentLines = append(contentLines, strings.Split(body, "\n")...)
 
-	for _, line := range bodyLines {
+	b.WriteString(padRow) // top padding row
+	for _, line := range contentLines {
 		lw := lipgloss.Width(line)
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
 		}
-		b.WriteString(leftBorder + line + pad + rightBorder + "\n")
+		b.WriteString(left + line + pad + right + "\n")
 	}
+	b.WriteString(padRow) // bottom padding row
 
 	hint := " Enter: select  /: search  Space: cancel "
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
