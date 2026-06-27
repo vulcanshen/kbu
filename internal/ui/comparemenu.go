@@ -133,7 +133,16 @@ func (m CompareMenuPopupModel) Render(frame string) string {
 	top := borderStyle.Render("╭"+strings.Repeat("─", leadDashCount)) +
 		titleStyle.Render(title) +
 		borderStyle.Render(strings.Repeat("─", trailDashCount)+"╮")
-	rows := []string{top}
+	// Top + bottom padding row matches the km8 popup convention —
+	// every other bordered popup (hintpopup, panel2menu, helmdocmenu,
+	// settingspopup, breadcrumb, listpicker) leaves one blank row of
+	// breathing space between the title border and the first content
+	// row, and another between the last content row and the hint
+	// border. See .claude/rules/popup-convention.md §6.
+	left := borderStyle.Render("│")
+	right := borderStyle.Render("│")
+	padRow := left + strings.Repeat(" ", innerW) + right
+	rows := []string{top, padRow}
 	for i, it := range m.items {
 		text := " " + it + strings.Repeat(" ", innerW-1-lipgloss.Width(it))
 		if i == m.cursor {
@@ -141,8 +150,9 @@ func (m CompareMenuPopupModel) Render(frame string) string {
 		} else {
 			text = rowStyle.Render(text)
 		}
-		rows = append(rows, borderStyle.Render("│")+text+borderStyle.Render("│"))
+		rows = append(rows, left+text+right)
 	}
+	rows = append(rows, padRow)
 	tail := innerW - hintW
 	if tail < 0 {
 		tail = 0
