@@ -171,18 +171,19 @@ func (m ConfirmModel) renderFullPopup() string {
 	var b strings.Builder
 	b.WriteString(bStyle.Render("╭─") + tStyle.Render(title) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
 
-	leftBorder := bStyle.Render("│")
-	rightBorder := bStyle.Render("│")
-	bodyLines := append([]string{""}, strings.Split(body, "\n")...)
-	bodyLines = append(bodyLines, "")
-	for _, line := range bodyLines {
+	left := bStyle.Render("│")
+	right := bStyle.Render("│")
+	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
+	b.WriteString(padRow) // top padding row
+	for _, line := range strings.Split(body, "\n") {
 		lw := lipgloss.Width(line)
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
 		}
-		b.WriteString(leftBorder + line + pad + rightBorder + "\n")
+		b.WriteString(left + line + pad + right + "\n")
 	}
+	b.WriteString(padRow) // bottom padding row
 
 	bottomDashes := innerW - len(hint) - 1
 	if bottomDashes < 0 {

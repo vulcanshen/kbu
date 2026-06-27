@@ -189,12 +189,10 @@ func (m HelpModel) renderFullPopup() string {
 	rightLines := joinColumnSections(rightSections, columnTarget(leftSections, rightSections))
 
 	gutter := strings.Repeat(" ", gutterW)
-	var bodyLines []string
-	bodyLines = append(bodyLines, "") // top breathing
+	var contentLines []string
 	for i := range leftLines {
-		bodyLines = append(bodyLines, padRight(leftLines[i], leftColW)+gutter+padRight(rightLines[i], rightColW))
+		contentLines = append(contentLines, padRight(leftLines[i], leftColW)+gutter+padRight(rightLines[i], rightColW))
 	}
-	bodyLines = append(bodyLines, "") // bottom breathing
 
 	title := " 󰘳 Keybindings"
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
@@ -208,9 +206,11 @@ func (m HelpModel) renderFullPopup() string {
 	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter) + "╮"))
 	b.WriteString("\n")
 
-	leftBorder := bStyle.Render("│")
-	rightBorder := bStyle.Render("│")
-	for _, line := range bodyLines {
+	left := bStyle.Render("│")
+	right := bStyle.Render("│")
+	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
+	b.WriteString(padRow) // top padding row
+	for _, line := range contentLines {
 		lw := lipgloss.Width(line)
 		// Safety net: clamp to innerW so a single overlong row never punches
 		// through the right border. wrapPlain breaks at word boundaries and
@@ -224,12 +224,13 @@ func (m HelpModel) renderFullPopup() string {
 			pad = strings.Repeat(" ", innerW-lw)
 		}
 		if line == "" {
-			b.WriteString(leftBorder + strings.Repeat(" ", innerW) + rightBorder)
+			b.WriteString(left + strings.Repeat(" ", innerW) + right)
 		} else {
-			b.WriteString(leftBorder + line + pad + rightBorder)
+			b.WriteString(left + line + pad + right)
 		}
 		b.WriteString("\n")
 	}
+	b.WriteString(padRow) // bottom padding row
 	hint := " Esc/?/Space:close j/k:scroll "
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
