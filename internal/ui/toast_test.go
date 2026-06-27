@@ -21,11 +21,12 @@ func TestToastModel_ShowActivates(t *testing.T) {
 	m := NewToastModel(theme.DefaultTheme())
 	cmd := m.Show("Copied!")
 	if cmd == nil {
-		t.Fatal("expected non-nil dismiss cmd")
+		t.Fatal("expected non-nil dismiss/open cmd batch")
 	}
 	if !m.IsActive() {
 		t.Error("expected toast active after Show")
 	}
+	m.animator.Finalize()
 	if !strings.Contains(m.RenderPopup(), "Copied!") {
 		t.Errorf("expected popup to contain message, got %q", m.RenderPopup())
 	}
@@ -34,17 +35,28 @@ func TestToastModel_ShowActivates(t *testing.T) {
 func TestToastModel_MatchingDismissDeactivates(t *testing.T) {
 	m := NewToastModel(theme.DefaultTheme())
 	m.Show("hi")
+	m.animator.Finalize()
 	m.Update(toastDismissMsg{id: m.id})
+	// Update kicks off the close animation; Finalize fast-forwards
+	// past it so the test can assert the post-animation steady state.
+	m.animator.Finalize()
 	if m.IsActive() {
-		t.Error("expected toast inactive after matching dismiss")
+		t.Error("expected toast inactive after matching dismiss + animation finalize")
 	}
 }
 
 func TestToastModel_ShowStickyHasNoDismissCmd(t *testing.T) {
 	m := NewToastModel(theme.DefaultTheme())
 	cmd := m.ShowSticky("drag mode hint")
-	if cmd != nil {
-		t.Errorf("sticky toast must NOT schedule an auto-dismiss cmd, got %T", cmd())
+	if cmd == nil {
+		t.Fatal("ShowSticky must still return the animator open cmd")
+	}
+	// Sticky toast must NOT batch a toastDismissMsg timer — the only
+	// msg the cmd can produce is AnimTickMsg from the open animation.
+	if msg := cmd(); msg == nil {
+		t.Fatal("open cmd must produce a msg")
+	} else if _, isDismiss := msg.(toastDismissMsg); isDismiss {
+		t.Errorf("sticky toast must NOT schedule an auto-dismiss cmd, got %T", msg)
 	}
 	if !m.IsActive() {
 		t.Error("sticky toast must be active immediately")
@@ -60,6 +72,7 @@ func TestToastModel_StickyOutlivesStaleTick(t *testing.T) {
 	m.Show("first")
 	staleID := m.id
 	m.ShowSticky("drag mode hint")
+	m.animator.Finalize()
 	m.Update(toastDismissMsg{id: staleID})
 	if !m.IsActive() {
 		t.Error("sticky toast must survive a stale dismiss msg from a prior toast")
@@ -69,12 +82,16 @@ func TestToastModel_StickyOutlivesStaleTick(t *testing.T) {
 func TestToastModel_DismissTakesStickyDown(t *testing.T) {
 	m := NewToastModel(theme.DefaultTheme())
 	m.ShowSticky("drag mode hint")
+	m.animator.Finalize()
 	m.Dismiss()
-	if m.IsActive() {
-		t.Error("Dismiss() must deactivate the toast")
-	}
+	// Sticky flag clears synchronously — visual state goes through
+	// the close animation; Finalize fast-forwards past it.
 	if m.IsSticky() {
 		t.Error("Dismiss() must clear the sticky flag")
+	}
+	m.animator.Finalize()
+	if m.IsActive() {
+		t.Error("Dismiss() must deactivate the toast (after animation completes)")
 	}
 }
 
@@ -102,6 +119,7 @@ func TestToastModel_StaleDismissIgnored(t *testing.T) {
 	m.Show("first")
 	staleID := m.id
 	m.Show("second") // bumps id; stale tick from "first" should now be ignored
+	m.animator.Finalize()
 	m.Update(toastDismissMsg{id: staleID})
 	if !m.IsActive() {
 		t.Error("expected toast still active after stale dismiss")

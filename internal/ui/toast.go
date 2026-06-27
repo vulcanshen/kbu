@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -27,11 +28,17 @@ const (
 	toastInfoDuration = 1 * time.Second
 	toastWarnDuration = 2 * time.Second
 
-	toastInfoGlyph = "󰵅 "
-	toastWarnGlyph = "󰀦 "
+	toastInfoGlyph = "󰵅"
+	toastWarnGlyph = "󰀦"
 
-	toastInfoColor = theme.Periwinkle // shared overlay accent (same as popups + pty edit)
-	toastWarnColor = "#fab387"        // Catppuccin Peach — caution, action blocked
+	toastInfoColor = theme.Periwinkle
+	toastWarnColor = "#fab387" // Catppuccin Peach — caution, action blocked
+
+	// toastTitleText is the fixed title text for every toast — the
+	// popup-convention rule requires `glyph + text` in border titles;
+	// the level glyph + a stable "km8" identifier tell the user "your
+	// app is talking" without leaking per-toast specifics into chrome.
+	toastTitleText = "km8"
 )
 
 // ToastModel renders a transient centered popup that auto-dismisses.
@@ -46,25 +53,31 @@ const (
 // non-sticky sits ABOVE popups (a freshly-fired error or status
 // should interrupt whatever popup is on screen).
 type ToastModel struct {
-	active  bool
-	sticky  bool
-	level   toastLevel
-	message string
-	id      int // generation counter, so stale Tick fires are ignored
-	theme   *theme.Theme
+	sticky   bool
+	level    toastLevel
+	message  string
+	id       int // generation counter, so stale Tick fires are ignored
+	theme    *theme.Theme
+	animator PopupAnimator
 }
 
 type toastDismissMsg struct{ id int }
 
 func NewToastModel(t *theme.Theme) ToastModel {
-	return ToastModel{theme: t}
+	return ToastModel{
+		theme:    t,
+		animator: NewPopupAnimator("toast", lipgloss.Color(toastInfoColor)),
+	}
 }
 
-func (m ToastModel) IsActive() bool { return m.active }
+// IsActive reports whether the toast frame should be drawn. Includes
+// the closing-animation window so the popup fades out instead of
+// snapping away when the dismiss timer fires.
+func (m ToastModel) IsActive() bool { return m.animator.IsActive() }
 func (m ToastModel) IsSticky() bool { return m.sticky }
 
 // Show is the info-level toast — short reminders, "Copied!", PTY hints.
-// 1s duration, sky-blue border.
+// 1s duration, periwinkle border.
 func (m *ToastModel) Show(message string) tea.Cmd {
 	return m.show(toastInfo, message)
 }
@@ -84,41 +97,51 @@ func (m *ToastModel) ShowWarn(message string) tea.Cmd {
 // cancel). Increments id so any prior in-flight auto-dismiss tick
 // becomes stale and won't take this sticky one down.
 func (m *ToastModel) ShowSticky(message string) tea.Cmd {
-	m.active = true
 	m.sticky = true
 	m.level = toastInfo
 	m.message = message
 	m.id++
-	return nil
+	m.animator.Color = lipgloss.Color(toastInfoColor)
+	return m.animator.Open()
 }
 
-// Dismiss takes the toast down immediately. Intended for sticky
-// toasts (paired with ShowSticky); also bumps id so the now-dismissed
-// toast can't be re-killed by a stale tick if the caller turns
-// around and calls Show() — that path schedules its own fresh tick
-// against the new id.
-func (m *ToastModel) Dismiss() {
-	m.active = false
+// Dismiss begins the close animation. Caller chains the returned cmd
+// into its own tea.Batch — fire-and-forget Dismiss without chaining
+// drops the close-animation tick.
+func (m *ToastModel) Dismiss() tea.Cmd {
 	m.sticky = false
 	m.id++
+	return m.animator.Close()
 }
 
 func (m *ToastModel) show(level toastLevel, message string) tea.Cmd {
-	m.active = true
 	m.sticky = false
 	m.level = level
 	m.message = message
 	m.id++
 	id := m.id
-	return tea.Tick(toastDuration(level), func(time.Time) tea.Msg {
+	m.animator.Color = toastBorderColor(level)
+	dismissCmd := tea.Tick(toastDuration(level), func(time.Time) tea.Msg {
 		return toastDismissMsg{id: id}
 	})
+	return tea.Batch(m.animator.Open(), dismissCmd)
 }
 
-func (m *ToastModel) Update(msg tea.Msg) {
+// Update routes toastDismissMsg into the close animation. Returns the
+// close tick cmd so the caller can batch it into the main loop —
+// previously Update had no return because dismiss was synchronous.
+func (m *ToastModel) Update(msg tea.Msg) tea.Cmd {
 	if dismiss, ok := msg.(toastDismissMsg); ok && dismiss.id == m.id {
-		m.active = false
+		return m.animator.Close()
 	}
+	return nil
+}
+
+func (m *ToastModel) HandleTick(msg AnimTickMsg) tea.Cmd {
+	if msg.Target != m.animator.Target {
+		return nil
+	}
+	return m.animator.Tick()
 }
 
 func toastDuration(level toastLevel) time.Duration {
@@ -142,39 +165,70 @@ func toastGlyph(level toastLevel) string {
 	return toastInfoGlyph
 }
 
+// toastHint returns the hint-bar text. Sticky toasts include the
+// keyboard escape so the user always knows how to take down a
+// background-mode reminder; transient toasts surface "auto-dismiss"
+// so the absence of a dismiss key reads as design, not omission.
+func (m ToastModel) toastHint() string {
+	if m.sticky {
+		return " Esc: close "
+	}
+	return " auto-dismiss "
+}
+
 func (m ToastModel) RenderPopup() string {
-	if !m.active {
+	if !m.animator.IsActive() {
 		return ""
 	}
 	bc := toastBorderColor(m.level)
 	glyph := toastGlyph(m.level)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 
-	titleW := lipgloss.Width(glyph)
-	contentW := lipgloss.Width(m.message) + 2 // padding 1 each side
-	if w := titleW + 4; w > contentW {
-		contentW = w
+	title := fmt.Sprintf(" %s %s ", glyph, toastTitleText)
+	titleW := lipgloss.Width(title)
+	hint := m.toastHint()
+	hintW := lipgloss.Width(hint)
+
+	// innerW must fit the widest of: title (+ 2 lead dashes + 1 trail
+	// minimum), message body (+2 padding 1 each side), and the bottom
+	// hint. Taking the max keeps the borders straight across all rows.
+	innerW := titleW + 3
+	if hintW > innerW {
+		innerW = hintW
 	}
-	innerW := contentW
-
-	dashesAfter := innerW - 1 - titleW
-	if dashesAfter < 0 {
-		dashesAfter = 0
+	if w := lipgloss.Width(m.message) + 2; w > innerW {
+		innerW = w
 	}
 
-	var b strings.Builder
-	b.WriteString(bStyle.Render("╭─") + tStyle.Render(glyph) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
-
-	leftBorder := bStyle.Render("│")
-	rightBorder := bStyle.Render("│")
-	body := " " + m.message + " "
-	pad := ""
-	if w := lipgloss.Width(body); w < innerW {
-		pad = strings.Repeat(" ", innerW-w)
+	leadDashCount := 2
+	trailDashCount := innerW - leadDashCount - titleW
+	if trailDashCount < 1 {
+		trailDashCount = 1
 	}
-	b.WriteString(leftBorder + body + pad + rightBorder + "\n")
+	top := bStyle.Render("╭"+strings.Repeat("─", leadDashCount)) +
+		tStyle.Render(title) +
+		bStyle.Render(strings.Repeat("─", trailDashCount)+"╮")
 
-	b.WriteString(bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯"))
-	return b.String()
+	left := bStyle.Render("│")
+	right := bStyle.Render("│")
+	padRow := left + strings.Repeat(" ", innerW) + right
+
+	bodyText := " " + m.message + " "
+	bw := lipgloss.Width(bodyText)
+	if bw < innerW {
+		bodyText += strings.Repeat(" ", innerW-bw)
+	}
+	bodyRow := left + bodyText + right
+
+	tail := innerW - hintW
+	if tail < 1 {
+		tail = 1
+	}
+	bot := bStyle.Render("╰") + hintStyle.Render(hint) +
+		bStyle.Render(strings.Repeat("─", tail)+"╯")
+
+	frame := strings.Join([]string{top, padRow, bodyRow, padRow, bot}, "\n")
+	return m.animator.RenderFrame(frame)
 }
