@@ -51,14 +51,28 @@ type AppLogModel struct {
 	seenErrorCount int
 	lastError      string
 	lastSuccess    string
+	layer          int
+	borderColor    lipgloss.Color
 }
 
 func NewAppLogModel(t *theme.Theme) AppLogModel {
+	bc := theme.PopupLayerColor(1)
 	return AppLogModel{
-		maxEntries: 1000,
-		theme:      t,
-		animator:   NewPopupAnimator("applog", lipgloss.Color(theme.Periwinkle)),
+		maxEntries:  1000,
+		theme:       t,
+		animator:    NewPopupAnimator("applog", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps the popup's nesting depth and derives + stores the
+// layer color. Animator stroke color updates in lockstep so the open/
+// close lines match the final border. Call this before Open().
+func (m *AppLogModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 const maxEntryChars = 300
@@ -357,7 +371,7 @@ func (m AppLogModel) renderFullPopup() string {
 
 	body := strings.Join(lines, "\n")
 
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 

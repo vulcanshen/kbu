@@ -24,6 +24,9 @@ type NamespacePickerModel struct {
 	// SetNamespaces once the real list arrives.
 	loading      bool
 	spinnerFrame int
+
+	layer       int
+	borderColor lipgloss.Color
 }
 
 // namespaceSpinnerTickMsg drives the braille-spinner cycle in the
@@ -49,10 +52,20 @@ var namespaceSpinnerFrames = []string{
 }
 
 func NewNamespacePickerModel(t *theme.Theme) NamespacePickerModel {
+	bc := theme.PopupLayerColor(1)
 	return NamespacePickerModel{
-		theme:    t,
-		animator: NewPopupAnimator("namespace", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("namespace", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *NamespacePickerModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // OpenLoading opens the popup IMMEDIATELY in its loading state — no
@@ -305,7 +318,7 @@ func (m NamespacePickerModel) RenderPopup() string {
 }
 
 func (m NamespacePickerModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	selectedStyle := m.theme.SidebarSelectedStyle()

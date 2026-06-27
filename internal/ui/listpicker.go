@@ -39,6 +39,9 @@ type ListPickerModel struct {
 	pendingPickerID string
 	pendingTitle    string
 	pendingItems    []ListPickerItem
+
+	layer       int
+	borderColor lipgloss.Color
 }
 
 // ListPickerItem is one row in the picker.
@@ -89,10 +92,20 @@ type ListPickerCancelMsg struct {
 }
 
 func NewListPickerModel(t *theme.Theme) ListPickerModel {
+	bc := theme.PopupLayerColor(1)
 	return ListPickerModel{
-		theme:    t,
-		animator: NewPopupAnimator("listpicker", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("listpicker", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *ListPickerModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open shows the picker with the given title + items. If the picker
@@ -304,7 +317,7 @@ func (m ListPickerModel) RenderPopup() string {
 }
 
 func (m ListPickerModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

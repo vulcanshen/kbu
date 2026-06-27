@@ -50,14 +50,27 @@ type YamlPopupModel struct {
 	matchCursor int
 
 	pendingG bool
+
+	layer       int
+	borderColor lipgloss.Color
 }
 
 // NewYamlPopupModel constructs a YamlPopupModel.
 func NewYamlPopupModel(t *theme.Theme) YamlPopupModel {
+	bc := theme.PopupLayerColor(1)
 	return YamlPopupModel{
-		theme:    t,
-		animator: NewPopupAnimator("yamlpopup", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("yamlpopup", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *YamlPopupModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open populates the popup with YAML for a specific resource, captures the
@@ -414,7 +427,7 @@ func (m YamlPopupModel) RenderPopup() string {
 }
 
 func (m YamlPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	// matchRowStyle highlights the line under the search cursor with the same

@@ -30,6 +30,9 @@ type HintPopupModel struct {
 	rows    []hintRow
 	actions []hintAction
 	cursor  int // index into actions; ignored when len(actions) == 0
+
+	layer       int
+	borderColor lipgloss.Color
 }
 
 type hintRow struct {
@@ -65,10 +68,20 @@ type HintActionMsg struct {
 }
 
 func NewHintPopupModel(t *theme.Theme) HintPopupModel {
+	bc := theme.PopupLayerColor(1)
 	return HintPopupModel{
-		theme:    t,
-		animator: NewPopupAnimator("hintpopup", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("hintpopup", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *HintPopupModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open shows the popup with the given title + rows. No interactive
@@ -407,7 +420,7 @@ func (m HintPopupModel) RenderPopup() string {
 }
 
 func (m HintPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	// Cheatsheet key letter — catppuccin blue, matching the "app

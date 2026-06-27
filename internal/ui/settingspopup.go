@@ -23,11 +23,13 @@ import (
 // popup re-renders in place — same animator-doesn't-restart trick the
 // listPicker uses for chained pickers.
 type SettingsPopupModel struct {
-	animator PopupAnimator
-	items    []SettingsItem
-	cursor   int
-	screenW  int
-	theme    *theme.Theme
+	animator    PopupAnimator
+	items       []SettingsItem
+	cursor      int
+	screenW     int
+	theme       *theme.Theme
+	layer       int
+	borderColor lipgloss.Color
 }
 
 // SettingsItem is one row in the popup. Key identifies the row in
@@ -50,23 +52,21 @@ type SettingsToggleMsg struct {
 	Key string
 }
 
-// settingsAccent is the popup's signature color. Custom periwinkle
-// (#A4BAFC) sitting between catppuccin blue (#89b4fa, panel-border
-// / app-frame) and lavender (#b4befe, in-panel user-footprint) on
-// the blue-purple axis, slightly lavender-leaning. The unified
-// "popup overlay" accent shared by every generic popup, the info-
-// level toast, and the kubectl-edit pty border — anything that
-// floats above the panel layer reads as the same family. Compare
-// popup keeps cyan; KM8erm shell pty stays amber; exec pty stays
-// green — feature-specific colors that opt out of the unified
-// accent.
-var settingsAccent = lipgloss.Color(theme.Periwinkle)
-
 func NewSettingsPopupModel(t *theme.Theme) SettingsPopupModel {
+	bc := theme.PopupLayerColor(1)
 	return SettingsPopupModel{
-		theme:    t,
-		animator: NewPopupAnimator("settingspopup", settingsAccent),
+		theme:       t,
+		animator:    NewPopupAnimator("settingspopup", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *SettingsPopupModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open shows the popup with the given items. Cursor resets to 0.
@@ -179,7 +179,7 @@ func (m SettingsPopupModel) RenderPopup() string {
 }
 
 func (m SettingsPopupModel) renderFullPopup() string {
-	bc := settingsAccent
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
@@ -217,7 +217,7 @@ func (m SettingsPopupModel) renderFullPopup() string {
 	}
 
 	// Cursor row collapses ON/OFF color distinction to the same dark
-	// text on the periwinkle accent background — the "ON"/"OFF" word
+	// text on the popup-layer accent background — the "ON"/"OFF" word
 	// itself carries the state signal, color stays uniform so the
 	// row reads as a single reverse-of-title chip (same pattern as
 	// other popups' cursor row).

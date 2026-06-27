@@ -41,6 +41,9 @@ type Panel2MenuPopupModel struct {
 	// "container/<name>" instead of the default "pod/<name>". Empty string
 	// falls back to the default rendering.
 	titleOverride string
+
+	layer       int
+	borderColor lipgloss.Color
 }
 
 type panel2MenuItem struct {
@@ -72,10 +75,20 @@ type Panel2MenuActionMsg struct {
 }
 
 func NewPanel2MenuPopupModel(t *theme.Theme) Panel2MenuPopupModel {
+	bc := theme.PopupLayerColor(1)
 	return Panel2MenuPopupModel{
-		theme:    t,
-		animator: NewPopupAnimator("panel2menu", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("panel2menu", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *Panel2MenuPopupModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open shows the menu for the given row. Items are computed at Open so
@@ -516,7 +529,7 @@ func resourceHasContainer(rt k8s.ResourceType) bool {
 }
 
 func (m Panel2MenuPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

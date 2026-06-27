@@ -31,8 +31,11 @@ const (
 	toastInfoGlyph = "󰵅"
 	toastWarnGlyph = "󰀦"
 
-	toastInfoColor = theme.Periwinkle
-	toastWarnColor = "#fab387" // Catppuccin Peach — caution, action blocked
+	// toastWarnColor — Catppuccin Peach. Warning is the only toast
+	// level that overrides the popup-layer scheme; the peach signal
+	// "something didn't work" takes precedence over the layer color
+	// so the user catches it at a glance.
+	toastWarnColor = "#fab387"
 
 	// toastTitleText is the fixed title text for every toast — the
 	// popup-convention rule requires `glyph + text` in border titles;
@@ -53,20 +56,39 @@ const (
 // non-sticky sits ABOVE popups (a freshly-fired error or status
 // should interrupt whatever popup is on screen).
 type ToastModel struct {
-	sticky   bool
-	level    toastLevel
-	message  string
-	id       int // generation counter, so stale Tick fires are ignored
-	theme    *theme.Theme
-	animator PopupAnimator
+	sticky      bool
+	level       toastLevel
+	message     string
+	id          int // generation counter, so stale Tick fires are ignored
+	theme       *theme.Theme
+	animator    PopupAnimator
+	layer       int
+	borderColor lipgloss.Color
 }
 
 type toastDismissMsg struct{ id int }
 
 func NewToastModel(t *theme.Theme) ToastModel {
+	bc := theme.PopupLayerColor(1)
 	return ToastModel{
-		theme:    t,
-		animator: NewPopupAnimator("toast", lipgloss.Color(toastInfoColor)),
+		theme:       t,
+		animator:    NewPopupAnimator("toast", bc),
+		borderColor: bc,
+		layer:       1,
+	}
+}
+
+// SetLayer stamps nesting depth + derives the info/sticky border
+// color from the popup-layer scale. Warn toasts override to Peach
+// at show time (toastBorderColor); SetLayer's layer color only
+// applies when level != toastWarn.
+func (m *ToastModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	// Warn keeps Peach regardless of layer; info / sticky pick up
+	// the new layer color immediately.
+	if m.level != toastWarn {
+		m.animator.Color = m.borderColor
 	}
 }
 
@@ -77,7 +99,7 @@ func (m ToastModel) IsActive() bool { return m.animator.IsActive() }
 func (m ToastModel) IsSticky() bool { return m.sticky }
 
 // Show is the info-level toast — short reminders, "Copied!", PTY hints.
-// 1s duration, periwinkle border.
+// 1s duration, popup-layer border (stamped via SetLayer).
 func (m *ToastModel) Show(message string) tea.Cmd {
 	return m.show(toastInfo, message)
 }
@@ -101,7 +123,7 @@ func (m *ToastModel) ShowSticky(message string) tea.Cmd {
 	m.level = toastInfo
 	m.message = message
 	m.id++
-	m.animator.Color = lipgloss.Color(toastInfoColor)
+	m.animator.Color = m.borderColor
 	return m.animator.Open()
 }
 
@@ -120,11 +142,20 @@ func (m *ToastModel) show(level toastLevel, message string) tea.Cmd {
 	m.message = message
 	m.id++
 	id := m.id
-	m.animator.Color = toastBorderColor(level)
+	m.animator.Color = m.toastBorderColor()
 	dismissCmd := tea.Tick(toastDuration(level), func(time.Time) tea.Msg {
 		return toastDismissMsg{id: id}
 	})
 	return tea.Batch(m.animator.Open(), dismissCmd)
+}
+
+// toastBorderColor picks the active border color: warn always Peach,
+// info / sticky use the popup-layer color stamped via SetLayer.
+func (m ToastModel) toastBorderColor() lipgloss.Color {
+	if m.level == toastWarn {
+		return lipgloss.Color(toastWarnColor)
+	}
+	return m.borderColor
 }
 
 // Update routes toastDismissMsg into the close animation. Returns the
@@ -151,13 +182,6 @@ func toastDuration(level toastLevel) time.Duration {
 	return toastInfoDuration
 }
 
-func toastBorderColor(level toastLevel) lipgloss.Color {
-	if level == toastWarn {
-		return lipgloss.Color(toastWarnColor)
-	}
-	return lipgloss.Color(toastInfoColor)
-}
-
 func toastGlyph(level toastLevel) string {
 	if level == toastWarn {
 		return toastWarnGlyph
@@ -180,7 +204,7 @@ func (m ToastModel) RenderPopup() string {
 	if !m.animator.IsActive() {
 		return ""
 	}
-	bc := toastBorderColor(m.level)
+	bc := m.toastBorderColor()
 	glyph := toastGlyph(m.level)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
