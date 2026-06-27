@@ -9,8 +9,8 @@ import (
 )
 
 // TestCompareYamlPopup_MenuAnimator_OpenCloseLifecycle pins the in-popup
-// Space-menu animation wiring added after v1.7.3. Previously the menu
-// toggled synchronously (menuOpen bool); now it shares the PopupAnimator
+// Space-menu animation wiring. The menu lives in its own file
+// (comparemenu.go) with its own PopupAnimator and shares the
 // Line → Expand / Compress → Line lifecycle every other km8 popup uses.
 func TestCompareYamlPopup_MenuAnimator_OpenCloseLifecycle(t *testing.T) {
 	m := NewCompareYamlPopupModel(theme.DefaultTheme())
@@ -20,54 +20,53 @@ func TestCompareYamlPopup_MenuAnimator_OpenCloseLifecycle(t *testing.T) {
 	if !m.animator.IsInteractive() {
 		t.Fatalf("popup animator should be Open after Finalize, got state %d", m.animator.State)
 	}
-	if m.menuAnimator.IsActive() {
-		t.Fatalf("menu animator should start Closed, got state %d", m.menuAnimator.State)
+	if m.menu.IsActive() {
+		t.Fatalf("menu animator should start Closed, got state %d", m.menu.animator.State)
 	}
 
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	if cmd == nil {
-		t.Fatalf("Space should return menuAnimator.Open() tick cmd, got nil")
+		t.Fatalf("Space should return menu.Open() tick cmd, got nil")
 	}
-	if m.menuAnimator.State != PopupOpeningLine {
-		t.Fatalf("after Space, menu state = %d, want PopupOpeningLine (%d)", m.menuAnimator.State, PopupOpeningLine)
+	if m.menu.animator.State != PopupOpeningLine {
+		t.Fatalf("after Space, menu state = %d, want PopupOpeningLine (%d)", m.menu.animator.State, PopupOpeningLine)
 	}
-	if !m.menuAnimator.IsActive() {
+	if !m.menu.IsActive() {
 		t.Fatalf("menu animator should be Active during opening")
 	}
 
-	m.menuAnimator.Finalize()
-	if !m.menuAnimator.IsInteractive() {
-		t.Fatalf("menu animator should be Interactive after Finalize, got state %d", m.menuAnimator.State)
+	m.menu.animator.Finalize()
+	if !m.menu.IsInteractive() {
+		t.Fatalf("menu animator should be Interactive after Finalize, got state %d", m.menu.animator.State)
 	}
 
 	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if cmd == nil {
-		t.Fatalf("Esc should return menuAnimator.Close() tick cmd, got nil")
+		t.Fatalf("Esc should return menu.Close() tick cmd, got nil")
 	}
-	if m.menuAnimator.State != PopupClosingCompress {
-		t.Fatalf("after Esc, menu state = %d, want PopupClosingCompress (%d)", m.menuAnimator.State, PopupClosingCompress)
+	if m.menu.animator.State != PopupClosingCompress {
+		t.Fatalf("after Esc, menu state = %d, want PopupClosingCompress (%d)", m.menu.animator.State, PopupClosingCompress)
 	}
 }
 
 // TestCompareYamlPopup_MenuAnimator_ResetsOnReopen guards against a
-// stale menu state surviving a popup Open → Close → Open cycle. The
-// previous menuOpen bool reset cleanly; the animator equivalent has to
-// force state to PopupClosed in Open since Finalize would otherwise
-// promote a mid-open state to PopupOpen.
+// stale menu state surviving a popup Open → Close → Open cycle. Open
+// must call m.menu.Reset() since Finalize would otherwise promote a
+// mid-open state to PopupOpen.
 func TestCompareYamlPopup_MenuAnimator_ResetsOnReopen(t *testing.T) {
 	m := NewCompareYamlPopupModel(theme.DefaultTheme())
 	m.SetSize(120, 40)
 	_ = m.Open("a: 1\n", "a: 2\n", "left", "right")
 	m.animator.Finalize()
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	m.menuAnimator.Finalize()
-	if !m.menuAnimator.IsInteractive() {
-		t.Fatalf("setup: menu should be open, got state %d", m.menuAnimator.State)
+	m.menu.animator.Finalize()
+	if !m.menu.IsInteractive() {
+		t.Fatalf("setup: menu should be open, got state %d", m.menu.animator.State)
 	}
 
 	_ = m.Open("a: 3\n", "a: 4\n", "left2", "right2")
-	if m.menuAnimator.IsActive() {
-		t.Fatalf("after reopen, menu animator should be Closed, got state %d", m.menuAnimator.State)
+	if m.menu.IsActive() {
+		t.Fatalf("after reopen, menu animator should be Closed, got state %d", m.menu.animator.State)
 	}
 }
 
