@@ -65,7 +65,7 @@ var settingsAccent = lipgloss.Color(theme.Periwinkle)
 func NewSettingsPopupModel(t *theme.Theme) SettingsPopupModel {
 	return SettingsPopupModel{
 		theme:    t,
-		animator: NewPopupAnimator("settings", settingsAccent),
+		animator: NewPopupAnimator("settingspopup", settingsAccent),
 	}
 }
 
