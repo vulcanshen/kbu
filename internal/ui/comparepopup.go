@@ -7,7 +7,6 @@ import (
 	udiff "github.com/aymanbagabas/go-udiff"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	overlay "github.com/rmhubbert/bubbletea-overlay"
 
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -77,12 +76,11 @@ type CompareYamlPopupModel struct {
 	contentLines []string
 	scrollOffset int
 
-	// menuAnimator + menuCursor drive the in-popup Space menu. Two items
-	// (toggle, close), no submenu nesting. menuAnimator owns the
-	// open/close animation so the menu lifecycle matches the rest of the
-	// popup stack (Line → Expand on open, Compress → Line on close).
-	menuAnimator PopupAnimator
-	menuCursor   int
+	// menu is the Space-triggered diff-options sub-popup (Switch view /
+	// Close). Lives in its own file (comparemenu.go) with its own
+	// PopupAnimator so it falls under the regular popup-audit pattern
+	// — see .claude/rules/popup-convention.md.
+	menu CompareMenuPopupModel
 
 	width    int
 	height   int
@@ -110,10 +108,10 @@ type CompareYamlPopupModel struct {
 // before Open if the user's config carries a different preference.
 func NewCompareYamlPopupModel(t *theme.Theme) CompareYamlPopupModel {
 	return CompareYamlPopupModel{
-		theme:        t,
-		animator:     NewPopupAnimator("comparepopup", lipgloss.Color(theme.Periwinkle)),
-		menuAnimator: NewPopupAnimator("comparepopup_menu", lipgloss.Color(theme.Periwinkle)),
-		layout:       CompareLayoutUnified,
+		theme:    t,
+		animator: NewPopupAnimator("comparepopup", lipgloss.Color(theme.Periwinkle)),
+		menu:     NewCompareMenuPopupModel(t),
+		layout:   CompareLayoutUnified,
 	}
 }
 
@@ -141,9 +139,7 @@ func (m *CompareYamlPopupModel) Open(left, right, leftLabel, rightLabel string) 
 	m.leftLabel = leftLabel
 	m.rightLabel = rightLabel
 	m.scrollOffset = 0
-	m.menuAnimator.State = PopupClosed
-	m.menuAnimator.Frame = 0
-	m.menuCursor = 0
+	m.menu.Reset()
 	m.pendingG = false
 	m.rebuildContent()
 	return m.animator.Open()
@@ -154,16 +150,13 @@ func (m CompareYamlPopupModel) IsActive() bool        { return m.animator.IsActi
 func (m CompareYamlPopupModel) IsInteractive() bool   { return m.animator.IsInteractive() }
 func (m CompareYamlPopupModel) ScrollOffset() int     { return m.scrollOffset }
 func (m CompareYamlPopupModel) Layout() CompareLayout { return m.layout }
-func (m CompareYamlPopupModel) MenuOpen() bool        { return m.menuAnimator.IsActive() }
+func (m CompareYamlPopupModel) MenuOpen() bool        { return m.menu.IsActive() }
 
 func (m *CompareYamlPopupModel) HandleTick(msg AnimTickMsg) tea.Cmd {
 	if msg.Target == m.animator.Target {
 		return m.animator.Tick()
 	}
-	if msg.Target == m.menuAnimator.Target {
-		return m.menuAnimator.Tick()
-	}
-	return nil
+	return m.menu.HandleTick(msg)
 }
 
 func (m *CompareYamlPopupModel) SetSize(w, h int) {
@@ -185,11 +178,28 @@ func (m CompareYamlPopupModel) Update(msg tea.Msg) (CompareYamlPopupModel, tea.C
 	if !ok {
 		return m, nil
 	}
-	if m.menuAnimator.IsActive() {
-		if !m.menuAnimator.IsInteractive() {
-			return m, nil
+	if m.menu.IsActive() {
+		newMenu, result, cmd := m.menu.Update(keyMsg)
+		m.menu = newMenu
+		if result == CompareMenuActionCommit {
+			switch m.menu.Cursor() {
+			case 0:
+				if m.layout == CompareLayoutSplit {
+					m.layout = CompareLayoutUnified
+				} else {
+					m.layout = CompareLayoutSplit
+				}
+				if m.onLayoutChange != nil {
+					m.onLayoutChange(m.layout)
+				}
+				m.scrollOffset = 0
+				m.rebuildContent()
+				return m, cmd
+			case 1:
+				return m, tea.Batch(cmd, m.animator.Close())
+			}
 		}
-		return m.handleMenuKey(keyMsg)
+		return m, cmd
 	}
 	return m.handlePopupKey(keyMsg)
 }
@@ -200,9 +210,8 @@ func (m CompareYamlPopupModel) handlePopupKey(keyMsg tea.KeyMsg) (CompareYamlPop
 		m.pendingG = false
 		return m, m.animator.Close()
 	case " ":
-		m.menuCursor = 0
 		m.pendingG = false
-		return m, m.menuAnimator.Open()
+		return m, m.menu.Open(m.menuItems())
 	case "j", "down":
 		if m.scrollOffset < m.maxScrollOffset() {
 			m.scrollOffset++
@@ -261,44 +270,6 @@ func (m CompareYamlPopupModel) menuItems() []string {
 		fmt.Sprintf("Switch to %s view", other.String()),
 		"Close",
 	}
-}
-
-func (m CompareYamlPopupModel) handleMenuKey(keyMsg tea.KeyMsg) (CompareYamlPopupModel, tea.Cmd) {
-	items := m.menuItems()
-	switch keyMsg.String() {
-	case "esc", " ":
-		// Space / Esc close the menu but leave the popup open — gives
-		// the user an "oops" path back without restarting the compare.
-		return m, m.menuAnimator.Close()
-	case "j", "down":
-		if m.menuCursor < len(items)-1 {
-			m.menuCursor++
-		}
-		return m, nil
-	case "k", "up":
-		if m.menuCursor > 0 {
-			m.menuCursor--
-		}
-		return m, nil
-	case "enter":
-		switch m.menuCursor {
-		case 0:
-			if m.layout == CompareLayoutSplit {
-				m.layout = CompareLayoutUnified
-			} else {
-				m.layout = CompareLayoutSplit
-			}
-			if m.onLayoutChange != nil {
-				m.onLayoutChange(m.layout)
-			}
-			m.scrollOffset = 0
-			m.rebuildContent()
-			return m, m.menuAnimator.Close()
-		case 1:
-			return m, tea.Batch(m.menuAnimator.Close(), m.animator.Close())
-		}
-	}
-	return m, nil
 }
 
 // rebuildContent recomputes contentLines for the current layout +
@@ -801,8 +772,8 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	parts = append(parts, bodyRows...)
 	parts = append(parts, bot)
 	frame := strings.Join(parts, "\n")
-	if m.menuAnimator.IsActive() {
-		frame = m.overlayMenu(frame)
+	if m.menu.IsActive() {
+		frame = m.menu.Render(frame)
 	}
 	return frame
 }
@@ -822,81 +793,3 @@ func (m CompareYamlPopupModel) renderBody(width, height int) string {
 	return strings.Join(rows, "\n")
 }
 
-// overlayMenu draws the Space-triggered action menu over the bottom of
-// the diff frame. Plain bordered box, cyan accent matching the popup
-// frame.
-func (m CompareYamlPopupModel) overlayMenu(frame string) string {
-	items := m.menuItems()
-	if len(items) == 0 {
-		return frame
-	}
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle))
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle)).Bold(true)
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).
-		Background(lipgloss.Color(theme.Periwinkle)).Bold(true)
-	rowStyle := lipgloss.NewStyle()
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
-
-	// Same icon as the parent compare-popup title so the overlay menu
-	// reads as "this is the compare popup's menu" — same family, not a
-	// new popup with its own identity. Matches the title-in-top-border
-	// convention every other km8 popup uses (helmdocmenu, hintpopup,
-	// settings, ...).
-	title := " \U000f08aa Diff "
-	hint := " enter: select  esc: cancel "
-	hintW := lipgloss.Width(hint)
-	titleW := lipgloss.Width(title)
-	// Inner width must accommodate the title (+ 2 lead dashes + 1
-	// trailing dash minimum), the widest item (+2 padding for the
-	// leading/trailing single space inside the row), AND the bottom
-	// hint — otherwise the borders stretch past the side bars and the
-	// corners no longer line up vertically.
-	innerW := hintW
-	if w := titleW + 3; w > innerW {
-		innerW = w
-	}
-	for _, it := range items {
-		w := lipgloss.Width(it) + 2 // leading + trailing spaces
-		if w > innerW {
-			innerW = w
-		}
-	}
-
-	leadDashCount := 2
-	trailDashCount := innerW - leadDashCount - titleW
-	if trailDashCount < 1 {
-		trailDashCount = 1
-	}
-	top := borderStyle.Render("╭"+strings.Repeat("─", leadDashCount)) +
-		titleStyle.Render(title) +
-		borderStyle.Render(strings.Repeat("─", trailDashCount)+"╮")
-	rows := []string{top}
-	for i, it := range items {
-		text := " " + it + strings.Repeat(" ", innerW-1-lipgloss.Width(it))
-		if i == m.menuCursor {
-			text = cursorStyle.Render(text)
-		} else {
-			text = rowStyle.Render(text)
-		}
-		rows = append(rows, borderStyle.Render("│")+text+borderStyle.Render("│"))
-	}
-	tail := innerW - hintW
-	if tail < 0 {
-		tail = 0
-	}
-	rows = append(rows, borderStyle.Render("╰")+hintStyle.Render(hint)+
-		borderStyle.Render(strings.Repeat("─", tail)+"╯"))
-
-	menuBlock := strings.Join(rows, "\n")
-	// Compose the menu on top of the diff frame using the same overlay
-	// engine the top-level popup stack uses. lipgloss.Place was an
-	// earlier attempt — it broke up the border across the popup because
-	// per-line width measurement on multi-line bordered content gets
-	// confused by ANSI styling.
-	//
-	// Wrap menuBlock with the menu animator's RenderFrame so the
-	// in-popup menu shares the Line → Expand / Compress → Line lifecycle
-	// every other km8 popup uses. During PopupClosed the animator emits
-	// "", and Composite then no-ops cleanly.
-	return overlay.Composite(m.menuAnimator.RenderFrame(menuBlock), frame, overlay.Center, overlay.Center, 0, 0)
-}
