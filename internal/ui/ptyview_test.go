@@ -13,7 +13,7 @@ import (
 )
 
 func TestPtyView_Initial_Inactive(t *testing.T) {
-	v := NewPtyView()
+	v := NewPtyView("ptyview_test")
 	if v.IsActive() {
 		t.Fatal("new PtyView must be inactive")
 	}
@@ -153,7 +153,7 @@ func TestPtyKeyBytes_AltPrefixesESC(t *testing.T) {
 // verifies the exit message arrives via tick-based detection. Light
 // integration test — requires the host OS to support PTY allocation.
 func TestPtyView_StartEcho_Exits(t *testing.T) {
-	v := NewPtyView()
+	v := NewPtyView("ptyview_test")
 	cmd := exec.Command("echo", "hello world")
 	startCmd := v.Start(cmd, "echo test", 80, 24, PtyKindExec)
 	if startCmd == nil {
@@ -461,12 +461,18 @@ func TestPtyView_ScrollToEnd_BufferFitsViewport_NoMove(t *testing.T) {
 // We set active=true, plug in a vt10x term, but leave ptmx nil so the Update
 // key-forward path no-ops cleanly.
 func hookedPtyView(kind PtyKind) *PtyView {
-	p := NewPtyView()
+	p := NewPtyView("ptyview_test")
 	p.active = true
 	p.kind = kind
 	p.term = vt10x.New(vt10x.WithSize(80, 24))
 	p.mu = &sync.Mutex{}
 	p.pendingLine = &strings.Builder{}
+	// Production Start() calls animator.Open() and the AnimTickMsg
+	// loop walks the state machine to PopupOpen. The fixture skips
+	// Start, so jump the animator straight to PopupOpen — otherwise
+	// RenderFrame returns "" and the visual-content tests fail.
+	_ = p.animator.Open()
+	p.animator.Finalize()
 	return p
 }
 
@@ -479,7 +485,10 @@ func TestPtyView_HiddenStateInvisibleButAlive(t *testing.T) {
 		t.Fatal("post-Start: IsAlive must be true")
 	}
 
-	p.Hide()
+	_ = p.Hide()
+	// Hide initiates the close animation. Skip past the frame-by-
+	// frame transition so the post-hide steady state can be asserted.
+	p.animator.Finalize()
 
 	if p.IsActive() {
 		t.Error("after Hide: IsActive must be false (popup not drawn)")
@@ -498,7 +507,7 @@ func TestPtyView_HiddenStateInvisibleButAlive(t *testing.T) {
 func TestPtyView_Hide_OnlyAffectsShellKind(t *testing.T) {
 	for _, kind := range []PtyKind{PtyKindEdit, PtyKindExec} {
 		p := hookedPtyView(kind)
-		p.Hide()
+		_ = p.Hide()
 		if p.IsHidden() {
 			t.Errorf("kind %d: Hide() must be a no-op for non-Shell kinds", kind)
 		}
@@ -510,12 +519,14 @@ func TestPtyView_Hide_OnlyAffectsShellKind(t *testing.T) {
 
 func TestPtyView_Show_RestoresVisibility(t *testing.T) {
 	p := hookedPtyView(PtyKindShell)
-	p.Hide()
+	_ = p.Hide()
+	p.animator.Finalize()
 	if !p.IsHidden() {
 		t.Fatal("setup: should be hidden after Hide")
 	}
 
-	p.Show(120, 40)
+	_ = p.Show(120, 40)
+	p.animator.Finalize()
 
 	if p.IsHidden() {
 		t.Error("after Show: IsHidden must be false")

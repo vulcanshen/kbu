@@ -1014,8 +1014,8 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 		confirm:         NewConfirmModel(t),
 		splash:          NewSplashModel(),
 		toast:           NewToastModel(t),
-		shellPty:        NewPtyView(),
-		txPty:           NewPtyView(),
+		shellPty:        NewPtyView("ptyview_shell"),
+		txPty:           NewPtyView("ptyview_tx"),
 		yamlPopup:       NewYamlPopupModel(t),
 		comparePopup:    newCompareModel,
 		breadcrumbPopup: NewBreadcrumbPopupModel(t),
@@ -1143,6 +1143,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.toast.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.shellPty.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.txPty.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		return m, tea.Batch(animCmds...)
@@ -1582,8 +1588,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// surface KM8erm under it. Currently: if tx visible, KM8erm
 			// hide/show is harmless (render still picks tx on top).
 			if m.shellPty.IsAlive() {
-				m.shellPty.Show(m.width, m.height)
-				return m, nil
+				return m, m.shellPty.Show(m.width, m.height)
 			}
 			cmd := buildShellTerminalCmd(m.cfg.KM8ermShell, m.cfg.KM8ermLoginShell)
 			return m, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell)

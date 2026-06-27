@@ -182,8 +182,8 @@ func appWithItems(items []k8s.ResourceItem, cursor int) AppModel {
 		// model would NPE without this; matching the production
 		// invariant is cleaner than gating the hot-path handler.
 		cfg:             &config.Config{},
-		shellPty:        NewPtyView(),
-		txPty:           NewPtyView(),
+		shellPty:        NewPtyView("ptyview_shell"),
+		txPty:           NewPtyView("ptyview_tx"),
 		toast:           NewToastModel(th),
 		breadcrumbPopup: NewBreadcrumbPopupModel(th),
 	}
@@ -513,7 +513,7 @@ func TestAppModel_HonorPendingTableSelect_KindMismatchSkips(t *testing.T) {
 // that LOOKS post-Start (IsAlive/IsActive true) without spawning a real
 // subprocess.
 func fakeAlivePtyView(kind PtyKind, hidden bool) *PtyView {
-	p := NewPtyView()
+	p := NewPtyView("ptyview_test")
 	p.active = true
 	p.hidden = hidden
 	p.kind = kind

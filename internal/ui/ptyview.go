@@ -80,12 +80,27 @@ type PtyView struct {
 	pendingLine  *strings.Builder
 	pendingCR    bool // last byte was \r — wait for next byte to decide CRLF vs progress-bar reset
 	scrollOffset int
+
+	// animator drives the open/close visual lifecycle so PTY popups
+	// match the rest of the popup stack — see .claude/rules/popup-
+	// convention.md. Target is supplied at construction time because
+	// the app runs two independent PtyView instances (shellPty +
+	// txPty) and AnimTickMsg routing needs a unique target per slot.
+	animator PopupAnimator
 }
 
 const maxScrollbackLines = 10000
 
-func NewPtyView() *PtyView {
-	return &PtyView{}
+// ptyTitleGlyph is the Nerd Font console_line glyph (U+F018D) — same
+// "terminal/subprocess overlay" category mark across Shell / Edit /
+// Exec kinds. Kind-specific differentiation lives in border color
+// (lavender for Shell, periwinkle for Edit/Exec) + title text.
+const ptyTitleGlyph = "󰆍"
+
+func NewPtyView(target string) *PtyView {
+	return &PtyView{
+		animator: NewPopupAnimator(target, lipgloss.Color(theme.Periwinkle)),
+	}
 }
 
 // IsActive reports whether the popup should be drawn AND receive input
@@ -110,21 +125,26 @@ func (p *PtyView) Title() string { return p.title }
 
 // Hide marks the popup as hidden without killing the subprocess. Only takes
 // effect for PtyKindShell; transient PTYs (edit / exec) ignore the call.
-func (p *PtyView) Hide() {
+// Returns the close-animation cmd so callers can batch it into the loop;
+// passing nil into a tea.Batch is harmless when callers don't care.
+func (p *PtyView) Hide() tea.Cmd {
 	if !p.active || p.kind != PtyKindShell {
-		return
+		return nil
 	}
 	p.hidden = true
+	return p.animator.Close()
 }
 
 // Show un-hides the popup and refreshes the PTY size to the current host
-// dimensions (it may have changed while hidden). No-op if not alive.
-func (p *PtyView) Show(hostW, hostH int) {
+// dimensions (it may have changed while hidden). Returns the open-animation
+// cmd so the caller can batch it. No-op if not alive.
+func (p *PtyView) Show(hostW, hostH int) tea.Cmd {
 	if !p.active {
-		return
+		return nil
 	}
 	p.hidden = false
 	p.SetSize(hostW, hostH)
+	return p.animator.Open()
 }
 
 // Start launches cmd in a PTY sized to fit a popup inside hostW × hostH.
@@ -161,7 +181,7 @@ func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int, kind PtyK
 	p.ptmx = ptmx
 
 	go p.readLoop()
-	return p.tick()
+	return tea.Batch(p.tick(), p.animator.Open())
 }
 
 func (p *PtyView) tick() tea.Cmd {
@@ -169,6 +189,16 @@ func (p *PtyView) tick() tea.Cmd {
 	return tea.Tick(50*time.Millisecond, func(time.Time) tea.Msg {
 		return ptyTickMsg{kind: kind}
 	})
+}
+
+// HandleTick routes AnimTickMsg into the popup-open/close animator.
+// Returns the next animation tick cmd or nil when the animation is
+// done.
+func (p *PtyView) HandleTick(msg AnimTickMsg) tea.Cmd {
+	if msg.Target != p.animator.Target {
+		return nil
+	}
+	return p.animator.Tick()
 }
 
 func (p *PtyView) readLoop() {
@@ -319,8 +349,11 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 				// ctrl+t is a hidden alias for the demo recorder (see
 				// app.go for rationale). Trade-off: zsh's transpose-chars
 				// binding inside KM8erm becomes unreachable.
+				// hidden is set sync; close animation plays out alongside
+				// (animator.IsActive() keeps RenderPopup drawing the
+				// fading frame until the lifecycle completes).
 				p.hidden = true
-				return p, nil
+				return p, p.animator.Close()
 			}
 		}
 
@@ -462,7 +495,10 @@ func (p *PtyView) View() string { return "" }
 // popup should not be drawn — either no subprocess alive, or the subprocess
 // is alive but hidden (Alt+T from a Shell-kind PtyView).
 func (p *PtyView) RenderPopup() string {
-	if !p.IsActive() || p.term == nil {
+	// Render whenever the popup is logically active OR the close
+	// animation is still playing. term==nil short-circuits (subprocess
+	// finished cleanup) — Stop's close animation is best-effort.
+	if (!p.IsActive() && !p.animator.IsActive()) || p.term == nil {
 		return ""
 	}
 	cols, rows := p.term.Size()
@@ -586,7 +622,12 @@ func (p *PtyView) RenderPopup() string {
 		out.WriteString("\n")
 	}
 	out.WriteString(bottom)
-	return out.String()
+	// Wrap with animator.RenderFrame so the open/close lifecycle shares
+	// the Line → Expand / Compress → Line animation every other popup
+	// uses. During PopupOpen, RenderFrame returns the frame unchanged
+	// (zero-cost); during PopupClosed it returns "" (and we short-
+	// circuited above so we don't reach here in that state).
+	return p.animator.RenderFrame(out.String())
 }
 
 // renderBottomBorder builds the closing border with a key-hint embedded in
