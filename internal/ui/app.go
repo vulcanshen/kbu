@@ -1142,6 +1142,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.settingsPopup.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
+		if c := m.toast.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
 		return m, tea.Batch(animCmds...)
 	}
 
@@ -2604,8 +2607,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case toastDismissMsg:
-		m.toast.Update(msg)
-		return m, nil
+		return m, m.toast.Update(msg)
 
 	case CRDsDiscoveredMsg:
 		if msg.Err != nil {
@@ -2746,20 +2748,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// finished → contract goes away → save happens." Failure
 		// surfaces via appLog + a fresh transient warn toast (which
 		// will outlive Dismiss because Show schedules its own tick).
-		m.toast.Dismiss()
+		dismissCmd := m.toast.Dismiss()
 		if err := m.persistPinnedKinds(); err != nil {
 			m.appLog.Error("pin order save failed: " + err.Error())
-			return m, m.toast.Show("pin order save failed")
+			return m, tea.Batch(dismissCmd, m.toast.Show("pin order save failed"))
 		}
-		return m, nil
+		return m, dismissCmd
 
 	case SidebarDragCancelMsg:
 		// Sidebar already reverted its pinned slice from the
 		// snapshot. Just dismiss the sticky toast — no cancellation
 		// toast (cancelling shouldn't nag the user about something
 		// they decided not to do).
-		m.toast.Dismiss()
-		return m, nil
+		return m, m.toast.Dismiss()
 
 	case SidebarDragRequestDropMenuMsg:
 		// Space mid-drag → drop-only menu. Single action surfaces the
