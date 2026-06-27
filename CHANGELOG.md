@@ -4,6 +4,124 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.4] - 2026-06-27
+
+A popup design-system overhaul. Every popup now follows a single
+convention codified in `.claude/rules/popup-convention.md`: 4-class
+taxonomy (menu / message / viewport / pty), mandatory glyph+text
+title, padded layout for menu+message kinds, animator-driven
+open/close, and — the headline change — a **layer-based border
+color algorithm**. The deeper a popup nests, the deeper its color
+runs along the `lavender → sapphire` scale, so the visual stack
+reads "this thing is on top of what's underneath" without having
+to think about it.
+
+### Added
+
+- **Popup layer color algorithm.** Border + animator stroke color
+  is derived from a popup's nesting depth: L1 → `lavenphire25`
+  (#A4C0FA), L2 → `lavenphire50` (#94C3F5), L3 → `lavenphire75`
+  (#84C5F0), L4+ → `sapphire` (#74c7ec, catppuccin Mocha
+  ceiling). `theme.PopupLayerColor(layer int)` is the single
+  source of truth; every popup model has a `SetLayer(int)` method
+  that updates both the border and the animator stroke in
+  lockstep. `AppModel.popupDepth()` counts currently-rendered
+  popups so `SetLayer(popupDepth()+1)` Just Works at every open
+  site. Sub-popups (comparemenu inside comparepopup) use
+  `parent.layer+1` so the menu always reads as one notch deeper
+  than the host. Future expansion subdivides the scale further or
+  raises the ceiling beyond sapphire.
+- **PTY popup open/close animation.** `shellPty` and `txPty` now
+  have their own PopupAnimator (targets `ptyview_shell` /
+  `ptyview_tx`) so KM8erm and kubectl edit/exec popups fade in
+  and out like every other popup. Previously they snapped in,
+  which read as a frame drop.
+- **PopupAnimator on Compare's Diff menu.** The Space-triggered
+  layout-toggle menu inside comparepopup grew its own animator —
+  it was the last popup-shaped surface in the codebase still
+  toggling synchronously.
+- **Namespace picker animated spinner.** Replaced the "Loading
+  namespaces…" body row with a 10-frame braille spinner
+  (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ @ 80ms) tucked into a fixed-width slot in the
+  title bar. lipgloss.Width(title) stays constant across
+  loading↔loaded so border-shake is impossible.
+
+### Changed
+
+- **Toast: 3-row → 5-row, layer color, fixed title text.** Toast
+  used to be a minimal glyph-only frame. Per the popup-convention
+  v2 rule that every title must be `glyph + text`, toasts now
+  render as a 5-row message-class popup: `{level glyph} km8` in
+  the title, padRow top + body + padRow bottom, and a hint bar
+  (`auto-dismiss` for transient, `Esc: close` for sticky). Border
+  follows the layer scale for info / sticky; warn keeps its
+  Catppuccin Peach (#fab387) — warning signal takes precedence
+  over the layer color.
+- **Popup convention v2 — 4-class taxonomy.** Every popup is now
+  one of `menu` (interactive selector, cursor + Enter),
+  `message` (short text + binary or scroll action),
+  `viewport` (long content, maximize vertical), or `pty`
+  (embedded subprocess frame). Each class has a spec table —
+  padding, title, hint — codified in
+  `.claude/rules/popup-convention.md` §2.
+- **Idiom B → A: named `padRow` recipe across the board.** Five
+  popups (applog / confirm / context / namespace / help) used to
+  get top/bottom padding via the inline
+  `bodyLines := []string{""}` + `append("")` trick. Converted
+  all to the canonical
+  `padRow := left + strings.Repeat(" ", innerW) + right` recipe
+  + explicit `b.WriteString(padRow)` bracketing the content loop.
+  Visual output unchanged; reads as "this is the convention" now.
+- **Periwinkle removed.** The custom `#A4BAFC` mid-purple that
+  every popup used to share is gone — replaced everywhere by the
+  layer color. Comments mentioning periwinkle as a border
+  reference cleaned up; the constant itself no longer exists in
+  `theme/theme.go`.
+- **PTY Shell border joins the layer system.** KM8erm popups used
+  to render with Lavender (`#b4befe`) borders to mark "this is
+  YOUR persistent shell". The KM8erm identity now lives only on
+  the statusbar marker (still lavender — user footprint); the
+  popup border itself follows the layer scale like every other
+  popup, so a popup over KM8erm reads one notch deeper than
+  KM8erm regardless of kind.
+- **comparemenu extracted to its own file.** The Space-triggered
+  Diff menu (`Switch view` / `Close`) used to live inside
+  `comparepopup.go` as `overlayMenu`. Moved to `comparemenu.go`
+  with its own `CompareMenuPopupModel` so it falls under the
+  popup-convention filename audit (one file = one popup) just
+  like every other popup.
+- **Top/bottom padding row added to comparemenu.** The newly-
+  extracted Diff menu was the only menu-class popup without the
+  one-row breathing space between title border and items.
+  Brought into line with every other bordered menu popup.
+- **`settingspopup` animator target renamed.** Was `"settings"`,
+  now `"settingspopup"` — every other popup's animator target
+  matches its filename. Convention cleanup, no functional change.
+
+### Fixed
+
+- **PTY close animation now plays.** `app.go`'s view-overlay gate
+  used `IsActive()`, which flipped false the moment `hidden=true`
+  during hide — the close-animation tick fired but `RenderPopup`
+  was never called for it. Added `IsRendered() = IsActive() ||
+  animator.IsActive()` to `PtyView` and gated rendering on it;
+  input routing still goes through `IsActive()` so keys don't
+  leak into a popup that's fading out.
+- **PtyView Shell animator stroke color matches border.** Pre-
+  v1.7.4 the animator was constructed with periwinkle but the
+  rendered border drew with lavender, so the open-line stroke
+  was a different color than the expanded popup it became. With
+  Shell joining the layer system, animator stroke + border are
+  now always in lockstep via `SetLayer`.
+- **Detail panel scroll preserved across watcher refresh.** The
+  v1.7.3 same-UID guard fix carried forward without regression.
+
+### Removed
+
+- **`theme.Periwinkle` constant** (replaced by the layer-color
+  scale; popups that need a border color now use
+  `theme.PopupLayerColor(layer)`).
+
 ## [v1.7.3] - 2026-06-26
 
 Polish pass on top of v1.7.2. Three real additions — **row switch
