@@ -2614,6 +2614,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toastDismissMsg:
 		return m, m.toast.Update(msg)
 
+	case namespaceSpinnerTickMsg:
+		return m, m.namespacePicker.HandleSpinnerTick(msg)
+
 	case CRDsDiscoveredMsg:
 		if msg.Err != nil {
 			m.appLog.Warn("CRD discovery failed: " + msg.Err.Error())
@@ -3017,10 +3020,10 @@ func (m AppModel) View() string {
 
 	// Composite shellPty under txPty: KM8erm renders first so a visible
 	// edit/exec popup overlays it. Hidden shellPty contributes nothing.
-	if m.shellPty.IsActive() {
+	if m.shellPty.IsRendered() {
 		mainView = overlay.Composite(m.shellPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
-	if m.txPty.IsActive() {
+	if m.txPty.IsRendered() {
 		mainView = overlay.Composite(m.txPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
