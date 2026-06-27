@@ -266,7 +266,7 @@ func TestRenderSplitDiff_TruncatesOversizedInput(t *testing.T) {
 	right := makeYAML(splitDiffLineLimit+500, "R")
 	th := theme.DefaultTheme()
 
-	out := renderSplitDiff(left, right, "blue", "green", 80, th)
+	out := renderSplitDiff(left, right, "blue", "green", 80, th, theme.PopupLayerColor(1))
 
 	if len(out) == 0 {
 		t.Fatal("expected non-empty diff output")
@@ -310,7 +310,7 @@ func TestRenderUnifiedDiff_TruncatesOversizedInput(t *testing.T) {
 	right := makeYAML(splitDiffLineLimit+500, "R")
 	th := theme.DefaultTheme()
 
-	out := renderUnifiedDiff(left, right, "blue", "green", 80, th)
+	out := renderUnifiedDiff(left, right, "blue", "green", 80, th, theme.PopupLayerColor(1))
 	if len(out) == 0 {
 		t.Fatal("expected non-empty unified diff output")
 	}
@@ -332,7 +332,7 @@ func TestRenderSplitDiff_NoBannerWhenUnderCap(t *testing.T) {
 	left := "a\nb\nc"
 	right := "a\nB\nc"
 	th := theme.DefaultTheme()
-	out := renderSplitDiff(left, right, "blue", "green", 80, th)
+	out := renderSplitDiff(left, right, "blue", "green", 80, th, theme.PopupLayerColor(1))
 	for _, row := range out {
 		if strings.Contains(row, "truncated") {
 			t.Errorf("did not expect truncation banner for small input, got row: %q", row)

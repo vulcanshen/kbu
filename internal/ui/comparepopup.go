@@ -99,6 +99,9 @@ type CompareYamlPopupModel struct {
 	// AppModel uses it to persist the new layout into the config file
 	// so the choice survives a restart. nil = no persistence.
 	onLayoutChange func(CompareLayout)
+
+	layer       int
+	borderColor lipgloss.Color
 }
 
 // NewCompareYamlPopupModel constructs a compare popup with the default
@@ -107,12 +110,22 @@ type CompareYamlPopupModel struct {
 // safer default than Split. Callers override via SetDefaultLayout
 // before Open if the user's config carries a different preference.
 func NewCompareYamlPopupModel(t *theme.Theme) CompareYamlPopupModel {
+	bc := theme.PopupLayerColor(1)
 	return CompareYamlPopupModel{
-		theme:    t,
-		animator: NewPopupAnimator("comparepopup", lipgloss.Color(theme.Periwinkle)),
-		menu:     NewCompareMenuPopupModel(t),
-		layout:   CompareLayoutUnified,
+		theme:       t,
+		animator:    NewPopupAnimator("comparepopup", bc),
+		menu:        NewCompareMenuPopupModel(t),
+		layout:      CompareLayoutUnified,
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *CompareYamlPopupModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // SetDefaultLayout sets the initial layout used by subsequent Open calls.
@@ -211,6 +224,10 @@ func (m CompareYamlPopupModel) handlePopupKey(keyMsg tea.KeyMsg) (CompareYamlPop
 		return m, m.animator.Close()
 	case " ":
 		m.pendingG = false
+		// Sub-popup layer = parent layer + 1. Compare popup is
+		// typically layer 1, so the menu opens at layer 2
+		// (lavenphire50) — visibly deeper than the parent.
+		m.menu.SetLayer(m.layer + 1)
 		return m, m.menu.Open(m.menuItems())
 	case "j", "down":
 		if m.scrollOffset < m.maxScrollOffset() {
@@ -280,9 +297,9 @@ func (m *CompareYamlPopupModel) rebuildContent() {
 	m.lastBuiltWidth = bodyW
 	m.lastBuiltLayout = m.layout
 	if m.layout == CompareLayoutUnified {
-		m.contentLines = renderUnifiedDiff(m.leftYAML, m.rightYAML, m.leftLabel, m.rightLabel, bodyW, m.theme)
+		m.contentLines = renderUnifiedDiff(m.leftYAML, m.rightYAML, m.leftLabel, m.rightLabel, bodyW, m.theme, m.borderColor)
 	} else {
-		m.contentLines = renderSplitDiff(m.leftYAML, m.rightYAML, m.leftLabel, m.rightLabel, bodyW, m.theme)
+		m.contentLines = renderSplitDiff(m.leftYAML, m.rightYAML, m.leftLabel, m.rightLabel, bodyW, m.theme, m.borderColor)
 	}
 	if m.scrollOffset > m.maxScrollOffset() {
 		m.scrollOffset = m.maxScrollOffset()
@@ -387,7 +404,7 @@ func truncationBanner(truncL, truncR bool, width int) string {
 // renderUnifiedDiff returns display lines for unified-diff mode. Wraps
 // go-udiff's Unified() output with lipgloss colouring: red on `-`,
 // green on `+`, dimmed on `@@` hunk headers, default on context.
-func renderUnifiedDiff(left, right, leftLabel, rightLabel string, width int, t *theme.Theme) []string {
+func renderUnifiedDiff(left, right, leftLabel, rightLabel string, width int, t *theme.Theme, accent lipgloss.Color) []string {
 	cappedLeft, cappedRight, truncL, truncR := capDiffInput(left, right)
 	diff := udiff.Unified(leftLabel, rightLabel, cappedLeft, cappedRight)
 	if diff == "" {
@@ -401,7 +418,7 @@ func renderUnifiedDiff(left, right, leftLabel, rightLabel string, width int, t *
 	}
 	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Running))
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Error))
-	hunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle)).Bold(true)
+	hunkStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	var out []string
 	if banner := truncationBanner(truncL, truncR, width); banner != "" {
@@ -430,7 +447,7 @@ func renderUnifiedDiff(left, right, leftLabel, rightLabel string, width int, t *
 // go-udiff edit list, building a synchronized left/right pair of lines
 // for each contiguous chunk. Half-width column per side, separated by a
 // vertical bar.
-func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *theme.Theme) []string {
+func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *theme.Theme, accent lipgloss.Color) []string {
 	// 1 separator column ` │ `, 3 chars.
 	colW := (width - 3) / 2
 	if colW < 8 {
@@ -440,7 +457,7 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Error))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle)).Bold(true)
+	headerStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)
 
 	// capDiffInput caps both sides to splitDiffLineLimit and reports
 	// per-side truncation. Shared with the unified path so the OOM /
@@ -701,7 +718,7 @@ func (m CompareYamlPopupModel) RenderPopup() string {
 func (m CompareYamlPopupModel) renderFrame() string {
 	popupW := m.popupWidth()
 	popupH := m.popupHeight()
-	borderColor := lipgloss.Color(theme.Periwinkle)
+	borderColor := m.borderColor
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 	titleStyle := lipgloss.NewStyle().Foreground(borderColor).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))

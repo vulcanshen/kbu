@@ -87,20 +87,38 @@ type PtyView struct {
 	// the app runs two independent PtyView instances (shellPty +
 	// txPty) and AnimTickMsg routing needs a unique target per slot.
 	animator PopupAnimator
+
+	layer       int
+	borderColor lipgloss.Color
 }
 
 const maxScrollbackLines = 10000
 
 // ptyTitleGlyph is the Nerd Font console_line glyph (U+F018D) — same
 // "terminal/subprocess overlay" category mark across Shell / Edit /
-// Exec kinds. Kind-specific differentiation lives in border color
-// (lavender for Shell, periwinkle for Edit/Exec) + title text.
+// Exec kinds. Kind differentiation lives in title text (Shell:
+// hostname / Edit: pod/foo / Exec: pod/foo → ctnr); border color
+// follows the popup-layer system like every other popup. KM8erm's
+// "user footprint" identity is carried by the statusbar marker
+// (lavender chip), not the popup border.
 const ptyTitleGlyph = "󰆍"
 
 func NewPtyView(target string) *PtyView {
+	bc := theme.PopupLayerColor(1)
 	return &PtyView{
-		animator: NewPopupAnimator(target, lipgloss.Color(theme.Periwinkle)),
+		animator:    NewPopupAnimator(target, bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps the PTY's popup nesting depth + derives border /
+// animator color. Should be called before Start() / Show() so the
+// open animation strokes use the right layer color from frame 0.
+func (p *PtyView) SetLayer(layer int) {
+	p.layer = layer
+	p.borderColor = theme.PopupLayerColor(layer)
+	p.animator.Color = p.borderColor
 }
 
 // IsActive reports whether the popup is logically visible AND should
@@ -570,29 +588,13 @@ func (p *PtyView) RenderPopup() string {
 	}
 	p.mu.Unlock()
 
-	// Two-color scheme along the user-state vs overlay split:
-	//   - PtyKindShell (KM8erm)       : lavender #b4befe — your
-	//                                   persistent shell, user-state
-	//                                   (same accent as Pinned /
-	//                                   statusbar values / unfocused-
-	//                                   selected chip)
-	//   - PtyKindEdit  (kubectl edit) : periwinkle — transient
-	//                                   subprocess overlay
-	//   - PtyKindExec  (kubectl exec) : periwinkle — transient
-	//                                   subprocess overlay
-	// Edit + Exec share the unified popup overlay periwinkle because
-	// both are "km8 spawns an external process, user does their thing,
-	// process exits, popup closes". The title (`kubectl edit pod/foo`
-	// vs `kubectl exec -it pod/foo`) carries the kind distinction.
-	// Border and title share one color (title is bold) for a consistent frame.
-	var borderColor lipgloss.Color
-	switch p.kind {
-	case PtyKindShell:
-		borderColor = lipgloss.Color("#b4befe")
-	default: // PtyKindEdit, PtyKindExec
-		borderColor = lipgloss.Color(theme.Periwinkle)
-	}
-	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+	// Border + title color follow the popup-layer system — all PTY
+	// kinds (Shell / Edit / Exec) use the layer color stamped via
+	// SetLayer. KM8erm's "your persistent shell" user-state identity
+	// is carried by the statusbar marker (lavender chip), not the
+	// popup border. Title text (`KM8erm: hostname` / `Edit: pod/foo`
+	// / `Shell: pod/foo → ctnr`) carries the kind distinction.
+	borderStyle := lipgloss.NewStyle().Foreground(p.borderColor)
 	titleStyle := borderStyle.Bold(true)
 
 	// Title gains a [SCROLLED N] marker while the user is viewing history so

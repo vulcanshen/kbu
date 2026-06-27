@@ -239,6 +239,61 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 	return ctx
 }
 
+// popupDepth returns the count of currently-rendered popups so a
+// newly-opening popup can stamp itself layer = depth + 1 via SetLayer
+// before its Open/Show/Toggle call. Lavender→sapphire layer scale
+// derives the border color from this count — see
+// .claude/rules/popup-convention.md §1.6.
+func (m AppModel) popupDepth() int {
+	n := 0
+	if m.help.IsActive() {
+		n++
+	}
+	if m.appLog.IsActive() {
+		n++
+	}
+	if m.confirm.IsActive() {
+		n++
+	}
+	if m.contextPicker.IsActive() {
+		n++
+	}
+	if m.namespacePicker.IsActive() {
+		n++
+	}
+	if m.helmDocMenu.IsActive() {
+		n++
+	}
+	if m.panel2Menu.IsActive() {
+		n++
+	}
+	if m.hintPopup.IsActive() {
+		n++
+	}
+	if m.listPicker.IsActive() {
+		n++
+	}
+	if m.settingsPopup.IsActive() {
+		n++
+	}
+	if m.yamlPopup.IsActive() {
+		n++
+	}
+	if m.comparePopup.IsActive() {
+		n++
+	}
+	if m.breadcrumbPopup.IsActive() {
+		n++
+	}
+	if m.shellPty.IsActive() {
+		n++
+	}
+	if m.txPty.IsActive() {
+		n++
+	}
+	return n
+}
+
 // compareHotkeyDispatch routes the "C" hotkey contextually:
 //   - no anchor set → mark the given row as the anchor
 //   - anchor set, cursor on a different row of the same kind → open
@@ -298,6 +353,7 @@ func (m *AppModel) openCompareDiff(item k8s.ResourceItem) tea.Cmd {
 		rightLabel = item.Name
 	}
 	m.comparePopup.SetSize(m.width, m.height)
+	m.comparePopup.SetLayer(m.popupDepth() + 1)
 	return m.comparePopup.Open(leftYAML, rightYAML, leftLabel, rightLabel)
 }
 
@@ -369,6 +425,7 @@ func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
 	}
 	title := sortPopupIcon + " Sort " + def.DisplayName + " by…"
 	m.listPicker.SetSize(m.width, m.height)
+	m.listPicker.SetLayer(m.popupDepth() + 1)
 	return m.listPicker.Open("sort:column", title, items)
 }
 
@@ -415,6 +472,7 @@ func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) t
 	}
 	title := sortPopupIcon + " Sort " + def.DisplayName + " by " + column + "…"
 	m.listPicker.SetSize(m.width, m.height)
+	m.listPicker.SetLayer(m.popupDepth() + 1)
 	return m.listPicker.Open("sort:direction", title, items)
 }
 
@@ -1552,6 +1610,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			quitCmd := func() tea.Msg {
 				return quitConfirmedMsg{}
 			}
+			m.confirm.SetLayer(m.popupDepth() + 1)
 			return m, m.confirm.Show(ConfirmQuit, "Quit km8?", "", quitCmd)
 		case "V":
 			return m, m.splash.Show()
@@ -1564,6 +1623,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// doesn't collide with any letter trigger; mnemonic "open
 			// app preferences from here forward".
 			m.settingsPopup.SetSize(m.width, m.height)
+			m.settingsPopup.SetLayer(m.popupDepth() + 1)
 			return m, m.settingsPopup.Open(m.buildSettingsItems())
 		case "alt+t", "alt+T", "ctrl+t":
 			// Alt+T is the single KM8erm toggle:
@@ -1588,15 +1648,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// surface KM8erm under it. Currently: if tx visible, KM8erm
 			// hide/show is harmless (render still picks tx on top).
 			if m.shellPty.IsAlive() {
+				m.shellPty.SetLayer(m.popupDepth() + 1)
 				return m, m.shellPty.Show(m.width, m.height)
 			}
+			m.shellPty.SetLayer(m.popupDepth() + 1)
 			cmd := buildShellTerminalCmd(m.cfg.KM8ermShell, m.cfg.KM8ermLoginShell)
 			return m, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell)
 		case "?":
 			m.help.SetSize(m.width, m.height)
+			if !m.help.IsActive() {
+				m.help.SetLayer(m.popupDepth() + 1)
+			}
 			return m, m.help.Toggle()
 		case "!":
 			m.appLog.SetSize(m.width, m.height)
+			if !m.appLog.IsActive() {
+				m.appLog.SetLayer(m.popupDepth() + 1)
+			}
 			return m, m.appLog.Toggle()
 		case "1":
 			m.detailExpanded = false
@@ -1662,6 +1730,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// LIST namespaces API in parallel. NamespaceListMsg swaps
 			// in the real list when it arrives — no flicker because
 			// the animator stays in open state across SetNamespaces.
+			m.namespacePicker.SetLayer(m.popupDepth() + 1)
 			openCmd := m.namespacePicker.OpenLoading()
 			return m, tea.Batch(openCmd, fetchNamespaces(m.k8sClient))
 		case "C":
@@ -1721,6 +1790,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				startCmd := func() tea.Msg {
 					return startEditMsg{resource: m.currentResource, item: item, contextName: m.k8sClient.ContextName()}
 				}
+				m.confirm.SetLayer(m.popupDepth() + 1)
 				return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
 			}
 		case ".":
@@ -1802,6 +1872,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, m.toast.Show("Delete not supported on " + m.currentResource.KubectlName())
 					}
 					detail := fmt.Sprintf("kubectl delete %s %s -n %s", m.currentResource.KubectlName(), item.Name, item.Namespace)
+					m.confirm.SetLayer(m.popupDepth() + 1)
 					return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
 						deleteResource(m.currentResource, item.Name, item.Namespace, m.k8sClient.ContextName()))
 				}
@@ -1865,6 +1936,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.yamlPopup.SetSize(m.width, m.height)
+			m.yamlPopup.SetLayer(m.popupDepth() + 1)
 			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
 		case " ":
 			// Sidebar (panel 1): rows are nav targets, not action targets.
@@ -1945,6 +2017,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						actions = itemOps
 					}
 				}
+				m.hintPopup.SetLayer(m.popupDepth() + 1)
 				return m, m.hintPopup.OpenWithActions(title, actions, rows)
 			}
 			// Container drill view: panel 2 is showing the containers of
@@ -1958,6 +2031,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if idx >= 0 && idx < len(m.drillDownContainers) {
 					c := m.drillDownContainers[idx]
 					m.panel2Menu.SetSize(m.width, m.height)
+					m.panel2Menu.SetLayer(m.popupDepth() + 1)
 					return m, m.panel2Menu.OpenForContainer(m.drillDownPod.Name, m.drillDownPod.Namespace, c.Name)
 				}
 				return m, nil
@@ -1971,6 +2045,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
 					m.helmDocMenu.SetSize(m.width, m.height)
+					m.helmDocMenu.SetLayer(m.popupDepth() + 1)
 					return m, m.helmDocMenu.Open(item.Name, item.Namespace)
 				}
 				return m, nil
@@ -1985,6 +2060,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if idx >= 0 && idx < len(m.items) {
 					item := m.items[idx]
 					m.panel2Menu.SetSize(m.width, m.height)
+					m.panel2Menu.SetLayer(m.popupDepth() + 1)
 					return m, m.panel2Menu.Open(m.currentResource, item, len(m.drillDownStack) > 0, m.compareCtxForMenu(item))
 				}
 				return m, nil
@@ -1997,6 +2073,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel == TablePanel && !m.editing && m.drillDownPod == nil && len(m.items) == 0 {
 				m.hintPopup.SetSize(m.width, m.height)
 				title, rows := panel2EmptyHintContent()
+				m.hintPopup.SetLayer(m.popupDepth() + 1)
 				return m, m.hintPopup.Open(title, rows)
 			}
 			// Panel 3 History tab on a Helm Release: Space picks the
@@ -2009,6 +2086,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					msg := fmt.Sprintf("Rollback %s to revision %d?", root.Name, rev.Revision)
 					cmdStr := k8s.RollbackCommandString(root.Name, root.Namespace, rev.Revision)
 					rollback := rollbackReleaseCmd(root.Name, root.Namespace, rev.Revision)
+					m.confirm.SetLayer(m.popupDepth() + 1)
 					return m, m.confirm.Show(ConfirmRollback, msg, cmdStr, rollback)
 				}
 				return m, nil
@@ -2019,6 +2097,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Logs" {
 				m.hintPopup.SetSize(m.width, m.height)
 				title, rows := logsHintContent()
+				m.hintPopup.SetLayer(m.popupDepth() + 1)
 				return m, m.hintPopup.Open(title, rows)
 			}
 			// Panel 3 Events tab: same idea — read-only cheatsheet for the
@@ -2026,6 +2105,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Events" {
 				m.hintPopup.SetSize(m.width, m.height)
 				title, rows := eventsHintContent()
+				m.hintPopup.SetLayer(m.popupDepth() + 1)
 				return m, m.hintPopup.Open(title, rows)
 			}
 			// Panel 3 Conditions tab: scrollable table like Events, same nav
@@ -2034,6 +2114,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Conditions" {
 				m.hintPopup.SetSize(m.width, m.height)
 				title, rows := conditionsHintContent()
+				m.hintPopup.SetLayer(m.popupDepth() + 1)
 				return m, m.hintPopup.Open(title, rows)
 			}
 			// v1.5.x: Relatives tab Space splits by drill depth.
@@ -2044,9 +2125,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.detail.Depth() <= 1 {
 					m.hintPopup.SetSize(m.width, m.height)
 					title, rows := relativesDrillHintContent()
+					m.hintPopup.SetLayer(m.popupDepth() + 1)
 					return m, m.hintPopup.Open(title, rows)
 				}
 				m.breadcrumbPopup.SetSize(m.width, m.height)
+				m.breadcrumbPopup.SetLayer(m.popupDepth() + 1)
 				return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
 			}
 			return m, nil
@@ -2066,6 +2149,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		target := msg.Ref
 		onConfirm := func() tea.Msg { return SwitchToResourceMsg{Ref: target} }
+		m.confirm.SetLayer(m.popupDepth() + 1)
 		return m, m.confirm.Show(ConfirmSwitch, "Switch panel 1 + 2 to this resource?", detail, onConfirm)
 
 	case SwitchToResourceMsg:
@@ -2348,6 +2432,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.breadcrumbPopup.SetSize(m.width, m.height)
+		m.breadcrumbPopup.SetLayer(m.popupDepth() + 1)
 		return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
 
 	case RelativeJumpMsg:
@@ -2364,6 +2449,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.yamlPopup.SetSize(m.width, m.height)
+		m.yamlPopup.SetLayer(m.popupDepth() + 1)
 		return m, m.yamlPopup.Open(msg.yaml, msg.ref.Type, msg.item, m.k8sClient.ContextName())
 
 	case aggregateLogsReadyMsg:
@@ -2467,6 +2553,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case ContextListMsg:
+		m.contextPicker.SetLayer(m.popupDepth() + 1)
 		return m, m.contextPicker.Open(msg.Contexts, msg.Current)
 
 	case ContextChangedMsg:
@@ -2561,6 +2648,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd := buildKubectlExecCmd(msg.podName, msg.namespace, msg.container, msg.contextName)
 		title := fmt.Sprintf("Shell: pod/%s → %s", msg.podName, msg.container)
+		m.txPty.SetLayer(m.popupDepth() + 1)
 		return m, m.txPty.Start(cmd, title, m.width, m.height, PtyKindExec)
 
 	case startEditMsg:
@@ -2576,6 +2664,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := buildKubectlEditCmd(msg.resource, msg.item, msg.contextName, m.cfgEditor)
 		config.WriteAuditEntry("edit", msg.resource.KubectlName()+"/"+msg.item.Name, msg.item.Namespace, "started") //nolint
 		m.appLog.Info("edit: " + msg.resource.KubectlName() + "/" + msg.item.Name)
+		m.txPty.SetLayer(m.popupDepth() + 1)
 		return m, m.txPty.Start(cmd, title, m.width, m.height, PtyKindEdit)
 
 	case DeleteDoneMsg:
@@ -2645,6 +2734,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.yamlPopup.SetSize(m.width, m.height)
+			m.yamlPopup.SetLayer(m.popupDepth() + 1)
 			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
 		case "E":
 			if resource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
@@ -2658,6 +2748,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			startCmd := func() tea.Msg {
 				return startEditMsg{resource: resource, item: item, contextName: m.k8sClient.ContextName()}
 			}
+			m.confirm.SetLayer(m.popupDepth() + 1)
 			return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
 		case "S":
 			return m, m.execShell()
@@ -2667,6 +2758,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.toast.Show("Helm-managed (read-only)")
 			}
 			detail := fmt.Sprintf("kubectl delete %s %s -n %s", resource.KubectlName(), item.Name, item.Namespace)
+			m.confirm.SetLayer(m.popupDepth() + 1)
 			return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
 				deleteResource(resource, item.Name, item.Namespace, m.k8sClient.ContextName()))
 		case "C":
@@ -2782,6 +2874,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		actions := []hintAction{
 			{label: "Drop to confirm new order", key: "D", action: "DropPinned"},
 		}
+		m.hintPopup.SetLayer(m.popupDepth() + 1)
 		return m, m.hintPopup.OpenWithActions(title, actions, nil)
 
 	case ListPickerCancelMsg:
@@ -2811,6 +2904,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// and the user gets a uniform "press q / Esc to dismiss" UX.
 		item := k8s.ResourceItem{Name: msg.ReleaseName, Namespace: msg.Namespace}
 		m.yamlPopup.SetSize(m.width, m.height)
+		m.yamlPopup.SetLayer(m.popupDepth() + 1)
 		return m, m.yamlPopup.Open(msg.Content, k8s.ResourceReleases, item, m.k8sClient.ContextName())
 
 	case RollbackResultMsg:
@@ -3418,6 +3512,7 @@ func (m *AppModel) execShell() tea.Cmd {
 	}
 
 	detail := fmt.Sprintf("kubectl exec -it %s -n %s -c %s", podName, namespace, container)
+	m.confirm.SetLayer(m.popupDepth() + 1)
 	showCmd := m.confirm.Show(ConfirmShellExec, "Exec into container?", detail,
 		shellExec(podName, namespace, container, m.k8sClient.ContextName()))
 	m.appLog.Info("exec shell: " + detail)

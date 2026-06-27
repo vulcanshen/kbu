@@ -16,14 +16,26 @@ type HelpModel struct {
 	height       int
 	theme        *theme.Theme
 	scrollOffset int
+	layer        int
+	borderColor  lipgloss.Color
 }
 
 // NewHelpModel creates a new help model.
 func NewHelpModel(t *theme.Theme) HelpModel {
+	bc := theme.PopupLayerColor(1)
 	return HelpModel{
-		theme:    t,
-		animator: NewPopupAnimator("help", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("help", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *HelpModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // IsActive returns whether the help overlay is visible (including animations).
@@ -168,7 +180,7 @@ func (m HelpModel) renderFullPopup() string {
 	}
 	colW := leftColW // tests + section sizing use the smaller side
 
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 

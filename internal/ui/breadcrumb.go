@@ -32,16 +32,28 @@ const (
 type BreadcrumbPopupModel struct {
 	animator PopupAnimator
 	chain    []k8s.RefTarget
-	cursor   int
-	screenW  int
-	theme    *theme.Theme
+	cursor      int
+	screenW     int
+	theme       *theme.Theme
+	layer       int
+	borderColor lipgloss.Color
 }
 
 func NewBreadcrumbPopupModel(t *theme.Theme) BreadcrumbPopupModel {
+	bc := theme.PopupLayerColor(1)
 	return BreadcrumbPopupModel{
-		theme:    t,
-		animator: NewPopupAnimator("breadcrumb", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("breadcrumb", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *BreadcrumbPopupModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open shows the popup with `chain` as the displayed levels (root first,
@@ -184,7 +196,7 @@ func (m BreadcrumbPopupModel) RenderPopup() string {
 }
 
 func (m BreadcrumbPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	levelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

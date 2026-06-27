@@ -34,6 +34,9 @@ type HelmDocMenuPopupModel struct {
 	// arriving mid-popup doesn't shift the target underneath the user.
 	releaseName string
 	releaseNS   string
+
+	layer       int
+	borderColor lipgloss.Color
 }
 
 type helmDocMenuItem struct {
@@ -51,11 +54,21 @@ var helmDocMenuItems = []helmDocMenuItem{
 }
 
 func NewHelmDocMenuPopupModel(t *theme.Theme) HelmDocMenuPopupModel {
+	bc := theme.PopupLayerColor(1)
 	return HelmDocMenuPopupModel{
-		theme:    t,
-		items:    helmDocMenuItems,
-		animator: NewPopupAnimator("helmdocmenu", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		items:       helmDocMenuItems,
+		animator:    NewPopupAnimator("helmdocmenu", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *HelmDocMenuPopupModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open shows the menu for the given release. Cursor resets to the first
@@ -229,7 +242,7 @@ func (m HelmDocMenuPopupModel) RenderPopup() string {
 }
 
 func (m HelmDocMenuPopupModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

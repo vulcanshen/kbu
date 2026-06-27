@@ -17,14 +17,26 @@ type ContextPickerModel struct {
 	theme       *theme.Theme
 	searching   bool
 	searchQuery string
+	layer       int
+	borderColor lipgloss.Color
 }
 
 // NewContextPickerModel creates a new context picker.
 func NewContextPickerModel(t *theme.Theme) ContextPickerModel {
+	bc := theme.PopupLayerColor(1)
 	return ContextPickerModel{
-		theme:    t,
-		animator: NewPopupAnimator("context", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("context", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *ContextPickerModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open populates the picker with available contexts and sets the cursor to
@@ -222,7 +234,7 @@ func (m ContextPickerModel) RenderPopup() string {
 }
 
 func (m ContextPickerModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	selectedStyle := m.theme.SidebarSelectedStyle()

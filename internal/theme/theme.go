@@ -8,16 +8,44 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Periwinkle is the custom overlay accent — a blue-purple sitting
-// between catppuccin blue (#89b4fa, panel-frame) and lavender
-// (#b4befe, in-panel user-footprint) on the cool-tone axis, slightly
-// lavender-leaning. Used as the unified accent for everything that
-// "floats above" the panel layer: popups (border + title), info-
-// level toast border, kubectl edit pty border. Not part of the
-// catppuccin Mocha palette — km8-specific, named in the same
-// "color name" family as catppuccin's own lavender / mauve /
-// flamingo.
-const Periwinkle = "#A4BAFC"
+// Popup-layer border color scale — lavender → sapphire gradient.
+// Each layer of popup nesting picks the next stop along the scale,
+// so the visual stack reads "deeper popups are MORE distinct from
+// the panel background". Scale endpoints are catppuccin Mocha
+// lavender + sapphire (real palette anchors, not custom blends);
+// intermediate stops are linear-RGB lerp of those two. Future
+// expansion: subdivide the existing intervals (12.5 / 37.5 / ...)
+// or raise the ceiling to sky.
+//
+// Lavender itself is the SCALE ANCHOR — popups never use it.
+// It stays reserved for in-panel user-footprint (sidebar Pinned
+// section, settings ON toggle, compare anchor row, unfocused-
+// selected chip, KM8erm statusbar marker).
+const (
+	Lavender     = "#b4befe" // scale anchor — popups DON'T use this
+	Lavenphire25 = "#A4C0FA" // L1 — first-tier popup
+	Lavenphire50 = "#94C3F5" // L2 — popup over popup (e.g. comparemenu over comparepopup)
+	Lavenphire75 = "#84C5F0" // L3 — popup over popup over popup (unused today)
+	Sapphire     = "#74c7ec" // L4 ceiling — catppuccin Mocha sapphire
+)
+
+// PopupLayerColor maps a popup's 1-based nesting depth to its
+// border + animator stroke color. Layer 0/1 → Lavenphire25, layer
+// 2 → Lavenphire50, layer 3 → Lavenphire75, layer 4+ → Sapphire.
+// Going past 4 clamps at Sapphire — when the app eventually nests
+// deeper, extend the scale by raising the ceiling and subdividing.
+func PopupLayerColor(layer int) lipgloss.Color {
+	switch {
+	case layer <= 1:
+		return lipgloss.Color(Lavenphire25)
+	case layer == 2:
+		return lipgloss.Color(Lavenphire50)
+	case layer == 3:
+		return lipgloss.Color(Lavenphire75)
+	default:
+		return lipgloss.Color(Sapphire)
+	}
+}
 
 // Theme defines colors for all UI elements in km8.
 type Theme struct {

@@ -20,13 +20,15 @@ const (
 )
 
 type ConfirmModel struct {
-	animator  PopupAnimator
-	action    ConfirmAction
-	message   string
-	detail    string
-	screenW   int
-	theme     *theme.Theme
-	onConfirm tea.Cmd
+	animator    PopupAnimator
+	action      ConfirmAction
+	message     string
+	detail      string
+	screenW     int
+	theme       *theme.Theme
+	onConfirm   tea.Cmd
+	layer       int
+	borderColor lipgloss.Color
 }
 
 func (m *ConfirmModel) SetSize(w, h int) {
@@ -34,10 +36,20 @@ func (m *ConfirmModel) SetSize(w, h int) {
 }
 
 func NewConfirmModel(t *theme.Theme) ConfirmModel {
+	bc := theme.PopupLayerColor(1)
 	return ConfirmModel{
-		theme:    t,
-		animator: NewPopupAnimator("confirm", lipgloss.Color(theme.Periwinkle)),
+		theme:       t,
+		animator:    NewPopupAnimator("confirm", bc),
+		borderColor: bc,
+		layer:       1,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *ConfirmModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 func (m *ConfirmModel) Show(action ConfirmAction, message, detail string, onConfirm tea.Cmd) tea.Cmd {
@@ -115,7 +127,7 @@ func (m ConfirmModel) RenderPopup() string {
 }
 
 func (m ConfirmModel) renderFullPopup() string {
-	bc := lipgloss.Color(theme.Periwinkle)
+	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	msgStyle := lipgloss.NewStyle().Bold(true)

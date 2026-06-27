@@ -27,17 +27,32 @@ const (
 // parent computes the item labels (they depend on parent layout
 // state), hands them to Open, and reads Cursor() on Commit.
 type CompareMenuPopupModel struct {
-	animator PopupAnimator
-	items    []string
-	cursor   int
-	theme    *theme.Theme
+	animator    PopupAnimator
+	items       []string
+	cursor      int
+	theme       *theme.Theme
+	layer       int
+	borderColor lipgloss.Color
 }
 
 func NewCompareMenuPopupModel(t *theme.Theme) CompareMenuPopupModel {
+	// Default to layer 2 — comparemenu always opens from inside
+	// comparepopup, so layer is parent (1) + 1 = 2. SetLayer can
+	// override if the nesting depth changes in the future.
+	bc := theme.PopupLayerColor(2)
 	return CompareMenuPopupModel{
-		animator: NewPopupAnimator("comparepopup_menu", lipgloss.Color(theme.Periwinkle)),
-		theme:    t,
+		animator:    NewPopupAnimator("comparepopup_menu", bc),
+		theme:       t,
+		borderColor: bc,
+		layer:       2,
 	}
+}
+
+// SetLayer stamps nesting depth + derives border / animator color.
+func (m *CompareMenuPopupModel) SetLayer(layer int) {
+	m.layer = layer
+	m.borderColor = theme.PopupLayerColor(layer)
+	m.animator.Color = m.borderColor
 }
 
 // Open stamps the current items + begins the open animation.
@@ -100,10 +115,10 @@ func (m CompareMenuPopupModel) Render(frame string) string {
 	if !m.animator.IsActive() || len(m.items) == 0 {
 		return frame
 	}
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle))
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Periwinkle)).Bold(true)
+	borderStyle := lipgloss.NewStyle().Foreground(m.borderColor)
+	titleStyle := lipgloss.NewStyle().Foreground(m.borderColor).Bold(true)
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).
-		Background(lipgloss.Color(theme.Periwinkle)).Bold(true)
+		Background(m.borderColor).Bold(true)
 	rowStyle := lipgloss.NewStyle()
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
 
