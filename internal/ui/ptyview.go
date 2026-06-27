@@ -103,9 +103,18 @@ func NewPtyView(target string) *PtyView {
 	}
 }
 
-// IsActive reports whether the popup should be drawn AND receive input
-// (alive and not hidden). Use this for view-overlay + key-routing checks.
+// IsActive reports whether the popup is logically visible AND should
+// receive input (alive, not hidden, fully open). Use this for input
+// routing. View overlays should use IsRendered() instead so the close
+// animation frames keep drawing past the moment hidden flips true.
 func (p *PtyView) IsActive() bool { return p.active && !p.hidden }
+
+// IsRendered reports whether RenderPopup should be invoked — true
+// while the popup is logically visible OR the open/close animation is
+// still mid-flight. Without this, the close animation tick fires but
+// app.go's `if IsActive()` gate skips RenderPopup, so the user sees
+// the popup snap shut instead of animate.
+func (p *PtyView) IsRendered() bool { return p.IsActive() || p.animator.IsActive() }
 
 // IsAlive reports whether the subprocess is running, regardless of whether
 // the popup is currently visible. Use this for status-bar marker rendering
