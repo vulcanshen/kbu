@@ -187,19 +187,53 @@ func TestStatusBarModel_ViewWithBadge_NoBadge(t *testing.T) {
 	}
 }
 
+// TestStatusBarModel_WarnBadge_DistinctFromError pins the v1.7.5 split:
+// warn fires the peach ` N warnings` badge, NOT the red `! N errors`
+// badge. Error precedence is preserved when both are present.
+func TestStatusBarModel_WarnBadge_DistinctFromError(t *testing.T) {
+	m := newTestStatusBar()
+
+	// warn-only — peach warnings badge, no error badge
+	v := m.ViewFull(0, 2, "", nil, nil)
+	if !strings.Contains(v, "") {
+		t.Error("warn-only badge must contain Nerd Font U+F071 warning glyph")
+	}
+	if !strings.Contains(v, "2 warnings") {
+		t.Errorf("warn-only badge must show count + 'warnings', got %q", v)
+	}
+	if strings.Contains(v, "errors") {
+		t.Error("warn-only badge must NOT use 'errors' wording")
+	}
+
+	// Singular form
+	v1 := m.ViewFull(0, 1, "", nil, nil)
+	if !strings.Contains(v1, "1 warning ") {
+		t.Errorf("singular warn badge must render 'warning' (not 'warnings'), got %q", v1)
+	}
+
+	// Error precedence — both set, error wins
+	vBoth := m.ViewFull(3, 5, "", nil, nil)
+	if !strings.Contains(vBoth, "3 errors") {
+		t.Errorf("error must take precedence over warn, got %q", vBoth)
+	}
+	if strings.Contains(vBoth, "") {
+		t.Error("warn badge must not coexist with error badge")
+	}
+}
+
 // ── PtyMarker ──────────────────────────────────────────────────────────────
 
 func TestStatusBarModel_ViewFull_NoPtyMarker(t *testing.T) {
 	m := newTestStatusBar()
-	v := m.ViewFull(0, "", nil, nil)
-	if strings.Contains(v, "attached") || strings.Contains(v, "KM8erm") {
+	v := m.ViewFull(0, 0, "", nil, nil)
+	if strings.Contains(v, "attached") || strings.Contains(v, "Alterm") {
 		t.Error("no PTY marker requested — bar must not render one")
 	}
 }
 
 func TestStatusBarModel_ViewFull_AttachedMarker(t *testing.T) {
 	m := newTestStatusBar()
-	v := m.ViewFull(0, "", &PtyMarker{Visible: true, Label: " attached"}, nil)
+	v := m.ViewFull(0, 0, "", &PtyMarker{Visible: true, Label: " attached"}, nil)
 	if !strings.Contains(v, "attached") {
 		t.Error("visible PTY marker must surface 'attached' label")
 	}
@@ -207,16 +241,16 @@ func TestStatusBarModel_ViewFull_AttachedMarker(t *testing.T) {
 
 func TestStatusBarModel_ViewFull_HiddenMarker(t *testing.T) {
 	m := newTestStatusBar()
-	v := m.ViewFull(0, "", &PtyMarker{Visible: false, Label: " KM8erm"}, nil)
-	if !strings.Contains(v, "KM8erm") {
-		t.Error("hidden PTY marker must surface 'KM8erm' label")
+	v := m.ViewFull(0, 0, "", &PtyMarker{Visible: false, Label: " Alterm"}, nil)
+	if !strings.Contains(v, "Alterm") {
+		t.Error("hidden PTY marker must surface 'Alterm' label")
 	}
 }
 
 func TestStatusBarModel_ViewFull_MarkerCoexistsWithErrorBadge(t *testing.T) {
 	m := newTestStatusBar()
-	v := m.ViewFull(3, "", &PtyMarker{Visible: false, Label: " KM8erm"}, nil)
-	if !strings.Contains(v, "KM8erm") {
+	v := m.ViewFull(3, 0, "", &PtyMarker{Visible: false, Label: " Alterm"}, nil)
+	if !strings.Contains(v, "Alterm") {
 		t.Error("marker must survive when an error badge is also present")
 	}
 	if !strings.Contains(v, "3 errors") {

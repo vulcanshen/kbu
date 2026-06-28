@@ -17,6 +17,7 @@ import (
 	"github.com/vulcanshen/km8/internal/config"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/km8/internal/version"
 )
 
 // aggregateLogsRetryInterval throttles re-attempts of failed aggregate
@@ -92,7 +93,7 @@ type AppModel struct {
 	confirm         ConfirmModel
 	splash          SplashModel
 	toast           ToastModel
-	// Dual-slot PTY: the persistent KM8erm shell (shellPty) and any
+	// Dual-slot PTY: the persistent Alterm shell (shellPty) and any
 	// transient PTY for kubectl edit / exec (txPty) live independently so
 	// the user can keep a long-running shell hidden in the background while
 	// editing or exec'ing into a container. tx-on-top is enforced at render
@@ -292,6 +293,70 @@ func (m AppModel) popupDepth() int {
 		n++
 	}
 	return n
+}
+
+// closeAllBlockingPopups batches the close cmds for every active
+// blocking popup. Used by context-shift target entry handlers (PTY
+// shell / kubectl edit / kubectl exec / drill-down) per popup-
+// convention §1.10 — the source popup that launched the action
+// should not still be sitting underneath when the user returns from
+// a minute-long subprocess session or a swapped-out panel 2 view.
+// Returns nil when nothing is open so callers can unconditionally
+// tea.Batch the result.
+//
+// Toast is intentionally excluded (§1.10): it is non-blocking and
+// auto-dismisses on its own timer; the close animation of a PTY
+// covers the whole popup region anyway, so any in-flight transient
+// toast vanishes visually with no special handling.
+//
+// PTY slots (shellPty / txPty) are also excluded — they have their
+// own mutual-exclusion logic (toast warn "Close current edit/exec
+// PTY first") and shouldn't cascade-close each other.
+func (m *AppModel) closeAllBlockingPopups() tea.Cmd {
+	var cmds []tea.Cmd
+	if m.help.IsActive() {
+		cmds = append(cmds, m.help.Close())
+	}
+	if m.appLog.IsActive() {
+		cmds = append(cmds, m.appLog.Close())
+	}
+	if m.confirm.IsActive() {
+		cmds = append(cmds, m.confirm.Close())
+	}
+	if m.contextPicker.IsActive() {
+		cmds = append(cmds, m.contextPicker.Close())
+	}
+	if m.namespacePicker.IsActive() {
+		cmds = append(cmds, m.namespacePicker.Close())
+	}
+	if m.helmDocMenu.IsActive() {
+		cmds = append(cmds, m.helmDocMenu.Close())
+	}
+	if m.panel2Menu.IsActive() {
+		cmds = append(cmds, m.panel2Menu.Close())
+	}
+	if m.hintPopup.IsActive() {
+		cmds = append(cmds, m.hintPopup.Close())
+	}
+	if m.listPicker.IsActive() {
+		cmds = append(cmds, m.listPicker.Close())
+	}
+	if m.settingsPopup.IsActive() {
+		cmds = append(cmds, m.settingsPopup.Close())
+	}
+	if m.yamlPopup.IsActive() {
+		cmds = append(cmds, m.yamlPopup.Close())
+	}
+	if m.comparePopup.IsActive() {
+		cmds = append(cmds, m.comparePopup.Close())
+	}
+	if m.breadcrumbPopup.IsActive() {
+		cmds = append(cmds, m.breadcrumbPopup.Close())
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 // compareHotkeyDispatch routes the "C" hotkey contextually:
@@ -1058,6 +1123,57 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 		// signal for a setup the user chose.
 		appLog.Info(fmt.Sprintf("config: $KM8__CONFIGPATH=%s — loads AND saves redirected here, not the default config dir", p))
 	}
+	// v1.7.5 KM8erm → Alterm rename: surface any deprecation warnings
+	// the config loader collected (legacy yaml keys present) and any
+	// deprecated env vars still set. Warn-level so the user notices in
+	// the `!` popup; removable next release when the transition ends.
+	//
+	// For config keys we ALSO trigger an immediate Save() to rewrite
+	// the file with the new keys (dropping the legacy ones) so the
+	// warning only fires once — this session. Next launch finds the
+	// new keys and stays silent. Best-effort: if Save fails (perms,
+	// disk full) the warning will recur next launch, which is correct
+	// behavior — the user needs to know migration didn't persist.
+	//
+	// Env-var warnings keep recurring per launch — they live in the
+	// user's shell rc / launchctl plist and km8 can't (and shouldn't)
+	// rewrite those. Persistent nudge is appropriate until the user
+	// updates their env.
+	for _, w := range cfg.DeprecationWarnings {
+		appLog.Warn(w)
+	}
+	if len(cfg.DeprecationWarnings) > 0 {
+		// Back up the original file before cfg.Save() rewrites it. The
+		// rewrite goes through yaml.Marshal which can't preserve user-
+		// added comments or unknown yaml keys — the backup is the
+		// escape hatch for power users who hand-edited their config.
+		// File suffix carries the km8 release tag (dots → underscores
+		// so the suffix sorts cleanly and doesn't confuse path tools).
+		// If backup fails we ABORT the Save — losing the user's custom
+		// content would be worse than recurring the warning next launch.
+		src := config.ConfigPath()
+		versTag := strings.ReplaceAll(version.Version, ".", "_")
+		bak, bakErr := config.BackupBeforeMigration(src, versTag)
+		if bakErr != nil {
+			appLog.Warn(fmt.Sprintf("config: backup before migration failed (%v) — Save aborted, warnings will recur next launch", bakErr))
+		} else {
+			if err := cfg.Save(); err != nil {
+				appLog.Warn(fmt.Sprintf("config: failed to rewrite legacy keys this session — warnings will recur next launch (%v)", err))
+			} else {
+				appLog.Info(fmt.Sprintf("config: original kept at %s before legacy-key migration", bak))
+			}
+		}
+		// Clear so subsequent reads of cfg.DeprecationWarnings (none
+		// expected — NewAppModel constructs once per run) don't double-
+		// surface the same message.
+		cfg.DeprecationWarnings = nil
+	}
+	if v := strings.TrimSpace(os.Getenv("KM8__SHELL")); v != "" {
+		appLog.Warn("env: $KM8__SHELL is deprecated, rename to $KM8__ALTERM_SHELL (the old name is still read this release; remove next release)")
+	}
+	if v := strings.TrimSpace(os.Getenv("KM8__LOGIN_SHELL")); v != "" {
+		appLog.Warn("env: $KM8__LOGIN_SHELL is deprecated, rename to $KM8__ALTERM_LOGIN_SHELL (the old name is still read this release; remove next release)")
+	}
 
 	return AppModel{
 		sidebar:         sidebar,
@@ -1125,7 +1241,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(quitConfirmedMsg); ok {
 		m.watcher.Stop()
 		m.logStreamer.Stop()
-		// Kill any persistent PTY (hidden KM8erm shell, mid-edit, mid-exec)
+		// Kill any persistent PTY (hidden Alterm shell, mid-edit, mid-exec)
 		// so we don't orphan the subprocess after km8 exits.
 		if m.shellPty != nil && m.shellPty.IsAlive() {
 			m.shellPty.Stop()
@@ -1220,7 +1336,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	//     tick is idempotent: it polls only its own done flag).
 	//   - tea.KeyMsg: txPty wins over shellPty (transient on top). If
 	//     neither has a visible popup, keys fall through to top-level
-	//     routing — KM8erm-hidden keeps the shell alive in background.
+	//     routing — Alterm-hidden keeps the shell alive in background.
 	anyAlive := m.shellPty.IsAlive() || m.txPty.IsAlive()
 	if anyAlive {
 		switch msg := msg.(type) {
@@ -1268,7 +1384,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.shellPty, cmd = m.shellPty.Update(msg)
 				return m, cmd
 			}
-			// All hidden: fall through (Alt+T re-shows KM8erm, etc.)
+			// All hidden: fall through (Alt+T re-shows Alterm, etc.)
 		}
 	}
 
@@ -1626,8 +1742,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settingsPopup.SetLayer(m.popupDepth() + 1)
 			return m, m.settingsPopup.Open(m.buildSettingsItems())
 		case "alt+t", "alt+T", "ctrl+t":
-			// Alt+T is the single KM8erm toggle:
-			//   - no shell alive   → spawn KM8erm
+			// Alt+T is the single Alterm toggle:
+			//   - no shell alive   → spawn Alterm
 			//   - alive, hidden    → reattach (show)
 			//   - alive, visible   → handled inside PtyView.Update (hides)
 			// The "visible" branch never reaches here because PtyView
@@ -1639,21 +1755,27 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// keypress = `t` or `ctrl+t`, never `alt+t`), so demo tapes
 			// emit Ctrl+T instead. Humans never see this alias in help/UI
 			// hints — the cost of accepting it is that pressing Ctrl+T
-			// while a KM8erm shell is visible will hide the shell instead
+			// while a Alterm shell is visible will hide the shell instead
 			// of forwarding to zsh's transpose-chars binding.
-			// Dual-slot: KM8erm lives in shellPty only. txPty (edit/exec)
-			// being alive does NOT block KM8erm — they can coexist; tx
+			// Dual-slot: Alterm lives in shellPty only. txPty (edit/exec)
+			// being alive does NOT block Alterm — they can coexist; tx
 			// visibility takes precedence so we just hide tx? No — tx is
 			// transient and the user explicitly launched it; better to
-			// surface KM8erm under it. Currently: if tx visible, KM8erm
+			// surface Alterm under it. Currently: if tx visible, Alterm
 			// hide/show is harmless (render still picks tx on top).
+			// §1.10 — Alterm is a context-shift target. In practice no
+			// blocking popup is active when Alt+T fires (popups
+			// intercept keys above this handler), so closeAll is
+			// usually nil; the call is here for rule symmetry with
+			// the kubectl edit / exec entry points.
+			closeAll := m.closeAllBlockingPopups()
 			if m.shellPty.IsAlive() {
 				m.shellPty.SetLayer(m.popupDepth() + 1)
-				return m, m.shellPty.Show(m.width, m.height)
+				return m, tea.Batch(closeAll, m.shellPty.Show(m.width, m.height))
 			}
 			m.shellPty.SetLayer(m.popupDepth() + 1)
-			cmd := buildShellTerminalCmd(m.cfg.KM8ermShell, m.cfg.KM8ermLoginShell)
-			return m, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell)
+			cmd := buildShellTerminalCmd(m.cfg.AltermShell, m.cfg.AltermLoginShell)
+			return m, tea.Batch(closeAll, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell))
 		case "?":
 			m.help.SetSize(m.width, m.height)
 			if !m.help.IsActive() {
@@ -1705,6 +1827,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.enterDrillDown()
 			}
 		case "esc":
+			// §1.9 — auto-dismiss toast still has to accept Esc. Toast
+			// is non-blocking (keys pass through to panels), so it
+			// can't intercept Esc itself; the app-level Esc handler
+			// dismisses it first. Higher-priority blocking popups
+			// already short-circuited above this switch, so reaching
+			// here means no popup is claiming Esc and the toast wins
+			// over filter clear / drill exit. Subsequent Esc presses
+			// then walk the panel chain normally.
+			if m.toast.IsActive() {
+				return m, m.toast.Dismiss()
+			}
 			filterActive := (m.activePanel == SidebarPanel && m.sidebar.HasActiveFilter()) ||
 				(m.activePanel == TablePanel && m.table.HasActiveFilter()) ||
 				(m.activePanel == DetailPanel && m.detail.HasActiveFilter())
@@ -2640,22 +2773,28 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case startShellExecMsg:
-		// Only txPty being alive blocks a new exec — shellPty (KM8erm) is
+		// Only txPty being alive blocks a new exec — shellPty (Alterm) is
 		// independent and may be hidden in the background.
 		if m.txPty.IsAlive() {
 			m.appLog.Warn("close active edit/exec PTY before opening shell")
 			return m, m.toast.Show("Close current edit/exec PTY first")
 		}
+		// §1.10 — PTY is a context-shift target; entry handler closes
+		// every blocking popup that launched this action so the user
+		// returns to a clean base view, not a stale source popup.
+		closeAll := m.closeAllBlockingPopups()
 		cmd := buildKubectlExecCmd(msg.podName, msg.namespace, msg.container, msg.contextName)
 		title := fmt.Sprintf("Shell: pod/%s → %s", msg.podName, msg.container)
 		m.txPty.SetLayer(m.popupDepth() + 1)
-		return m, m.txPty.Start(cmd, title, m.width, m.height, PtyKindExec)
+		return m, tea.Batch(closeAll, m.txPty.Start(cmd, title, m.width, m.height, PtyKindExec))
 
 	case startEditMsg:
 		if m.txPty.IsAlive() {
 			m.appLog.Warn("close active edit/exec PTY before editing")
 			return m, m.toast.Show("Close current edit/exec PTY first")
 		}
+		// §1.10 — see startShellExecMsg above.
+		closeAll := m.closeAllBlockingPopups()
 		m.editing = true
 		title := fmt.Sprintf("Edit: %s/%s", msg.resource.KubectlName(), msg.item.Name)
 		if msg.item.Namespace != "" {
@@ -2665,7 +2804,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		config.WriteAuditEntry("edit", msg.resource.KubectlName()+"/"+msg.item.Name, msg.item.Namespace, "started") //nolint
 		m.appLog.Info("edit: " + msg.resource.KubectlName() + "/" + msg.item.Name)
 		m.txPty.SetLayer(m.popupDepth() + 1)
-		return m, m.txPty.Start(cmd, title, m.width, m.height, PtyKindEdit)
+		return m, tea.Batch(closeAll, m.txPty.Start(cmd, title, m.width, m.height, PtyKindEdit))
 
 	case DeleteDoneMsg:
 		out := strings.TrimSpace(msg.Output)
@@ -2726,7 +2865,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Action {
 		case "Enter":
 			// Same code path as pressing Enter on the row directly — the
-			// menu entry is purely a discoverability surface.
+			// menu entry is purely a discoverability surface. The menu
+			// closes itself via §1.10 (enterDrillDown is a context-
+			// shift target whose entry calls closeAllBlockingPopups),
+			// not here — keeps the rule centralised on the target so
+			// every caller (this menu, table Enter, future surfaces)
+			// gets the same behaviour.
 			return m, m.enterDrillDown()
 		case "Y":
 			yaml := m.detail.CurrentLevelYAML()
@@ -2952,14 +3096,14 @@ func (m AppModel) View() string {
 		return m.splash.Render(m.width, m.height)
 	}
 
-	// KM8erm marker: render ONLY when the shell is alive but hidden — that's
+	// Alterm marker: render ONLY when the shell is alive but hidden — that's
 	// the state the user can't otherwise see ("is there a shell waiting for
 	// me?"). When the popup is visible, the popup's border already says
-	// "KM8erm: hostname" so a status-bar duplicate just adds noise; when no
+	// "Alterm: hostname" so a status-bar duplicate just adds noise; when no
 	// shell is running, nothing to mark.
 	var ptyMarker *PtyMarker
 	if m.shellPty != nil && m.shellPty.IsAlive() && m.shellPty.IsHidden() {
-		ptyMarker = &PtyMarker{Visible: false, Label: " KM8erm"}
+		ptyMarker = &PtyMarker{Visible: false, Label: " Alterm"}
 	}
 	var compareMarker *CompareMarker
 	if m.inCompareMode() {
@@ -2973,8 +3117,8 @@ func (m AppModel) View() string {
 			Label: "\U000f08aa Compare",
 		}
 	}
-	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.successNotice, ptyMarker, compareMarker)
-	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.LastErrorMessage(), "")
+	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.appLog.UnreadWarnCount(), m.successNotice, ptyMarker, compareMarker)
+	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.UnreadWarnCount(), m.appLog.LastErrorMessage(), m.appLog.LastWarnMessage(), "")
 
 	var mainView string
 
@@ -3112,7 +3256,7 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
-	// Composite shellPty under txPty: KM8erm renders first so a visible
+	// Composite shellPty under txPty: Alterm renders first so a visible
 	// edit/exec popup overlays it. Hidden shellPty contributes nothing.
 	if m.shellPty.IsRendered() {
 		mainView = overlay.Composite(m.shellPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
@@ -3228,6 +3372,11 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 
 	// Pod → Container drill-down (special case)
 	if m.currentResource == k8s.ResourcePods {
+		// §1.10 — drill-down is a context-shift target; entry handler
+		// closes every blocking popup that launched it so the user
+		// returns to a clean drilled-in view without a stale source
+		// popup (e.g. panel 2 menu) floating over swapped columns.
+		closeAll := m.closeAllBlockingPopups()
 		m.drillDownPod = &item
 		detail := k8s.GetResourceDetail(k8s.ResourcePods, item)
 		m.drillDownContainers = detail.Containers
@@ -3241,9 +3390,9 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 			m.detail.logLines = nil
 			m.logStreamer.Start(item.Name, item.Namespace, []string{c.Name})
 			m.logsActive = true
-			return waitForLogLine(m.logStreamer)
+			return tea.Batch(closeAll, waitForLogLine(m.logStreamer))
 		}
-		return nil
+		return closeAll
 	}
 
 	// Resource → child resource drill-down — only kinds with a
@@ -3255,7 +3404,9 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 		return nil
 	}
 
-	return func() tea.Msg {
+	// §1.10 — see Pod branch above.
+	closeAll := m.closeAllBlockingPopups()
+	return tea.Batch(closeAll, func() tea.Msg {
 		childType, children, err := k8s.FetchChildResources(
 			context.Background(), m.k8sClient.Clientset(), m.currentResource, item,
 		)
@@ -3268,7 +3419,7 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 			childType:  childType,
 			children:   children,
 		}
-	}
+	})
 }
 
 func (m *AppModel) exitDrillDown() tea.Cmd {
@@ -3563,24 +3714,32 @@ func buildKubectlExecCmd(podName, namespace, container, contextName string) *exe
 // PATH, and current directory are exactly what they'd see in a regular
 // terminal — like `ssh localhost` but embedded.
 //
-// Shell precedence: $KM8__SHELL > cfgShell (km8erm_shell config) >
-// $SHELL > /bin/sh. The env-var slot is for ad-hoc overrides (one-shot
-// `KM8__SHELL=... km8`) without editing the config; cfgShell is for
-// persistent per-user preference; $SHELL is the host fallback.
+// Shell precedence: $KM8__ALTERM_SHELL > $KM8__SHELL (deprecated) >
+// cfgShell (alterm_shell config) > $SHELL > /bin/sh. The env-var slot is
+// for ad-hoc overrides (one-shot `KM8__ALTERM_SHELL=... km8`) without
+// editing the config; cfgShell is for persistent per-user preference;
+// $SHELL is the host fallback. $KM8__SHELL is the v1.7.5-deprecated name
+// kept readable for one release so existing shell rc / launchctl plists
+// don't silently break — NewAppModel logs a deprecation warning when
+// it's still set; remove next release.
 //
-// Login precedence: $KM8__LOGIN_SHELL > cfgLogin (km8erm_login_shell).
-// Default is non-login interactive — sources .bashrc / .zshrc, skips
-// /etc/profile so macOS bash doesn't clobber the user's PS1. Flip true
-// when launched from a non-login parent (Raycast/Alfred/cron/non-default
-// tmux) and PATH lives in .zprofile / .bash_profile — without `-l`
-// those dotfiles don't run and KM8erm sees a stripped PATH.
+// Login precedence: $KM8__ALTERM_LOGIN_SHELL > $KM8__LOGIN_SHELL
+// (deprecated) > cfgLogin (alterm_login_shell). Default is non-login
+// interactive — sources .bashrc / .zshrc, skips /etc/profile so macOS
+// bash doesn't clobber the user's PS1. Flip true when launched from a
+// non-login parent (Raycast/Alfred/cron/non-default tmux) and PATH
+// lives in .zprofile / .bash_profile — without `-l` those dotfiles
+// don't run and Alterm sees a stripped PATH.
 //
 // All env-derived candidates are TrimSpace'd before the empty-string
-// check; otherwise a stray `KM8__SHELL=" /opt/.../fish"` (leading
+// check; otherwise a stray `KM8__ALTERM_SHELL=" /opt/.../fish"` (leading
 // space from copy-paste or a sourced .env) would fall through to
 // exec.Command verbatim and error with ENOENT.
 func buildShellTerminalCmd(cfgShell string, cfgLogin bool) *exec.Cmd {
-	sh := strings.TrimSpace(os.Getenv("KM8__SHELL"))
+	sh := strings.TrimSpace(os.Getenv("KM8__ALTERM_SHELL"))
+	if sh == "" {
+		sh = strings.TrimSpace(os.Getenv("KM8__SHELL"))
+	}
 	if sh == "" {
 		sh = strings.TrimSpace(cfgShell)
 	}
@@ -3592,7 +3751,11 @@ func buildShellTerminalCmd(cfgShell string, cfgLogin bool) *exec.Cmd {
 	}
 
 	login := cfgLogin
-	if v := strings.TrimSpace(os.Getenv("KM8__LOGIN_SHELL")); v != "" {
+	loginEnv := strings.TrimSpace(os.Getenv("KM8__ALTERM_LOGIN_SHELL"))
+	if loginEnv == "" {
+		loginEnv = strings.TrimSpace(os.Getenv("KM8__LOGIN_SHELL"))
+	}
+	if loginEnv != "" {
 		// strconv.ParseBool covers the Go-canonical truthy set
 		// {1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False}
 		// — same set kubectl + most Go CLIs accept. The previous
@@ -3600,7 +3763,7 @@ func buildShellTerminalCmd(cfgShell string, cfgLogin bool) *exec.Cmd {
 		// dropped `True`/`Yes`/`t`/`on` etc., which looked like Go-
 		// idiomatic spellings to the user. Unrecognized values
 		// leave login=cfgLogin (no override).
-		if b, err := strconv.ParseBool(v); err == nil {
+		if b, err := strconv.ParseBool(loginEnv); err == nil {
 			login = b
 		}
 	}
@@ -3611,7 +3774,7 @@ func buildShellTerminalCmd(cfgShell string, cfgLogin bool) *exec.Cmd {
 }
 
 // terminalTitle returns the popup title for the internal terminal — the
-// host's name prefixed with the KM8erm tag, mirroring how an ssh prompt
+// host's name prefixed with the Alterm tag, mirroring how an ssh prompt
 // identifies the connection. Returns os.Hostname() verbatim; mDNS-style
 // suffixes like `.home` / `.local` / `.lan` are passed through, because
 // the user said so (some routers append `.home` and the user wants to
@@ -3619,9 +3782,9 @@ func buildShellTerminalCmd(cfgShell string, cfgLogin bool) *exec.Cmd {
 func terminalTitle() string {
 	h, err := os.Hostname()
 	if err != nil || h == "" {
-		return "KM8erm"
+		return "Alterm"
 	}
-	return "KM8erm: " + h
+	return "Alterm: " + h
 }
 
 func (m AppModel) focusedPanelContent() string {

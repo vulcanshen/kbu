@@ -419,7 +419,7 @@ func renderUnifiedDiff(left, right, leftLabel, rightLabel string, width int, t *
 	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Running))
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Error))
 	hunkStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	var out []string
 	if banner := truncationBanner(truncL, truncR, width); banner != "" {
 		out = append(out, banner)
@@ -455,8 +455,8 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 	}
 	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Running))
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Status.Error))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
-	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
+	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	headerStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)
 
 	// capDiffInput caps both sides to splitDiffLineLimit and reports
@@ -681,7 +681,7 @@ func alignSplitDiff(leftLines, rightLines []string) []splitPair {
 
 func centerNoDiff(width int, t *theme.Theme) string {
 	msg := "(identical — no config diff)"
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	pad := (width - lipgloss.Width(msg)) / 2
 	if pad < 0 {
 		pad = 0
@@ -721,7 +721,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	borderColor := m.borderColor
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 	titleStyle := lipgloss.NewStyle().Foreground(borderColor).Bold(true)
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	title := fmt.Sprintf(" \U000f08aa %s vs %s ",
 		m.leftLabel, m.rightLabel)

@@ -49,7 +49,10 @@ type AppLogModel struct {
 	theme          *theme.Theme
 	errorCount     int
 	seenErrorCount int
+	warnCount      int
+	seenWarnCount  int
 	lastError      string
+	lastWarn       string
 	lastSuccess    string
 	layer          int
 	borderColor    lipgloss.Color
@@ -90,10 +93,17 @@ func (m *AppLogModel) Add(level LogLevel, msg string) {
 	if len(m.entries) > m.maxEntries {
 		m.entries = m.entries[len(m.entries)-m.maxEntries:]
 	}
-	if level == LogError || level == LogWarn {
+	switch level {
+	case LogError:
 		m.errorCount++
 		m.lastError = msg
-	} else if level == LogSuccess {
+	case LogWarn:
+		// Warn drives the status bar's peach `⚠ N warnings` badge — distinct
+		// from the red error badge so non-critical nudges (deprecation,
+		// transient hiccups) don't share visual signal with real failures.
+		m.warnCount++
+		m.lastWarn = msg
+	case LogSuccess:
 		m.lastSuccess = msg
 	}
 }
@@ -109,9 +119,16 @@ func (m *AppLogModel) Toggle() tea.Cmd {
 	}
 	m.scrollOffset = 0
 	m.seenErrorCount = m.errorCount
+	m.seenWarnCount = m.warnCount
 	m.lastError = ""
+	m.lastWarn = ""
 	return m.animator.Open()
 }
+
+// Close starts the close animation unconditionally — used by
+// AppModel.closeAllBlockingPopups when a context-shift target
+// (PTY / drill-down) pre-empts the popup stack.
+func (m *AppLogModel) Close() tea.Cmd { return m.animator.Close() }
 
 func (m AppLogModel) IsActive() bool      { return m.animator.IsActive() }
 func (m AppLogModel) IsInteractive() bool { return m.animator.IsInteractive() }
@@ -134,8 +151,16 @@ func (m AppLogModel) UnreadErrorCount() int {
 	return m.errorCount - m.seenErrorCount
 }
 
+func (m AppLogModel) UnreadWarnCount() int {
+	return m.warnCount - m.seenWarnCount
+}
+
 func (m AppLogModel) LastErrorMessage() string {
 	return m.lastError
+}
+
+func (m AppLogModel) LastWarnMessage() string {
+	return m.lastWarn
 }
 
 func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
@@ -181,7 +206,10 @@ func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
 			m.entries = nil
 			m.errorCount = 0
 			m.seenErrorCount = 0
+			m.warnCount = 0
+			m.seenWarnCount = 0
 			m.lastError = ""
+			m.lastWarn = ""
 			m.scrollOffset = 0
 		case "y":
 			return m, copyToClipboardCmd(m.PlainText())
@@ -238,10 +266,15 @@ func (m AppLogModel) renderAllLines() []string {
 	}
 	innerW := m.popupWidth() - 2
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Error))
-	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
+	// Warn entries use Catppuccin Peach — same hue as the status bar's
+	// peach warn badge, toast warn border, and the popup-convention §1.7
+	// warn signal. One warning colour app-wide. Status.Pending (yellow)
+	// is reserved for transitional/degraded resource states (Pending pod,
+	// etc.) — distinct semantic from "user-facing warning".
+	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(toastWarnColor))
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Running))
 	infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Detail.ValueFg))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	var all []string
 	for i := len(m.entries) - 1; i >= 0; i-- {
@@ -345,7 +378,7 @@ func (m AppLogModel) RenderPopup() string {
 }
 
 func (m AppLogModel) renderFullPopup() string {
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	boxW := m.popupWidth()
 	// Body content area = total height - 2 borders - 2 padRows.

@@ -43,13 +43,13 @@ type PtyExitMsg struct {
 type PtyKind int
 
 const (
-	PtyKindShell PtyKind = iota // KM8erm (T key)
+	PtyKindShell PtyKind = iota // Alterm (T key)
 	PtyKindEdit                 // `kubectl edit`
 	PtyKindExec                 // `kubectl exec -it -- /bin/sh`
 )
 
 // PtyView renders an embedded PTY in a popup overlay. Used for `kubectl edit`,
-// `kubectl exec`, and the KM8erm internal shell so subprocess output stays
+// `kubectl exec`, and the Alterm internal shell so subprocess output stays
 // inside km8 instead of leaking into the host terminal scrollback after quit.
 //
 // The Shell-kind variant is *persistent*: pressing Alt+T inside the popup
@@ -59,6 +59,7 @@ const (
 type PtyView struct {
 	active       bool
 	hidden       bool // alive but not currently rendered; only meaningful for PtyKindShell
+	stopPending  bool // subprocess exited; waiting for close animation to settle before hard cleanup
 	kind         PtyKind
 	title        string
 	hostW, hostH int
@@ -98,7 +99,7 @@ const maxScrollbackLines = 10000
 // "terminal/subprocess overlay" category mark across Shell / Edit /
 // Exec kinds. Kind differentiation lives in title text (Shell:
 // hostname / Edit: pod/foo / Exec: pod/foo → ctnr); border color
-// follows the popup-layer system like every other popup. KM8erm's
+// follows the popup-layer system like every other popup. Alterm's
 // "user footprint" identity is carried by the statusbar marker
 // (lavender chip), not the popup border.
 const ptyTitleGlyph = "󰆍"
@@ -180,6 +181,7 @@ func (p *PtyView) Show(hostW, hostH int) tea.Cmd {
 func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int, kind PtyKind) tea.Cmd {
 	p.active = true
 	p.hidden = false
+	p.stopPending = false
 	p.kind = kind
 	p.title = title
 	p.cmd = cmd
@@ -221,11 +223,22 @@ func (p *PtyView) tick() tea.Cmd {
 // HandleTick routes AnimTickMsg into the popup-open/close animator.
 // Returns the next animation tick cmd or nil when the animation is
 // done.
+//
+// Also drains the two-phase exit cleanup: ptyTickMsg's done branch
+// (subprocess exited) defers the hard Stop() so the close animation
+// can keep painting the last-known term grid. When the animator
+// settles in PopupClosed, run Stop() here — term/ptmx are released
+// and the animator is ready to Open() again on the next Start.
 func (p *PtyView) HandleTick(msg AnimTickMsg) tea.Cmd {
 	if msg.Target != p.animator.Target {
 		return nil
 	}
-	return p.animator.Tick()
+	tickCmd := p.animator.Tick()
+	if p.stopPending && p.animator.State == PopupClosed {
+		p.Stop()
+		p.stopPending = false
+	}
+	return tickCmd
 }
 
 func (p *PtyView) readLoop() {
@@ -357,17 +370,35 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 				exitCode = p.cmd.ProcessState.ExitCode()
 			}
 			kind := p.kind
-			p.Stop()
-			return p, func() tea.Msg {
-				return PtyExitMsg{Kind: kind, ExitCode: exitCode}
+			// Subprocess exited. Two-phase teardown: kick off the
+			// close animation NOW (so the popup shrinks gracefully
+			// like every other popup) and defer the hard Stop() —
+			// which nils term + ptmx and would shortcircuit
+			// RenderPopup — until HandleTick sees the animator
+			// finish. stopPending is also the signal that the
+			// animator was advanced to PopupClosingCompress here
+			// so the next Start can Open() it (without this,
+			// animator stays in PopupOpen forever → next Start's
+			// Open() is a no-op → no open animation).
+			//
+			// Re-entering this branch (extra tick fires after we
+			// already kicked off close) is harmless: stopPending
+			// short-circuits and animator.Close() is idempotent.
+			if !p.stopPending {
+				p.stopPending = true
+				closeCmd := p.animator.Close()
+				return p, tea.Batch(closeCmd, func() tea.Msg {
+					return PtyExitMsg{Kind: kind, ExitCode: exitCode}
+				})
 			}
+			return p, nil
 		}
 		return p, p.tick()
 
 	case tea.KeyMsg:
-		// Alt+T hides KM8erm popup without killing the shell — persistent PTY.
+		// Alt+T hides Alterm popup without killing the shell — persistent PTY.
 		// Always intercepted for PtyKindShell regardless of alt-screen mode;
-		// users running vim *inside* KM8erm still need an escape hatch to
+		// users running vim *inside* Alterm still need an escape hatch to
 		// peek at km8 panels without losing their shell session.
 		// Edit/Exec popups pass it through (transient — no hide concept).
 		if p.kind == PtyKindShell {
@@ -375,7 +406,7 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 			case "alt+t", "alt+T", "ctrl+t":
 				// ctrl+t is a hidden alias for the demo recorder (see
 				// app.go for rationale). Trade-off: zsh's transpose-chars
-				// binding inside KM8erm becomes unreachable.
+				// binding inside Alterm becomes unreachable.
 				// hidden is set sync; close animation plays out alongside
 				// (animator.IsActive() keeps RenderPopup drawing the
 				// fading frame until the lifecycle completes).
@@ -590,9 +621,9 @@ func (p *PtyView) RenderPopup() string {
 
 	// Border + title color follow the popup-layer system — all PTY
 	// kinds (Shell / Edit / Exec) use the layer color stamped via
-	// SetLayer. KM8erm's "your persistent shell" user-state identity
+	// SetLayer. Alterm's "your persistent shell" user-state identity
 	// is carried by the statusbar marker (lavender chip), not the
-	// popup border. Title text (`KM8erm: hostname` / `Edit: pod/foo`
+	// popup border. Title text (`Alterm: hostname` / `Edit: pod/foo`
 	// / `Shell: pod/foo → ctnr`) carries the kind distinction.
 	borderStyle := lipgloss.NewStyle().Foreground(p.borderColor)
 	titleStyle := borderStyle.Bold(true)

@@ -66,8 +66,8 @@ func TestBuildShellTerminalCmd_FallbackWhenShellUnset(t *testing.T) {
 }
 
 func TestBuildShellTerminalCmd_ConfigOverridesShellEnv(t *testing.T) {
-	// km8erm_shell config wins over $SHELL — the user wants fish inside
-	// km8erm but their host shell is still zsh.
+	// alterm_shell config wins over $SHELL — the user wants fish inside
+	// alterm but their host shell is still zsh.
 	unsetEnvForTest(t, "KM8__SHELL")
 	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
 	t.Setenv("SHELL", "/bin/zsh")
@@ -80,7 +80,7 @@ func TestBuildShellTerminalCmd_ConfigOverridesShellEnv(t *testing.T) {
 
 func TestBuildShellTerminalCmd_KM8ShellEnvOverridesEverything(t *testing.T) {
 	// $KM8__SHELL is the top of the precedence stack: it beats both the
-	// km8erm_shell config AND $SHELL. Use case: one-shot
+	// alterm_shell config AND $SHELL. Use case: one-shot
 	// `KM8__SHELL=/bin/bash km8` to test a different shell without
 	// touching the persisted config.
 	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
@@ -96,7 +96,7 @@ func TestBuildShellTerminalCmd_KM8ShellEnvOverridesEverything(t *testing.T) {
 func TestBuildShellTerminalCmd_TrimsWhitespaceFromEnv(t *testing.T) {
 	// Leading / trailing whitespace from a copy-pasted env value or a
 	// sourced .env file would previously slip past the empty-check and
-	// reach exec.Command verbatim → LookPath ENOENT, KM8erm refuses to
+	// reach exec.Command verbatim → LookPath ENOENT, Alterm refuses to
 	// open with no obvious reason. TrimSpace closes the trap.
 	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
 	t.Setenv("KM8__SHELL", "  /opt/homebrew/bin/fish\t")
@@ -108,7 +108,7 @@ func TestBuildShellTerminalCmd_TrimsWhitespaceFromEnv(t *testing.T) {
 }
 
 func TestBuildShellTerminalCmd_LoginConfigAppendsDashEll(t *testing.T) {
-	// km8erm_login_shell: true should spawn the shell with `-l`,
+	// alterm_login_shell: true should spawn the shell with `-l`,
 	// matching what the v1.7.1 baseline did unconditionally.
 	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
 	unsetEnvForTest(t, "KM8__SHELL")
@@ -149,8 +149,8 @@ func TestBuildShellTerminalCmd_LoginEnvFalseOverridesConfig(t *testing.T) {
 
 func TestTerminalTitle_PrefixAndSuffix(t *testing.T) {
 	title := terminalTitle()
-	if !strings.Contains(title, "KM8erm") {
-		t.Errorf("title must contain 'KM8erm' marker, got %q", title)
+	if !strings.Contains(title, "Alterm") {
+		t.Errorf("title must contain 'Alterm' marker, got %q", title)
 	}
 	// We deliberately pass mDNS suffixes through (`.local`, `.home`, ...)
 	// because the user wants the raw hostname. No suffix assertion.
@@ -177,7 +177,7 @@ func appWithItems(items []k8s.ResourceItem, cursor int) AppModel {
 		theme:           th,
 		// cfg is non-nil to match production NewAppModel — every other
 		// m.cfg reader in app.go nil-guards, but the ctrl+t handler
-		// (line ~1539) reads m.cfg.KM8ermShell/KM8ermLoginShell raw.
+		// (line ~1539) reads m.cfg.AltermShell/AltermLoginShell raw.
 		// A test that dispatches Ctrl+T against an appWithItems-built
 		// model would NPE without this; matching the production
 		// invariant is cleaner than gating the hot-path handler.
@@ -533,7 +533,7 @@ func TestAppModel_PtyExitMsg_EditKindClearsEditingFlag(t *testing.T) {
 }
 
 func TestAppModel_PtyExitMsg_ShellKindLeavesEditingFlag(t *testing.T) {
-	// KM8erm exit should NOT touch editing — dual-slot independence.
+	// Alterm exit should NOT touch editing — dual-slot independence.
 	m := appWithItems(nil, 0)
 	m.editing = true
 	updated, _ := m.Update(PtyExitMsg{Kind: PtyKindShell, ExitCode: 0})
@@ -552,7 +552,7 @@ func TestAppModel_PtyExitMsg_ExecKindLeavesEditingFlag(t *testing.T) {
 	}
 }
 
-func TestAppModel_DualSlot_KM8ermHidden_AllowsExecSpawn(t *testing.T) {
+func TestAppModel_DualSlot_AltermHidden_AllowsExecSpawn(t *testing.T) {
 	// The bug fix: with shellPty alive + hidden, startShellExecMsg must
 	// NOT be blocked. Old single-slot design blocked any new PTY when
 	// shell was alive even if hidden — confusing UX.
@@ -884,6 +884,82 @@ func TestAppModel_CompareHotkeyDispatch_TogglesOnAnchorRow(t *testing.T) {
 
 // silence unused warning if tea is not referenced elsewhere in tests
 var _ tea.Msg = struct{}{}
+
+func TestAppModel_CloseAllBlockingPopups_NilWhenIdle(t *testing.T) {
+	// §1.10 — helper must return nil (not a no-op tea.Batch wrapping
+	// nothing) when no blocking popup is open. Callers rely on this
+	// to keep `tea.Batch(closeAll, mainCmd)` from carrying a payload
+	// when there is nothing to close.
+	th := theme.DefaultTheme()
+	m := AppModel{
+		theme:           th,
+		panel2Menu:      NewPanel2MenuPopupModel(th),
+		confirm:         NewConfirmModel(th),
+		help:            NewHelpModel(th),
+		appLog:          NewAppLogModel(th),
+		hintPopup:       NewHintPopupModel(th),
+		listPicker:      NewListPickerModel(th),
+		settingsPopup:   NewSettingsPopupModel(th),
+		yamlPopup:       NewYamlPopupModel(th),
+		comparePopup:    NewCompareYamlPopupModel(th),
+		breadcrumbPopup: NewBreadcrumbPopupModel(th),
+		contextPicker:   NewContextPickerModel(th),
+		namespacePicker: NewNamespacePickerModel(th),
+		helmDocMenu:     NewHelmDocMenuPopupModel(th),
+	}
+	if cmd := m.closeAllBlockingPopups(); cmd != nil {
+		t.Errorf("closeAllBlockingPopups must return nil when nothing is open, got %T", cmd)
+	}
+}
+
+func TestAppModel_CloseAllBlockingPopups_ClosesActiveOnes(t *testing.T) {
+	// §1.10 — every active blocking popup must enter its closing
+	// animation when the helper fires. Mocks the post-commit state
+	// where panel2Menu launched a confirm: both popups are active,
+	// then a context-shift target (e.g. PTY) enters via its handler
+	// and the helper takes both down.
+	th := theme.DefaultTheme()
+	m := AppModel{
+		theme:           th,
+		panel2Menu:      NewPanel2MenuPopupModel(th),
+		confirm:         NewConfirmModel(th),
+		help:            NewHelpModel(th),
+		appLog:          NewAppLogModel(th),
+		hintPopup:       NewHintPopupModel(th),
+		listPicker:      NewListPickerModel(th),
+		settingsPopup:   NewSettingsPopupModel(th),
+		yamlPopup:       NewYamlPopupModel(th),
+		comparePopup:    NewCompareYamlPopupModel(th),
+		breadcrumbPopup: NewBreadcrumbPopupModel(th),
+		contextPicker:   NewContextPickerModel(th),
+		namespacePicker: NewNamespacePickerModel(th),
+		helmDocMenu:     NewHelmDocMenuPopupModel(th),
+	}
+	// Open panel2Menu + confirm; drain animations to fully open.
+	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
+	m.panel2Menu.animator.Finalize()
+	_ = m.confirm.Show(ConfirmEdit, "Edit?", "kubectl edit pod/nginx", nil)
+	m.confirm.animator.Finalize()
+	if !m.panel2Menu.IsActive() || !m.confirm.IsActive() {
+		t.Fatalf("setup: both popups must be active, got panel2Menu=%v confirm=%v",
+			m.panel2Menu.IsActive(), m.confirm.IsActive())
+	}
+
+	cmd := m.closeAllBlockingPopups()
+	if cmd == nil {
+		t.Fatal("closeAllBlockingPopups must return a Cmd when popups are open")
+	}
+	// Helper triggers the close animation; finalize fast-forwards
+	// past it so we can assert the post-animation steady state.
+	m.panel2Menu.animator.Finalize()
+	m.confirm.animator.Finalize()
+	if m.panel2Menu.IsActive() {
+		t.Error("§1.10: panel2Menu must be closed after helper + finalize")
+	}
+	if m.confirm.IsActive() {
+		t.Error("§1.10: confirm must be closed after helper + finalize")
+	}
+}
 
 func TestAppModel_EscOnPanel2WithCompareMode_ClearsLockAndPopsDrill(t *testing.T) {
 	// Panel 2 Esc with compare mode active AND a drill chain in

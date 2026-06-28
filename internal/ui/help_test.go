@@ -81,7 +81,7 @@ func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 	// v1.7+ trimmed help is intentionally minimal — "Space opens the
 	// menu, 一看就懂" eliminates the need to spell out per-context
 	// triggers. Section names: Core (4 universal gestures) / Navigation
-	// (cursor + panel) / Global (app-level) / KM8erm.
+	// (cursor + panel) / Global (app-level) / Alterm.
 	expectedSections := []string{
 		"Core",
 		"Navigation",

@@ -41,7 +41,7 @@
 
 ### TUI + persistent shell in one window
 
-![km8erm](docs/demo-km8erm.gif)
+![alterm](docs/demo-alterm.gif)
 
 ## Four keys to drive km8
 
@@ -125,13 +125,13 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 ## Features
 
 - **Zero learning curve** -- every action surfaces through the `Space` menu. Power-user hotkeys (`P` pin / `S` sort / `C` compare / `Y` YAML / `E` edit / `N` ns / `>` settings / ...) exist for speed but you can ignore the whole cheat sheet — `Space` walks you through the same menus, in context, every time. Onboarding doc: *"When in doubt, hit Space."*
-- **Compose, don't replace** -- KM8erm (the embedded persistent shell, `Alt+t`) means any other terminal tool you'd normally drop out of km8 for rides along inside it. Use km8 for navigation and inspection; use whatever you trust for write-side operations — no scrollback split, no context switch, and KM8erm keeps env / cwd / shell history intact across `Alt+t` toggles
+- **Compose, don't replace** -- Alterm (the embedded persistent shell, `Alt+t`) means any other terminal tool you'd normally drop out of km8 for rides along inside it. Use km8 for navigation and inspection; use whatever you trust for write-side operations — no scrollback split, no context switch, and Alterm keeps env / cwd / shell history intact across `Alt+t` toggles
 - **Pinned resource kinds (`P` + `D` drag-and-drop)** -- panel 1's sidebar grows a Pinned section at the top. `P` on any resource row toggles pin / unpin, and the order persists into the config file. Pins **move** rather than duplicate — a pinned kind disappears from its original category and reappears under Pinned, so each kind has exactly one home. With two or more pinned kinds, press `D` on a pinned row to enter modal drag-and-drop: `j`/`k` swap the locked kind with its neighbour, `Enter` or `D` commits the new order, `Esc` and anything else reverts to the snapshot taken at entry. The header reads `Pinned 󰩐 [D]rop` while dragging, the dragged row paints lavender, and a sticky toast carries the keyboard contract; `Space` mid-drag opens a trimmed drop-only menu if the contract slips out of memory. Pin / sort / future-per-kind settings share the same per-kind config block, so a CRD that briefly goes away (operator reinstall, etc.) keeps its pin and sort silently and restores both the moment it comes back
 - **YAML Compare popup (`C`)** -- panel 2 row-level diff. `C` on a row marks it as the **compare anchor** (status-bar glyph shows which row is locked); `C` on a different row of the same kind opens a side-by-side or unified YAML diff. `C` on the anchor itself cancels — the same key toggles all three states (mark / diff / cancel). The diff popup has its own action menu (`Space`) to switch layout live, and the default layout (Unified) is persisted in config. Compare YAML is pre-cleaned (status / managedFields / resourceVersion / uid stripped) so the diff focuses on what the user actually authored
 - **List-view sort (`S` on sidebar, `Alt+Shift+S` on panel 2)** -- per-kind multi-column sort persisted across restarts. Pick a column → direction → the picker loops back to the column step so additional tiers can be stacked without re-invoking the flow. Each tier renders its priority and direction in the panel-2 header (`Name (1) ↑ · Restarts (2) ↓ …`); single-tier chains collapse to just the arrow to keep the simple case visually quiet. Reset row at the bottom drops the entire chain in one shot; per-column `Unset` removes a single tier from the direction step. `Esc` is the only way out — the picker never closes itself between operations. Comparators are type-aware: `Age` / `Updated` use the underlying timestamp (not the rendered "5d3h" string); `Ready` parses "N/M" as a pair of ints; `Restarts`, `Desired`, `Current`, `Up-to-date`, `Available`, `Active`, `Rev` use the int form so "10" sorts above "2". Unknown columns silently skip so a stale config doesn't break the sort. No saved sort = `(namespace, name)` ascending, matching kubectl's cross-namespace default
 - **Mouse support** -- click a panel to focus it + move the cursor, double-click to drill (synthesizes `Enter`), right-click to open the row's context menu (synthesizes `Space`), wheel scrolls half-page (synthesizes `u` / `d`). 13 popups respond too: list popups commit on left-click, viewer popups (YAML / Compare / App Log / Help) keep wheel scroll, the confirm dialog deliberately makes left-click a no-op so a stray click can't trigger a destructive delete / quit / rollback. Mouse can be turned off in the Settings popup (`>`) and a `scroll_direction: natural | reverse` setting flips the wheel for users who prefer the inverse mapping
 - **Settings popup (`>`)** -- app-level surface with a cog glyph in the title. Currently carries Mouse on/off + Scroll Direction; future global settings drop in here. The popup is its own escape hatch: even when Mouse is off, clicking remains possible inside the popup so users can turn mouse back on
-- **Layer-based popup borders (v1.7.4)** -- every popup picks its border color from a `lavender → sapphire` gradient based on nesting depth: layer 1 (any first-tier popup) uses lavenphire25, layer 2 (a popup over another popup — e.g. the Diff menu inside Compare, or Confirm inside Breadcrumb) uses lavenphire50, layer 3 lavenphire75, layer 4+ sapphire. The visual stack always reads "this thing is on top of what's underneath" without needing to think about it. Toast warnings keep their Catppuccin Peach border as a dedicated warning signal; KM8erm's user-footprint identity lives on the statusbar marker (still lavender) so the popup border stays consistent with every other overlay
+- **Layer-based popup borders (v1.7.4)** -- every popup picks its border color from a `lavender → sapphire` gradient based on nesting depth: layer 1 (any first-tier popup) uses lavenphire25, layer 2 (a popup over another popup — e.g. the Diff menu inside Compare, or Confirm inside Breadcrumb) uses lavenphire50, layer 3 lavenphire75, layer 4+ sapphire. The visual stack always reads "this thing is on top of what's underneath" without needing to think about it. Toast warnings keep their Catppuccin Peach border as a dedicated warning signal; Alterm's user-footprint identity lives on the statusbar marker (still lavender) so the popup border stays consistent with every other overlay
 - **27 built-in resource types + CRD support** -- dynamic discovery of Custom Resources at startup, across Cluster / Workloads / Network / Config / Storage / RBAC / Autoscaling / Helm categories. The Helm category only registers when the `helm` CLI is on `PATH`
 - **Real-time Watch updates** -- resources refresh automatically via Kubernetes Watch API
 - **Vim-style navigation** -- `j`/`k`, `u`/`d` page scroll, `gg`/`G`, `/` search
@@ -147,9 +147,9 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 - **Status column coloring — abnormal-only** -- panel 2's Status column (every kind that has one — Pod / Node / Namespace / PVC / PV / Helm Release) plus the Events Type column paint **only** abnormal values. Yellow for transitional / degraded (Pending / Terminating / SchedulingDisabled / Released / pending-* / Init:*), red for failures (Failed / Error / CrashLoopBackOff / ImagePullBackOff / NotReady / Lost / Warning). Healthy values (Running / Bound / Active / Deployed / Normal) stay at the row's base foreground. Color = signal, not decoration — your eye is drawn only to rows that need attention. Cursor / lock rows pick the darker Catppuccin Latte variant so pastels don't wash out on the reverse-video bg
 - **Row switch debounce (300ms)** -- panel 2 j/k mashing used to fire one detail fetch + one log-stream Start per row, even for rows the cursor flew past. The dispatch is now debounced: every row switch bumps a sequence counter and schedules the fetch / stream Start 300ms later, so a rapid scroll through 49 rows fires exactly one fetch (for the row you stopped on) instead of 49. Lie-as-lock invariant preserves: panel 2 still feels instantly responsive because the cheap state mutations (Stop previous stream, clear retry throttle) run inline; only the expensive work defers. Matches the existing sidebar `switchSeq` debounce window for muscle-memory consistency
 - **Edit & shell exec via embedded PTY** -- `E` runs `kubectl edit` and `S` runs `kubectl exec -it -- /bin/sh`, both inside an in-app virtual terminal so the editor and shell session never touch the host terminal scrollback. Editor honors `$KUBE_EDITOR` / `$EDITOR` (or `config.yaml editor`)
-- **KM8erm internal terminal** -- `Alt+t` toggles an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do. The shell is **persistent**: pressing `Alt+t` while the popup is visible hides it without killing the shell; pressing it again reattaches (cwd, history, env, background jobs all preserved). A `KM8erm` chip on the right of the status bar shows when the shell is alive in the background. Independent of `kubectl edit` / `kubectl exec` — you can keep KM8erm running while editing a resource or exec'ing into a container in a separate popup
-- **PTY popup borders follow the popup layer scale** -- KM8erm, `kubectl edit`, and `kubectl exec` all render with the popup-layer border color (deeper popups get deeper colors along the `lavender → sapphire` scale). KM8erm's "your persistent shell" identity lives on the statusbar marker (still lavender — the user-footprint accent), while the popup border itself reads as just another floating overlay. The title (`KM8erm: hostname` vs `Edit: pod/foo` vs `Shell: pod/foo → ctnr`) carries the kind distinction
-- **PTY scrollback** -- 10k-line history for all PTY popups (KM8erm, shell exec, edit). `PgUp` / `PgDn` page, `Home` / `End` jump to top / live. Disabled in alt-screen apps (vim, less, htop) so they keep their own paging
+- **Alterm internal terminal** -- `Alt+t` toggles an embedded shell (login shell with full env / cwd) inside km8 — like `ssh localhost` in a popup. Run `kubectl apply -f`, `helm`, anything you'd normally drop out of km8 to do. The shell is **persistent**: pressing `Alt+t` while the popup is visible hides it without killing the shell; pressing it again reattaches (cwd, history, env, background jobs all preserved). A `Alterm` chip on the right of the status bar shows when the shell is alive in the background. Independent of `kubectl edit` / `kubectl exec` — you can keep Alterm running while editing a resource or exec'ing into a container in a separate popup
+- **PTY popup borders follow the popup layer scale** -- Alterm, `kubectl edit`, and `kubectl exec` all render with the popup-layer border color (deeper popups get deeper colors along the `lavender → sapphire` scale). Alterm's "your persistent shell" identity lives on the statusbar marker (still lavender — the user-footprint accent), while the popup border itself reads as just another floating overlay. The title (`Alterm: hostname` vs `Edit: pod/foo` vs `Shell: pod/foo → ctnr`) carries the kind distinction
+- **PTY scrollback** -- 10k-line history for all PTY popups (Alterm, shell exec, edit). `PgUp` / `PgDn` page, `Home` / `End` jump to top / live. Disabled in alt-screen apps (vim, less, htop) so they keep their own paging
 - **Per-container colored log labels** -- multi-container pods are visually distinguishable line-by-line; stable color per container name
 - **Resource deletion** -- `D` (uppercase, both as a hotkey and via the `Space` menu) with confirmation dialog
 - **Search/filter** -- `/` to search in the sidebar and table panels, and in the namespace/context picker popups. Sidebar search also matches category names (e.g. "cluster" expands the Cluster category). Search clears automatically when focus moves to another panel — selection persists, the filter doesn't
@@ -218,7 +218,7 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 | Key | Action |
 |---|---|
 | `>` | Open the global Settings popup (mouse on/off, scroll direction; future settings) |
-| `Alt+t` | Toggle KM8erm (spawn / show / hide; shell stays alive across hide) |
+| `Alt+t` | Toggle Alterm (spawn / show / hide; shell stays alive across hide) |
 | `y` | Copy focused panel content to clipboard (OSC 52) |
 | `!` | App log |
 | `?` | Help |
@@ -257,7 +257,7 @@ While the anchor is set, panel 2's bottom-left border shows an `esc: exit compar
 | `Space` | Panel 3, History tab, non-current row | Roll back to that revision (confirm popup shows the exact `helm rollback` command) |
 | `.` | Any non-Releases panel 2 list | Toggle visibility of helm-managed objects |
 
-### PTY popups (KM8erm, edit, shell exec)
+### PTY popups (Alterm, edit, shell exec)
 
 | Key | Action |
 |---|---|
@@ -314,12 +314,12 @@ default_context: ""      # kubeconfig context (default: current-context)
 default_namespace: ""    # namespace filter (default: all namespaces)
 editor: ""               # exposed to kubectl as $KUBE_EDITOR
                          # (default: kubectl falls back to $EDITOR → vi / notepad)
-km8erm_shell: ""         # shell launched by KM8erm (default: $SHELL → /bin/sh).
+alterm_shell: ""         # shell launched by Alterm (default: $SHELL → /bin/sh).
                          # Bare names are resolved via $PATH at popup-open time
                          # (Go exec.Command semantics); absolute paths are used
-                         # verbatim. Lets you pick e.g. fish inside km8erm
+                         # verbatim. Lets you pick e.g. fish inside alterm
                          # while keeping zsh as host shell.
-km8erm_login_shell: false # Flip true to launch KM8erm with `-l` so it sources
+alterm_login_shell: false # Flip true to launch Alterm with `-l` so it sources
                          # ~/.zprofile / ~/.bash_profile / /etc/profile.
                          # Default false matches the v1.7.2 baseline (non-login
                          # interactive — .bashrc/.zshrc still loads, no
@@ -374,14 +374,14 @@ Both override the corresponding config slot for one-shot runs without editing th
 | Variable | Effect | Precedence |
 |---|---|---|
 | `KM8__CONFIGPATH` | Use this file as the config file instead of the default layout (`$XDG_CONFIG_HOME/km8/config.yaml` etc.). Theme file path is NOT affected — it still lives under the OS config directory. Absolute path recommended; relative path resolves against CWD at load/save time. | `KM8__CONFIGPATH` > default layout |
-| `KM8__SHELL` | Use this binary as the KM8erm shell. Bare names are looked up on `$PATH` at popup-open time (Go `exec.Command` semantics); absolute paths run verbatim. Leading / trailing whitespace is trimmed. | `KM8__SHELL` > `km8erm_shell` config > `$SHELL` > `/bin/sh` |
-| `KM8__LOGIN_SHELL` | Force the KM8erm shell into login mode (`-l`) or out of it. Truthy values: `true` / `1` / `yes` (and uppercase). Any other value disables login mode. Use when launched from a non-login parent and your PATH is set in `.zprofile`. | `KM8__LOGIN_SHELL` > `km8erm_login_shell` config > `false` |
+| `KM8__ALTERM_SHELL` | Use this binary as the Alterm shell. Bare names are looked up on `$PATH` at popup-open time (Go `exec.Command` semantics); absolute paths run verbatim. Leading / trailing whitespace is trimmed. | `KM8__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
+| `KM8__ALTERM_LOGIN_SHELL` | Force the Alterm shell into login mode (`-l`) or out of it. Truthy values: `true` / `1` / `yes` (and uppercase). Any other value disables login mode. Use when launched from a non-login parent and your PATH is set in `.zprofile`. | `KM8__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
 
 Example:
 
 ```sh
-# Try fish in KM8erm without editing config.yaml
-KM8__SHELL=/opt/homebrew/bin/fish km8
+# Try fish in Alterm without editing config.yaml
+KM8__ALTERM_SHELL=/opt/homebrew/bin/fish km8
 
 # Point km8 at a per-project config (e.g. checked into the repo)
 KM8__CONFIGPATH="$PWD/.km8.yaml" km8
@@ -402,13 +402,13 @@ sidebar:
   category_fg: "#89b4fa"
 
 table:
-  header_bg: "#313244"
+  header_bg: ""                        # empty = sits on the panel canvas, fg alone signals header
   header_fg: "#89b4fa"
   row_fg: "#cdd6f4"
   selected_row_bg: "#bac2de"           # focused-panel cursor bg (reverse-video)
   selected_row_fg: "#1e1e2e"
-  unfocused_selected_row_bg: "#353648" # other-panel "remembered" selection bg
-  unfocused_selected_row_fg: "#cdd6f4"
+  unfocused_selected_row_bg: "#b4befe" # other-panel "remembered" selection bg — Catppuccin lavender chip
+  unfocused_selected_row_fg: "#1e1e2e"
   alternating_bg: ""
 
 detail:
@@ -417,24 +417,22 @@ detail:
   value_fg: "#cdd6f4"
   tab_active_bg: "#45475a"
   tab_active_fg: "#cdd6f4"
-  tab_inactive_fg: "#6c7086"
+  tab_inactive_fg: "#7f849c"           # Catppuccin overlay1 (v1.7.5)
 
 status_bar:
-  background: "#181825"
+  background: ""                       # empty = terminal transparent
   foreground: "#cdd6f4"
-  cluster_fg: "#a6e3a1"
-  namespace_fg: "#f9e2af"
   context_fg: "#89b4fa"
 
 status_line:
-  background: "#313244"
-  foreground: "#a6adc8"
+  background: ""                       # empty = terminal transparent
+  foreground: "#89b4fa"
 
 status:
   running: "#a6e3a1"
   pending: "#f9e2af"
   error: "#f38ba8"
-  unknown: "#6c7086"
+  unknown: "#7f849c"                   # Catppuccin overlay1 (v1.7.5)
 ```
 
 ## Requirements

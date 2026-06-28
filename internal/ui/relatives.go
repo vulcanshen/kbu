@@ -173,12 +173,12 @@ func renderRelativeEntries(entries []relativeEntry, cursor int, width int, t *th
 	valueStyle := t.DetailValueStyle()
 	sectionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Sidebar.CategoryFg)).Bold(true)
 	drillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(t.Sidebar.CategoryFg)).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	cursorRowStyle := t.TableSelectedRowStyle()
 	if !focused {
 		cursorRowStyle = t.TableUnfocusedSelectedRowStyle()
 		// Mirror the sidebar/table treatment: when the panel is
-		// unfocused, every non-cursor row collapses to overlay0 grey
+		// unfocused, every non-cursor row collapses to overlay1 grey
 		// so the cursor row's lavender chip is the single surviving
 		// "remembered position" marker. Section headers stay bold so
 		// the structural hierarchy is still legible.

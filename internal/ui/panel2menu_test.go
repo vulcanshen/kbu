@@ -478,6 +478,39 @@ func TestPanel2Menu_CursorOnEnterRowCommitsEnter(t *testing.T) {
 	}
 }
 
+func TestPanel2Menu_CommitKeepsMenuOpen(t *testing.T) {
+	// §1.8 popup-convention: commit emits the action msg WITHOUT
+	// closing the menu — the menu is the source popup that the
+	// confirm / yaml / pty target stacks on top of. If the menu
+	// ever closes synchronously on commit again, Esc on the target
+	// will drop the user back to the panel instead of returning
+	// here, recreating the v1.7.4 inconsistency this test guards
+	// against.
+	m := newPanel2Menu(t)
+	item := k8s.ResourceItem{Name: "nginx", Namespace: "default"}
+	openCmd := m.Open(k8s.ResourcePods, item, false, panel2CompareCtx{})
+	drainPanel2MenuToInteractive(t, &m, openCmd)
+
+	// "E" commits Edit; menu must remain active afterwards.
+	_, batchCmd := m.Update(key("E"))
+	if batchCmd == nil {
+		t.Fatal("E hotkey must commit Edit")
+	}
+	if !m.IsActive() {
+		t.Error("§1.8: commit must NOT close the menu — target popup stacks on top")
+	}
+	// The cmd must NOT carry an AnimTickMsg with a 'closing' phase —
+	// commit-time close has been removed entirely. Detect by walking
+	// the batch for AnimTickMsg whose target matches the menu. The
+	// action msg is enough; no AnimTickMsg should appear.
+	expectMsg(t, batchCmd, func(msg tea.Msg) bool {
+		if tick, ok := msg.(AnimTickMsg); ok && tick.Target == m.animator.Target {
+			t.Errorf("§1.8: commit must not fire a self-close AnimTickMsg, got %+v", tick)
+		}
+		return false
+	})
+}
+
 func TestPanel2Menu_HotkeyDirectTrigger(t *testing.T) {
 	// Pressing "E" while menu is open commits Edit without cursor move.
 	m := newPanel2Menu(t)

@@ -57,15 +57,26 @@ func TestAppLogModel_Add_Info(t *testing.T) {
 	}
 }
 
-func TestAppLogModel_Add_Warn_IncrementsErrorCount(t *testing.T) {
+// TestAppLogModel_Add_Warn_IncrementsWarnCount pins the v1.7.5 split:
+// Warn no longer feeds errorCount (which would arm the red status-bar
+// `! N errors` badge). It feeds warnCount, which arms the separate
+// peach `⚠ N warnings` badge. Use Error for real failures so the red
+// signal stays meaningful.
+func TestAppLogModel_Add_Warn_IncrementsWarnCount(t *testing.T) {
 	m := newTestAppLog()
-	m.Warn("something bad")
+	m.Warn("something off")
 
-	if m.UnreadErrorCount() != 1 {
-		t.Errorf("expected 1 unread error after Warn, got %d", m.UnreadErrorCount())
+	if m.UnreadWarnCount() != 1 {
+		t.Errorf("expected 1 unread warn after Warn, got %d", m.UnreadWarnCount())
 	}
-	if m.LastErrorMessage() != "something bad" {
-		t.Errorf("expected last error to be set after Warn")
+	if m.LastWarnMessage() != "something off" {
+		t.Errorf("expected last warn to be set after Warn, got %q", m.LastWarnMessage())
+	}
+	if m.UnreadErrorCount() != 0 {
+		t.Errorf("Warn must NOT increment errorCount (red badge reserved for Error); got %d", m.UnreadErrorCount())
+	}
+	if m.LastErrorMessage() != "" {
+		t.Errorf("Warn must NOT set lastError; got %q", m.LastErrorMessage())
 	}
 }
 

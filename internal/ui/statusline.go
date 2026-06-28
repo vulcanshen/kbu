@@ -47,7 +47,7 @@ type hint struct {
 // hints returns the keys surfaced on the status line. v1.7+ mental model:
 // only the universal cross-panel gestures live here — `?` for the full
 // reference, `Esc` / `Space` / `Enter` / `Tab` as the four core gestures
-// (per the popup-design mindset memo), plus the global KM8erm toggle.
+// (per the popup-design mindset memo), plus the global Alterm toggle.
 //
 // Everything panel-specific (N namespace, C context, / filter, trigger
 // letters Y/E/S/D, sort hotkeys, ...) lives in the statusbar labels
@@ -60,7 +60,7 @@ func (m StatusLineModel) hints() []hint {
 		{"Space", "menu"},
 		{"Enter", "commit/into"},
 		{"Tab", "cycle panel"},
-		{"Alt-t", "KM8erm"},
+		{"Alt-t", "Alterm"},
 		{">", "settings"},
 	}
 }
@@ -70,7 +70,7 @@ func (m StatusLineModel) renderedHints() []string {
 		Foreground(lipgloss.Color(m.theme.StatusLine.Foreground)).
 		Bold(true)
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6c7086"))
+		Foreground(lipgloss.Color("#7f849c"))
 
 	var out []string
 	for _, h := range m.hints() {
@@ -118,20 +118,27 @@ func (m StatusLineModel) View() string {
 }
 
 func (m StatusLineModel) ViewWithError(unreadErrors int, lastError string) string {
-	return m.ViewWithNotice(unreadErrors, lastError, "")
+	return m.ViewWithNotice(unreadErrors, 0, lastError, "", "")
 }
 
-func (m StatusLineModel) ViewWithNotice(unreadErrors int, lastError, lastSuccess string) string {
+// ViewWithNotice renders the status line with an optional right-side
+// notice. Precedence: error (red lastError) > warn (peach lastWarn) >
+// success (green lastSuccess) > nothing. The warn slot mirrors the
+// status bar's peach badge so the two surfaces read consistently.
+func (m StatusLineModel) ViewWithNotice(unreadErrors, unreadWarns int, lastError, lastWarn, lastSuccess string) string {
 	line := m.layoutLine()
 	barStyle := m.theme.StatusLineStyle().Padding(0, 0)
 
-	// Error takes priority over success.
 	noticeText := ""
 	noticeColor := ""
-	if unreadErrors > 0 && lastError != "" {
+	switch {
+	case unreadErrors > 0 && lastError != "":
 		noticeText = lastError
 		noticeColor = m.theme.Status.Error
-	} else if lastSuccess != "" {
+	case unreadWarns > 0 && lastWarn != "":
+		noticeText = lastWarn
+		noticeColor = toastWarnColor
+	case lastSuccess != "":
 		noticeText = lastSuccess
 		noticeColor = m.theme.Status.Running
 	}

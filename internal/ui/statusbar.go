@@ -50,12 +50,12 @@ func (m *StatusBarModel) SetActivePanel(p Panel) {
 	m.activePanel = p
 }
 
-// PtyMarker is the right-side indicator that a persistent PTY (KM8erm) is
+// PtyMarker is the right-side indicator that a persistent PTY (Alterm) is
 // alive. The status bar renders it green when the popup is currently visible
 // ("attached") and amber when the popup is hidden in the background.
 type PtyMarker struct {
 	Visible bool
-	Label   string // "attached" / "KM8erm" / ... — caller controls
+	Label   string // "attached" / "Alterm" / ... — caller controls
 }
 
 // CompareMarker is the indicator that compare mode is active. Label
@@ -74,13 +74,21 @@ func (m StatusBarModel) ViewWithErrors(unreadErrors int) string {
 }
 
 func (m StatusBarModel) ViewWithBadge(unreadErrors int, successNotice string) string {
-	return m.ViewFull(unreadErrors, successNotice, nil, nil)
+	return m.ViewFull(unreadErrors, 0, successNotice, nil, nil)
 }
 
 // ViewFull renders the status bar with optional PTY + compare markers.
 // Markers sit in the LEFT segment after the namespace label so they don't
-// fight the error / success badge on the right for space.
-func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *PtyMarker, compare *CompareMarker) string {
+// fight the error / warn / success badge on the right for space.
+//
+// Badge precedence: error (red) > warn (peach) > success (green) > none.
+// Splitting warn from error lets non-critical nudges (deprecation, transient
+// hiccups) surface a Catppuccin Peach ` N warnings` badge without
+// firing the red `! N errors` signal that should mean real failure. The
+// `` glyph is the Nerd Font Font-Awesome warning triangle, picked
+// over the unicode `⚠` (U+26A0) per design-guide §3.2 (glyphs limited
+// to the U+F... Nerd Font private-use range).
+func (m StatusBarModel) ViewFull(unreadErrors, unreadWarns int, successNotice string, pty *PtyMarker, compare *CompareMarker) string {
 	// `[C]ontext: <ctx>  [N]amespace: <ns>` — multi-segment rendering
 	// with semantic coloring instead of layout-shifting bracket markers:
 	//   • brackets `[ ]`: blue (theme ContextFg)
@@ -118,9 +126,9 @@ func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *Pt
 
 	left := fmt.Sprintf(" %s  %s", ctx, ns)
 	if pty != nil {
-		// Hidden KM8erm: same orange (#F0AE49) as the KM8erm popup border so
+		// Hidden Alterm: same orange (#F0AE49) as the Alterm popup border so
 		// the user can visually link "this chip" to "that popup".
-		// Lavender matches the popup border (KM8erm is your persistent
+		// Lavender matches the popup border (Alterm is your persistent
 		// shell — a user-state thing that outlives every other popup,
 		// same conceptual bucket as Pinned / statusbar values / the
 		// unfocused-selected chip).
@@ -148,6 +156,17 @@ func (m StatusBarModel) ViewFull(unreadErrors int, successNotice string, pty *Pt
 	case unreadErrors > 0:
 		badgeText := fmt.Sprintf(" ! %d errors ", unreadErrors)
 		badgePart = badgeStyle.Background(lipgloss.Color(m.theme.Status.Error)).Render(badgeText)
+	case unreadWarns > 0:
+		// Catppuccin Peach — same hue as toast warn border. The warn
+		// badge is visually distinct from the error red so deprecation
+		// nudges / non-critical events don't get conflated with real
+		// failures.
+		label := "warnings"
+		if unreadWarns == 1 {
+			label = "warning"
+		}
+		badgeText := fmt.Sprintf("  %d %s ", unreadWarns, label)
+		badgePart = badgeStyle.Background(lipgloss.Color(toastWarnColor)).Render(badgeText)
 	case successNotice != "":
 		badgeText := fmt.Sprintf(" ✓ %s ", successNotice)
 		badgePart = badgeStyle.Background(lipgloss.Color(m.theme.Status.Running)).Render(badgeText)
