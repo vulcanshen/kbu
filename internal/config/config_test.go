@@ -601,6 +601,67 @@ func TestNextPinOrder_MonotonicSparse(t *testing.T) {
 	}
 }
 
+// TestBackupBeforeMigration_PreservesContent — v1.7.5 deprecation-key
+// migration must save user content verbatim before triggering
+// cfg.Save() (which loses comments + unknown fields). Backup file
+// should match the source byte-for-byte and live at the documented
+// sibling path.
+func TestBackupBeforeMigration_PreservesContent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	original := []byte("# user-added comment about fish\n" +
+		"km8erm_shell: /opt/homebrew/bin/fish\n" +
+		"future_field: 42  # km8 doesn't know this yet\n" +
+		"editor: vim\n")
+	if err := os.WriteFile(path, original, 0o644); err != nil {
+		t.Fatalf("seeding source: %v", err)
+	}
+
+	bak, err := BackupBeforeMigration(path, "1_7_5")
+	if err != nil {
+		t.Fatalf("BackupBeforeMigration: %v", err)
+	}
+	wantPath := path + ".old.1_7_5"
+	if bak != wantPath {
+		t.Errorf("backup path = %q, want %q", bak, wantPath)
+	}
+	got, err := os.ReadFile(bak)
+	if err != nil {
+		t.Fatalf("reading backup: %v", err)
+	}
+	if string(got) != string(original) {
+		t.Errorf("backup content differs from source:\n--- source ---\n%s\n--- backup ---\n%s", original, got)
+	}
+}
+
+// TestBackupBeforeMigration_OverwritesExisting — re-running migration
+// in the same km8 release overwrites a prior backup of the same name
+// so the user has the latest pre-migration snapshot, not a stale one
+// from a previous failed attempt.
+func TestBackupBeforeMigration_OverwritesExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	bakPath := path + ".old.1_7_5"
+	if err := os.WriteFile(bakPath, []byte("stale prior backup\n"), 0o644); err != nil {
+		t.Fatalf("seeding stale backup: %v", err)
+	}
+	fresh := []byte("fresh config to back up\n")
+	if err := os.WriteFile(path, fresh, 0o644); err != nil {
+		t.Fatalf("seeding source: %v", err)
+	}
+
+	if _, err := BackupBeforeMigration(path, "1_7_5"); err != nil {
+		t.Fatalf("BackupBeforeMigration: %v", err)
+	}
+	got, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf("reading backup: %v", err)
+	}
+	if string(got) != string(fresh) {
+		t.Errorf("backup must reflect FRESH source, got stale:\n%s", got)
+	}
+}
+
 func TestSaveTo_Atomic_NoTempfileLeak(t *testing.T) {
 	// Save should not leave .config.*.yaml stragglers around after a
 	// successful write — they would confuse a user listing the config

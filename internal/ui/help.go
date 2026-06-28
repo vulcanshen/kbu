@@ -57,6 +57,11 @@ func (m *HelpModel) Toggle() tea.Cmd {
 	return m.animator.Open()
 }
 
+// Close starts the close animation unconditionally — used by
+// AppModel.closeAllBlockingPopups when a context-shift target
+// (PTY / drill-down) pre-empts the popup stack.
+func (m *HelpModel) Close() tea.Cmd { return m.animator.Close() }
+
 // HandleTick processes an animation tick. Returns a new tick cmd if animation continues.
 func (m *HelpModel) HandleTick(msg AnimTickMsg) tea.Cmd {
 	if msg.Target != m.animator.Target {
@@ -496,13 +501,13 @@ func (m HelpModel) helpContent() []helpEntry {
 		{isSection: true, text: "Global"},
 		{key: "N / C", desc: "Switch namespace / context"},
 		{key: ">", desc: "Open Settings popup (mouse, scroll direction, …)"},
-		{key: "Alt+t", desc: "Toggle KM8erm"},
+		{key: "Alt+t", desc: "Toggle Alterm"},
 		{key: "y", desc: "Copy focused panel"},
 		{key: "z", desc: "Toggle expand panel"},
 		{key: "!", desc: "App log"},
 		{key: "?", desc: "Toggle help"},
 		{key: "q", desc: "Quit km8"},
-		{isSection: true, text: "KM8erm (embedded shell)"},
+		{isSection: true, text: "Alterm (embedded shell)"},
 		{key: "PgUp / PgDn", desc: "Scroll history"},
 		{key: "Home / End", desc: "Top / back to live"},
 	}

@@ -113,7 +113,7 @@ func (m SplashModel) Render(width, height int) string {
 	logo := strings.Join(logoLines, "\n")
 
 	// Caption space is always reserved so the logo doesn't shift when text appears.
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	logoW := cols * 2
 	done := m.revealedCount >= len(m.pixelOrder)
 	titleText, taglineText, hintText := " ", " ", " "

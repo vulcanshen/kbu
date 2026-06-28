@@ -4,6 +4,163 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.5] - 2026-06-28
+
+A polish release on top of v1.7.4's popup design-system overhaul.
+Headline threads:
+
+1. **Popup convention §1.8 / §1.9 / §1.10** — codifies who closes whom
+   across the popup stack. Opening a new popup no longer tears down the
+   source (§1.8); Esc dismisses every popup including auto-dismiss
+   toast (§1.9); context-shift targets (PTY / drill-down) own the
+   close of every blocking popup beneath them (§1.10).
+2. **PTY two-phase stop** — `kubectl edit` / `kubectl exec` lost both
+   its close animation on subprocess exit AND its open animation on
+   the next launch. Fixed by deferring `Stop()` until the animator
+   finishes painting closed, mirroring the Alterm Alt+T hide pattern.
+3. **Panel 3 unfocus dim** — Events / Conditions previously rendered
+   identically focused or not. They now collapse to the dim treatment
+   sidebar / table / history already use. The dim grey scale was
+   stepped from overlay0 → overlay1 app-wide (overlay0 read as
+   "disabled" on streaming-content tabs). **Logs is the documented
+   exception**: streaming content is information actively arriving, and
+   dimming it would hide log lines the user is glancing for from the
+   corner of the eye. Logs renders identically focused or not — matches
+   how Lens / k9s treat streaming logs.
+4. **KM8erm → Alterm rename.** The embedded persistent shell popup is
+   now called Alterm app-wide — code identifiers, yaml config keys, env
+   var names, docs, demo gif filenames. One release of transition for
+   the user-facing settings: the legacy `km8erm_shell` /
+   `km8erm_login_shell` yaml keys are auto-migrated on load, and the
+   legacy `$KM8__SHELL` / `$KM8__LOGIN_SHELL` env vars are still read
+   as a fallback. Both paths emit an App Log warning to nudge the user.
+   **Removed in the next release** — update your config.yaml and your
+   shell rc / launchctl plists this cycle.
+
+### Added
+
+- **Panel 3 unfocus dim for Events / Conditions tabs.**
+  `DetailModel.SetFocused()` now rebuilds every tab on focus change,
+  not just Relatives / History. Events / Conditions / Relatives /
+  History collapse to overlay1 (`#7f849c`) via `TableDimRowStyle`
+  when the panel isn't focused. Logs is the streaming exception
+  (see below) and does not dim.
+- **One-shot legacy config rewrite — with backup.** When the
+  deprecation migration fires (legacy `km8erm_*` yaml keys detected),
+  AppModel copies your original `config.yaml` to a sibling
+  `config.yaml.old.1_7_5` snapshot first, THEN calls `cfg.Save()`
+  to rewrite the live file with the new `alterm_*` keys (dropping
+  legacy). The deprecation warning surfaces once this session —
+  next launch finds new keys and stays silent. Env-var warnings
+  keep recurring since km8 can't rewrite the user's shell rc /
+  launchctl plists.
+
+  Why the backup: `cfg.Save()` goes through `yaml.Marshal(struct)`
+  which can't preserve user-added comments or yaml keys km8 doesn't
+  recognize. The `.old.1_7_5` file is the escape hatch for power
+  users who hand-edited config — if you wanted those comments back,
+  they're there verbatim. Backup failure ABORTS the Save (warning
+  recurs next launch) — losing your custom content silently would
+  be worse than nagging you again.
+- **Peach warn badge — distinct from error.** App Log now tracks
+  warn and error counts separately. The status bar's right-side badge
+  splits accordingly: red `! N errors` for real failures, Catppuccin
+  Peach (`#fab387`) ` N warnings` for non-critical nudges
+  (deprecation, transient hiccups). Same Peach as toast warn border
+  + App Log WARN entries — one warning colour across the whole app.
+  Badge glyph uses Nerd Font U+F071 (`nf-fa-warning`) per design-guide
+  §3.2 (glyphs limited to `U+F...` Nerd Font range). The status line
+  bottom notice follows the same precedence (error red > warn peach >
+  success green).
+- **`AppModel.closeAllBlockingPopups()` helper.** Batches `Close()`
+  for the 13 blocking popups (toast + PTY slots excluded — toast
+  auto-dismisses, PTY slots have their own mutex). Returns `nil`
+  when nothing is open so callers can unconditionally
+  `tea.Batch(closeAll, ...)`. Used by every context-shift entry
+  handler (`startEditMsg` / `startShellExecMsg` / Alt+T /
+  `enterDrillDown`). Public `Close()` added to `HelpModel` +
+  `AppLogModel` so the helper can drive them.
+
+### Changed
+
+- **Popup §1.8 — opening a popup no longer closes the source.**
+  `Panel2MenuPopupModel.commit()` no longer self-closes. The menu
+  was the only popup that tore itself down on commit, so Esc on the
+  target popup (confirm / yaml / pty) used to drop the user back to
+  the panel instead of returning here. Aligns with the canonical
+  Relatives → switch-confirm pattern.
+- **Popup §1.10 — context-shift targets close the popup stack.**
+  Inline action popups (confirm / yaml / diff / sort picker / helm
+  docs) still stack on top and return to the source. But context-
+  shift targets — PTY shell, kubectl edit, kubectl exec, drill-down
+  — take the user out of km8's popup tree for minutes; returning
+  to a stale source popup over swapped content is disorientation,
+  not anchoring. The target's entry handler now calls
+  `closeAllBlockingPopups()` at the top. Every launch site (direct
+  hotkey, panel 2 menu commit, future surfaces) gets the right
+  behavior for free.
+- **Dim grey scale: overlay0 → overlay1.** App-wide step from
+  `#6c7086` to `#7f849c` across 17 active call sites. overlay0 read
+  as "disabled" on the new panel 3 streaming tabs; overlay1 lands
+  at "still there, still updating" without competing for focus. The
+  6 popup chrome files that were already on overlay1 by design are
+  untouched.
+
+### Fixed
+
+- **PTY close + restart animation lost.** `txPty` (kubectl edit /
+  kubectl exec) lost its close animation on subprocess exit AND
+  its open animation on the next launch. Root cause: `ptyTickMsg`'s
+  done branch called `p.Stop()` synchronously, which nilled
+  `term` + `ptmx` before `animator.Close()` could paint over the
+  grid, and the animator was never told to close so the next
+  `Start` hit the "already open → no-op" guard. Fix: two-phase
+  teardown — done branch sets `stopPending = true` + calls
+  `animator.Close()` + emits `PtyExitMsg` via `tea.Batch`, but does
+  NOT call `Stop()`. `HandleTick()` runs `Stop()` only when state
+  settles in `PopupClosed` AND `stopPending` is true. Mirrors the
+  Alterm Alt+T hide pattern that always worked.
+- **Esc on auto-dismiss toast.** `app.go` case `"esc"` now short-
+  circuits to `m.toast.Dismiss()` before its own filter-clear /
+  drill-exit work. Blocking popups already handle Esc themselves;
+  toast was the gap because it's non-blocking and can't intercept
+  keys (§1.9).
+
+### Tests
+
+- `TestDetailModel_EventsConditions_DimOnUnfocus` — locks Events /
+  Conditions dim. Forces `lipgloss.TrueColor` profile (default `Ascii`
+  in `go test` would strip the diff), asserts SetFocused flips
+  contentLines bytes while ANSI strip yields identical plain text.
+- `TestDetailModel_Logs_NoDimOnUnfocus` — locks the streaming
+  exception: Logs must render identically focused or not, byte-for-byte.
+- `TestPtyView_StartEcho_Exits` — unwraps `BatchMsg` to find the
+  `PtyExitMsg` payload, asserts `stopPending` mid-flight, finalizes
+  the animator via HandleTick, asserts deferred `Stop()` ran.
+- `TestPtyView_SecondStartReplaysOpenAnimation` — pins the restart
+  fix: Start → exit-detect → finalize close → Start, assert
+  animator transitions through `PopupOpeningLine`.
+- `TestPanel2Menu_CommitKeepsMenuOpen` — asserts the menu stays
+  `IsActive()` after commit and no self-close `AnimTickMsg` slips
+  into the batch.
+- `TestAppModel_CloseAllBlockingPopups_NilWhenIdle` /
+  `_ClosesActiveOnes` — helper contract.
+
+### Renamed (KM8erm → Alterm)
+
+- **Config yaml keys** (legacy keys auto-migrated this release,
+  **removed next release**):
+  - `km8erm_shell` → `alterm_shell`
+  - `km8erm_login_shell` → `alterm_login_shell`
+- **Environment variables** (legacy names read as fallback this
+  release, **removed next release**):
+  - `KM8__SHELL` → `KM8__ALTERM_SHELL`
+  - `KM8__LOGIN_SHELL` → `KM8__ALTERM_LOGIN_SHELL`
+- **Demo gif**: `docs/demo-km8erm.gif` → `docs/demo-alterm.gif`
+  (re-recording pending; the README reference is updated).
+- All Go identifiers, popup titles, statusbar marker label, comments,
+  and docs swept from `KM8erm` / `km8erm` to `Alterm` / `alterm`.
+
 ## [v1.7.4] - 2026-06-27
 
 A popup design-system overhaul. Every popup now follows a single
@@ -33,7 +190,7 @@ to think about it.
   raises the ceiling beyond sapphire.
 - **PTY popup open/close animation.** `shellPty` and `txPty` now
   have their own PopupAnimator (targets `ptyview_shell` /
-  `ptyview_tx`) so KM8erm and kubectl edit/exec popups fade in
+  `ptyview_tx`) so Alterm and kubectl edit/exec popups fade in
   and out like every other popup. Previously they snapped in,
   which read as a frame drop.
 - **PopupAnimator on Compare's Diff menu.** The Space-triggered
@@ -77,13 +234,13 @@ to think about it.
   layer color. Comments mentioning periwinkle as a border
   reference cleaned up; the constant itself no longer exists in
   `theme/theme.go`.
-- **PTY Shell border joins the layer system.** KM8erm popups used
+- **PTY Shell border joins the layer system.** Alterm popups used
   to render with Lavender (`#b4befe`) borders to mark "this is
-  YOUR persistent shell". The KM8erm identity now lives only on
+  YOUR persistent shell". The Alterm identity now lives only on
   the statusbar marker (still lavender — user footprint); the
   popup border itself follows the layer scale like every other
-  popup, so a popup over KM8erm reads one notch deeper than
-  KM8erm regardless of kind.
+  popup, so a popup over Alterm reads one notch deeper than
+  Alterm regardless of kind.
 - **comparemenu extracted to its own file.** The Space-triggered
   Diff menu (`Switch view` / `Close`) used to live inside
   `comparepopup.go` as `overlayMenu`. Moved to `comparemenu.go`
@@ -293,11 +450,11 @@ fragments.
   - `$KM8__CONFIGPATH` — point km8 at a config file outside
     `~/.config/km8/config.yaml`. Useful for split per-cluster configs
     or running a custom config without touching the default.
-  - `$KM8__SHELL` — override KM8erm's shell (skip the default
+  - `$KM8__SHELL` — override Alterm's shell (skip the default
     detection, strip the `-l` login flag so the prompt stays clean).
   - `$KM8__LOGIN_SHELL` — opt back into login mode (`true` /
     `1` / `yes`); default is non-login for a faster, quieter prompt.
-- **`km8erm_shell` + `km8erm_login_shell` config keys.** Persistent
+- **`alterm_shell` + `alterm_login_shell` config keys.** Persistent
   equivalents of the env vars above. Empty string = fall through to
   platform default (`$SHELL` → `/bin/zsh` → `/bin/bash`).
 - **`docs/demo-compare.gif`.** Walks Space + Enter + Space + Enter
@@ -310,9 +467,9 @@ fragments.
   "Single-pane Kubernetes workspace — Tab/Space/Enter/Esc drive
   everything". New hero quote: 「遇事不決，就按 Space」/ "When in
   doubt, hit Space". Features list leads with ZLC and Compose
-  (KM8erm runs other TUIs — k9s, btop, lazygit — not a replacement
+  (Alterm runs other TUIs — k9s, btop, lazygit — not a replacement
   pitch). Env-var section added in both EN and 繁中 READMEs. Pinned
-  drag glyph swapped from `⇅` to `󰩐` (U+F0A50). KM8erm border +
+  drag glyph swapped from `⇅` to `󰩐` (U+F0A50). Alterm border +
   edit/exec pty colors documented as lavender + periwinkle (matches
   v1.7.1 color mindset). Panel expand hotkey corrected from `=`/
   `-` to `z`. Toast info color corrected from sky-blue to
@@ -333,7 +490,7 @@ fragments.
   glyph, highlight overflow contained so long release names don't
   bleed past the popup edge.
 - **Demo gifs re-recorded.** All 5 prior demos (basics, relatives,
-  helm, yaml-edit, km8erm) re-recorded for v1.7.1's visual changes,
+  helm, yaml-edit, alterm) re-recorded for v1.7.1's visual changes,
   plus the new compare gif. Tape recording got a Sleep + Wait +
   Sleep pacing pattern so panel-1 actions that trigger panel-2
   reload wait on the actual content marker, not the border-title
@@ -368,7 +525,7 @@ one Y bug fix, and a removed cross-kind Pod-Status special case.
 | Role | Color | Where |
 |---|---|---|
 | App frame / structure | catppuccin blue `#89b4fa` | Panel border (focused), Detail tab bar (focused), `[ ]` brackets in statusbar, table HeaderFg, Detail field labels, Relatives section header + drill arrow, sidebar categories (Pinned exception below) |
-| User footprint / persistent preference | catppuccin lavender `#b4befe` | Pinned category, statusbar `<ctx>` / `<ns>` values, unfocused-selected chip (all 3 panels), Listpicker "current" badge, Settings ON, KM8erm pty border + statusbar chip |
+| User footprint / persistent preference | catppuccin lavender `#b4befe` | Pinned category, statusbar `<ctx>` / `<ns>` values, unfocused-selected chip (all 3 panels), Listpicker "current" badge, Settings ON, Alterm pty border + statusbar chip |
 | User current hand | catppuccin subtext1 `#bac2de` | Focused-selected chip (sidebar + table) |
 | Overlay layer (transient) | custom periwinkle `#A4BAFC` (new `theme.Periwinkle`) | Every generic popup (panel2menu, hintpopup, listpicker, breadcrumb, helmdocmenu, settings, namespace, context, confirm, applog, help, yamlpopup) + info-level toast + kubectl edit + kubectl exec pty borders |
 | Compare feature | cyan `#9DDAEA` | Locked row, statusbar compare chip, compare popup chrome |
@@ -417,8 +574,8 @@ appears as one slot in the container-log color palette.
   stays overlay1 grey. Cursor row collapses to one uniform
   dark-on-periwinkle chip; the "ON" / "OFF" word itself carries
   the state. Drops the duplicate cursor-row styles.
-- **KM8erm pty border + statusbar chip: amber → lavender.**
-  KM8erm is your persistent personal shell, the only pty kind
+- **Alterm pty border + statusbar chip: amber → lavender.**
+  Alterm is your persistent personal shell, the only pty kind
   that outlives its popup; same conceptual bucket as the other
   user-state accents.
 - **kubectl exec pty border: green → periwinkle.** Edit + Exec
@@ -426,13 +583,13 @@ appears as one slot in the container-log color palette.
   title bar (`kubectl edit pod/foo` vs `kubectl exec -it pod/foo`)
   carries the kind distinction.
 - **Bottom hint line slimmed.** From `?:help q:quit N:ns C:ctx
-  space:menu enter:into Alt-t:KM8erm [/:filter]` to `? Esc Space
+  space:menu enter:into Alt-t:Alterm [/:filter]` to `? Esc Space
   Enter Tab Alt-t > settings`. The retired keys all live elsewhere
   now (`N` / `C` on the statusbar, `q` is a special "no popup
   open" gesture, `/` is the per-panel search hint).
 - **Help popup reorganized.** New structure: **Core** (Tab /
   Enter / Esc / Space — the four cross-app gestures), **Navigation**
-  (cursor + panel keys), **Global** (app-level letters), **KM8erm**.
+  (cursor + panel keys), **Global** (app-level letters), **Alterm**.
   Dropped the "Vim Navigation" framing — the cursor keys are
   universal-tui, not vim-specific.
 - **Settings hotkey: `M` → `>` (shift+.).** `M` was an arbitrary
@@ -932,9 +1089,9 @@ user can land focus, `Space` shows what they can do.
 
 ## [v1.5.2] - 2026-05-27
 
-Dual-slot PTY + status bar styling pass. The headline fix: KM8erm
+Dual-slot PTY + status bar styling pass. The headline fix: Alterm
 (persistent embedded shell) can now coexist with `kubectl exec` /
-`kubectl edit` — previously a hidden KM8erm shell blocked any new PTY,
+`kubectl edit` — previously a hidden Alterm shell blocked any new PTY,
 forcing the user to exit it. Container drill gets a Space menu too, so
 the v1.5.1 "Space = right-click menu" model now reaches the bottom of
 the drill chain.
@@ -942,8 +1099,8 @@ the drill chain.
 ### Added
 
 - **Dual-slot PTY architecture.** Split the single `m.ptyView` into
-  `m.shellPty` (KM8erm, persistent) and `m.txPty` (kubectl edit / exec,
-  transient). They run independently — hide KM8erm in the background,
+  `m.shellPty` (Alterm, persistent) and `m.txPty` (kubectl edit / exec,
+  transient). They run independently — hide Alterm in the background,
   then exec into a container without closing the shell session. Render
   layers tx on top of shell; input routing prefers tx; tick + exit
   messages carry `Kind` so the right slot cleans up.
@@ -957,19 +1114,19 @@ the drill chain.
 
 - **Status bar text labels → Nerd Font icons.** `ctx:` / `cluster:` /
   `ns:` replaced with `\U+F0237` / `\U+F1856` / `\U+F51E` — more compact,
-  matches the KM8erm chip style. Hidden KM8erm chip color synced to
+  matches the Alterm chip style. Hidden Alterm chip color synced to
   the popup border (`#F0AE49`).
 - **PTY popup borders tri-color.** With two PTYs able to coexist, each
   kind needs its own border so the active popup's provenance is
-  unambiguous: KM8erm shell stays Catppuccin peach `#F0AE49`, `kubectl
+  unambiguous: Alterm shell stays Catppuccin peach `#F0AE49`, `kubectl
   exec` switches to green `#a6e3a1`, `kubectl edit` keeps sky blue
   `#74c7ec`. Title (bold) shares each popup's border color.
 
 ### Fixed
 
-- **Hidden KM8erm no longer blocks edit/exec.** Old single-slot guard
+- **Hidden Alterm no longer blocks edit/exec.** Old single-slot guard
   refused `startShellExecMsg` and `startEditMsg` whenever any PTY was
-  alive — including a backgrounded KM8erm shell. Guards now check only
+  alive — including a backgrounded Alterm shell. Guards now check only
   the txPty slot, so the persistent shell stays out of the way.
 
 ## [v1.5.1] - 2026-05-27
@@ -1102,7 +1259,7 @@ signal danger. The mental-model anchor is a desktop GUI analogue: Enter
   `demo-relatives` (chain drill + Space breadcrumb popup + confirm
   switch), `demo-yaml-edit` (Space menu → Edit → confirm → vim, the
   v1.5.1-correct path to `kubectl edit`), `demo-helm` (new — Space
-  doc menu → Manifest YAML popup), `demo-km8erm` (two scale cycles
+  doc menu → Manifest YAML popup), `demo-alterm` (two scale cycles
   showing hide/show persistence).
 
 ## [v1.5.0] - 2026-05-26
@@ -1196,7 +1353,7 @@ goes via `Y` + your editor).
   bottom-left corner of the affected panel + an unambiguous `.helm`
   label, since the marker only matters while looking at the Secrets
   list.
-- **Hidden KM8erm chip relabeled `KM8erm`** (was `km8erm` lowercase)
+- **Hidden Alterm chip relabeled `Alterm`** (was `alterm` lowercase)
   to match the popup border title.
 - **Breadcrumb + helm doc menu popups grew one row of top/bottom
   padding** so title/hint don't sit flush against the first/last
@@ -1268,7 +1425,7 @@ to a Pod you land where you came from instead of being teleported to
 Logs. ServiceAccount and Secret grow bidirectional links (RBAC
 subjects + token-secret annotations). Selection styling gains a focused
 vs unfocused distinction so you can always see which panel "remembers"
-the cursor. Two KM8erm/drill bug fixes from v1.3.0 hotfixes promoted in.
+the cursor. Two Alterm/drill bug fixes from v1.3.0 hotfixes promoted in.
 
 ### Added
 
@@ -1342,11 +1499,11 @@ the cursor. Two KM8erm/drill bug fixes from v1.3.0 hotfixes promoted in.
 
 ### Fixed
 
-- **KM8erm: Alt+letter / Shift+Tab / Ctrl-arrows / F-keys forwarded
+- **Alterm: Alt+letter / Shift+Tab / Ctrl-arrows / F-keys forwarded
   to the embedded shell.** `ptyKeyBytes` was dropping these — zsh
   hotkeys like `Alt+.` / `Alt+f` / `Alt+Backspace`, Shift+Tab reverse
   completion, Ctrl+Left/Right word jump, and F1–F12 all silently
-  no-op'd inside KM8erm. Now they serialize to the right escape
+  no-op'd inside Alterm. Now they serialize to the right escape
   sequences (meta convention ESC prefix for Alt, xterm CSI for
   modified arrows, DEC SS3 / CSI `~` for F-keys).
 - **Drill chain survives background watcher refresh.** While drilled
@@ -1392,7 +1549,7 @@ chase ownership / consumer / ref chains by repeatedly drilling
 leaving panel 3. 25 of 26 resource kinds carry Links data; every drill
 respects a cycle pre-check; a breadcrumb popup lets you jump back to
 any ancestor level in one step. Alongside that: a persistent embedded
-shell (KM8erm), aggregate Deployment logs, a full-screen `Y` YAML
+shell (Alterm), aggregate Deployment logs, a full-screen `Y` YAML
 popup, and a layout refactor that ditched percentage-math heuristics
 for absolute stacking.
 
@@ -1435,11 +1592,11 @@ for absolute stacking.
   skew + jitter would make any ordering misleading). Falls back to
   the Deployment's full selector when the current-ReplicaSet lookup
   fails (RBAC denies RS list, etc.).
-- **Persistent KM8erm (`Alt+t`).** The embedded shell survives
+- **Persistent Alterm (`Alt+t`).** The embedded shell survives
   visibility toggling. First `Alt+t` spawns it; subsequent presses
   hide / show while cwd, history, env vars, and background jobs all
   persist. Status bar carries a chip in the `ns:` row showing state —
-  green `attached` while visible, peach `km8erm` while hidden. Shell
+  green `attached` while visible, peach `alterm` while hidden. Shell
   exits cleanly on km8 quit. `Alt+t` only applies to the Shell-kind
   PTY; `kubectl edit` and `kubectl exec` popups treat it as a regular
   key (their lifecycle is bound to the subprocess). `e` / `s` while
@@ -1516,7 +1673,7 @@ for absolute stacking.
 
 ### Fixed
 
-- **Panic on quit when KM8erm was hidden.** `Stop()` nil'd `p.cmd`
+- **Panic on quit when Alterm was hidden.** `Stop()` nil'd `p.cmd`
   while `readLoop` was still doing `cmd.Wait()`; the loop now
   captures local pointer copies before the wait so the nil
   reassignment can't race the in-flight wait.
@@ -1539,11 +1696,11 @@ for absolute stacking.
 - **Help popup right border on odd-width terminals.** Off-by-one
   from integer-truncated column split — fixed by letting the middle
   gutter absorb the leftover column.
-- **KM8erm hidden status-bar marker uses peach (`#fab387`).** The
+- **Alterm hidden status-bar marker uses peach (`#fab387`).** The
   previous yellow was identical to the `ns:` text; the new color
   matches the panel-border palette and is unambiguous.
 - **`Alt+t` hint everywhere is lowercase.** The keymap is
-  case-sensitive; help / status line / KM8erm border hints now match
+  case-sensitive; help / status line / Alterm border hints now match
   the actual key.
 - **Long Links values wrap consistently for cursor and non-cursor
   rows.** Cursor row used `lipgloss.Width()` (which wraps); non-
@@ -1628,8 +1785,8 @@ for absolute stacking.
 ## [v1.2.0] - 2026-05-22
 
 ### Added
-- **KM8erm — embedded shell terminal** (`T` key). Opens the user's login shell (`$SHELL -l`, fallback `/bin/sh`) inside a PtyView popup with the user's full env and cwd intact — essentially `ssh localhost` embedded in km8. The popup title shows the short hostname (`.local` mDNS suffix stripped) so it's clear which machine you're connected to. Solves the "I need to drop out of km8 to run `kubectl apply -f foo.yaml`" friction without re-implementing every kubectl verb inside the TUI.
-- **PTY scrollback** — 10,000-line ring buffer captures every output line that flows through any PtyView popup (KM8erm, `s` shell exec, `e` edit). Navigate with `PgUp` / `PgDn` (page) and `Home` / `End` (top / live). Typing any other key snaps the view back to live. ANSI color codes are preserved so the rendered history looks exactly like the live output. Scrollback automatically resets when the subprocess clears the screen (`clear` / `\x1b[2J` / `\x1b[H\x1b[J` / `\x1b[3J` / `\x1bc`).
+- **Alterm — embedded shell terminal** (`T` key). Opens the user's login shell (`$SHELL -l`, fallback `/bin/sh`) inside a PtyView popup with the user's full env and cwd intact — essentially `ssh localhost` embedded in km8. The popup title shows the short hostname (`.local` mDNS suffix stripped) so it's clear which machine you're connected to. Solves the "I need to drop out of km8 to run `kubectl apply -f foo.yaml`" friction without re-implementing every kubectl verb inside the TUI.
+- **PTY scrollback** — 10,000-line ring buffer captures every output line that flows through any PtyView popup (Alterm, `s` shell exec, `e` edit). Navigate with `PgUp` / `PgDn` (page) and `Home` / `End` (top / live). Typing any other key snaps the view back to live. ANSI color codes are preserved so the rendered history looks exactly like the live output. Scrollback automatically resets when the subprocess clears the screen (`clear` / `\x1b[2J` / `\x1b[H\x1b[J` / `\x1b[3J` / `\x1bc`).
 - **Per-container colored log labels** — multi-container pods are now visually distinguishable line-by-line. Each container name gets a stable color (FNV hash → 8-entry Catppuccin palette).
 - **Colored Pod STATUS column** — green for `Running` / `Succeeded` / `Completed`, yellow for `Pending` / `ContainerCreating` / `PodInitializing`, red for `CrashLoopBackOff` / `ImagePullBackOff` / `OOMKilled` / `Evicted` / `Error` / `Failed` / `Init:<reason>`, gray for `Terminating` / `Unknown`.
 - **Sidebar category-name search** — typing `/` followed by a category name (e.g. `cluster`) now expands the matching category and shows all its children, not only resource items whose own label contains the query.

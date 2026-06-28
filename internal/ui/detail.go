@@ -530,10 +530,11 @@ func (m *DetailModel) SetFocused(focused bool) {
 		return
 	}
 	m.focused = focused
-	switch m.ActiveTabName() {
-	case "Relatives", "History":
-		m.buildContentLines()
-	}
+	// Every tab now reacts to focus — Relatives / History repaint their
+	// cursor highlight, Logs / Events / Conditions collapse to the
+	// overlay0 dim treatment used by sidebar / table when unfocused so
+	// panel 3 stops pulling the eye while focus sits elsewhere.
+	m.buildContentLines()
 }
 
 // CopyableContent returns the current tab's content as plain text (no ANSI
@@ -1080,6 +1081,13 @@ func (m DetailModel) buildEventLines() []string {
 
 	labelStyle := m.theme.DetailLabelStyle()
 	valueStyle := m.theme.DetailValueStyle()
+	if !m.focused {
+		// Mirror the sidebar / table / history dim treatment so panel 3
+		// recedes consistently when focus moves elsewhere.
+		dim := m.theme.TableDimRowStyle()
+		labelStyle = dim
+		valueStyle = dim
+	}
 
 	// Indent for message continuation lines: leading 2 + typeW + 2 + reasonW + 2 + objectW + 2
 	msgIndent := strings.Repeat(" ", 2+typeW+2+reasonW+2+objectW+2)
@@ -1155,6 +1163,16 @@ func (m DetailModel) buildConditionsLines() []string {
 
 	labelStyle := m.theme.DetailLabelStyle()
 	valueStyle := m.theme.DetailValueStyle()
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Error))
+	if !m.focused {
+		// Same dim treatment as Events / Logs — the False-row red collapses
+		// too. focused = look at diagnostics in detail; unfocused = let
+		// the panel recede. focus is one Tab away.
+		dim := m.theme.TableDimRowStyle()
+		labelStyle = dim
+		valueStyle = dim
+		errorStyle = dim
+	}
 
 	msgIndent := strings.Repeat(" ", 2+typeW+2+statusW+2+reasonW+2)
 
@@ -1181,8 +1199,9 @@ func (m DetailModel) buildConditionsLines() []string {
 		rendered := valueStyle
 		if c.Status == "False" {
 			// Failing condition is usually the diagnostic answer — highlight
-			// with the same Error palette used for status badges.
-			rendered = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Error))
+			// with the same Error palette used for status badges. Collapses
+			// to dim when the panel isn't focused (errorStyle == dim).
+			rendered = errorStyle
 		}
 		for _, row := range formatRows(c.Type, c.Status, c.Reason, c.Message, c.Age) {
 			lines = append(lines, rendered.Render(row))
@@ -1445,7 +1464,15 @@ func (m DetailModel) buildLogLines() []string {
 		return []string{"  " + m.theme.DetailValueStyle().Render("Waiting for logs...")}
 	}
 	var lines []string
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	// Logs is the only panel-3 tab that does NOT dim on unfocus.
+	// Streaming content is information actively arriving; dimming it
+	// would hide updates that the user is glancing for from the corner
+	// of the eye. The other panel-3 tabs (Events / Conditions /
+	// Relatives / History) all dim via TableDimRowStyle because their
+	// content is static — focus-back-and-read works fine for them.
+	// Documented exception to the unfocus-dim convention, matching how
+	// Lens / k9s treat streaming logs.
+	sepDim := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	for _, ll := range m.logLines {
 		// Build plain + styled prefixes side by side. Plain is for wrap-width
 		// math (avoid counting ANSI escapes); styled is what we actually emit.
@@ -1461,7 +1488,7 @@ func (m DetailModel) buildLogLines() []string {
 			podStyle := lipgloss.NewStyle().Foreground(podLogColor(ll.pod)).Bold(true)
 			ctrStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
 			plainPrefix = "  " + ll.container + "@" + tag + " │ "
-			styledPrefix = "  " + ctrStyle.Render(ll.container) + dimStyle.Render("@") + podStyle.Render(tag) + " │ "
+			styledPrefix = "  " + ctrStyle.Render(ll.container) + sepDim.Render("@") + podStyle.Render(tag) + " │ "
 		} else {
 			ctrStyle := lipgloss.NewStyle().Foreground(containerLogColor(ll.container)).Bold(true)
 			plainPrefix = "  " + ll.container + " │ "

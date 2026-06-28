@@ -178,17 +178,108 @@ func TestPtyView_StartEcho_Exits(t *testing.T) {
 	if cmd2 == nil {
 		t.Fatal("expected exit command from tick after done flag set")
 	}
-	msg := cmd2()
-	exit, ok := msg.(PtyExitMsg)
+	// Two-phase teardown (popup-convention v2 §1.10 + close-anim fix):
+	// done-detection batches a close-animation cmd + the PtyExitMsg
+	// emitter. cmd2() returns a BatchMsg carrying both — unwrap and
+	// find the PtyExitMsg.
+	exit, ok := drainPtyBatchForExit(cmd2())
 	if !ok {
-		t.Fatalf("expected PtyExitMsg, got %T", msg)
+		t.Fatalf("expected BatchMsg containing PtyExitMsg, got %T", cmd2())
 	}
 	if exit.ExitCode != 0 {
 		t.Errorf("echo exited with code %d, want 0", exit.ExitCode)
 	}
-	if updated.IsActive() {
-		t.Error("PtyView must be inactive after PtyExitMsg dispatch")
+	// IsActive stays true while the close animation plays — the hard
+	// Stop() is deferred to HandleTick once the animator settles in
+	// PopupClosed. Finalize() fast-forwards past the animation so the
+	// post-cleanup steady state can be asserted in a single test step.
+	if !updated.stopPending {
+		t.Error("after exit-detect: stopPending must be true (deferred Stop)")
 	}
+	updated.animator.Finalize()
+	_ = updated.HandleTick(AnimTickMsg{Target: updated.animator.Target})
+	if updated.IsActive() {
+		t.Error("PtyView must be inactive after close animation settles + HandleTick runs Stop()")
+	}
+	if updated.stopPending {
+		t.Error("after deferred Stop(): stopPending must be false")
+	}
+}
+
+// TestPtyView_SecondStartReplaysOpenAnimation locks in the fix for
+// the silent-restart bug: before the two-phase teardown, ptyTickMsg
+// done detection called Stop() synchronously, which (a) niled term
+// → close animation never painted (RenderPopup short-circuited on
+// term==nil) and (b) never advanced animator past PopupOpen → next
+// Start's animator.Open() was a no-op → no open animation either.
+// This test reproduces the cycle: Start → done detected → finalize
+// close → Start again, and asserts the animator actually transitions
+// through PopupOpeningLine on the second Start.
+func TestPtyView_SecondStartReplaysOpenAnimation(t *testing.T) {
+	v := NewPtyView("ptyview_test_restart")
+
+	// First Start + exit-detect cycle.
+	first := exec.Command("echo", "first")
+	if c := v.Start(first, "echo first", 80, 24, PtyKindExec); c == nil {
+		t.Fatal("first Start must return a cmd")
+	}
+	// Wait for echo to actually exit.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if v.done != nil && v.done.Load() {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if v.done == nil || !v.done.Load() {
+		t.Fatal("first echo did not complete in time")
+	}
+	updated, _ := v.Update(ptyTickMsg{})
+	if !updated.stopPending {
+		t.Fatal("first cycle: stopPending must be true after done-detect")
+	}
+	// Drive the animator to PopupClosed + run HandleTick so deferred
+	// Stop() actually fires.
+	updated.animator.Finalize()
+	_ = updated.HandleTick(AnimTickMsg{Target: updated.animator.Target})
+	if updated.animator.State != PopupClosed {
+		t.Fatalf("first cycle: animator must be PopupClosed post-Finalize+HandleTick, got %v", updated.animator.State)
+	}
+	if updated.stopPending {
+		t.Error("first cycle: stopPending must be cleared by deferred Stop()")
+	}
+
+	// Second Start — the bug was that Open() became a no-op because
+	// the animator was still stuck in PopupOpen. With the fix, the
+	// first cycle put the animator into PopupClosed, so Open() now
+	// kicks the opening animation back into action.
+	second := exec.Command("echo", "second")
+	if c := updated.Start(second, "echo second", 80, 24, PtyKindExec); c == nil {
+		t.Fatal("second Start must return a cmd")
+	}
+	if updated.animator.State != PopupOpeningLine {
+		t.Errorf("second Start: animator must replay open animation (PopupOpeningLine), got %v — this is the silent-restart regression", updated.animator.State)
+	}
+}
+
+// drainPtyBatchForExit walks a tea.BatchMsg looking for the
+// PtyExitMsg payload. Returns the exit + ok=true on first match,
+// or zero + false if no exit msg is present.
+func drainPtyBatchForExit(msg tea.Msg) (PtyExitMsg, bool) {
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		exit, isExit := msg.(PtyExitMsg)
+		return exit, isExit
+	}
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		if exit, isExit := c().(PtyExitMsg); isExit {
+			return exit, true
+		}
+	}
+	return PtyExitMsg{}, false
 }
 
 func TestPtyView_CaptureToScrollback_SplitsOnNewline(t *testing.T) {

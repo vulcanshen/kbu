@@ -26,17 +26,17 @@ type Config struct {
 	// Empty string means fall back to $EDITOR, then platform default.
 	Editor string `yaml:"editor"`
 
-	// KM8ermShell overrides $SHELL for the KM8erm internal terminal
+	// AltermShell overrides $SHELL for the Alterm internal terminal
 	// popup. Empty string means fall back to $SHELL, then /bin/sh —
 	// the typical case where the user wants the same login shell as
 	// their host terminal. Resolved via Go's exec.Command(name, args)
 	// — bare names (e.g. `fish`) are looked up on $PATH at popup-open
 	// time; absolute paths are used verbatim. Distinct from `Editor`
-	// so users can pick e.g. `fish` for an interactive km8erm while
+	// so users can pick e.g. `fish` for an interactive alterm while
 	// keeping vim/$EDITOR for kubectl edit.
-	KM8ermShell string `yaml:"km8erm_shell"`
+	AltermShell string `yaml:"alterm_shell"`
 
-	// KM8ermLoginShell launches the KM8erm shell with `-l` so it
+	// AltermLoginShell launches the Alterm shell with `-l` so it
 	// sources login dotfiles (~/.zprofile, ~/.bash_profile, /etc/
 	// profile). Default false because the login path on macOS bash
 	// force-sets PS1 from /etc/profile and clobbered the user's clean
@@ -46,9 +46,9 @@ type Config struct {
 	// Flip true when km8 is launched from a NON-login parent shell
 	// (Raycast / Alfred / cron / tmux configured non-login) and your
 	// PATH lives in .zprofile / .bash_profile rather than .zshrc —
-	// without `-l` those dotfiles never run and KM8erm sees a
+	// without `-l` those dotfiles never run and Alterm sees a
 	// stripped PATH that can't find brew/asdf/mise binaries.
-	KM8ermLoginShell bool `yaml:"km8erm_login_shell"`
+	AltermLoginShell bool `yaml:"alterm_login_shell"`
 
 	// Compare carries settings for the YAML compare popup.
 	Compare CompareConfig `yaml:"compare"`
@@ -69,6 +69,15 @@ type Config struct {
 	// (CRD uninstalled, etc.) — the entry is preserved so a re-install
 	// of the CRD silently restores the user's pin / sort.
 	ResourceKindConfig map[string]ResourceKindConfigEntry `yaml:"resource_kind_config,omitempty"`
+
+	// DeprecationWarnings collected during LoadFrom — populated when the
+	// loader migrates a deprecated yaml key (e.g. km8erm_shell →
+	// alterm_shell from the v1.7.5 rename). Not yaml-tagged: never
+	// persisted, lives only for the lifetime of the loaded Config.
+	// AppModel emits each entry to the App Log on startup so the user
+	// sees the nudge in the `!` popup. Removable next release once the
+	// transition period ends.
+	DeprecationWarnings []string `yaml:"-"`
 }
 
 // ResourceKindConfigEntry is the per-kind config bag. Each sub-field
@@ -336,6 +345,40 @@ func LoadFrom(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parsing config file %s: %w", path, err)
 	}
+
+	// v1.7.5 KM8erm → Alterm rename transition: read the legacy keys
+	// (km8erm_shell / km8erm_login_shell) when the new keys are absent
+	// so existing config.yaml files keep working. Second yaml pass into
+	// a raw map detects key PRESENCE — needed because bool's zero value
+	// (false) is indistinguishable from "key absent" without it. Save()
+	// never writes the deprecated keys, so the migration is one-shot:
+	// next save rewrites the file with new keys only and the warning
+	// stops on subsequent loads. Removable next release.
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err == nil {
+		_, newShellPresent := raw["alterm_shell"]
+		if oldShell, oldShellPresent := raw["km8erm_shell"]; oldShellPresent {
+			if !newShellPresent {
+				if s, ok := oldShell.(string); ok {
+					cfg.AltermShell = s
+				}
+			}
+			cfg.DeprecationWarnings = append(cfg.DeprecationWarnings,
+				"config: 'km8erm_shell' is deprecated, rename to 'alterm_shell' (auto-migrated this session — the next km8 save will rewrite your config.yaml with the new key)")
+		}
+
+		_, newLoginPresent := raw["alterm_login_shell"]
+		if oldLogin, oldLoginPresent := raw["km8erm_login_shell"]; oldLoginPresent {
+			if !newLoginPresent {
+				if b, ok := oldLogin.(bool); ok {
+					cfg.AltermLoginShell = b
+				}
+			}
+			cfg.DeprecationWarnings = append(cfg.DeprecationWarnings,
+				"config: 'km8erm_login_shell' is deprecated, rename to 'alterm_login_shell' (auto-migrated this session — the next km8 save will rewrite your config.yaml with the new key)")
+		}
+	}
+
 	return cfg, nil
 }
 
@@ -554,4 +597,32 @@ func (c *Config) SaveTo(path string) error {
 		return fmt.Errorf("renaming tempfile to %s: %w", path, err)
 	}
 	return nil
+}
+
+// BackupBeforeMigration copies the current config file to a sibling
+// `<srcPath>.old.<vers>` file so a user-edited config (comments,
+// custom fields, hand-written formatting) is preserved verbatim
+// before any Save-triggered rewrite that goes through yaml.Marshal
+// — which can't preserve those. Returns the backup path on success.
+//
+// `vers` is the running km8 release with dots replaced by
+// underscores so the suffix sorts cleanly and doesn't confuse
+// path-splitters that special-case dot (e.g. `1_7_5`, or `dev` for
+// local builds).
+//
+// If the target backup already exists, it is overwritten — the most
+// recent pre-migration snapshot is the most relevant for the user
+// asking "what did my config look like just before this run rewrote
+// it". Same-version migrations are idempotent, so re-running doesn't
+// produce a confusingly stale backup.
+func BackupBeforeMigration(srcPath, vers string) (string, error) {
+	bakPath := srcPath + ".old." + vers
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		return "", fmt.Errorf("reading config for backup: %w", err)
+	}
+	if err := os.WriteFile(bakPath, data, 0o644); err != nil {
+		return "", fmt.Errorf("writing backup %s: %w", bakPath, err)
+	}
+	return bakPath, nil
 }

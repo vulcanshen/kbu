@@ -120,7 +120,7 @@ func (m CompareMenuPopupModel) Render(frame string) string {
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).
 		Background(m.borderColor).Bold(true)
 	rowStyle := lipgloss.NewStyle()
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	// Same icon as the parent compare-popup title so the overlay menu
 	// reads as "this is the compare popup's menu" — same family, not a

@@ -208,7 +208,7 @@ func (m ToastModel) RenderPopup() string {
 	glyph := toastGlyph(m.level)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	title := fmt.Sprintf(" %s %s ", glyph, toastTitleText)
 	titleW := lipgloss.Width(title)

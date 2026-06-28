@@ -16,12 +16,12 @@ func newTestStatusLine() StatusLineModel {
 //
 // v1.7+ status-line mental model: only the universal cross-panel gestures
 // stay here. `?` for the full reference + the four core gestures
-// (Esc/Space/Enter/Tab, per the popup-design mindset) + Alt-t KM8erm.
+// (Esc/Space/Enter/Tab, per the popup-design mindset) + Alt-t Alterm.
 // Everything panel-specific (N/C, `/`, trigger letters) lives in the
 // statusbar labels or the per-row Space menus / popups.
 
 func TestStatusLineModel_Hints_Universal(t *testing.T) {
-	// The five core gestures + help + KM8erm + settings — present on
+	// The five core gestures + help + Alterm + settings — present on
 	// every panel, independent of activePanel state.
 	want := []string{"?", "Esc", "Space", "Enter", "Tab", "Alt-t", ">"}
 	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
@@ -71,7 +71,7 @@ func TestStatusLineModel_LineCount_IsAlwaysOne(t *testing.T) {
 func TestStatusLineModel_ViewWithNotice_ShowsError(t *testing.T) {
 	m := newTestStatusLine()
 	m.SetWidth(120)
-	view := m.ViewWithNotice(1, "fetch failed", "")
+	view := m.ViewWithNotice(1, 0, "fetch failed", "", "")
 	if !strings.Contains(view, "fetch failed") {
 		t.Error("ViewWithNotice must show error message when errors > 0")
 	}
@@ -80,7 +80,7 @@ func TestStatusLineModel_ViewWithNotice_ShowsError(t *testing.T) {
 func TestStatusLineModel_ViewWithNotice_ShowsSuccess(t *testing.T) {
 	m := newTestStatusLine()
 	m.SetWidth(120)
-	view := m.ViewWithNotice(0, "", "applied")
+	view := m.ViewWithNotice(0, 0, "", "", "applied")
 	if !strings.Contains(view, "applied") {
 		t.Error("ViewWithNotice must show success message when no errors")
 	}
@@ -89,7 +89,7 @@ func TestStatusLineModel_ViewWithNotice_ShowsSuccess(t *testing.T) {
 func TestStatusLineModel_ViewWithNotice_ErrorPriorityOverSuccess(t *testing.T) {
 	m := newTestStatusLine()
 	m.SetWidth(120)
-	view := m.ViewWithNotice(1, "fetch failed", "applied")
+	view := m.ViewWithNotice(1, 0, "fetch failed", "", "applied")
 	if !strings.Contains(view, "fetch failed") {
 		t.Error("error must appear when both error and success are present")
 	}
@@ -101,7 +101,7 @@ func TestStatusLineModel_ViewWithNotice_ErrorPriorityOverSuccess(t *testing.T) {
 func TestStatusLineModel_ViewWithNotice_NoNotice(t *testing.T) {
 	m := newTestStatusLine()
 	m.SetWidth(120)
-	view := m.ViewWithNotice(0, "", "")
+	view := m.ViewWithNotice(0, 0, "", "", "")
 	if view == "" {
 		t.Error("ViewWithNotice must render something even with no notice")
 	}

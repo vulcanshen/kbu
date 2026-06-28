@@ -521,7 +521,7 @@ func (m YamlPopupModel) renderFullPopup() string {
 		}
 	}
 	if len(m.contentLines) == 0 {
-		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 		lines = append(lines, dim.Render("  (no YAML — resource may still be loading)"))
 	}
 

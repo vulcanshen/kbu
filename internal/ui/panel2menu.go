@@ -281,21 +281,23 @@ func (m Panel2MenuPopupModel) prevSelectable(from int) int {
 	return from
 }
 
-// commit closes the popup AND emits the action msg. Trigger 後 menu popup
-// 一律關閉 — A 方案: cursor+Enter and direct hotkey paths reach the same
-// final state, popup stack哲學不破 (menu is a launcher, not a context).
+// commit emits the action msg WITHOUT closing the menu. The menu is
+// a source popup per §1.8 popup-convention — when the action's target
+// is itself a popup (confirm / yaml / pty / diff / sort picker), the
+// menu must stay open underneath so Esc on the target returns the
+// user here. The app's Panel2MenuActionMsg handler closes the menu
+// explicitly for actions whose target is a panel-state transition
+// (Enter drill-down) rather than a popup.
 func (m *Panel2MenuPopupModel) commit(key string) tea.Cmd {
-	closeCmd := m.animator.Close()
 	resource := m.resource
 	item := m.item
-	actionCmd := func() tea.Msg {
+	return func() tea.Msg {
 		return Panel2MenuActionMsg{
 			Action:   key,
 			Resource: resource,
 			Item:     item,
 		}
 	}
-	return tea.Batch(closeCmd, actionCmd)
 }
 
 func (m Panel2MenuPopupModel) View() string { return "" }

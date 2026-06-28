@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -1416,6 +1418,118 @@ func TestContainerLogColor_Distinguishes(t *testing.T) {
 	}
 	if len(seen) < 2 {
 		t.Errorf("expected ≥2 distinct colors across %v, got %d", names, len(seen))
+	}
+}
+
+// TestDetailModel_EventsConditions_DimOnUnfocus pins the v1.7.5 panel-3
+// dim-on-unfocus extension for the STATIC tabs: SetFocused must flip the
+// rendered styling of Events / Conditions (previously only Relatives /
+// History reacted to focus).
+//
+// Logs is deliberately excluded from this test — Logs is the streaming
+// exception (Path C). Its content does NOT change on focus, since dimming
+// streaming content would hide the updates the user is glancing for from
+// the corner of the eye. See TestDetailModel_Logs_NoDimOnUnfocus for the
+// inverse assertion.
+//
+// For each tab the test asserts:
+//
+//   - contentLines bytes differ between focused vs unfocused
+//     (styling actually changed)
+//   - ansi.Strip yields identical plain text
+//     (no content lost in the rebuild)
+//
+// We deliberately don't assert specific colors — that's the existing test
+// style (avoid fragility across terminal profiles). The byte-diff is enough
+// to catch a "SetFocused doesn't rebuild this tab" regression. The test
+// forces lipgloss to TrueColor so colour ANSI is actually emitted in the
+// non-TTY `go test` environment (default profile strips it, masking the
+// byte diff).
+func TestDetailModel_EventsConditions_DimOnUnfocus(t *testing.T) {
+	prev := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	stripLines := func(lines []string) []string {
+		out := make([]string, len(lines))
+		for i, l := range lines {
+			out[i] = ansi.Strip(l)
+		}
+		return out
+	}
+	assertDim := func(t *testing.T, tab string, focused, unfocused []string) {
+		t.Helper()
+		if len(focused) != len(unfocused) {
+			t.Fatalf("[%s] line count differs: focused=%d unfocused=%d", tab, len(focused), len(unfocused))
+		}
+		anyChanged := false
+		for i := range focused {
+			if focused[i] != unfocused[i] {
+				anyChanged = true
+			}
+			if ansi.Strip(focused[i]) != ansi.Strip(unfocused[i]) {
+				t.Errorf("[%s] line %d plain text changed on unfocus:\n  focused=  %q\n  unfocused=%q",
+					tab, i, ansi.Strip(focused[i]), ansi.Strip(unfocused[i]))
+			}
+		}
+		if !anyChanged {
+			t.Errorf("[%s] expected at least one line to change styling on unfocus, none did", tab)
+		}
+		_ = stripLines // keep helper available for future per-line assertions
+	}
+
+	// --- Events tab ---
+	{
+		m := newTestDetail()
+		m.SetResourceType(k8s.ResourcePods)
+		m.SetDetail(sampleDetail(), sampleEvents())
+		m = m.switchToTab(2) // Events
+		focused := append([]string(nil), m.contentLines...)
+		m.SetFocused(false)
+		assertDim(t, "Events", focused, m.contentLines)
+	}
+
+	// --- Conditions tab ---
+	{
+		m := newTestDetail()
+		m.SetResourceType(k8s.ResourcePods)
+		d := sampleDetail()
+		d.Conditions = []k8s.ConditionItem{
+			{Type: "Ready", Status: "True", Reason: "", Message: "", Age: "1m"},
+			{Type: "PodScheduled", Status: "False", Reason: "Unschedulable", Message: "0/3 nodes available", Age: "2m"},
+		}
+		m.SetDetail(d, sampleEvents())
+		m = m.switchToTab(3) // Conditions
+		focused := append([]string(nil), m.contentLines...)
+		m.SetFocused(false)
+		assertDim(t, "Conditions", focused, m.contentLines)
+	}
+}
+
+// TestDetailModel_Logs_NoDimOnUnfocus pins the v1.7.5 Path-C decision:
+// Logs is the streaming exception and must render IDENTICALLY whether
+// focused or not. Dimming streaming content would hide log lines
+// arriving from the corner of the eye — the whole point of having
+// Logs visible across panel focus changes is the glance. Other static
+// panel-3 tabs (Events / Conditions / Relatives / History) DO dim
+// per TestDetailModel_EventsConditions_DimOnUnfocus.
+func TestDetailModel_Logs_NoDimOnUnfocus(t *testing.T) {
+	prev := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), sampleEvents())
+	m.AppendLogLine("pod-abcdef", "nginx", "log entry 1")
+	m.AppendLogLine("pod-abcdef", "sidecar", "log entry 2")
+	m = m.switchToTab(0) // Logs
+	focused := append([]string(nil), m.contentLines...)
+	m.SetFocused(false)
+	for i := range focused {
+		if focused[i] != m.contentLines[i] {
+			t.Errorf("Logs line %d changed on unfocus — Logs must be identical regardless of focus (Path C exception)\n  focused=  %q\n  unfocused=%q",
+				i, focused[i], m.contentLines[i])
+		}
 	}
 }
 

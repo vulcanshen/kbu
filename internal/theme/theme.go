@@ -20,7 +20,7 @@ import (
 // Lavender itself is the SCALE ANCHOR — popups never use it.
 // It stays reserved for in-panel user-footprint (sidebar Pinned
 // section, settings ON toggle, compare anchor row, unfocused-
-// selected chip, KM8erm statusbar marker).
+// selected chip, Alterm statusbar marker).
 const (
 	Lavender     = "#b4befe" // scale anchor — popups DON'T use this
 	Lavenphire25 = "#A4C0FA" // L1 — first-tier popup
@@ -139,7 +139,7 @@ func DefaultTheme() *Theme {
 			ValueFg:       "#cdd6f4",
 			TabActiveBg:   "#45475a",
 			TabActiveFg:   "#cdd6f4",
-			TabInactiveFg: "#6c7086",
+			TabInactiveFg: "#7f849c",
 		},
 		StatusBar: StatusBarColors{
 			Background: "",
@@ -154,7 +154,7 @@ func DefaultTheme() *Theme {
 			Running: "#a6e3a1",
 			Pending: "#f9e2af",
 			Error:   "#f38ba8",
-			Unknown: "#6c7086",
+			Unknown: "#7f849c",
 		},
 	}
 }
@@ -226,12 +226,16 @@ func (t *Theme) SidebarCategoryStyle() lipgloss.Style {
 }
 
 // SidebarDimRowStyle returns the dim style applied to non-cursor sidebar
-// rows while the sidebar is unfocused. Catppuccin overlay0 (#6c7086) —
+// rows while the sidebar is unfocused. Catppuccin overlay1 (#7f849c) —
 // dim enough to recede so the cursor row stands out as the single
 // "remembered position" marker, light enough to stay legible if the
-// user glances over.
+// user glances over. v1.7.5 stepped this up from overlay0 (#6c7086)
+// so streaming-content panels (Logs / Events / Conditions) read as
+// "still there, still updating" when unfocused rather than "disabled".
+// One step further (subtext0 #a6adc8) was tried and rejected — too
+// close to the main text colour to read as a recede signal.
 func (t *Theme) SidebarDimRowStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 }
 
 // TableHeaderStyle returns the style for table column headers. Bg is
@@ -276,10 +280,10 @@ func (t *Theme) TableUnfocusedSelectedRowStyle() lipgloss.Style {
 
 // TableDimRowStyle returns the dim style applied to non-cursor non-locked
 // table rows and the column header while the table is unfocused. Same
-// overlay0 grey as SidebarDimRowStyle so the two panels' unfocused
+// overlay1 grey as SidebarDimRowStyle so the two panels' unfocused
 // treatments read consistently.
 func (t *Theme) TableDimRowStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 }
 
 // TableAlternatingRowStyle returns the style for alternating table rows.

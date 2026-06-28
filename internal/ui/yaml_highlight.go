@@ -19,7 +19,7 @@ func highlightYAMLLine(line string, t *theme.Theme) string {
 	}
 	keyStyle := t.DetailLabelStyle()
 	valStyle := t.DetailValueStyle()
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	leadingLen := len(line) - len(strings.TrimLeft(line, " \t"))
 	leading := line[:leadingLen]
