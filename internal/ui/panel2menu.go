@@ -341,17 +341,6 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 
 	var items []panel2MenuItem
 
-	// ── hotkey group ──
-	items = append(items, panel2MenuItem{label: "YAML", key: "Y", hint: "view resource manifest"})
-	if canEdit {
-		items = append(items, panel2MenuItem{label: "Edit", key: "E", hint: "kubectl edit"})
-	}
-	if resourceHasContainer(rt) {
-		items = append(items, panel2MenuItem{label: "Shell", key: "S", hint: "kubectl exec -it"})
-	}
-	if canDelete {
-		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
-	}
 	// Compare entry — single "C" key, label switches on state so the
 	// user always sees what C would do on the current row:
 	//   - not set + >1 selectable items → "Mark as Compare anchor"
@@ -364,22 +353,42 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 	//     toggle from any row of the same kind)
 	//   - kind switched away from anchor's kind, or single-item list:
 	//     entry hidden (acting on it would be a no-op)
-	if compare.locked {
-		switch {
-		case compare.cursorComparable:
-			items = append(items, panel2MenuItem{
-				label: "Compare to anchor",
-				key:   "C",
-				hint:  "open the YAML diff popup",
-			})
-		case compare.cursorOnAnchor:
-			items = append(items, panel2MenuItem{
-				label: "Unmark Compare anchor",
-				key:   "C",
-				hint:  "cancel anchor, exit compare mode",
-			})
-		}
-	} else if compare.canLock {
+	//
+	// Slot rule: "Compare to anchor" is surfaced FIRST in the item
+	// group when in compare mode + comparable cursor — it IS what the
+	// user came to do (they set the anchor, opened the menu on a
+	// candidate row; burying it after YAML/Edit/Shell/Delete makes
+	// the user scan past 4 unrelated row-CRUD verbs every time). The
+	// "Mark" and "Unmark" sub-cases stay in the post-Delete slot:
+	// Mark is offered alongside other row actions (no anchor yet,
+	// user might be doing anything), Unmark is a cleanup verb on the
+	// anchor row itself.
+	if compare.locked && compare.cursorComparable {
+		items = append(items, panel2MenuItem{
+			label: "Compare to anchor",
+			key:   "C",
+			hint:  "open the YAML diff popup",
+		})
+	}
+
+	// ── hotkey group ──
+	items = append(items, panel2MenuItem{label: "YAML", key: "Y", hint: "view resource manifest"})
+	if canEdit {
+		items = append(items, panel2MenuItem{label: "Edit", key: "E", hint: "kubectl edit"})
+	}
+	if resourceHasContainer(rt) {
+		items = append(items, panel2MenuItem{label: "Shell", key: "S", hint: "kubectl exec -it"})
+	}
+	if canDelete {
+		items = append(items, panel2MenuItem{label: "Delete", key: "D", hint: "kubectl delete"})
+	}
+	if compare.locked && compare.cursorOnAnchor {
+		items = append(items, panel2MenuItem{
+			label: "Unmark Compare anchor",
+			key:   "C",
+			hint:  "cancel anchor, exit compare mode",
+		})
+	} else if !compare.locked && compare.canLock {
 		items = append(items, panel2MenuItem{
 			label: "Mark as Compare anchor",
 			key:   "C",
@@ -408,12 +417,13 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 	// not on the row." Opens the same column picker the panel-1
 	// sidebar Space menu's Sort entry opens.
 	//
-	// Hotkey is Alt+Shift+S (rendered "[Alt][S]ort panel 2 list")
+	// Hotkey is Alt+Shift+S (rendered "[Alt-S]ort panel 2 list")
 	// because bare S on panel 2 is already Shell — the modifier
 	// carves out room for sort without breaking the existing Shell
-	// muscle memory. Label is pre-composed with literal "[Alt][S]"
-	// markers; bracketHotkey is bypassed for multi-key chords
-	// (len(key) > 1) so the markers pass through unchanged.
+	// muscle memory. Label is pre-composed with literal "[Alt-S]"
+	// marker (same chord-bracket convention the bottom statusline
+	// uses for [Alt-t]erm); bracketHotkey is bypassed for multi-key
+	// chords (len(key) > 1) so the marker passes through unchanged.
 	//
 	// When Sort is present the menu has two operation regions, so
 	// we prepend "item operation" + append "panel operation" labels
@@ -425,7 +435,7 @@ func buildPanel2MenuItems(rt k8s.ResourceType, item k8s.ResourceItem, helmManage
 		items = append(items, panel2MenuItem{separator: true})
 		items = append(items, panel2MenuItem{header: true, label: "panel operation"})
 		items = append(items, panel2MenuItem{
-			label: "[Alt][S]ort panel 2 list",
+			label: "[Alt-S]ort panel 2 list",
 			key:   "alt+S",
 			hint:  "open sort column picker",
 		})

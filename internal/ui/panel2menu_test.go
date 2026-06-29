@@ -224,6 +224,105 @@ func TestPanel2Menu_Items_CompareAnchored_ShowsCompareTo(t *testing.T) {
 	}
 }
 
+// TestPanel2Menu_Items_CompareToAnchor_IsFirstItem pins the slot rule:
+// in compare mode + comparable cursor, "Compare to anchor" sits FIRST
+// in the item group (before YAML/Edit/Shell/Delete). The user opened
+// the menu on a candidate row precisely to run the diff — surfacing it
+// first means they don't scan past 4 row-CRUD verbs to find it. Tests
+// the position relative to YAML; the "item operation" header (when
+// present) is unaffected by this rule and still wraps the group.
+func TestPanel2Menu_Items_CompareToAnchor_IsFirstItem(t *testing.T) {
+	ctx := panel2CompareCtx{locked: true, canLock: true, cursorComparable: true}
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
+
+	// Find positions, skipping non-selectable rows (header / separator).
+	posCompare, posYAML := -1, -1
+	for i, it := range items {
+		if it.header || it.separator {
+			continue
+		}
+		if it.key == "C" && it.label == "Compare to anchor" && posCompare == -1 {
+			posCompare = i
+		}
+		if it.key == "Y" && posYAML == -1 {
+			posYAML = i
+		}
+	}
+	if posCompare == -1 {
+		t.Fatalf("Compare to anchor entry missing, got %v", itemKeys(items))
+	}
+	if posYAML == -1 {
+		t.Fatalf("YAML entry missing, got %v", itemKeys(items))
+	}
+	if posCompare > posYAML {
+		t.Errorf("Compare to anchor must appear BEFORE YAML in the item group; got positions compare=%d, yaml=%d, items=%v",
+			posCompare, posYAML, itemKeys(items))
+	}
+}
+
+// TestPanel2Menu_Items_MarkAnchor_StaysAfterDelete confirms the slot
+// rule only promotes "Compare to anchor" — the Mark sub-case (no
+// anchor set yet) stays in the post-Delete slot because it's offered
+// alongside other row actions, not as a primary intent.
+func TestPanel2Menu_Items_MarkAnchor_StaysAfterDelete(t *testing.T) {
+	ctx := panel2CompareCtx{locked: false, canLock: true}
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
+
+	posMark, posDelete := -1, -1
+	for i, it := range items {
+		if it.header || it.separator {
+			continue
+		}
+		if it.key == "C" && it.label == "Mark as Compare anchor" {
+			posMark = i
+		}
+		if it.key == "D" {
+			posDelete = i
+		}
+	}
+	if posMark == -1 {
+		t.Fatalf("Mark as Compare anchor entry missing, got %v", itemKeys(items))
+	}
+	if posDelete == -1 {
+		t.Fatalf("Delete entry missing, got %v", itemKeys(items))
+	}
+	if posMark < posDelete {
+		t.Errorf("Mark sub-case must stay AFTER Delete (no promotion); got mark=%d, delete=%d, items=%v",
+			posMark, posDelete, itemKeys(items))
+	}
+}
+
+// TestPanel2Menu_Items_UnmarkAnchor_StaysAfterDelete confirms the same
+// for Unmark — it's a cleanup verb on the anchor row, not the "thing
+// you came to do", so it stays in the post-Delete slot.
+func TestPanel2Menu_Items_UnmarkAnchor_StaysAfterDelete(t *testing.T) {
+	ctx := panel2CompareCtx{locked: true, canLock: true, cursorOnAnchor: true}
+	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, ctx)
+
+	posUnmark, posDelete := -1, -1
+	for i, it := range items {
+		if it.header || it.separator {
+			continue
+		}
+		if it.key == "C" && it.label == "Unmark Compare anchor" {
+			posUnmark = i
+		}
+		if it.key == "D" {
+			posDelete = i
+		}
+	}
+	if posUnmark == -1 {
+		t.Fatalf("Unmark Compare anchor entry missing, got %v", itemKeys(items))
+	}
+	if posDelete == -1 {
+		t.Fatalf("Delete entry missing, got %v", itemKeys(items))
+	}
+	if posUnmark < posDelete {
+		t.Errorf("Unmark sub-case must stay AFTER Delete (no promotion); got unmark=%d, delete=%d, items=%v",
+			posUnmark, posDelete, itemKeys(items))
+	}
+}
+
 func TestPanel2Menu_Items_CompareAnchoredOnAnchorRow_ShowsUnmark(t *testing.T) {
 	// Cursor sitting on the anchor row itself: cursorOnAnchor=true.
 	// "Unmark Compare anchor" surfaces with key "C" — pressing C
@@ -573,17 +672,18 @@ func TestPanel2Menu_AltSHotkeyEmitsSortAction(t *testing.T) {
 }
 
 func TestPanel2Menu_SortEntryUsesAltShiftSLabel(t *testing.T) {
-	// Panel-2 Sort entry renders the literal "[Alt][S]ort panel 2
+	// Panel-2 Sort entry renders the literal "[Alt-S]ort panel 2
 	// list" label (bracketHotkey is bypassed because the key is the
-	// multi-char chord "alt+S", so the pre-composed markers pass
-	// through). Locks the wording the popup-design mindset settled
-	// on for the panel-2 entry.
+	// multi-char chord "alt+S", so the pre-composed marker passes
+	// through). The chord-bracket form [Alt-S] mirrors the bottom
+	// statusline's [Alt-t] / [Alt-t]erm chip — one chord rendering
+	// rule across the whole app.
 	items := buildPanel2MenuItems(k8s.ResourcePods, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	sort := findItemByKey(items, "alt+S")
 	if sort == nil {
 		t.Fatal("Pods menu must contain a Sort entry (key=alt+S)")
 	}
-	want := "[Alt][S]ort panel 2 list"
+	want := "[Alt-S]ort panel 2 list"
 	if sort.label != want {
 		t.Errorf("Sort label = %q, want %q", sort.label, want)
 	}

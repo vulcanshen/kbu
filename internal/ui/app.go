@@ -490,7 +490,13 @@ func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
 	}
 	title := sortPopupIcon + " Sort " + def.DisplayName + " by…"
 	m.listPicker.SetSize(m.width, m.height)
-	m.listPicker.SetLayer(m.popupDepth() + 1)
+	// SetLayer stamps the layer color; popupDepth() counts the picker
+	// itself when it's already active, which would double-bump the layer
+	// on a swap (column → direction, or direction → loop-back column).
+	// Only stamp on first open — the swap path keeps its original layer.
+	if !m.listPicker.IsActive() {
+		m.listPicker.SetLayer(m.popupDepth() + 1)
+	}
 	return m.listPicker.Open("sort:column", title, items)
 }
 
@@ -537,7 +543,12 @@ func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) t
 	}
 	title := sortPopupIcon + " Sort " + def.DisplayName + " by " + column + "…"
 	m.listPicker.SetSize(m.width, m.height)
-	m.listPicker.SetLayer(m.popupDepth() + 1)
+	// Swap path: listPicker is already active from the column step, so
+	// skip the layer re-stamp — same instance, same layer (see the same
+	// guard in openSortColumnPicker for the rationale).
+	if !m.listPicker.IsActive() {
+		m.listPicker.SetLayer(m.popupDepth() + 1)
+	}
 	return m.listPicker.Open("sort:direction", title, items)
 }
 
@@ -1496,6 +1507,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// listPicker is checked BEFORE hintPopup / panel2Menu because the Sort
+	// flow stacks the listPicker on top of either source (sidebar Space
+	// menu's SortKind, panel-2 menu's [Alt][S]ort) per §1.8 — the source
+	// stays underneath, the picker owns input. Hard-routing in source-
+	// first order would send j/k to the menu cursor below the picker.
+	if m.listPicker.IsActive() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			var cmd tea.Cmd
+			m.listPicker, cmd = m.listPicker.Update(msg)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+	}
+
 	if m.hintPopup.IsActive() {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -1513,18 +1541,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			var cmd tea.Cmd
 			m.panel2Menu, cmd = m.panel2Menu.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.listPicker.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.listPicker, cmd = m.listPicker.Update(msg)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -1769,11 +1785,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// usually nil; the call is here for rule symmetry with
 			// the kubectl edit / exec entry points.
 			closeAll := m.closeAllBlockingPopups()
+			// PTY is a §1.10 context-shift target — it REPLACES the popup
+			// tree rather than stacking on it (closeAll above tears down
+			// every blocking popup). UX-wise the user sees a single layer
+			// when the PTY is visible, regardless of which popup chain
+			// launched it. Pin layer 1 so Alterm + kubectl edit/exec share
+			// one border color. (popupDepth() here is misleading anyway:
+			// closeAll is a staged tea.Cmd, so the popups it will close
+			// are still counted as active.)
+			m.shellPty.SetLayer(1)
 			if m.shellPty.IsAlive() {
-				m.shellPty.SetLayer(m.popupDepth() + 1)
 				return m, tea.Batch(closeAll, m.shellPty.Show(m.width, m.height))
 			}
-			m.shellPty.SetLayer(m.popupDepth() + 1)
 			cmd := buildShellTerminalCmd(m.cfg.AltermShell, m.cfg.AltermLoginShell)
 			return m, tea.Batch(closeAll, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell))
 		case "?":
@@ -2785,7 +2808,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		closeAll := m.closeAllBlockingPopups()
 		cmd := buildKubectlExecCmd(msg.podName, msg.namespace, msg.container, msg.contextName)
 		title := fmt.Sprintf("Shell: pod/%s → %s", msg.podName, msg.container)
-		m.txPty.SetLayer(m.popupDepth() + 1)
+		// §1.10 context-shift target — always layer 1; see Alt+T handler
+		// for the rationale.
+		m.txPty.SetLayer(1)
 		return m, tea.Batch(closeAll, m.txPty.Start(cmd, title, m.width, m.height, PtyKindExec))
 
 	case startEditMsg:
@@ -2803,7 +2828,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := buildKubectlEditCmd(msg.resource, msg.item, msg.contextName, m.cfgEditor)
 		config.WriteAuditEntry("edit", msg.resource.KubectlName()+"/"+msg.item.Name, msg.item.Namespace, "started") //nolint
 		m.appLog.Info("edit: " + msg.resource.KubectlName() + "/" + msg.item.Name)
-		m.txPty.SetLayer(m.popupDepth() + 1)
+		// §1.10 context-shift target — always layer 1; see Alt+T handler
+		// for the rationale.
+		m.txPty.SetLayer(1)
 		return m, tea.Batch(closeAll, m.txPty.Start(cmd, title, m.width, m.height, PtyKindEdit))
 
 	case DeleteDoneMsg:
@@ -2906,16 +2933,26 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
 				deleteResource(resource, item.Name, item.Namespace, m.k8sClient.ContextName()))
 		case "C":
-			// Contextual compare action — same letter, dispatches on
-			// current state:
-			//   - no anchor set → mark this row as the anchor
-			//   - anchor set, cursor on different row of same kind →
-			//     open the diff popup against the anchor
-			// Menu gating hides "C" when the action would be a no-op
-			// (cursor on the anchor itself, single-item list, kind
-			// switched away from the anchor's), so we don't need to
-			// double-guard here beyond the inCompareMode branch.
-			return m, m.compareHotkeyDispatch(resource, item)
+			// Contextual compare action — three branches:
+			//   - no anchor set                       → MARK this row as anchor (state mutation, no popup)
+			//   - anchor set, cursor on anchor row    → UNMARK anchor (state mutation, no popup)
+			//   - anchor set, cursor on different row → open the diff popup
+			// (Menu gating hides "C" for the kind-mismatch / single-item
+			// no-ops, so we only have to think about these three.)
+			//
+			// State mutations close the menu so the user immediately sees
+			// the resulting anchor highlight (or cleared state) — keeping
+			// the menu up would hide the panel-2 lavender lock row that
+			// just appeared. Diff-popup launch keeps the menu underneath
+			// per §1.8 (Esc on the diff returns to the menu).
+			willOpenDiff := m.inCompareMode() &&
+				m.compareLock.uid != item.UID &&
+				m.compareLock.resourceType == resource
+			dispatch := m.compareHotkeyDispatch(resource, item)
+			if willOpenDiff {
+				return m, dispatch
+			}
+			return m, tea.Batch(m.panel2Menu.Close(), dispatch)
 		case "alt+S":
 			// Open the sort column picker for the resource type
 			// whose menu was invoked — same picker the direct
@@ -3103,19 +3140,16 @@ func (m AppModel) View() string {
 	// shell is running, nothing to mark.
 	var ptyMarker *PtyMarker
 	if m.shellPty != nil && m.shellPty.IsAlive() && m.shellPty.IsHidden() {
-		ptyMarker = &PtyMarker{Visible: false, Label: " Alterm"}
+		// Statusbar renders "[Alt-t]erm" — pointer-as-flag, no label.
+		ptyMarker = &PtyMarker{}
 	}
 	var compareMarker *CompareMarker
 	if m.inCompareMode() {
-		// Fixed-width "Compare" label — the locked resource name was
-		// previously interpolated here but resource names are unbounded
-		// (some pod names easily exceed the available statusbar width),
-		// and the compare popup itself already shows "left vs right".
-		// The icon alone signals "compare anchor active"; the popup
-		// carries the names when the user actually engages.
-		compareMarker = &CompareMarker{
-			Label: "\U000f08aa Compare",
-		}
+		// "[C]ompare" — pointer-as-flag, statusbar renders the chip
+		// with panel-aware [C] dimming anti-correlated to [C]ontext
+		// (lit on panel 2 where C fires compare, dim on panel 1/3
+		// where C means context picker).
+		compareMarker = &CompareMarker{}
 	}
 	statusBar := m.statusBar.ViewFull(m.appLog.UnreadErrorCount(), m.appLog.UnreadWarnCount(), m.successNotice, ptyMarker, compareMarker)
 	statusLine := m.statusLine.ViewWithNotice(m.appLog.UnreadErrorCount(), m.appLog.UnreadWarnCount(), m.appLog.LastErrorMessage(), m.appLog.LastWarnMessage(), "")
