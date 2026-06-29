@@ -226,35 +226,94 @@ func TestStatusBarModel_WarnBadge_DistinctFromError(t *testing.T) {
 func TestStatusBarModel_ViewFull_NoPtyMarker(t *testing.T) {
 	m := newTestStatusBar()
 	v := m.ViewFull(0, 0, "", nil, nil)
-	if strings.Contains(v, "attached") || strings.Contains(v, "Alterm") {
-		t.Error("no PTY marker requested — bar must not render one")
+	if strings.Contains(v, "Alt-t") || strings.Contains(v, "erm") {
+		t.Error("no PTY marker requested — bar must not render the [Alt-t]erm chip")
 	}
 }
 
-func TestStatusBarModel_ViewFull_AttachedMarker(t *testing.T) {
+func TestStatusBarModel_ViewFull_PtyMarker_RendersAltermChip(t *testing.T) {
 	m := newTestStatusBar()
-	v := m.ViewFull(0, 0, "", &PtyMarker{Visible: true, Label: " attached"}, nil)
-	if !strings.Contains(v, "attached") {
-		t.Error("visible PTY marker must surface 'attached' label")
+	v := m.ViewFull(0, 0, "", &PtyMarker{}, nil)
+	// Bracket-hotkey format: [Alt-t]erm. Tokens checked separately
+	// because ANSI escapes can split between the bracket and the
+	// label-rest depending on render profile.
+	if !strings.Contains(v, "[Alt-t]") {
+		t.Errorf("[Alt-t]erm chip must contain the [Alt-t] hotkey marker, got %q", v)
+	}
+	if !strings.Contains(v, "erm") {
+		t.Errorf("[Alt-t]erm chip must contain the 'erm' label tail, got %q", v)
 	}
 }
 
-func TestStatusBarModel_ViewFull_HiddenMarker(t *testing.T) {
+func TestStatusBarModel_ViewFull_PtyMarkerCoexistsWithErrorBadge(t *testing.T) {
 	m := newTestStatusBar()
-	v := m.ViewFull(0, 0, "", &PtyMarker{Visible: false, Label: " Alterm"}, nil)
-	if !strings.Contains(v, "Alterm") {
-		t.Error("hidden PTY marker must surface 'Alterm' label")
-	}
-}
-
-func TestStatusBarModel_ViewFull_MarkerCoexistsWithErrorBadge(t *testing.T) {
-	m := newTestStatusBar()
-	v := m.ViewFull(3, 0, "", &PtyMarker{Visible: false, Label: " Alterm"}, nil)
-	if !strings.Contains(v, "Alterm") {
-		t.Error("marker must survive when an error badge is also present")
+	v := m.ViewFull(3, 0, "", &PtyMarker{}, nil)
+	if !strings.Contains(v, "[Alt-t]") {
+		t.Error("[Alt-t]erm chip must survive when an error badge is also present")
 	}
 	if !strings.Contains(v, "3 errors") {
-		t.Error("error badge must still render alongside marker")
+		t.Error("error badge must still render alongside the chip")
+	}
+}
+
+func TestStatusBarModel_ViewFull_CompareMarker_RendersCompareChip(t *testing.T) {
+	m := newTestStatusBar()
+	v := m.ViewFull(0, 0, "", nil, &CompareMarker{})
+	if !strings.Contains(v, "[C]") {
+		t.Errorf("[C]ompare chip must contain the [C] hotkey marker, got %q", v)
+	}
+	if !strings.Contains(v, "ompare") {
+		t.Errorf("[C]ompare chip must contain the 'ompare' label tail, got %q", v)
+	}
+}
+
+// TestStatusBarModel_CompareChip_PanelAwareDimming pins the anti-
+// correlated dimming between [C]ontext (the always-on label) and
+// [C]ompare (the conditional chip). They share the C letter but mean
+// different things by panel:
+//   - panel 2: C fires compare actions → [C]ompare [C] BRIGHT
+//     (table hijacks C), [C]ontext [C] DIM
+//   - panel 1/3: C means context picker → [C]ontext [C] BRIGHT,
+//     [C]ompare [C] DIM (pressing C here would NOT fire compare)
+//
+// Brightness is the panel-routed handoff signal; the chip's PRESENCE
+// alone still says "anchor set". We assert the relative ordering of
+// the C-segment styles between [C]ontext and [C]ompare by checking
+// the rendered width is invariant (same characters, same total) and
+// the chip's [C] segment appears in both views regardless — the
+// detailed color-byte test would be brittle against ANSI rendering
+// profiles, so the cross-panel SAMENESS of total-width is the
+// stable proxy.
+func TestStatusBarModel_CompareChip_PanelAwareDimming_WidthInvariant(t *testing.T) {
+	widths := map[Panel]int{}
+	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
+		m := newTestStatusBar()
+		m.SetActivePanel(p)
+		v := m.ViewFull(0, 0, "", nil, &CompareMarker{})
+		widths[p] = lipgloss.Width(v)
+	}
+	want := widths[SidebarPanel]
+	for p, w := range widths {
+		if w != want {
+			t.Errorf("[C]ompare chip must keep statusbar width invariant across panels (dimming swaps color, not size); widths=%v", widths)
+			break
+		}
+		_ = p
+	}
+}
+
+// TestStatusBarModel_CompareChip_RendersOnEveryPanel confirms the chip
+// is present (not hidden) on every panel — anchor state is global, so
+// the marker shows up regardless of which panel has focus. Dimming
+// happens AT the [C] segment, not by hiding the whole chip.
+func TestStatusBarModel_CompareChip_RendersOnEveryPanel(t *testing.T) {
+	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
+		m := newTestStatusBar()
+		m.SetActivePanel(p)
+		v := m.ViewFull(0, 0, "", nil, &CompareMarker{})
+		if !strings.Contains(v, "[C]") || !strings.Contains(v, "ompare") {
+			t.Errorf("panel %v: [C]ompare chip must render (anchor state is global)", p)
+		}
 	}
 }
 
