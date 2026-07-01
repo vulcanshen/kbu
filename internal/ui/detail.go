@@ -748,14 +748,32 @@ func (m DetailModel) BorderTopRightHint() string {
 }
 
 // BorderBottomLeftHint returns a short hotkey hint for the bottom-left of
-// panel 3's border, or "" when no hint applies. Currently surfaces "esc:
-// back" on the Relatives tab at depth > 1 so users discover that Esc
-// pops one drill level back up the chain (mirrors panel 2's ".: toggle
-// helm" pattern, and matches the "Back" verb used in km8's Key Bindings
-// docs for Esc).
+// panel 3's border, or "" when no hint applies.
+//
+// Convention: the border hint surfaces TAB-CONTEXTUAL keys only — keys
+// whose meaning is specific to the current tab. Core-keys (Tab / Space /
+// Esc / Enter / ?) carry app-wide constant semantics and are not
+// repeated here; they live in the ? help cheatsheet. Enter and Esc do
+// appear below because their behavior on Relatives is contextual (Enter
+// drills into the referenced resource; Esc at depth>1 pops one drill
+// level — distinct from the app-wide "dismiss popup" default).
+//
+// Surfaces:
+//   - "enter: drill" on Relatives always; "esc: back" composes on top
+//     once depth > 1 (there's a chain to walk back up).
+//   - "u/d: page  gg: top  G: live" on Logs so users discover the scroll
+//     keys at hand. `G` says "live" rather than "bottom" because
+//     scrollToBottom on Logs also re-attaches the live tail
+//     (followTail flips true) — losing that nuance would mislead.
 func (m DetailModel) BorderBottomLeftHint() string {
-	if m.ActiveTabName() == "Relatives" && m.Depth() > 1 {
-		return "esc: back"
+	switch m.ActiveTabName() {
+	case "Relatives":
+		if m.Depth() > 1 {
+			return "enter: drill  esc: back"
+		}
+		return "enter: drill"
+	case "Logs":
+		return "u/d: page  gg: top  G: live"
 	}
 	return ""
 }

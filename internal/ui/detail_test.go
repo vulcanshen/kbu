@@ -1376,25 +1376,53 @@ func TestDetailModel_BorderBottomLeftHint_RelativesDrillDepth(t *testing.T) {
 	m.SetDetail(sampleDetail(), nil)
 	m = m.switchToTab(1) // Relatives — hint logic gates on ActiveTabName()=="Relatives"
 
-	// depth=1 on Relatives → no hint (nothing to pop).
-	if got := m.BorderBottomLeftHint(); got != "" {
-		t.Errorf("depth=1: expected empty hint, got %q", got)
+	// depth=1 on Relatives → only "enter: drill" (no chain to walk
+	// back up yet, so esc has its app-wide dismiss default and is
+	// suppressed from the hint).
+	if got := m.BorderBottomLeftHint(); got != "enter: drill" {
+		t.Errorf("depth=1: expected %q, got %q", "enter: drill", got)
 	}
 
-	// Push a fake drill frame → depth becomes 2 → hint should appear.
+	// Push a fake drill frame → depth becomes 2 → esc: back composes on.
 	m.drillStack = append(m.drillStack, drillFrame{
 		ref:  k8s.RefTarget{Type: k8s.ResourcePods, Name: "x"},
 		item: k8s.ResourceItem{Name: "x"},
 	})
-	if got := m.BorderBottomLeftHint(); got != "esc: back" {
-		t.Errorf("depth>1: expected 'esc: back', got %q", got)
+	want := "enter: drill  esc: back"
+	if got := m.BorderBottomLeftHint(); got != want {
+		t.Errorf("depth>1: expected %q, got %q", want, got)
 	}
 
-	// Switch to a non-Relatives tab → hint must clear even at depth>1
-	// (Esc semantics only apply on Relatives).
+	// Switch to a non-Relatives tab → hint clears (Enter/Esc semantics
+	// are Relatives-contextual; other tabs either have their own
+	// hint — Logs — or none — Info, Events, History).
 	m = m.switchToTab(2) // Events
 	if got := m.BorderBottomLeftHint(); got != "" {
 		t.Errorf("non-Relatives tab: expected empty hint, got %q", got)
+	}
+}
+
+func TestDetailModel_BorderBottomLeftHint_LogsTab(t *testing.T) {
+	// Logs tab surfaces u/d/gg/G scroll keys so users discover them on
+	// the border instead of needing to open the help popup. `G` says
+	// "live" because scrollToBottom on Logs also re-attaches the live
+	// tail (followTail flips true), and dropping that nuance would
+	// mislead users into reading G as a plain "jump to end".
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods) // tabs = [Logs, Relatives, Events]
+	m.SetDetail(sampleDetail(), nil)
+	m = m.switchToTab(0) // Logs
+
+	want := "u/d: page  gg: top  G: live"
+	if got := m.BorderBottomLeftHint(); got != want {
+		t.Errorf("Logs tab: expected %q, got %q", want, got)
+	}
+
+	// Off Logs → Logs hint clears (Relatives has its own contextual
+	// hint covered by the Relatives test).
+	m = m.switchToTab(2) // Events — no hint
+	if got := m.BorderBottomLeftHint(); got != "" {
+		t.Errorf("Events tab: expected empty hint, got %q", got)
 	}
 }
 
