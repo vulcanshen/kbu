@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.7] - 2026-07-01
+
+A UX polish + docs release on top of v1.7.6. Two threads:
+
+1. **Panel 3 border hint — Logs + Relatives.** Panel 2's bottom-left
+   border has surfaced `.: toggle helm` (+ `esc: exit compare`) as
+   an at-a-glance cheat sheet for tab-contextual hotkeys; panel 3
+   was silent. Now:
+   - Logs tab → `u/d: page  gg: top  G: live` (`G` says "live"
+     rather than "bottom" because `scrollToBottom` on Logs also
+     re-attaches the live tail — losing that nuance would mislead).
+   - Relatives tab @ depth 1 → `enter: drill`.
+   - Relatives tab @ depth > 1 → `enter: drill  esc: back` (Esc
+     gains a Relatives-local "pop one drill level" verb layered on
+     top of the app-wide dismiss default).
+   The `<key>: <verb>` format matches panel-2's chip, so the whole
+   panel-border affordance vocabulary stays one shape across
+   surfaces.
+2. **Design docs consolidation.**
+   `docs/zlc-tui-design-principle.md` rewritten as universal,
+   app-agnostic guidance — the ZLC score becomes a quantitative
+   framework (`X × min(1, 5/Y) × 100%`, `X` = user-perceivable
+   operations over total, `Y` = core-key role union with alias
+   completeness gating Y+0 vs Y+1). Reference apps table: vim 0%,
+   nano ~100%, km8 ~100%. Framework boundary called out: hotkey
+   ergonomics and post-learning efficiency are explicitly out of
+   ZLC scope. New `docs/km8-zlc-implementation.md` documents km8's
+   concrete mapping — km8 ZLC score table (X=1.0, Y=5, ZLC=100%),
+   the 5 core-keys (Tab / Space / Esc / Enter / ?), the bottom
+   statusline `[X]label` chip as the Layer-1 disclosure surface,
+   the full km8 hotkey table, and the popup-convention v2 content
+   inlined in §6 (since `.claude/rules/` isn't git-tracked). New
+   §6.6.2 codifies the panel-border-hint rule shipped in thread 1:
+   hints surface tab-contextual verbs only; core-keys'
+   app-wide defaults live in the `?` help + statusbar disclosure
+   surfaces, not repeated on panel borders.
+
+### Changed
+
+- `internal/ui/detail.go` `BorderBottomLeftHint()` — added Logs
+  case, added Relatives depth=1 case (both were returning "").
+- Demo gifs re-recorded against v1.7.7 for panel 3 renders.
+
+### Tests
+
+- `detail_test.go`:
+  `TestDetailModel_BorderBottomLeftHint_LogsTab` added;
+  `TestDetailModel_BorderBottomLeftHint_RelativesDrillDepth` updated
+  to assert the new depth=1 hint and the composed
+  `enter: drill  esc: back` at depth > 1.
+
 ## [v1.7.6] - 2026-06-29
 
 A bug-fix + UX-polish release on top of v1.7.5. Six threads:
