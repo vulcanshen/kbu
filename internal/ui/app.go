@@ -3160,7 +3160,7 @@ func (m AppModel) View() string {
 		panelH := m.height - 1 - m.statusLine.LineCount()
 		panelW := m.width - 2*panelHMargin
 		m.detail.SetSize(panelW-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		fullPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, true)+m.detail.TabTitle(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
 		hMargin := blankColumn(panelHMargin, panelH)
 		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, fullPanel, hMargin)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
@@ -3169,9 +3169,8 @@ func (m AppModel) View() string {
 		panelW := m.width - 2*panelHMargin
 		m.table.SetSize(panelW-2, upperH-2)
 		m.detail.SetSize(panelW-2, detailH-2)
-		tabTitle := "[2] " + m.breadcrumb()
-		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		tablePanel := renderPanelWithScroll(m.table.View(), focusedPanelTitle("[2]", m.breadcrumb(), m.theme, m.activePanel == TablePanel), panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
+		detailPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, m.activePanel == DetailPanel)+m.detail.TabTitle(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
 		middle := joinTableAndDetail(tablePanel, detailPanel, panelW)
 		fullH := upperH + panelVSpace + detailH
 		hMargin := blankColumn(panelHMargin, fullH)
@@ -3184,10 +3183,9 @@ func (m AppModel) View() string {
 		m.table.SetSize(rw-2, upperH-2)
 		m.detail.SetSize(rw-2, detailH-2)
 
-		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), "[1] km8", sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", "")
-		tabTitle := "[2] " + m.breadcrumb()
-		tablePanel := renderPanelWithScroll(m.table.View(), tabTitle, rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
-		detailPanel := renderPanelWithScroll(m.detail.View(), "[3] "+m.detail.TabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), focusedPanelTitle("[1]", "Kinds", m.theme, m.activePanel == SidebarPanel), sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", "")
+		tablePanel := renderPanelWithScroll(m.table.View(), focusedPanelTitle("[2]", m.breadcrumb(), m.theme, m.activePanel == TablePanel), rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
+		detailPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, m.activePanel == DetailPanel)+m.detail.TabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
 
 		rightSide := joinTableAndDetail(tablePanel, detailPanel, rw)
 
@@ -3844,7 +3842,7 @@ func (m AppModel) focusedPanelContent() string {
 func (m *AppModel) tablePanelBottomLeft() string {
 	var parts []string
 	if m.currentResource != k8s.ResourceReleases {
-		parts = append(parts, ".: toggle helm")
+		parts = append(parts, ".: helm")
 	}
 	if m.inCompareMode() {
 		parts = append(parts, "esc: exit compare")
@@ -3992,6 +3990,47 @@ type ScrollInfo struct {
 	Total    int
 }
 
+// focusedPanelTitle builds a Panel 1/2 border title. Layout:
+//   unfocused:  "[N] body "                       — plain border-color bold
+//   focused:    "[N]<>body<>"                     — spaces replaced by
+//               Powerline hard caps ( U+E0B2 and  U+E0B0); body becomes a
+//               filled chip with Catppuccin base fg on border-blue bg.
+// Same visual width across focus states because the caps occupy the same
+// cells the spaces did.
+func focusedPanelTitle(prefix, body string, t *theme.Theme, focused bool) string {
+	borderHex := t.Detail.BorderColor
+	if focused {
+		borderHex = t.Sidebar.CategoryFg
+	}
+	bc := lipgloss.Color(borderHex)
+	prefixStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	// Chip style: same shape in both focus states — only the bg color
+	// swaps (bright blue when focused, border-gray when not). Fg is
+	// always Catppuccin base — high contrast on focused chip, low
+	// contrast (muted / recede) on the unfocused gray one.
+	capStyle := lipgloss.NewStyle().Foreground(bc)
+	chipStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#1e1e2e")).
+		Background(bc).
+		Bold(true)
+	return prefixStyle.Render(prefix) +
+		capStyle.Render("") +
+		chipStyle.Render(body) +
+		capStyle.Render("")
+}
+
+// plainTitlePrefix styles the "[N] " prefix in the standard border color
+// + bold. Panel 3 uses this because its body (the tab bar from
+// DetailModel.TabTitle) already carries its own per-tab styling that
+// shouldn't be wrapped by a chip.
+func plainTitlePrefix(prefix string, t *theme.Theme, focused bool) string {
+	borderHex := t.Detail.BorderColor
+	if focused {
+		borderHex = t.Sidebar.CategoryFg
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(borderHex)).Bold(true).Render(prefix)
+}
+
 func renderPanel(content, title string, width, height int, focused bool, t *theme.Theme) string {
 	return renderPanelWithScroll(content, title, width, height, focused, t, nil, "", "")
 }
@@ -4046,7 +4085,7 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 		dashesAfter = 0
 	}
 	b.WriteString(bStyle.Render(tl + horiz))
-	b.WriteString(tStyle.Render(title))
+	b.WriteString(title)
 	b.WriteString(bStyle.Render(strings.Repeat(horiz, dashesAfter)))
 	if topRight != "" {
 		b.WriteString(bStyle.Render(" "))

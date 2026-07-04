@@ -124,10 +124,73 @@ func TestSplashModel_TickStopsWhenComplete(t *testing.T) {
 	m := newTestSplash()
 	m.Show()
 	m.revealedCount = len(m.pixelOrder) // fast-forward to end
+	m.versionVisible = true             // past version hold
+	m.hintVisible = true                // past hint hold
 
 	_, cmd := m.Update(splashTickMsg{})
 	if cmd != nil {
 		t.Error("no tick cmd should be returned when animation is already complete")
+	}
+}
+
+func TestSplashModel_CaptionRevealsAfterAnimation(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+	m.revealedCount = len(m.pixelOrder) // fast-forward past K/8 reveal
+
+	// Post-completion tick schedules the version reveal (not the hint).
+	_, cmd := m.Update(splashTickMsg{})
+	if cmd == nil {
+		t.Fatal("post-completion tick must return the version-reveal cmd")
+	}
+	if m.versionVisible {
+		t.Error("version must not be visible until splashVersionMsg fires")
+	}
+
+	// splashVersionMsg makes version visible AND schedules the hint reveal.
+	m, cmd = m.Update(splashVersionMsg{})
+	if !m.versionVisible {
+		t.Error("splashVersionMsg must set versionVisible = true")
+	}
+	if cmd == nil {
+		t.Fatal("splashVersionMsg must return the hint-reveal cmd")
+	}
+	if m.hintVisible {
+		t.Error("hint must not be visible until splashHintMsg fires")
+	}
+
+	// splashHintMsg makes the hint visible.
+	m, _ = m.Update(splashHintMsg{})
+	if !m.hintVisible {
+		t.Error("splashHintMsg must set hintVisible = true")
+	}
+}
+
+func TestSplashModel_BoundaryBeatOnce(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+	m.revealedCount = m.bgCount // fast-forward to the M→K/8 boundary
+
+	// First tick at boundary: hold, don't advance.
+	before := m.revealedCount
+	m, cmd := m.Update(splashTickMsg{})
+	if m.revealedCount != before {
+		t.Errorf("boundary tick must not advance; before=%d after=%d", before, m.revealedCount)
+	}
+	if !m.boundaryPaused {
+		t.Error("boundary tick must set boundaryPaused = true")
+	}
+	if cmd == nil {
+		t.Error("boundary tick must return the resume cmd")
+	}
+
+	// Second tick at boundary: advance into stage 2, no further hold.
+	m, _ = m.Update(splashTickMsg{})
+	if m.revealedCount <= before {
+		t.Errorf("second boundary tick must advance into stage 2; before=%d after=%d", before, m.revealedCount)
+	}
+	if m.versionVisible {
+		t.Error("version must not be visible while pixels are still revealing")
 	}
 }
 

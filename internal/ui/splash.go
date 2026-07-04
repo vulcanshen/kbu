@@ -12,12 +12,18 @@ import (
 )
 
 type splashTickMsg struct{}
+type splashVersionMsg struct{}
+type splashHintMsg struct{}
 
 // SplashModel renders the km8 logo as a hidden easter egg.
 type SplashModel struct {
-	active        bool
-	pixelOrder    []int // shuffled indices of colored pixels (row*18 + col)
-	revealedCount int
+	active         bool
+	pixelOrder     []int // colored pixel indices (row*cols + col): row-major M background, then shuffled K/8 foreground
+	revealedCount  int
+	bgCount        int // step-size boundary — first bgCount indices are M pixels
+	boundaryPaused bool
+	versionVisible bool
+	hintVisible    bool
 }
 
 func NewSplashModel() SplashModel {
@@ -29,20 +35,34 @@ func (m SplashModel) IsActive() bool { return m.active }
 func (m *SplashModel) Show() tea.Cmd {
 	m.active = true
 	m.revealedCount = 0
+	m.boundaryPaused = false
+	m.versionVisible = false
+	m.hintVisible = false
 
-	// Collect all colored pixel indices.
-	var colored []int
-	for r := 0; r < len(logoPixels); r++ {
-		for c := 0; c < len(logoPixels[r]); c++ {
-			if pixelColor(logoPixels[r][c]) != "" {
-				colored = append(colored, r*len(logoPixels[r])+c)
+	// Five-phase reveal:
+	// (1) M background — row-major top-to-bottom sweep.
+	// (2) beat — brief hold at the M→K/8 boundary.
+	// (3) K/8 foreground shuffled — identity emerging from noise (accelerated).
+	// (4) hold — version caption appears.
+	// (5) hold — esc hint appears.
+	rows, cols := len(logoPixels), len(logoPixels[0])
+	var bg, fg []int
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			switch logoPixels[r][c] {
+			case 'M':
+				bg = append(bg, r*cols+c)
+			case 'K', '8':
+				fg = append(fg, r*cols+c)
 			}
 		}
 	}
-	rand.Shuffle(len(colored), func(i, j int) { colored[i], colored[j] = colored[j], colored[i] })
-	m.pixelOrder = colored
+	// bg stays in row-major order for top-to-bottom sweep; fg shuffled.
+	rand.Shuffle(len(fg), func(i, j int) { fg[i], fg[j] = fg[j], fg[i] })
+	m.pixelOrder = append(bg, fg...)
+	m.bgCount = len(bg)
 
-	return tea.Tick(30*time.Millisecond, func(time.Time) tea.Msg {
+	return tea.Tick(10*time.Millisecond, func(time.Time) tea.Msg {
 		return splashTickMsg{}
 	})
 }
@@ -85,6 +105,16 @@ func pixelColor(p byte) string {
 	return ""
 }
 
+func pixelGlyph(p byte) string {
+	switch p {
+	case 'K', '8':
+		return "" // nf-fa-paw
+	case 'M':
+		return "\U000f011b" // nf-md-cat
+	}
+	return ""
+}
+
 func (m SplashModel) Render(width, height int) string {
 	if !m.active {
 		return ""
@@ -103,7 +133,8 @@ func (m SplashModel) Render(width, height int) string {
 		for c := 0; c < cols; c++ {
 			color := pixelColor(logoPixels[r][c])
 			if color != "" && revealed[r*cols+c] {
-				line.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render("██"))
+				glyph := pixelGlyph(logoPixels[r][c])
+				line.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(glyph + " "))
 			} else {
 				line.WriteString("  ")
 			}
@@ -114,18 +145,17 @@ func (m SplashModel) Render(width, height int) string {
 
 	// Caption space is always reserved so the logo doesn't shift when text appears.
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
+	blueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa"))
 	logoW := cols * 2
-	done := m.revealedCount >= len(m.pixelOrder)
-	titleText, taglineText, hintText := " ", " ", " "
-	if done {
-		titleText = "K M 8"
-		taglineText = version.Display()
-		hintText = dimStyle.Render("press Esc to close")
+	versionText, hintText := " ", " "
+	if m.versionVisible {
+		versionText = blueStyle.Render(version.Display())
+	}
+	if m.hintVisible {
+		hintText = dimStyle.Render("Press Esc to close")
 	}
 	caption := "\n\n" +
-		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, titleText) +
-		"\n" +
-		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, taglineText) +
+		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, versionText) +
 		"\n\n" +
 		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, hintText)
 
@@ -144,17 +174,53 @@ func (m SplashModel) Update(msg tea.Msg) (SplashModel, tea.Cmd) {
 			m.active = false
 			m.revealedCount = 0
 			m.pixelOrder = nil
+			m.bgCount = 0
+			m.boundaryPaused = false
+			m.versionVisible = false
+			m.hintVisible = false
 		}
 	case splashTickMsg:
-		if m.revealedCount < len(m.pixelOrder) {
-			m.revealedCount += 15
-			if m.revealedCount > len(m.pixelOrder) {
-				m.revealedCount = len(m.pixelOrder)
-			}
-			return m, tea.Tick(30*time.Millisecond, func(time.Time) tea.Msg {
+		// Beat at the M→K/8 boundary — brief hold so the M reveal registers
+		// before the K/8 shuffle starts.
+		if m.bgCount > 0 && m.revealedCount == m.bgCount && !m.boundaryPaused {
+			m.boundaryPaused = true
+			return m, tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
 				return splashTickMsg{}
 			})
 		}
+		if m.revealedCount < len(m.pixelOrder) {
+			// Stage 1 (M background): 4 pixels/tick @ 10ms — top-to-bottom sweep.
+			// Stage 2 (K/8 foreground): 2 pixels/tick @ 10ms — accelerated shuffle.
+			step, delay := 4, 10*time.Millisecond
+			if m.revealedCount >= m.bgCount {
+				step, delay = 2, 10*time.Millisecond
+			}
+			newCount := m.revealedCount + step
+			// Clamp to the boundary so the M→K/8 beat fires cleanly.
+			if m.revealedCount < m.bgCount && newCount > m.bgCount {
+				newCount = m.bgCount
+			}
+			if newCount > len(m.pixelOrder) {
+				newCount = len(m.pixelOrder)
+			}
+			m.revealedCount = newCount
+			return m, tea.Tick(delay, func(time.Time) tea.Msg {
+				return splashTickMsg{}
+			})
+		}
+		// K/8 done — schedule the version caption reveal after a brief hold.
+		if !m.versionVisible {
+			return m, tea.Tick(400*time.Millisecond, func(time.Time) tea.Msg {
+				return splashVersionMsg{}
+			})
+		}
+	case splashVersionMsg:
+		m.versionVisible = true
+		return m, tea.Tick(300*time.Millisecond, func(time.Time) tea.Msg {
+			return splashHintMsg{}
+		})
+	case splashHintMsg:
+		m.hintVisible = true
 	}
 	return m, nil
 }
