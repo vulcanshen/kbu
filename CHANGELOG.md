@@ -4,6 +4,93 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.8] - 2026-07-05
+
+A UI-polish release on top of v1.7.7. Five threads:
+
+1. **Border-title chip system for Panel 1 / 2 / 3.** Every panel's
+   border title now renders its "current tab body" as a filled
+   Powerline chip when the panel is focused (and dimmer surface2
+   chip when it isn't) —  U+E0D4 left cap +  U+E0B0 right cap,
+   Catppuccin base fg on border-color bg, bold. The `[N]` panel-
+   number prefix stays plain border-color-bold outside the chip
+   so it reads as a fixed hotkey marker. Panel 3's tab bar mirrors
+   the same treatment on its active tab (space-cell layout: N tabs
+   interleaved with N+1 boundary cells, the two cells adjacent to
+   the active tab become the caps, interior cells get a subtle
+   Nerd Font marker, edge cells stay plain space). The old
+   ` label ` / `[label]` / `─` scheme is gone — every panel now
+   uses one unified "focused = filled chip" vocabulary.
+2. **Panel 1 label: km8 → Kinds.** The sidebar's border title used
+   to read `[1] km8` — a product-name identity but not a content
+   label. Now `[1] Kinds` to match the K8s three-tier abstraction
+   Panel 1 selects: Panel 1 picks a **Kind**, Panel 2 lists
+   **Resources** of that Kind, Panel 3 shows one **Object**'s
+   detail. Reads flush with `[2] <breadcrumb>` and `[3] <tab bar>`
+   as content-describing titles rather than one branded outlier.
+3. **Empty state — centered dim placeholder everywhere.** Panel 2
+   with zero rows used to render just the column header and blank
+   space, indistinguishable from "still loading". Now shows
+   `No <kind>` (or `No <kind> matching "query"` when a search
+   filter is active) centered horizontally + vertically in the
+   row viewport as a dim overlay0 placeholder. Panel 3 gets the
+   same treatment: every tab's placeholder (`No events` / `Waiting
+   for logs...` / `No conditions` / `No revision history` / the
+   Relatives "press Y for full YAML" hint / `No resource selected`)
+   now renders centered + dim via `activeTabEmptyMessage()` instead
+   of the previous left-aligned first-line style.
+4. **Name column middle-truncation.** Kubectl-style pod names
+   (`nginx-6d8f7c-xyz`) bury the identity signal at both ends — the
+   old tail-only truncation (`nginx-6d…`) dropped the pod-hash
+   suffix that distinguishes rows in a rollout. Panel 2's Name
+   column now uses middle-truncation (`nginx…-xyz`) so both the
+   app-name prefix AND the tail stay visible. All other columns
+   keep tail-truncation, which reads better for prefix-heavy
+   values like status / age / IP / node. New `truncateMiddle`
+   helper walks rune-by-rune via `lipgloss.Width` so wide chars
+   and Nerd Font PUA glyphs count correctly.
+5. **Splash easter-egg refresh.** The hidden `Ctrl+K K M 8` splash
+   reveal was reworked into a four-phase animation: M background
+   sweeps top-to-bottom (4 pixels / 10ms), brief boundary beat
+   (250ms hold), K/8 foreground shuffles in (2 pixels / 10ms),
+   400ms hold before the version caption fades in, 300ms hold
+   before the `Press Esc to close` hint. Total runtime ~1.5s —
+   deliberate cinematic pacing over the previous single-shot
+   reveal. Also: panel 2's helm-toggle hint compacted from
+   `.: toggle helm` to `.: helm` to leave more breathing room in
+   the bottom-left border.
+
+### Changed
+
+- `internal/ui/app.go` — new `focusedPanelTitle` and
+  `plainTitlePrefix` helpers; `renderPanelWithScroll` now treats
+  the title as pre-styled by the caller (removed outer
+  `tStyle.Render(title)` wrap). Panel 2 tab title composition
+  updated for chip caps; Panel 3 caller drops the trailing space
+  from the `[3]` prefix so the tab bar's cell 0 provides the
+  boundary. `tablePanelBottomLeft` hint compacted.
+- `internal/ui/detail.go` — `TabTitle()` rewritten to use the
+  space-cell layout with chip caps on the active tab; new
+  `activeTabEmptyMessage()` method and centered-dim rendering in
+  `View()` for uniform empty-state handling.
+- `internal/ui/table.go` — new `truncateMiddle` helper; render
+  path uses it for the Name column (title == "Name"), tail
+  truncation preserved for other columns; centered dim empty-
+  state message when `len(rows) == 0`.
+- `internal/ui/splash.go` — reworked to four-phase reveal with
+  `splashVersionMsg` / `splashHintMsg` message types for the
+  independent caption reveals.
+
+### Tests
+
+- `internal/ui/table_test.go` — `TestTruncateMiddle` (9 cases
+  covering fits / edge widths / wide chars / empty input);
+  `TestTableModel_EmptyStateRendersMessage` and
+  `TestTableModel_EmptyStateWithSearchShowsQuery`.
+- `internal/ui/splash_test.go` — 3 tests for the new phase
+  transitions and cap glyph rendering; existing tests still pass
+  with the reworked state machine.
+
 ## [v1.7.7] - 2026-07-01
 
 A UX polish + docs release on top of v1.7.6. Two threads:
