@@ -476,16 +476,17 @@ func (m DetailModel) View() string {
 		return ""
 	}
 
-	var b strings.Builder
-
 	contentHeight := m.contentHeight()
 	if contentHeight <= 0 {
 		return ""
 	}
 
-	if !m.hasData {
-		b.WriteString(m.theme.DetailValueStyle().Render("  No resource selected"))
-		return b.String()
+	// Empty state: centered dim placeholder in the tab body, matching
+	// Panel 2's empty-state convention. Applies uniformly to the
+	// "no resource selected" case and each tab's own empty message.
+	if msg := m.activeTabEmptyMessage(); msg != "" {
+		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
+		return lipgloss.Place(m.width, contentHeight, lipgloss.Center, lipgloss.Center, dim.Render(msg))
 	}
 
 	displayLines := m.contentLines
@@ -499,9 +500,44 @@ func (m DetailModel) View() string {
 	for i := m.scrollOffset; i < end; i++ {
 		lines = append(lines, displayLines[i])
 	}
-	b.WriteString(strings.Join(lines, "\n"))
+	return strings.Join(lines, "\n")
+}
 
-	return b.String()
+// activeTabEmptyMessage returns the placeholder text for the current tab
+// when it has no data to show, or "" when there is content. View() renders
+// the returned message centered + dim; the individual buildXxxLines
+// functions still produce the same message as a first-line fallback (dead
+// code in practice, but keeps the builders self-contained).
+func (m DetailModel) activeTabEmptyMessage() string {
+	if !m.hasData {
+		return "No resource selected"
+	}
+	switch m.ActiveTabName() {
+	case "Logs":
+		if !supportsLogs(m.resourceType) {
+			return "Logs not available for this resource type"
+		}
+		if len(m.logLines) == 0 {
+			return "Waiting for logs..."
+		}
+	case "Events":
+		if len(m.events) == 0 {
+			return "No events"
+		}
+	case "Conditions":
+		if len(m.detail.Conditions) == 0 {
+			return "No conditions"
+		}
+	case "Relatives":
+		if len(m.relativeEntries) == 0 {
+			return relativesPlaceholderEmpty
+		}
+	case "History":
+		if len(m.detail.ReleaseHistory) == 0 {
+			return "No revision history"
+		}
+	}
+	return ""
 }
 
 // SetSize sets the dimensions of the detail panel. When the width changes the
@@ -684,18 +720,59 @@ func (m DetailModel) TabTitle() string {
 	if m.focused {
 		borderHex = m.theme.Sidebar.CategoryFg
 	}
-	bStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderHex))
-	tStyle := bStyle.Bold(true)
+	bc := lipgloss.Color(borderHex)
+	bStyle := lipgloss.NewStyle().Foreground(bc)
+	// Same chip pattern as focusedPanelTitle (Panel 1/2): active tab
+	// wrapped in \uE0D4 left cap + \uE0B0 right cap, chip body on a
+	// border-color bg with Catppuccin base fg. Boundary cells between
+	// non-active boundary cells are plain spaces (outline divider
+	// competed with the active chip visually).
+	capStyle := lipgloss.NewStyle().Foreground(bc)
+	chipStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#1e1e2e")).
+		Background(bc).
+		Bold(true)
+	const (
+		leftCap    = "\uE0D4" // active chip left cap (honeycomb)
+		rightCap   = "\uE0B0" // active chip right cap (hard triangle)
+	)
+	activeIdx := int(m.activeTab)
 
-	var parts []string
-	for i, tab := range m.tabs {
+	var b strings.Builder
+	for i := 0; i <= len(m.tabs); i++ {
+		// Boundary cell at position i — sits BEFORE tab i, or trailing
+		// after the last tab when i == len. Powerline caps take the
+		// slots around the active tab; interior slots get the outline
+		// divider. The very first slot (i == 0) is skipped when it
+		// isn't the active tab's left cap — the tab bar starts flush
+		// with the first tab label rather than leading with an outline.
+		switch {
+		case i == activeIdx:
+			b.WriteString(capStyle.Render(leftCap))
+		case i == activeIdx+1:
+			b.WriteString(capStyle.Render(rightCap))
+		case i == 0 || i == len(m.tabs):
+			// Leading + trailing edges when they aren't caps — plain
+			// space. Emitting a marker at the very ends would read as
+			// a lonely dot floating before the first / after the last
+			// label.
+			b.WriteString(" ")
+		default:
+			// Nerd Font glyph U+F48B as a subtle marker between tabs.
+			// Styled in the border color so it recedes to a hint
+			// rather than competing with the active chip. 1 cell wide
+			// → tab-bar width stays constant.
+			b.WriteString(capStyle.Render(""))
+		}
+
+		if i >= len(m.tabs) {
+			break
+		}
+		tab := m.tabs[i]
 		label := m.tabLabel(tab)
 		// Logs tab carries its live/paused marker glyph regardless of
-		// active state — when only the active tab shows the marker,
-		// switching tabs makes the tab bar contract / expand by 2
-		// cells, which propagates up through panel 3's border and
-		// shows as a horizontal jitter on every tab change. Keeping
-		// the glyph always-on locks tab-bar width per resource kind.
+		// active state — locks tab-bar width per resource kind so
+		// switching active tab doesn't shift the border.
 		if tab == "Logs" {
 			marker := logsPausedGlyph
 			if m.followTail {
@@ -704,12 +781,12 @@ func (m DetailModel) TabTitle() string {
 			label = label + " " + marker
 		}
 		if DetailTab(i) == m.activeTab {
-			parts = append(parts, tStyle.Render("["+label+"]"))
+			b.WriteString(chipStyle.Render(label))
 		} else {
-			parts = append(parts, bStyle.Render(" "+label+" "))
+			b.WriteString(bStyle.Render(label))
 		}
 	}
-	return strings.Join(parts, bStyle.Render("─"))
+	return b.String()
 }
 
 // Nerd Font Material Design Icons: play (live) + pause (paused). Picked

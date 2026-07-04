@@ -449,6 +449,23 @@ func (m TableModel) View() string {
 		return b.String()
 	}
 
+	// Empty state — no rows to render. Center a dim placeholder in the
+	// row viewport instead of leaving blank space, so the user can tell
+	// "the fetch completed and there really are none" from a still-
+	// loading table (which just has the header + nothing).
+	if len(m.rows) == 0 {
+		kind := strings.ToLower(m.resourceType.String())
+		var msg string
+		if m.searchQuery != "" {
+			msg = fmt.Sprintf("No %s matching %q", kind, m.searchQuery)
+		} else {
+			msg = "No " + kind
+		}
+		styled := m.theme.TableDimRowStyle().Render(msg)
+		b.WriteString(lipgloss.Place(m.width, visible, lipgloss.Center, lipgloss.Center, styled))
+		return b.String()
+	}
+
 	end := m.scrollOffset + visible
 	if end > len(m.rows) {
 		end = len(m.rows)
@@ -631,7 +648,16 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		// lipgloss.Width for the padding side.
 		if vw := lipgloss.Width(val); vw > w {
 			if w >= 1 {
-				val = ansi.Truncate(val, w, "…")
+				// Name column: middle-truncate so distinctive front
+				// (app name) AND tail (pod hash / replicaset suffix)
+				// stay visible — kubectl-style names bury the identity
+				// signal at both ends. All other columns keep the
+				// tail-truncation (status/age/ip are prefix-heavy).
+				if i < len(m.columns) && m.columns[i].Title == "Name" {
+					val = truncateMiddle(val, w)
+				} else {
+					val = ansi.Truncate(val, w, "…")
+				}
 			} else {
 				val = ""
 			}
@@ -657,6 +683,55 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 	}
 
 	return line
+}
+
+// truncateMiddle shortens s so its visual width equals w, replacing the
+// middle with "…" and preserving both ends. Returns s unchanged when
+// its width already fits. Used for the Name column so kubectl-style
+// pod / replicaset names — where distinctive signal lives at BOTH ends
+// (app-name prefix and hash/replicaset suffix) — stay recognisable:
+// "nginx-6d8f7c-xyz" (16 cells) at w=10 becomes "nginx…-xyz".
+//
+// Both halves get as-equal-as-possible cell budgets; left absorbs any
+// leftover cell when (w-1) is odd. Reads visual width per rune via
+// lipgloss.Width so wide / Nerd Font PUA glyphs (see
+// [[reference-nerd-font-pua-width-stability]]) count correctly.
+func truncateMiddle(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= w {
+		return s
+	}
+	if w == 1 {
+		return "…"
+	}
+	avail := w - 1 // reserve 1 cell for the ellipsis
+	rightW := avail / 2
+	leftW := avail - rightW
+	runes := []rune(s)
+	leftEnd, leftUsed := 0, 0
+	for i, r := range runes {
+		rw := lipgloss.Width(string(r))
+		if leftUsed+rw > leftW {
+			break
+		}
+		leftUsed += rw
+		leftEnd = i + 1
+	}
+	rightStart, rightUsed := len(runes), 0
+	for i := len(runes) - 1; i >= 0; i-- {
+		rw := lipgloss.Width(string(runes[i]))
+		if rightUsed+rw > rightW {
+			break
+		}
+		rightUsed += rw
+		rightStart = i
+	}
+	if rightStart < leftEnd {
+		rightStart = leftEnd
+	}
+	return string(runes[:leftEnd]) + "…" + string(runes[rightStart:])
 }
 
 // SetColumns replaces the column definitions and resets the table state.

@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/km8/internal/k8s"
 	"github.com/vulcanshen/km8/internal/theme"
 )
@@ -650,7 +651,9 @@ func TestTableModel_RenderRow_VisualWidthTruncation(t *testing.T) {
 	}{
 		{"helm glyph fits in width 2", helmGlyph, 2, helmGlyph},
 		{"helm glyph fits exact width 1", helmGlyph, 1, helmGlyph},
-		{"ascii truncates with ellipsis", "CrashLoopBackOff", 8, "CrashLo…"},
+		// Column 0 = Name (from newTestTable's default Pod columns); Name
+		// uses middle-truncation so the pod-hash tail stays visible.
+		{"ascii truncates with mid ellipsis", "CrashLoopBackOff", 8, "Cras…Off"},
 		{"ascii short pads to width", "abc", 6, "abc"},
 		{"empty cell pads to width", "", 4, ""},
 	}
@@ -666,6 +669,58 @@ func TestTableModel_RenderRow_VisualWidthTruncation(t *testing.T) {
 				t.Errorf("rendered cell missing %q in %q", c.wantInLine, plain)
 			}
 		})
+	}
+}
+
+func TestTruncateMiddle(t *testing.T) {
+	cases := []struct {
+		name string
+		s    string
+		w    int
+		want string
+	}{
+		{"fits unchanged", "nginx", 10, "nginx"},
+		{"exact width unchanged", "nginx", 5, "nginx"},
+		{"kubectl-style pod name at 10", "nginx-6d8f7c-xyz", 10, "nginx…-xyz"},
+		{"kubectl-style pod name at 8", "nginx-6d8f7c-xyz", 8, "ngin…xyz"},
+		{"very tight w=3 splits 1+1+1", "abcdefghij", 3, "a…j"},
+		{"w=2 leaves left char + ellipsis", "abcdefghij", 2, "a…"},
+		{"w=1 collapses to ellipsis", "abcdefghij", 1, "…"},
+		{"w=0 empties", "abcdefghij", 0, ""},
+		{"empty input", "", 5, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := truncateMiddle(c.s, c.w)
+			if got != c.want {
+				t.Errorf("truncateMiddle(%q, %d) = %q, want %q", c.s, c.w, got, c.want)
+			}
+			if c.w > 0 {
+				if vw := lipgloss.Width(got); vw > c.w {
+					t.Errorf("truncateMiddle(%q, %d) width=%d exceeds w", c.s, c.w, vw)
+				}
+			}
+		})
+	}
+}
+
+func TestTableModel_EmptyStateRendersMessage(t *testing.T) {
+	m := newTestTable()
+	m.SetSize(80, 20)
+	// resourceType defaults to Pods per newTestTable; leave rows empty.
+	view := ansiStrip(m.View())
+	if !strings.Contains(view, "No pods") {
+		t.Errorf("empty table must render 'No pods' placeholder, got %q", view)
+	}
+}
+
+func TestTableModel_EmptyStateWithSearchShowsQuery(t *testing.T) {
+	m := newTestTable()
+	m.SetSize(80, 20)
+	m.searchQuery = "nginx"
+	view := ansiStrip(m.View())
+	if !strings.Contains(view, "matching") || !strings.Contains(view, "nginx") {
+		t.Errorf("empty table with search must reference the query, got %q", view)
 	}
 }
 
