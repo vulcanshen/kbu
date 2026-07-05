@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.9] - 2026-07-06
+
+A UI-polish release on top of v1.7.8. Two threads:
+
+1. **Panel 3 tab bar → Powerline chip chain.** The v1.7.8 tab-bar
+   layout (space-cell interleave with subtle Nerd Font markers on
+   interior cells and Powerline caps around the active tab) has
+   been replaced with a starship-style Powerline chip chain: only
+   the active tab renders as a filled chip (Catppuccin base fg on
+   border-color bg), the rest sit on the panel's base bg with thin
+    U+E0B1 chevrons between them. The identity chip for `[3]`
+   merges with the first tab into a single "[3] Label" chip when
+   that tab is active (avoids a double chevron at the join). All
+   three panels now speak the same Powerline vocabulary — Panel 1
+   `<E0B6>[1] Kinds<E0B0>`, Panel 2 `<E0B6>[2] <breadcrumb><E0B0>`,
+   Panel 3 either `<E0B6>[3] FirstLabel<E0B0>rest…` or
+   `<E0B6>[3]<E0B0>rest…` depending on which tab is active. Panel 1
+   / 2 titles also grew the  U+E0B6 round-left cap for a softer
+   opening edge than the previous  U+E0D4 honeycomb.
+2. **Splash caption expansion.** The splash easter egg used to
+   reveal just the version line after the pixel logo settled.
+   v1.7.9 expands that into a three-line identity block matching
+   the README intro — `KubeMate` (bold), `v1.7.9`, and
+   `A single-pane kubernetes workspace` — all appearing together
+   in blue 400ms after the K/8 pixel reveal completes, held for
+   500ms before the "Press Esc to close" dim hint fades in.
+   Everything users see now says the same thing about km8, whether
+   they landed from GitHub or opened the splash directly.
+
 ## [v1.7.8] - 2026-07-05
 
 A UI-polish release on top of v1.7.7. Five threads:
