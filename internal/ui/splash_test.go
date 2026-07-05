@@ -124,6 +124,8 @@ func TestSplashModel_TickStopsWhenComplete(t *testing.T) {
 	m := newTestSplash()
 	m.Show()
 	m.revealedCount = len(m.pixelOrder) // fast-forward to end
+	m.identityVisible = true            // past identity hold
+	m.taglineVisible = true             // past tagline hold
 	m.versionVisible = true             // past version hold
 	m.hintVisible = true                // past hint hold
 
@@ -138,22 +140,29 @@ func TestSplashModel_CaptionRevealsAfterAnimation(t *testing.T) {
 	m.Show()
 	m.revealedCount = len(m.pixelOrder) // fast-forward past K/8 reveal
 
-	// Post-completion tick schedules the version reveal (not the hint).
+	// Post-completion tick schedules the identity reveal.
 	_, cmd := m.Update(splashTickMsg{})
 	if cmd == nil {
-		t.Fatal("post-completion tick must return the version-reveal cmd")
+		t.Fatal("post-completion tick must return the identity-reveal cmd")
 	}
-	if m.versionVisible {
-		t.Error("version must not be visible until splashVersionMsg fires")
+	if m.identityVisible {
+		t.Error("identity must not be visible until splashIdentityMsg fires")
 	}
 
-	// splashVersionMsg makes version visible AND schedules the hint reveal.
-	m, cmd = m.Update(splashVersionMsg{})
+	// splashIdentityMsg fires KubeMate + version + tagline together AND
+	// schedules the hint reveal.
+	m, cmd = m.Update(splashIdentityMsg{})
+	if !m.identityVisible {
+		t.Error("splashIdentityMsg must set identityVisible = true")
+	}
 	if !m.versionVisible {
-		t.Error("splashVersionMsg must set versionVisible = true")
+		t.Error("splashIdentityMsg must set versionVisible = true (fires together)")
+	}
+	if !m.taglineVisible {
+		t.Error("splashIdentityMsg must set taglineVisible = true (fires together)")
 	}
 	if cmd == nil {
-		t.Fatal("splashVersionMsg must return the hint-reveal cmd")
+		t.Fatal("splashIdentityMsg must return the hint-reveal cmd")
 	}
 	if m.hintVisible {
 		t.Error("hint must not be visible until splashHintMsg fires")

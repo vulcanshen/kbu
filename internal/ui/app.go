@@ -3990,45 +3990,46 @@ type ScrollInfo struct {
 	Total    int
 }
 
-// focusedPanelTitle builds a Panel 1/2 border title. Layout:
-//   unfocused:  "[N] body "                       — plain border-color bold
-//   focused:    "[N]<>body<>"                     — spaces replaced by
-//               Powerline hard caps ( U+E0B2 and  U+E0B0); body becomes a
-//               filled chip with Catppuccin base fg on border-blue bg.
-// Same visual width across focus states because the caps occupy the same
-// cells the spaces did.
+// focusedPanelTitle builds a Panel 1/2 border title. Layout (both focus
+// states): <E0B6>[N] body<E0B0> — round left cap + single filled chip
+// wrapping prefix & body + hard right cap. Chip fg = Catppuccin base; bg
+// = border color (blue when focused, surface2 when not).
 func focusedPanelTitle(prefix, body string, t *theme.Theme, focused bool) string {
 	borderHex := t.Detail.BorderColor
 	if focused {
 		borderHex = t.Sidebar.CategoryFg
 	}
 	bc := lipgloss.Color(borderHex)
-	prefixStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
-	// Chip style: same shape in both focus states — only the bg color
-	// swaps (bright blue when focused, border-gray when not). Fg is
-	// always Catppuccin base — high contrast on focused chip, low
-	// contrast (muted / recede) on the unfocused gray one.
 	capStyle := lipgloss.NewStyle().Foreground(bc)
 	chipStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#1e1e2e")).
 		Background(bc).
 		Bold(true)
-	return prefixStyle.Render(prefix) +
-		capStyle.Render("") +
-		chipStyle.Render(body) +
-		capStyle.Render("")
+	return capStyle.Render("\uE0B6") +
+		chipStyle.Render(prefix+" "+body) +
+		capStyle.Render("\uE0B0")
 }
 
-// plainTitlePrefix styles the "[N] " prefix in the standard border color
-// + bold. Panel 3 uses this because its body (the tab bar from
-// DetailModel.TabTitle) already carries its own per-tab styling that
-// shouldn't be wrapped by a chip.
+// plainTitlePrefix wraps the "[N]" panel-id in a Powerline chip matching
+// focusedPanelTitle's shape: <E0B6>[N]<E0B0>. Panel 3 uses this because
+// its body (the tab bar from DetailModel.TabTitle) carries its own per-tab
+// chip system; sharing the same panel-id chip keeps the visual language
+// unified across all three panels.
 func plainTitlePrefix(prefix string, t *theme.Theme, focused bool) string {
 	borderHex := t.Detail.BorderColor
 	if focused {
 		borderHex = t.Sidebar.CategoryFg
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(borderHex)).Bold(true).Render(prefix)
+	bc := lipgloss.Color(borderHex)
+	capStyle := lipgloss.NewStyle().Foreground(bc)
+	chipStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#1e1e2e")).
+		Background(bc).
+		Bold(true)
+	// Open the [N] chip with a round left cap; TabTitle handles closing
+	// (either merges with the first tab when active, or emits its own
+	// close cap into the base tab area).
+	return capStyle.Render("\uE0B6") + chipStyle.Render(prefix)
 }
 
 func renderPanel(content, title string, width, height int, focused bool, t *theme.Theme) string {
