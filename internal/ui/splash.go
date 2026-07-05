@@ -12,18 +12,20 @@ import (
 )
 
 type splashTickMsg struct{}
-type splashVersionMsg struct{}
+type splashIdentityMsg struct{} // fires KubeMate + version + tagline together
 type splashHintMsg struct{}
 
 // SplashModel renders the km8 logo as a hidden easter egg.
 type SplashModel struct {
-	active         bool
-	pixelOrder     []int // colored pixel indices (row*cols + col): row-major M background, then shuffled K/8 foreground
-	revealedCount  int
-	bgCount        int // step-size boundary — first bgCount indices are M pixels
-	boundaryPaused bool
-	versionVisible bool
-	hintVisible    bool
+	active          bool
+	pixelOrder      []int // colored pixel indices (row*cols + col): row-major M background, then shuffled K/8 foreground
+	revealedCount   int
+	bgCount         int // step-size boundary — first bgCount indices are M pixels
+	boundaryPaused  bool
+	identityVisible bool // "KubeMate" line
+	taglineVisible  bool // "A single-pane Kubernetes workspace"
+	versionVisible  bool
+	hintVisible     bool
 }
 
 func NewSplashModel() SplashModel {
@@ -36,15 +38,17 @@ func (m *SplashModel) Show() tea.Cmd {
 	m.active = true
 	m.revealedCount = 0
 	m.boundaryPaused = false
+	m.identityVisible = false
+	m.taglineVisible = false
 	m.versionVisible = false
 	m.hintVisible = false
 
 	// Five-phase reveal:
 	// (1) M background — row-major top-to-bottom sweep.
 	// (2) beat — brief hold at the M→K/8 boundary.
-	// (3) K/8 foreground shuffled — identity emerging from noise (accelerated).
-	// (4) hold — version caption appears.
-	// (5) hold — esc hint appears.
+	// (3) K/8 foreground shuffled — identity emerging from noise.
+	// (4) 400ms hold → KubeMate + version + tagline appear together (all blue).
+	// (5) 500ms hold → esc hint appears.
 	rows, cols := len(logoPixels), len(logoPixels[0])
 	var bg, fg []int
 	for r := 0; r < rows; r++ {
@@ -147,15 +151,25 @@ func (m SplashModel) Render(width, height int) string {
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	blueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa"))
 	logoW := cols * 2
-	versionText, hintText := " ", " "
+	identityText, taglineText, versionText, hintText := " ", " ", " ", " "
+	if m.identityVisible {
+		identityText = blueStyle.Bold(true).Render("KubeMate")
+	}
 	if m.versionVisible {
 		versionText = blueStyle.Render(version.Display())
+	}
+	if m.taglineVisible {
+		taglineText = blueStyle.Render("A single-pane kubernetes workspace")
 	}
 	if m.hintVisible {
 		hintText = dimStyle.Render("Press Esc to close")
 	}
 	caption := "\n\n" +
+		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, identityText) +
+		"\n" +
 		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, versionText) +
+		"\n" +
+		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, taglineText) +
 		"\n\n" +
 		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, hintText)
 
@@ -176,6 +190,8 @@ func (m SplashModel) Update(msg tea.Msg) (SplashModel, tea.Cmd) {
 			m.pixelOrder = nil
 			m.bgCount = 0
 			m.boundaryPaused = false
+			m.identityVisible = false
+			m.taglineVisible = false
 			m.versionVisible = false
 			m.hintVisible = false
 		}
@@ -208,15 +224,17 @@ func (m SplashModel) Update(msg tea.Msg) (SplashModel, tea.Cmd) {
 				return splashTickMsg{}
 			})
 		}
-		// K/8 done — schedule the version caption reveal after a brief hold.
-		if !m.versionVisible {
+		// K/8 done — schedule the identity caption reveal after a brief hold.
+		if !m.identityVisible {
 			return m, tea.Tick(400*time.Millisecond, func(time.Time) tea.Msg {
-				return splashVersionMsg{}
+				return splashIdentityMsg{}
 			})
 		}
-	case splashVersionMsg:
+	case splashIdentityMsg:
+		m.identityVisible = true
 		m.versionVisible = true
-		return m, tea.Tick(300*time.Millisecond, func(time.Time) tea.Msg {
+		m.taglineVisible = true
+		return m, tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
 			return splashHintMsg{}
 		})
 	case splashHintMsg:

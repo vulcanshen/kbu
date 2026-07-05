@@ -721,70 +721,81 @@ func (m DetailModel) TabTitle() string {
 		borderHex = m.theme.Sidebar.CategoryFg
 	}
 	bc := lipgloss.Color(borderHex)
-	bStyle := lipgloss.NewStyle().Foreground(bc)
-	// Same chip pattern as focusedPanelTitle (Panel 1/2): active tab
-	// wrapped in \uE0D4 left cap + \uE0B0 right cap, chip body on a
-	// border-color bg with Catppuccin base fg. Boundary cells between
-	// non-active boundary cells are plain spaces (outline divider
-	// competed with the active chip visually).
-	capStyle := lipgloss.NewStyle().Foreground(bc)
-	chipStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#1e1e2e")).
-		Background(bc).
-		Bold(true)
-	const (
-		leftCap    = "\uE0D4" // active chip left cap (honeycomb)
-		rightCap   = "\uE0B0" // active chip right cap (hard triangle)
-	)
+	baseColor := lipgloss.Color("#1e1e2e")
+
+	// Powerline chip chain (starship-inspired). Only the active tab is
+	// highlighted (blue chip); non-active tabs sit on base bg with thin
+	// E0B1 chevrons between them. When the first tab is active, its chip
+	// merges with the [N] chip left open by plainTitlePrefix, becoming
+	// one continuous blue segment "[N] Label" (avoids double chevron
+	// at the boundary). Otherwise [N] closes with its own cap and every
+	// tab renders under the standard base/blue rule.
+	chipStyle := lipgloss.NewStyle().Foreground(baseColor).Background(bc).Bold(true)
+	closeCap := lipgloss.NewStyle().Foreground(bc).Background(baseColor)
+	openCap := lipgloss.NewStyle().Foreground(baseColor).Background(bc)
+	baseLabel := lipgloss.NewStyle().Foreground(bc).Background(baseColor)
+	divider := lipgloss.NewStyle().Foreground(bc).Background(baseColor)
+	trailingBase := lipgloss.NewStyle().Foreground(baseColor)
+	trailingBlue := lipgloss.NewStyle().Foreground(bc)
+
 	activeIdx := int(m.activeTab)
+	tabs := m.tabs
 
-	var b strings.Builder
-	for i := 0; i <= len(m.tabs); i++ {
-		// Boundary cell at position i — sits BEFORE tab i, or trailing
-		// after the last tab when i == len. Powerline caps take the
-		// slots around the active tab; interior slots get the outline
-		// divider. The very first slot (i == 0) is skipped when it
-		// isn't the active tab's left cap — the tab bar starts flush
-		// with the first tab label rather than leading with an outline.
-		switch {
-		case i == activeIdx:
-			b.WriteString(capStyle.Render(leftCap))
-		case i == activeIdx+1:
-			b.WriteString(capStyle.Render(rightCap))
-		case i == 0 || i == len(m.tabs):
-			// Leading + trailing edges when they aren't caps — plain
-			// space. Emitting a marker at the very ends would read as
-			// a lonely dot floating before the first / after the last
-			// label.
-			b.WriteString(" ")
-		default:
-			// Nerd Font glyph U+F48B as a subtle marker between tabs.
-			// Styled in the border color so it recedes to a hint
-			// rather than competing with the active chip. 1 cell wide
-			// → tab-bar width stays constant.
-			b.WriteString(capStyle.Render(""))
-		}
-
-		if i >= len(m.tabs) {
-			break
-		}
-		tab := m.tabs[i]
-		label := m.tabLabel(tab)
-		// Logs tab carries its live/paused marker glyph regardless of
-		// active state — locks tab-bar width per resource kind so
-		// switching active tab doesn't shift the border.
-		if tab == "Logs" {
+	labelOf := func(i int) string {
+		label := m.tabLabel(tabs[i])
+		if tabs[i] == "Logs" {
 			marker := logsPausedGlyph
 			if m.followTail {
 				marker = logsLiveGlyph
 			}
 			label = label + " " + marker
 		}
-		if DetailTab(i) == m.activeTab {
-			b.WriteString(chipStyle.Render(label))
-		} else {
-			b.WriteString(bStyle.Render(label))
+		return label
+	}
+
+	if len(tabs) == 0 {
+		return trailingBlue.Render("\uE0B0")
+	}
+
+	var b strings.Builder
+	// prevBlue tracks whether the previous cell sits on chip bg. Starts
+	// true because plainTitlePrefix left the [N] chip open.
+	prevBlue := true
+	for i := 0; i < len(tabs); i++ {
+		isBlue := (i == activeIdx)
+		if i == 0 {
+			if isBlue {
+				// First tab active: merge with [N] chip. No boundary cap
+				// -- just continue the blue chip with " Label ".
+				b.WriteString(chipStyle.Render(" " + labelOf(0) + " "))
+			} else {
+				// Close [N] chip; first tab label sits flush against the
+				// close cap (cap is the separator).
+				b.WriteString(closeCap.Render("\uE0B0"))
+				b.WriteString(baseLabel.Render(labelOf(0) + " "))
+			}
+			prevBlue = isBlue
+			continue
 		}
+		switch {
+		case prevBlue && !isBlue:
+			b.WriteString(closeCap.Render("\uE0B0"))
+		case !prevBlue && isBlue:
+			b.WriteString(openCap.Render("\uE0B0"))
+		case !prevBlue && !isBlue:
+			b.WriteString(divider.Render("\uE0B1"))
+		}
+		if isBlue {
+			b.WriteString(chipStyle.Render(" " + labelOf(i)))
+		} else {
+			b.WriteString(baseLabel.Render(" " + labelOf(i)))
+		}
+		prevBlue = isBlue
+	}
+	if prevBlue {
+		b.WriteString(trailingBlue.Render("\uE0B0"))
+	} else {
+		b.WriteString(trailingBase.Render("\uE0B0"))
 	}
 	return b.String()
 }
