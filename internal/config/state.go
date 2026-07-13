@@ -52,6 +52,13 @@ type State struct {
 	// (Namespace / Node / etc.), ObjectNamespace stays empty.
 	ObjectNamespace string `yaml:"object_namespace,omitempty"`
 	ObjectName      string `yaml:"object_name,omitempty"`
+
+	// Panel is the focused panel at quit time — "sidebar", "table",
+	// or "detail". Empty falls back to "sidebar" (the fresh-launch
+	// default). Stored as a string rather than the Panel int enum so
+	// the YAML stays readable and the enum can be reordered without
+	// breaking existing state files.
+	Panel string `yaml:"panel,omitempty"`
 }
 
 // DefaultState returns an empty State. Used both as the load-file-missing
