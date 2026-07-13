@@ -205,6 +205,20 @@ func (m HelpModel) renderFullPopup() string {
 	leftLines := joinColumnSections(leftSections, columnTarget(leftSections, rightSections))
 	rightLines := joinColumnSections(rightSections, columnTarget(leftSections, rightSections))
 
+	// Defensive length equalisation. splitGroupsForColumns can leave the
+	// right column empty when the section list is small (or when the
+	// balance heuristic strongly prefers left), and joinColumnSections
+	// returning nil for an empty slice would panic the row-zip below on
+	// rightLines[i]. Pad the shorter side to the longer with empty rows
+	// so the two-column layout stays consistent for any (leftLines,
+	// rightLines) pair.
+	for len(rightLines) < len(leftLines) {
+		rightLines = append(rightLines, "")
+	}
+	for len(leftLines) < len(rightLines) {
+		leftLines = append(leftLines, "")
+	}
+
 	gutter := strings.Repeat(" ", gutterW)
 	var contentLines []string
 	for i := range leftLines {
