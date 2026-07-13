@@ -496,12 +496,22 @@ func resourceAllowsEdit(rt k8s.ResourceType) bool {
 }
 
 // resourceAllowsDelete returns false for kinds where `kubectl delete` is
-// blocked by km8's scout-tool stance. Events (no point), Nodes (admin
-// infra action), Namespaces (cascades to every workload in the ns — too
-// destructive for a list-row hotkey).
+// blocked by km8's scout-tool stance. Events (no point — they're
+// system-generated immutable records), Nodes (admin infra action, not
+// km8's audience).
+//
+// Namespaces is intentionally NOT blocked here — the cascading destruction
+// of every resource in the namespace makes it the single most dangerous
+// delete km8 exposes, but blocking it entirely also makes km8 useless
+// for "kubectl delete ns test-XYZ" cleanup which IS a normal dev-workflow
+// action. The tradeoff resolves through the confirm popup: the delete-
+// triggering paths (d hotkey + Space menu Delete) build a stronger
+// warning message for the Namespace kind via deleteConfirmSurface —
+// "will remove ALL resources in it" — so the user cannot fat-finger
+// past a generic "delete resource?" prompt when the target is a ns.
 func resourceAllowsDelete(rt k8s.ResourceType) bool {
 	switch rt {
-	case k8s.ResourceEvents, k8s.ResourceNodes, k8s.ResourceNamespaces:
+	case k8s.ResourceEvents, k8s.ResourceNodes:
 		return false
 	}
 	return true
