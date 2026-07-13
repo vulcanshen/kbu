@@ -12,9 +12,18 @@ import (
 )
 
 // YamlPopupModel renders the full YAML of a resource in a large overlay popup.
-// Supports j/k/u/d/gg/G scroll, / search (Enter commits; n/N step through
-// matches), e to dispatch kubectl edit on the same resource (no confirm — user
-// already inspected before pressing), and Esc to close.
+//
+// v1.7.10 pivot: this popup is a vim-style buffer, not a scroll-only
+// viewer. hjkl moves a cursor (auto-scrolling to keep it visible); v
+// enters character-wise visual mode; y in visual mode copies the
+// selected substring, y outside visual mode copies the full YAML.
+// w/b/e word-motion + 0/$ line-endpoints + gg/G buffer-endpoints + u/d
+// half-page all follow vim semantics.
+//
+// Also supports / search (Enter commits; n/N step through matches),
+// E to dispatch kubectl edit on the same resource (no confirm — user
+// already inspected before pressing), and Esc to close (or exit
+// visual mode when active).
 type YamlPopupModel struct {
 	yaml string
 	// rawLines is the source YAML split by newline. searchQuery matches
@@ -24,6 +33,13 @@ type YamlPopupModel struct {
 	// wrapped to fit the popup body width, then highlighted. One raw line
 	// may produce 1+ display lines (see contentLineRaw).
 	contentLines []string
+	// contentPlain[i] is the ANSI-stripped version of contentLines[i].
+	// Kept parallel to contentLines so cursor-col math (rune-index into
+	// the visible characters) can happen in O(1) per line without
+	// re-stripping the styled string on every keystroke. Also the
+	// authoritative source for visual-mode selection extraction — y
+	// copies substrings out of these plain strings.
+	contentPlain []string
 	// contentLineRaw[i] = index into rawLines that display line i came from.
 	// Used to (a) map matchLines (raw indices) to display positions for
 	// auto-scroll and (b) extend the current-match background highlight
@@ -50,6 +66,22 @@ type YamlPopupModel struct {
 	matchCursor int
 
 	pendingG bool
+
+	// Cursor position — the vim buffer cursor. cursorLine indexes into
+	// contentLines / contentPlain; cursorCol is a rune-index within
+	// contentPlain[cursorLine]. Both default to 0 so Open() lands the
+	// cursor at the top-left of the document.
+	cursorLine int
+	cursorCol  int
+
+	// Visual mode. visualMode=true switches every motion key from
+	// "move cursor" to "extend selection between anchor and cursor",
+	// and remaps y from "copy full YAML" to "copy selection + exit
+	// visual". Anchor coordinates are captured when v is pressed and
+	// don't move as the cursor extends the selection.
+	visualMode       bool
+	visualAnchorLine int
+	visualAnchorCol  int
 
 	layer       int
 	borderColor lipgloss.Color
@@ -86,6 +118,11 @@ func (m *YamlPopupModel) Open(yaml string, rt k8s.ResourceType, item k8s.Resourc
 	m.matchLines = nil
 	m.matchCursor = 0
 	m.pendingG = false
+	m.cursorLine = 0
+	m.cursorCol = 0
+	m.visualMode = false
+	m.visualAnchorLine = 0
+	m.visualAnchorCol = 0
 	m.rebuildContent()
 	return m.animator.Open()
 }
@@ -117,20 +154,72 @@ func (m *YamlPopupModel) SetSize(w, h int) {
 	}
 }
 
-// bodyWidth is the column budget for a single YAML line inside the popup
-// (popup inner width minus the 2 borders).
+// bodyWidth is the column budget for a single YAML content line inside
+// the popup — popup inner width minus the 2 borders MINUS the line-
+// number gutter. Wrapping decisions in rebuildContent use this value so
+// long lines break to the right of the gutter, not through it.
 func (m YamlPopupModel) bodyWidth() int {
-	w := m.popupWidth() - 2
+	w := m.popupWidth() - 2 - m.gutterWidth()
 	if w < 10 {
 		w = 10
 	}
 	return w
 }
 
+// gutterWidth is the number of cells reserved on the left for the raw
+// line number + a single trailing space separator. Zero when there are
+// no lines to number. The digit count is derived from len(rawLines),
+// so a 42-line YAML gets a 3-cell gutter ("42 "), a 999-line YAML gets
+// 4 cells ("999 "). Kept small so it doesn't dominate the popup on
+// short YAMLs.
+func (m YamlPopupModel) gutterWidth() int {
+	n := len(m.rawLines)
+	if n == 0 {
+		return 0
+	}
+	digits := 1
+	for n >= 10 {
+		digits++
+		n /= 10
+	}
+	return digits + 1 // trailing space separator
+}
+
+// gutter returns the styled left-gutter cells for display line i.
+// Shows the raw line number (1-indexed) on the FIRST display row of
+// each raw line; continuation rows (wrapped chunks of the same raw
+// line) get blank spaces so the number stays anchored to the logical
+// line, not the visual chunk. Fixed width = m.gutterWidth() so cursor
+// col math never has to shift past variable-width gutters.
+//
+// The gutter is intentionally excluded from cursor / selection
+// semantics: cursorCol is a rune index into contentPlain[i], which
+// contains only content bytes. Visual y copies from contentPlain,
+// so line numbers never leak into the clipboard. h at cursorCol=0
+// stops there — the gutter is a display artefact, not addressable
+// text.
+func (m YamlPopupModel) gutter(i int) string {
+	gw := m.gutterWidth()
+	if gw == 0 || i < 0 || i >= len(m.contentLineRaw) {
+		return ""
+	}
+	// Show the number only on the first display line for this raw
+	// line — a wrapped chunk anchoring 3 display rows shouldn't
+	// repeat "42" three times.
+	showNum := i == 0 || m.contentLineRaw[i] != m.contentLineRaw[i-1]
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
+	if !showNum {
+		return mutedStyle.Render(strings.Repeat(" ", gw))
+	}
+	label := fmt.Sprintf("%*d ", gw-1, m.contentLineRaw[i]+1)
+	return mutedStyle.Render(label)
+}
+
 func (m *YamlPopupModel) rebuildContent() {
 	if m.yaml == "" {
 		m.rawLines = nil
 		m.contentLines = nil
+		m.contentPlain = nil
 		m.contentLineRaw = nil
 		m.lastBuiltWidth = 0
 		return
@@ -140,6 +229,7 @@ func (m *YamlPopupModel) rebuildContent() {
 	m.lastBuiltWidth = w
 
 	m.contentLines = m.contentLines[:0]
+	m.contentPlain = m.contentPlain[:0]
 	m.contentLineRaw = m.contentLineRaw[:0]
 	for i, raw := range m.rawLines {
 		chunks := wrapPlain(raw, w)
@@ -147,14 +237,18 @@ func (m *YamlPopupModel) rebuildContent() {
 			// Empty raw line still takes one display row so blank lines in
 			// the YAML render as blank rows (don't collapse).
 			m.contentLines = append(m.contentLines, "")
+			m.contentPlain = append(m.contentPlain, "")
 			m.contentLineRaw = append(m.contentLineRaw, i)
 			continue
 		}
 		for _, chunk := range chunks {
 			m.contentLines = append(m.contentLines, highlightYAMLLine(chunk, m.theme))
+			m.contentPlain = append(m.contentPlain, chunk)
 			m.contentLineRaw = append(m.contentLineRaw, i)
 		}
 	}
+	// Reflow can shrink line count — clamp cursor so it stays valid.
+	m.clampCursor()
 }
 
 // firstDisplayLineForRaw returns the smallest display-line index whose source
@@ -170,7 +264,11 @@ func (m YamlPopupModel) firstDisplayLineForRaw(rawIdx int) int {
 	return -1
 }
 
-// Update handles keyboard input.
+// Update handles keyboard input. Vim-buffer semantics: hjkl / w / b / e /
+// 0 / $ / gg / G / u / d all move the cursor (auto-scrolling to keep it
+// on screen); v toggles character-wise visual mode; y is mode-aware
+// (visual → selection copy + exit; normal → full YAML). Esc exits
+// visual mode first, then closes the popup.
 func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 	if !m.animator.IsInteractive() {
 		return m, nil
@@ -184,49 +282,115 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 	}
 
 	switch keyMsg.String() {
-	case "esc", " ":
+	case "esc":
+		// Esc peels overlays in order: visual mode → locked search →
+		// close popup. Mirrors vim (Esc in visual returns to normal)
+		// and preserves the "one Esc backs out one layer" mental model
+		// so the user is never surprised by a stray Esc closing the
+		// popup while search results are still on screen. Locked search
+		// = matches showing but not typing (m.searching=false + a
+		// non-empty query); the typing case is handled inside
+		// handleSearchKey so this branch never sees it.
+		if m.visualMode {
+			m.visualMode = false
+			m.pendingG = false
+			return m, nil
+		}
+		if m.searchQuery != "" || len(m.matchLines) > 0 {
+			m.searchQuery = ""
+			m.matchLines = nil
+			m.matchCursor = 0
+			m.pendingG = false
+			return m, nil
+		}
 		m.pendingG = false
 		return m, m.animator.Close()
+	case " ":
+		// Space keeps closing the popup — it was the pre-vim-buffer
+		// close-shortcut and users may have muscle memory for it. Not
+		// used in visual mode either (no need for another exit path).
+		m.pendingG = false
+		return m, m.animator.Close()
+	case "h", "left":
+		m = m.moveCursorLeft()
+		m.pendingG = false
+	case "l", "right":
+		m = m.moveCursorRight()
+		m.pendingG = false
 	case "j", "down":
-		if m.scrollOffset < m.maxScrollOffset() {
-			m.scrollOffset++
-		}
+		m = m.moveCursorDown()
 		m.pendingG = false
 	case "k", "up":
-		if m.scrollOffset > 0 {
-			m.scrollOffset--
-		}
+		m = m.moveCursorUp()
+		m.pendingG = false
+	case "0":
+		m.cursorCol = 0
+		m.pendingG = false
+		m.ensureCursorVisible()
+	case "$":
+		m.cursorCol = m.lastColOf(m.cursorLine)
+		m.pendingG = false
+		m.ensureCursorVisible()
+	case "w":
+		m = m.moveWordForward()
+		m.pendingG = false
+	case "b":
+		m = m.moveWordBackward()
+		m.pendingG = false
+	case "e":
+		m = m.moveWordEnd()
 		m.pendingG = false
 	case "d":
 		half := m.contentHeight() / 2
 		if half < 1 {
 			half = 1
 		}
-		m.scrollOffset += half
-		if m.scrollOffset > m.maxScrollOffset() {
-			m.scrollOffset = m.maxScrollOffset()
+		m.cursorLine += half
+		if m.cursorLine > m.lastLine() {
+			m.cursorLine = m.lastLine()
 		}
+		m.clampCol()
+		m.ensureCursorVisible()
 		m.pendingG = false
 	case "u":
 		half := m.contentHeight() / 2
 		if half < 1 {
 			half = 1
 		}
-		m.scrollOffset -= half
-		if m.scrollOffset < 0 {
-			m.scrollOffset = 0
+		m.cursorLine -= half
+		if m.cursorLine < 0 {
+			m.cursorLine = 0
 		}
+		m.clampCol()
+		m.ensureCursorVisible()
 		m.pendingG = false
 	case "G":
-		m.scrollOffset = m.maxScrollOffset()
+		m.cursorLine = m.lastLine()
+		m.clampCol()
+		m.ensureCursorVisible()
 		m.pendingG = false
 	case "g":
 		if m.pendingG {
-			m.scrollOffset = 0
+			m.cursorLine = 0
+			m.clampCol()
+			m.ensureCursorVisible()
 			m.pendingG = false
 		} else {
 			m.pendingG = true
 		}
+	case "v":
+		// Toggle character-wise visual mode. Entering: anchor to
+		// current cursor so the initial selection is a single character
+		// under the cursor. Re-pressing v exits visual mode without
+		// copying — same as Esc but keeps hands over hjkl territory.
+		if m.visualMode {
+			m.visualMode = false
+		} else {
+			m.visualMode = true
+			m.visualAnchorLine = m.cursorLine
+			m.visualAnchorCol = m.cursorCol
+		}
+		m.pendingG = false
 	case "/":
 		m.searching = true
 		m.searchQuery = ""
@@ -237,12 +401,14 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 		if len(m.matchLines) > 0 {
 			m.matchCursor = (m.matchCursor + 1) % len(m.matchLines)
 			m.scrollToMatch()
+			m.landCursorOnMatch()
 		}
 		m.pendingG = false
 	case "N":
 		if len(m.matchLines) > 0 {
 			m.matchCursor = (m.matchCursor - 1 + len(m.matchLines)) % len(m.matchLines)
 			m.scrollToMatch()
+			m.landCursorOnMatch()
 		}
 		m.pendingG = false
 	case "E":
@@ -257,9 +423,19 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 			return startEditMsg{resource: rt, item: item, contextName: ctx}
 		})
 	case "y":
-		// Copy the full YAML (not just the visible viewport) — paste-back
-		// use cases want the whole document. OSC 52 via copyToClipboardCmd
-		// works through tmux / SSH without xclip / pbcopy.
+		// Two modes: visual mode → copy the character-wise selection
+		// between anchor and cursor, then exit visual. Normal mode →
+		// copy the full YAML (paste-back use cases want the whole
+		// document). OSC 52 via copyToClipboardCmd works through tmux /
+		// SSH without xclip / pbcopy.
+		if m.visualMode {
+			text := m.selectionText()
+			m.visualMode = false
+			if text == "" {
+				return m, nil
+			}
+			return m, copyToClipboardCmd(text)
+		}
 		if m.yaml == "" {
 			return m, nil
 		}
@@ -267,6 +443,339 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// --- cursor helpers -------------------------------------------------------
+
+// lastLine returns the last valid cursorLine index (len-1) or 0 for empty.
+func (m YamlPopupModel) lastLine() int {
+	if len(m.contentPlain) == 0 {
+		return 0
+	}
+	return len(m.contentPlain) - 1
+}
+
+// lineRunes returns the rune slice for the given display line's plain
+// text. Isolated so cursor col math ignores multi-byte character
+// boundary issues — vim cursor semantics are "grid cell" but for MVP
+// we treat one rune as one cell (fine for YAML which is ASCII in
+// practice, mildly off for the rare non-BMP glyph in a comment).
+func (m YamlPopupModel) lineRunes(line int) []rune {
+	if line < 0 || line >= len(m.contentPlain) {
+		return nil
+	}
+	return []rune(m.contentPlain[line])
+}
+
+// lastColOf returns the last valid cursorCol for the given line (0
+// for empty lines so cursor still lands somewhere).
+func (m YamlPopupModel) lastColOf(line int) int {
+	rr := m.lineRunes(line)
+	if len(rr) == 0 {
+		return 0
+	}
+	return len(rr) - 1
+}
+
+func (m *YamlPopupModel) clampCol() {
+	if m.cursorCol < 0 {
+		m.cursorCol = 0
+		return
+	}
+	if last := m.lastColOf(m.cursorLine); m.cursorCol > last {
+		m.cursorCol = last
+	}
+}
+
+func (m *YamlPopupModel) clampCursor() {
+	if m.cursorLine < 0 {
+		m.cursorLine = 0
+	}
+	if last := m.lastLine(); m.cursorLine > last {
+		m.cursorLine = last
+	}
+	m.clampCol()
+}
+
+func (m YamlPopupModel) moveCursorLeft() YamlPopupModel {
+	if m.cursorCol > 0 {
+		m.cursorCol--
+	}
+	m.ensureCursorVisible()
+	return m
+}
+
+func (m YamlPopupModel) moveCursorRight() YamlPopupModel {
+	if last := m.lastColOf(m.cursorLine); m.cursorCol < last {
+		m.cursorCol++
+	}
+	m.ensureCursorVisible()
+	return m
+}
+
+func (m YamlPopupModel) moveCursorDown() YamlPopupModel {
+	if m.cursorLine < m.lastLine() {
+		m.cursorLine++
+		m.clampCol()
+	}
+	m.ensureCursorVisible()
+	return m
+}
+
+func (m YamlPopupModel) moveCursorUp() YamlPopupModel {
+	if m.cursorLine > 0 {
+		m.cursorLine--
+		m.clampCol()
+	}
+	m.ensureCursorVisible()
+	return m
+}
+
+// isWordRune classifies a rune as part of a word for w/b/e motions.
+// Vim's default `iskeyword` treats alphanumeric + underscore as word
+// chars; we follow suit — matches YAML key names ([A-Za-z0-9_-]).
+// Hyphen is included because it's common in K8s field names.
+func isWordRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z',
+		r >= 'A' && r <= 'Z',
+		r >= '0' && r <= '9',
+		r == '_', r == '-':
+		return true
+	}
+	return false
+}
+
+// moveWordForward implements vim's `w` — jump to the start of the
+// next word. Skips whitespace and non-word runs; wraps to the next
+// line when at the end of the current one. Stops at buffer end.
+func (m YamlPopupModel) moveWordForward() YamlPopupModel {
+	line, col := m.cursorLine, m.cursorCol
+	for {
+		rr := m.lineRunes(line)
+		if col >= len(rr) {
+			if line >= m.lastLine() {
+				break
+			}
+			line++
+			col = 0
+			continue
+		}
+		// Skip current word first (find end of current word class).
+		if col < len(rr) && isWordRune(rr[col]) {
+			for col < len(rr) && isWordRune(rr[col]) {
+				col++
+			}
+		} else if col < len(rr) && !isSpace(rr[col]) {
+			for col < len(rr) && !isWordRune(rr[col]) && !isSpace(rr[col]) {
+				col++
+			}
+		}
+		// Skip spaces to find start of next word.
+		for col < len(rr) && isSpace(rr[col]) {
+			col++
+		}
+		if col < len(rr) {
+			break
+		}
+	}
+	m.cursorLine, m.cursorCol = line, col
+	m.clampCursor()
+	m.ensureCursorVisible()
+	return m
+}
+
+// moveWordBackward implements vim's `b` — jump to the start of the
+// current or previous word.
+func (m YamlPopupModel) moveWordBackward() YamlPopupModel {
+	line, col := m.cursorLine, m.cursorCol
+	for {
+		if col == 0 {
+			if line == 0 {
+				break
+			}
+			line--
+			col = len(m.lineRunes(line))
+			continue
+		}
+		rr := m.lineRunes(line)
+		col--
+		// Skip trailing spaces.
+		for col > 0 && isSpace(rr[col]) {
+			col--
+		}
+		// Walk back through the current word class to its start.
+		if col > 0 && isWordRune(rr[col]) {
+			for col > 0 && isWordRune(rr[col-1]) {
+				col--
+			}
+		} else if col > 0 && !isSpace(rr[col]) {
+			for col > 0 && !isWordRune(rr[col-1]) && !isSpace(rr[col-1]) {
+				col--
+			}
+		}
+		break
+	}
+	m.cursorLine, m.cursorCol = line, col
+	m.clampCursor()
+	m.ensureCursorVisible()
+	return m
+}
+
+// moveWordEnd implements vim's `e` — jump to the end of the current
+// or next word.
+func (m YamlPopupModel) moveWordEnd() YamlPopupModel {
+	line, col := m.cursorLine, m.cursorCol
+	// Start by advancing one rune so we don't stick at the same
+	// end-of-word position when already there.
+	rr := m.lineRunes(line)
+	if col < len(rr) {
+		col++
+	}
+	for {
+		rr = m.lineRunes(line)
+		if col >= len(rr) {
+			if line >= m.lastLine() {
+				col = len(rr)
+				if col > 0 {
+					col--
+				}
+				break
+			}
+			line++
+			col = 0
+			continue
+		}
+		// Skip spaces.
+		for col < len(rr) && isSpace(rr[col]) {
+			col++
+		}
+		if col >= len(rr) {
+			continue
+		}
+		// Walk through the current word class to its final rune.
+		if isWordRune(rr[col]) {
+			for col+1 < len(rr) && isWordRune(rr[col+1]) {
+				col++
+			}
+		} else {
+			for col+1 < len(rr) && !isWordRune(rr[col+1]) && !isSpace(rr[col+1]) {
+				col++
+			}
+		}
+		break
+	}
+	m.cursorLine, m.cursorCol = line, col
+	m.clampCursor()
+	m.ensureCursorVisible()
+	return m
+}
+
+func isSpace(r rune) bool { return r == ' ' || r == '\t' }
+
+// ensureCursorVisible adjusts scrollOffset so the cursor sits inside
+// the visible viewport. Called after every cursor mutation.
+func (m *YamlPopupModel) ensureCursorVisible() {
+	h := m.contentHeight()
+	if h <= 0 {
+		return
+	}
+	if m.cursorLine < m.scrollOffset {
+		m.scrollOffset = m.cursorLine
+	} else if m.cursorLine >= m.scrollOffset+h {
+		m.scrollOffset = m.cursorLine - h + 1
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+	if max := m.maxScrollOffset(); m.scrollOffset > max {
+		m.scrollOffset = max
+	}
+}
+
+// landCursorOnMatch snaps the cursor onto the leading line of the
+// current search match after n/N. Keeps cursor + search focus in
+// lock-step so a subsequent v-then-y captures the match line.
+func (m *YamlPopupModel) landCursorOnMatch() {
+	if len(m.matchLines) == 0 {
+		return
+	}
+	rawTarget := m.matchLines[m.matchCursor]
+	target := m.firstDisplayLineForRaw(rawTarget)
+	if target < 0 {
+		return
+	}
+	m.cursorLine = target
+	m.cursorCol = 0
+	m.clampCol()
+}
+
+// selectionRange normalises (anchor, cursor) into (startLine, startCol,
+// endLine, endCol) in forward reading order, so callers don't have to
+// think about which end was set first. Inclusive on both ends.
+func (m YamlPopupModel) selectionRange() (sL, sC, eL, eC int) {
+	sL, sC = m.visualAnchorLine, m.visualAnchorCol
+	eL, eC = m.cursorLine, m.cursorCol
+	if sL > eL || (sL == eL && sC > eC) {
+		sL, sC, eL, eC = eL, eC, sL, sC
+	}
+	return
+}
+
+// selectionText extracts the character-wise selection out of
+// contentPlain — what the user visually selected. Multi-line
+// selections join with newlines (the selection spans the wrapped
+// display view, matching what's on screen). Empty when no lines
+// exist.
+func (m YamlPopupModel) selectionText() string {
+	if len(m.contentPlain) == 0 {
+		return ""
+	}
+	sL, sC, eL, eC := m.selectionRange()
+	if sL == eL {
+		rr := m.lineRunes(sL)
+		if len(rr) == 0 {
+			return ""
+		}
+		if eC >= len(rr) {
+			eC = len(rr) - 1
+		}
+		return string(rr[sC : eC+1])
+	}
+	var b strings.Builder
+	// First line: from sC to end.
+	startRunes := m.lineRunes(sL)
+	if sC < len(startRunes) {
+		b.WriteString(string(startRunes[sC:]))
+	}
+	b.WriteByte('\n')
+	// Middle lines: whole line.
+	for i := sL + 1; i < eL; i++ {
+		b.WriteString(m.contentPlain[i])
+		b.WriteByte('\n')
+	}
+	// Last line: from 0 to eC.
+	endRunes := m.lineRunes(eL)
+	if len(endRunes) > 0 {
+		if eC >= len(endRunes) {
+			eC = len(endRunes) - 1
+		}
+		b.WriteString(string(endRunes[0 : eC+1]))
+	}
+	return b.String()
+}
+
+// selectionCoversLine reports whether display line `i` overlaps the
+// current visual-mode selection. Used at render time to decide which
+// rows carry the selection-bg highlight.
+func (m YamlPopupModel) selectionCoversLine(i int) bool {
+	if !m.visualMode {
+		return false
+	}
+	sL, _, eL, _ := m.selectionRange()
+	return i >= sL && i <= eL
+}
+
+// --- search handler --------------------------------------------------------
 
 func (m YamlPopupModel) handleSearchKey(msg tea.KeyMsg) (YamlPopupModel, tea.Cmd) {
 	switch {
@@ -501,24 +1010,88 @@ func (m YamlPopupModel) renderFullPopup() string {
 		currentMatchRaw = m.matchLines[m.matchCursor]
 	}
 
+	// Visual-mode + cursor overlays share the ANSI-strip approach that
+	// search match highlight uses — once selection or cursor lands on a
+	// line we drop syntax colouring in favour of the clearer selection
+	// bg + cursor cell. Kept as a per-line branch so untouched lines
+	// still render the syntax-highlighted version (the vast majority
+	// of the buffer for typical selections).
+	//
+	// Colours:
+	//   - Cursor uses lipgloss inverse-video so it reads as a caret
+	//     against any bg.
+	//   - Visual-mode SELECTION uses lavender (#b4befe) per km8's
+	//     color mindset: lavender = user-state (the user is actively
+	//     picking a region), same accent as sidebar Pinned / statusbar
+	//     [C]ontext / [N]amespace values, so "you selected this"
+	//     reads identically across the app. Distinct from the
+	//     search-match highlight (TableSelectedRow, subtext1) so
+	//     the two overlays don't visually collide when a selection
+	//     spans a match row.
+	cursorStyle := lipgloss.NewStyle().Reverse(true)
+	selectionStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(theme.Lavender)).
+		Foreground(lipgloss.Color("#1e1e2e")). // Catppuccin Mocha base — high contrast on lavender bg
+		Bold(true)
+	sL, sC, eL, eC := 0, 0, 0, 0
+	if m.visualMode {
+		sL, sC, eL, eC = m.selectionRange()
+	}
+
+	contentW := innerW - m.gutterWidth()
 	for i := start; i < end; i++ {
 		isMatch := currentMatchRaw >= 0 && i < len(m.contentLineRaw) && m.contentLineRaw[i] == currentMatchRaw
-		if isMatch {
-			// Full-row highlight. Strip ANSI from the display chunk so lipgloss
-			// Background composes cleanly (per-token foregrounds inside the
-			// styled line would leak default bg through the row otherwise).
-			plain := ansi.Strip(m.contentLines[i])
-			if lipgloss.Width(plain) > innerW {
-				plain = ansiTruncate(plain, innerW)
+		selected := m.selectionCoversLine(i)
+		hasCursor := i == m.cursorLine
+		var content string
+		switch {
+		case selected:
+			// Visual-mode selection: keep syntax coloring OUTSIDE the
+			// selection range, overlay the selection bg + cursor cell
+			// only where they belong. Compute per-line selection
+			// endpoints from the normalised anchor/cursor range.
+			var lineStart, lineEnd int
+			switch {
+			case sL == eL:
+				lineStart, lineEnd = sC, eC
+			case i == sL:
+				lineStart, lineEnd = sC, len([]rune(m.contentPlain[i]))-1
+			case i == eL:
+				lineStart, lineEnd = 0, eC
+			default:
+				lineStart, lineEnd = 0, len([]rune(m.contentPlain[i]))-1
 			}
-			lines = append(lines, matchRowStyle.Width(innerW).Render(plain))
-		} else {
-			line := m.contentLines[i]
-			if lipgloss.Width(line) > innerW {
-				line = ansiTruncate(line, innerW)
+			content = overlaySelectionOnStyledLine(m.contentLines[i], m.contentPlain[i], lineStart, lineEnd, hasCursor, m.cursorCol, selectionStyle, cursorStyle)
+			if lipgloss.Width(content) > contentW {
+				content = ansiTruncate(content, contentW)
 			}
-			lines = append(lines, line)
+		case hasCursor && !isMatch:
+			// Cursor-only line (no selection, no search match): splice
+			// the cursor cell into the styled line so surrounding
+			// syntax colours survive.
+			content = overlayCursorOnStyledLine(m.contentLines[i], m.contentPlain[i], m.cursorCol, cursorStyle)
+			if lipgloss.Width(content) > contentW {
+				content = ansiTruncate(content, contentW)
+			}
+		case isMatch:
+			// Search-match line (no selection): full-row match-bg
+			// highlight per the pre-visual behaviour. Strips syntax
+			// colouring in favour of the "current match" cue.
+			plain := m.contentPlain[i]
+			if i >= len(m.contentPlain) {
+				plain = ansi.Strip(m.contentLines[i])
+			}
+			if lipgloss.Width(plain) > contentW {
+				plain = ansiTruncate(plain, contentW)
+			}
+			content = matchRowStyle.Width(contentW).Render(plain)
+		default:
+			content = m.contentLines[i]
+			if lipgloss.Width(content) > contentW {
+				content = ansiTruncate(content, contentW)
+			}
 		}
+		lines = append(lines, m.gutter(i)+content)
 	}
 	if len(m.contentLines) == 0 {
 		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
@@ -560,14 +1133,93 @@ func (m YamlPopupModel) renderFullPopup() string {
 	return b.String()
 }
 
+// overlaySelectionOnStyledLine keeps the syntax-highlighted styled
+// line intact OUTSIDE the selection range and overlays the selection
+// bg only where it belongs. Same principle as overlayCursorOnStyledLine
+// but for a range, and with an optional cursor cell nested inside
+// the selection (visual-mode cursor always sits at one endpoint).
+//
+// selStart / selEnd are inclusive rune indices into plain. If the
+// caller provides an empty plain string (blank line inside a
+// selection), a single selection-styled space is rendered so the
+// user still sees "this line is selected".
+func overlaySelectionOnStyledLine(styled, plain string, selStart, selEnd int, hasCursor bool, cursorCol int, selectionStyle, cursorStyle lipgloss.Style) string {
+	plainRunes := []rune(plain)
+	if len(plainRunes) == 0 {
+		if hasCursor {
+			return cursorStyle.Render(" ")
+		}
+		return selectionStyle.Render(" ")
+	}
+	if selStart < 0 {
+		selStart = 0
+	}
+	if selEnd >= len(plainRunes) {
+		selEnd = len(plainRunes) - 1
+	}
+	const largeRight = 1_000_000
+	before := ansi.Cut(styled, 0, selStart)
+	after := ansi.Cut(styled, selEnd+1, largeRight)
+
+	var block strings.Builder
+	for i := selStart; i <= selEnd; i++ {
+		cell := string(plainRunes[i])
+		if hasCursor && i == cursorCol {
+			block.WriteString(cursorStyle.Render(cell))
+		} else {
+			block.WriteString(selectionStyle.Render(cell))
+		}
+	}
+	return before + block.String() + after
+}
+
+// overlayCursorOnStyledLine returns the syntax-highlighted styled
+// line with only the cell at cursorCol flipped to reverse video. The
+// rest of the line keeps its highlightYAMLLine coloring (dim keys,
+// muted comments, list dashes, etc.). Uses ansi.Cut for the prefix
+// and suffix splits so ANSI style spans that straddle the cursor
+// column don't break — Cut is grapheme + escape aware.
+//
+// plain is the ANSI-stripped mirror of styled, needed because the
+// character under the cursor has to come from the visible-cell view
+// (styled contains ANSI bytes that would confuse a []rune index).
+// cursorCol out of range for the line renders the cursor as a single
+// reverse-video space at the end of the line — matches vim behavior
+// on empty lines / past-EOL positions.
+func overlayCursorOnStyledLine(styled, plain string, cursorCol int, cursorStyle lipgloss.Style) string {
+	plainRunes := []rune(plain)
+	if len(plainRunes) == 0 {
+		return cursorStyle.Render(" ")
+	}
+	if cursorCol < 0 {
+		cursorCol = 0
+	}
+	if cursorCol >= len(plainRunes) {
+		cursorCol = len(plainRunes) - 1
+	}
+	cell := string(plainRunes[cursorCol])
+	// Cap far past normal line lengths — ansi.Cut needs a right-
+	// bound; MaxInt would work but is easy to misread. 1e6 is plenty
+	// for any real YAML line and keeps the intent obvious.
+	const largeRight = 1_000_000
+	before := ansi.Cut(styled, 0, cursorCol)
+	after := ansi.Cut(styled, cursorCol+1, largeRight)
+	return before + cursorStyle.Render(cell) + after
+}
+
+
 // bottomBarStrings produces the bottom-border hint + indicator pair that fits
 // in `available` columns. Vim conventions (j/k u/d gg/G n/N) are intentionally
 // omitted — they apply everywhere in km8 and don't need to live in the local
 // hint. Falls back to a short hint and finally drops the indicator if the
 // popup width is too tight.
 func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicator string) {
-	const hintFull = " E:edit  y:copy  /:search  Space:close "
-	const hintShort = " E  y  /  Space "
+	// v enters visual mode (character-wise); y copies selection when
+	// visual is active, else the full YAML. hjkl/w/b/e/0/$ move the
+	// cursor. Full hint spells it out; short falls back to letter
+	// tags when the popup is narrow.
+	const hintFull = " v:visual  y:copy  E:edit  /:search  Esc:close "
+	const hintShort = " v  y  E  /  Esc "
 	hint = hintFull
 
 	total := len(m.contentLines)
