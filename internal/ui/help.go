@@ -502,7 +502,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{key: "N / C", desc: "Switch namespace / context"},
 		{key: ">", desc: "Open Settings popup (mouse, scroll direction, …)"},
 		{key: "Alt+t", desc: "Toggle Alterm"},
-		{key: "y", desc: "Copy focused panel"},
+		{key: "y", desc: "Copy focus: cursor row when it has one, else full content"},
 		{key: "z", desc: "Toggle expand panel"},
 		{key: "!", desc: "App log"},
 		{key: "?", desc: "Toggle help"},
