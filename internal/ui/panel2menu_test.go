@@ -138,16 +138,21 @@ func TestPanel2Menu_Items_NodesEditNoDelete(t *testing.T) {
 	}
 }
 
-func TestPanel2Menu_Items_NamespacesEditNoDelete(t *testing.T) {
-	// Namespaces: Edit kept (labels/annotations), Delete blocked.
+func TestPanel2Menu_Items_NamespacesEditAndDelete(t *testing.T) {
+	// Namespaces: Edit kept (labels/annotations); Delete now allowed but
+	// gated by an explicit "will remove ALL resources" confirm popup —
+	// see TestDeleteConfirmSurface_Namespace for the warning text.
 	// Namespaces don't drill — no Enter entry.
 	items := buildPanel2MenuItems(k8s.ResourceNamespaces, k8s.ResourceItem{}, false, panel2CompareCtx{})
 	keys := itemKeys(items)
 	if !contains(keys, "Y") || !contains(keys, "E") {
 		t.Errorf("Namespaces menu missing YAML or Edit, got %v", keys)
 	}
-	if contains(keys, "D") {
-		t.Errorf("Namespaces menu must not have Delete (cascades to all workloads), got %v", keys)
+	if !contains(keys, "D") {
+		t.Errorf("Namespaces menu must expose Delete (with confirm warning), got %v", keys)
+	}
+	if contains(keys, "Enter") {
+		t.Errorf("Namespaces menu must not have Enter (no drill), got %v", keys)
 	}
 }
 

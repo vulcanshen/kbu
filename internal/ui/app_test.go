@@ -156,6 +156,76 @@ func TestTerminalTitle_PrefixAndSuffix(t *testing.T) {
 	// because the user wants the raw hostname. No suffix assertion.
 }
 
+func TestDeleteConfirmSurface_Namespace(t *testing.T) {
+	// Namespace deletes cascade — the confirm popup MUST explicitly
+	// call out that ALL resources inside will be removed. A generic
+	// "delete resource?" prompt would understate the blast radius and
+	// invite a fat-finger disaster. Detail line matches kubectl's
+	// cluster-scoped call (no -n flag).
+	item := k8s.ResourceItem{Name: "test-ns"}
+	msg, detail := deleteConfirmSurface(k8s.ResourceNamespaces, item)
+	if !strings.Contains(msg, "namespace") {
+		t.Errorf("message must mention namespace, got %q", msg)
+	}
+	if !strings.Contains(msg, "test-ns") {
+		t.Errorf("message must include the target name for eyeball verification, got %q", msg)
+	}
+	if !strings.Contains(msg, "ALL resources") {
+		t.Errorf("message must warn about cascading destruction, got %q", msg)
+	}
+	if detail != "kubectl delete namespace test-ns" {
+		t.Errorf("detail line for ns must match cluster-scoped kubectl call, got %q", detail)
+	}
+}
+
+func TestDeleteConfirmSurface_NamespacedResource(t *testing.T) {
+	// Non-Namespace kinds keep the shared warning text + include the
+	// -n <ns> flag so the popup detail mirrors deleteResource's actual
+	// kubectl invocation.
+	item := k8s.ResourceItem{Name: "web-abc123", Namespace: "default"}
+	msg, detail := deleteConfirmSurface(k8s.ResourcePods, item)
+	if strings.Contains(msg, "namespace") {
+		t.Errorf("non-ns delete must not falsely warn about ns cascade, got %q", msg)
+	}
+	if detail != "kubectl delete pod web-abc123 -n default" {
+		t.Errorf("detail must include -n flag for namespaced kinds, got %q", detail)
+	}
+}
+
+func TestDeleteConfirmSurface_ClusterScopedNonNamespace(t *testing.T) {
+	// ClusterRoles / CRDs / PVs / other cluster-scoped kinds: shared
+	// warning text (no Namespace-cascade language) + no -n flag.
+	item := k8s.ResourceItem{Name: "admin"} // Namespace empty
+	msg, detail := deleteConfirmSurface(k8s.ResourceClusterRoles, item)
+	if strings.Contains(msg, "ALL resources") {
+		t.Errorf("non-ns cluster-scoped delete must not carry the ns cascade warning, got %q", msg)
+	}
+	if strings.Contains(detail, "-n") {
+		t.Errorf("cluster-scoped detail must NOT include -n flag, got %q", detail)
+	}
+	if detail != "kubectl delete clusterrole admin" {
+		t.Errorf("expected 'kubectl delete clusterrole admin', got %q", detail)
+	}
+}
+
+func TestResourceAllowsDelete_NamespaceOptIn(t *testing.T) {
+	// Namespaces was previously blocked from delete entirely; opening
+	// the door requires the stronger confirm surface (see the tests
+	// above). Guard against a regression re-adding Namespaces to the
+	// block list — that would silently hide the ns delete flow.
+	if !resourceAllowsDelete(k8s.ResourceNamespaces) {
+		t.Error("Namespaces delete must be allowed (gated by strong confirm, not blocked outright)")
+	}
+	// Events / Nodes stay blocked — sanity check the rest of the
+	// allow-list wasn't affected.
+	if resourceAllowsDelete(k8s.ResourceEvents) {
+		t.Error("Events delete must remain blocked (system-generated records)")
+	}
+	if resourceAllowsDelete(k8s.ResourceNodes) {
+		t.Error("Nodes delete must remain blocked (admin infra action)")
+	}
+}
+
 func TestBuildSessionState_PopulatesFromCursor(t *testing.T) {
 	items := []k8s.ResourceItem{
 		{Name: "svc-a", Namespace: "ns-a"},

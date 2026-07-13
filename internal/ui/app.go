@@ -2123,9 +2123,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !resourceAllowsDelete(m.currentResource) {
 						return m, m.toast.Show("Delete not supported on " + m.currentResource.KubectlName())
 					}
-					detail := fmt.Sprintf("kubectl delete %s %s -n %s", m.currentResource.KubectlName(), item.Name, item.Namespace)
+					message, detail := deleteConfirmSurface(m.currentResource, item)
 					m.confirm.SetLayer(m.popupDepth() + 1)
-					return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
+					return m, m.confirm.Show(ConfirmDelete, message, detail,
 						deleteResource(m.currentResource, item.Name, item.Namespace, m.k8sClient.ContextName()))
 				}
 			}
@@ -3024,9 +3024,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.appLog.Info("Helm-managed (read-only) — use helm uninstall")
 				return m, m.toast.Show("Helm-managed (read-only)")
 			}
-			detail := fmt.Sprintf("kubectl delete %s %s -n %s", resource.KubectlName(), item.Name, item.Namespace)
+			message, detail := deleteConfirmSurface(resource, item)
 			m.confirm.SetLayer(m.popupDepth() + 1)
-			return m, m.confirm.Show(ConfirmDelete, "⚠ Delete resource? This cannot be undone.", detail,
+			return m, m.confirm.Show(ConfirmDelete, message, detail,
 				deleteResource(resource, item.Name, item.Namespace, m.k8sClient.ContextName()))
 		case "C":
 			// Contextual compare action — three branches:
@@ -4335,6 +4335,32 @@ func sanitizeEditorEnv(cfgEditor string) []string {
 		env = append(env, "KUBE_EDITOR="+cfgEditor)
 	}
 	return env
+}
+
+// deleteConfirmSurface returns the confirm popup's (message, detail)
+// pair for a kubectl delete target. Namespace deletes get a stronger
+// warning because the action cascades to every resource in the ns —
+// a generic "delete resource?" prompt would understate the blast
+// radius. Cluster-scoped kinds also drop the "-n <namespace>" tail
+// from the detail line so the popup mirrors the actual kubectl call
+// (which deleteResource() constructs from the same empty-ns signal).
+//
+// Kept as a package-level function (not a method on AppModel) so both
+// delete-trigger sites — d hotkey (2100s) and Space menu Delete
+// (3020s) — share one text source and tests can hit it directly.
+func deleteConfirmSurface(rt k8s.ResourceType, item k8s.ResourceItem) (message, detail string) {
+	if rt == k8s.ResourceNamespaces {
+		return fmt.Sprintf("⚠ Delete namespace %q? This will remove ALL resources inside it. Cannot be undone.", item.Name),
+			fmt.Sprintf("kubectl delete namespace %s", item.Name)
+	}
+	if item.Namespace == "" {
+		// Other cluster-scoped kinds (ClusterRoles / CRDs / PVs / …) —
+		// no -n flag. Message stays the shared default.
+		return "⚠ Delete resource? This cannot be undone.",
+			fmt.Sprintf("kubectl delete %s %s", rt.KubectlName(), item.Name)
+	}
+	return "⚠ Delete resource? This cannot be undone.",
+		fmt.Sprintf("kubectl delete %s %s -n %s", rt.KubectlName(), item.Name, item.Namespace)
 }
 
 func deleteResource(rt k8s.ResourceType, name, namespace, contextName string) tea.Cmd {
