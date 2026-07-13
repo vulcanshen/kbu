@@ -414,23 +414,30 @@ func newSidebarFromRegistry(t *theme.Theme, reg *k8s.Registry) SidebarModel {
 	return m
 }
 
-// CopyableContent returns the visible sidebar tree as plain text (respecting
-// the active search filter). Categories are flush-left, resources indented
-// with two spaces. Used by the global `y` key.
+// CopyableContent returns the CURSOR ROW's raw KubectlName. Follows
+// the "focus content" mental model driving the global `y` key: sidebar
+// has a cursor, so y copies whatever the cursor is on — a specific
+// kind name (e.g. "pods", "crontabs.stable.example.com"), not the
+// whole sidebar tree.
+//
+// KubectlName over DisplayName: raw, stable across km8 upgrades, and
+// pipes cleanly into `kubectl get $(pbpaste)`. Category-header
+// cursor positions return "" so an accidental y on a header line
+// silently skips rather than copying the header label — categories
+// aren't a legitimate copy target.
+//
+// The pre-v1.7.9 semantics ("copy visible sidebar tree") were dropped
+// with the switch to the focus model.
 func (m SidebarModel) CopyableContent() string {
 	items := m.visibleItems()
-	if len(items) == 0 {
+	if m.cursor < 0 || m.cursor >= len(items) {
 		return ""
 	}
-	lines := make([]string, 0, len(items))
-	for _, it := range items {
-		if it.isCategory {
-			lines = append(lines, it.label)
-		} else {
-			lines = append(lines, "  "+it.label)
-		}
+	item := items[m.cursor]
+	if item.isCategory {
+		return ""
 	}
-	return strings.Join(lines, "\n")
+	return item.resourceType.KubectlName()
 }
 
 // RefreshCategories rebuilds sidebar categories from the registry.

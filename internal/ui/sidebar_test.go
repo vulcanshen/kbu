@@ -113,19 +113,54 @@ func TestSidebarModel_LockedFilterEmptiedByUnpin_EscClearsFilter(t *testing.T) {
 	}
 }
 
-func TestSidebarModel_CopyableContent(t *testing.T) {
+func TestSidebarModel_CopyableContent_CursorKindKubectlName(t *testing.T) {
+	// v1.7.9 focus-content semantics: y on the sidebar copies the
+	// KubectlName of the currently-highlighted kind (raw, stable
+	// across upgrades). Never the whole sidebar tree — that was the
+	// pre-v1.7.9 semantic and got dropped with the focus-model
+	// pivot.
 	m := newTestSidebar()
+
+	// Cursor initialised at row 0 — that's typically a category
+	// header. Advance until we land on a non-category row.
+	for i := 0; i < 20; i++ {
+		items := m.visibleItems()
+		if len(items) > 0 && m.cursor < len(items) && !items[m.cursor].isCategory {
+			break
+		}
+		m.cursor++
+	}
 	got := m.CopyableContent()
 	if got == "" {
-		t.Fatal("expected non-empty copyable content")
+		t.Fatal("expected non-empty content for a kind-row cursor")
 	}
-	// Category should be flush-left.
-	if !strings.Contains(got, "\nWorkloads\n") {
-		t.Errorf("expected flush-left category 'Workloads', got:\n%s", got)
+	if strings.Contains(got, "\n") {
+		t.Errorf("expected single-line KubectlName, got:\n%s", got)
 	}
-	// Resources should be indented with two spaces.
-	if !strings.Contains(got, "  Pods") {
-		t.Errorf("expected indented 'Pods', got:\n%s", got)
+	if strings.Contains(got, " ") {
+		t.Errorf("KubectlName should not contain spaces (raw form), got %q", got)
+	}
+}
+
+func TestSidebarModel_CopyableContent_CategoryCursorReturnsEmpty(t *testing.T) {
+	// Landing the cursor on a category header must yield "" — categories
+	// aren't a legitimate copy target; the header label is metadata, not
+	// a resource identity.
+	m := newTestSidebar()
+	items := m.visibleItems()
+	categoryIdx := -1
+	for i, it := range items {
+		if it.isCategory {
+			categoryIdx = i
+			break
+		}
+	}
+	if categoryIdx < 0 {
+		t.Skip("no category header in default sidebar")
+	}
+	m.cursor = categoryIdx
+	if got := m.CopyableContent(); got != "" {
+		t.Errorf("category cursor: expected empty, got %q", got)
 	}
 }
 

@@ -36,26 +36,35 @@ func sampleRows(n int) [][]string {
 
 // keyMsg is declared in sidebar_test.go (same package)
 
-func TestTableModel_CopyableContent(t *testing.T) {
+func TestTableModel_CopyableContent_CursorRowTabSep(t *testing.T) {
+	// v1.7.9 focus-content semantics: y copies ONLY the cursor row,
+	// tab-separated raw values (no header, no padding). Enables
+	// direct `pbpaste | awk -F$'\t' '{print $1}'` in the shell.
 	m := newTestTable()
 	m.SetRows(sampleRows(3))
+	m.cursor = 1 // "pod-1" row
 	got := m.CopyableContent()
+
 	if got == "" {
-		t.Fatal("expected non-empty copyable content")
+		t.Fatal("expected non-empty content for a row cursor")
 	}
-	// Header should be present (Pods has a "Name" column).
-	if !strings.Contains(got, "Name") {
-		t.Errorf("expected header to contain Name, got:\n%s", got)
+	if strings.Contains(got, "\n") {
+		t.Errorf("cursor-row output must be a single line, got:\n%s", got)
 	}
-	// All sample row names must appear.
-	for _, want := range []string{"pod-0", "pod-1", "pod-2"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("expected row %q in output, got:\n%s", want, got)
+	if strings.Contains(got, "Name") {
+		t.Errorf("must not include header (focus = cursor row only), got:\n%s", got)
+	}
+	if !strings.Contains(got, "pod-1") {
+		t.Errorf("expected the cursor row's name in output, got:\n%s", got)
+	}
+	for _, wrong := range []string{"pod-0", "pod-2"} {
+		if strings.Contains(got, wrong) {
+			t.Errorf("must not include non-cursor rows, but %q present in:\n%s", wrong, got)
 		}
 	}
-	// One header line + three rows.
-	if lines := strings.Count(got, "\n") + 1; lines != 4 {
-		t.Errorf("expected 4 lines (header + 3 rows), got %d:\n%s", lines, got)
+	// Tab-separated: at least one tab must be present between cells.
+	if !strings.Contains(got, "\t") {
+		t.Errorf("expected tab-separated cells, got:\n%s", got)
 	}
 }
 
@@ -63,6 +72,15 @@ func TestTableModel_CopyableContent_EmptyWhenNoRows(t *testing.T) {
 	m := newTestTable()
 	if got := m.CopyableContent(); got != "" {
 		t.Errorf("expected empty when no rows, got %q", got)
+	}
+}
+
+func TestTableModel_CopyableContent_EmptyWhenCursorOutOfRange(t *testing.T) {
+	m := newTestTable()
+	m.SetRows(sampleRows(2))
+	m.cursor = 99 // past end
+	if got := m.CopyableContent(); got != "" {
+		t.Errorf("out-of-range cursor: expected empty, got %q", got)
 	}
 }
 

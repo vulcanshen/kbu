@@ -47,48 +47,40 @@ type TableModel struct {
 	sortChain []config.SortConfig
 }
 
-// CopyableContent returns the current (filtered) table rows as plain text
-// with the header. Columns are space-padded for readability when pasted.
-// Used by the global `y` key.
+// CopyableContent returns the CURSOR ROW as tab-separated raw column
+// values. The global `y` key follows a "focus content" mental model:
+// when the focus target has a cursor concept, y copies whatever the
+// cursor is pointing at — for panel 2 that's a single row, not the
+// whole list. Raw values (no header, no padding) so `pbpaste | awk` /
+// `cut -f2` work directly on the output.
+//
+// The pre-v1.7.9 semantics ("copy filtered rows + header, space-padded")
+// were dropped in favor of the focus model. If a user needs the full
+// list they can multi-select or open the YAML popup for structured
+// output. See the panel3 non-cursor tabs (Logs / Events / …) — those
+// KEEP their full-content copy because they have no cursor.
 func (m TableModel) CopyableContent() string {
 	if len(m.rows) == 0 {
 		return ""
 	}
-	widths := make([]int, len(m.columns))
-	for i, c := range m.columns {
-		widths[i] = len(c.Title)
+	idx := m.cursor
+	if idx < 0 || idx >= len(m.rows) {
+		return ""
 	}
-	for _, row := range m.rows {
-		for i := 0; i < len(widths) && i < len(row); i++ {
-			if len(row[i]) > widths[i] {
-				widths[i] = len(row[i])
-			}
+	row := m.rows[idx]
+	// Skip the helm-marker column when present so the yanked line
+	// carries only user-facing column values. ColumnsForResource
+	// inserts an unlabeled marker column between Name and the rest for
+	// non-Helm kinds; the marker cell is a decorative glyph string and
+	// would appear as noise in `awk`/`cut` pipelines.
+	cells := make([]string, 0, len(row))
+	for i, cell := range row {
+		if i < len(m.columns) && m.columns[i].Title == "" {
+			continue
 		}
+		cells = append(cells, cell)
 	}
-	formatRow := func(cells []string) string {
-		parts := make([]string, len(widths))
-		for i := range widths {
-			cell := ""
-			if i < len(cells) {
-				cell = cells[i]
-			}
-			if i == len(widths)-1 {
-				parts[i] = cell
-			} else {
-				parts[i] = fmt.Sprintf("%-*s", widths[i], cell)
-			}
-		}
-		return strings.Join(parts, "  ")
-	}
-	header := make([]string, len(m.columns))
-	for i, c := range m.columns {
-		header[i] = c.Title
-	}
-	lines := []string{formatRow(header)}
-	for _, row := range m.rows {
-		lines = append(lines, formatRow(row))
-	}
-	return strings.Join(lines, "\n")
+	return strings.Join(cells, "\t")
 }
 
 // ColumnsForResource returns the column definitions for a given resource
