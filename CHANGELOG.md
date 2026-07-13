@@ -4,6 +4,89 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.10] - 2026-07-13
+
+A backlog-collapsing release: five queued TODO items shipped as
+one, plus a large YAML popup rewrite that turns the read-only
+viewer into a vim-style buffer. Four threads:
+
+1. **YAML popup → vim-style buffer.** The popup was the last
+   surface where cursor semantics didn't exist — you could scroll
+   but never select a piece. v1.7.10 turns it into a vim buffer:
+   `hjkl` moves a cursor cell (auto-scroll follows), `w`/`b`/`e`
+   walks words, `0`/`$` line endpoints, `gg`/`G` buffer endpoints,
+   `u`/`d` half-page cursor jumps. `v` enters character-wise
+   visual mode — anchor snaps to cursor, hjkl extends selection
+   (j/k cross lines naturally), `y` copies the selected substring
+   and exits visual, `Esc` peels visual first / locked search
+   next / closes popup last. Normal-mode `y` still copies the
+   whole YAML for paste-back use cases. Left-side dim gutter
+   renders raw line numbers (right-aligned, blank on wrap
+   continuation rows) — deliberately outside cursor + selection
+   coordinates so line numbers never leak into the clipboard.
+   YAML syntax colouring survives every overlay layer: cursor
+   line uses `ansi.Cut` to splice a reverse-video cell into the
+   styled string; selection block uses lavender bg (per km8's
+   color mindset — user-state) while preserving syntax colours
+   outside the range.
+
+2. **Session state persistence — where you were is where you
+   restart.** Every quit now snapshots `(context, namespace,
+   kind, panel-2 row cursor, focused panel)` to `state.yaml`
+   alongside `config.yaml`. Next launch loads the file, applies
+   context + namespace before the k8s client connects, restores
+   the sidebar cursor to the recorded Kind, and populates the
+   Relatives-jump-style `pendingTableSelect` so the row cursor
+   snaps onto the last-selected object when the first
+   `ResourceDataMsg` arrives. Focused panel (sidebar / table /
+   detail) also restored, so `q` from panel 2 lands you back on
+   panel 2 next launch. Statusbar `[N]amespace` now reflects the
+   client's actual namespace on startup — previously it always
+   opened as "All Namespaces" even when the client was scoped
+   to a specific ns via `$KM8__NAMESPACE` or the recorded state.
+   State is kept separate from `config.yaml` on purpose:
+   `config.yaml` is user-authored preferences (comments
+   preserved, hand-editable), `state.yaml` is auto-rewritten
+   every quit — mixing them would break the config trust
+   boundary. `$KM8__STATEPATH` env var mirrors `$KM8__CONFIGPATH`
+   for sandbox / test overrides.
+
+3. **Panel 3 Logs / Events polish.** Container output using
+   carriage-return progress redraws (`apt update`, `npm install`,
+   `pip install`, `docker pull`) no longer breaks the Logs tab
+   viewport — `sanitizeLogText` collapses the `\r`-separated
+   segments to the final visible state before storage. ANSI
+   colour escapes untouched. Events tab gains follow-latest
+   parity with Logs: same live (▶) / paused (⏸) glyph in the
+   tab title, `G` re-arms the tail, `k` / scroll-up pauses,
+   bottom-left hint reads `u/d: page  gg: top  G: live`.
+   Panel 3 tab bar tightens to one uniform rule — every tab
+   renders as `" Label"` (leading space + label, boundary
+   chevron acts as the trailing separator). Glyph-carrying
+   Logs / Events used to have an extra space before the glyph
+   AND a trailing pad on non-glyph siblings; dropping both
+   reclaims ~5 cells of horizontal room and eliminates the
+   asymmetry between glyph and non-glyph tabs.
+
+4. **Cluster-mutation UX: Namespace delete + focus-content
+   yank.** `D` on a Namespace row (previously blocked by
+   `resourceAllowsDelete`) now opens a strong confirm popup:
+   `!!! Delete namespace "X"? This will remove ALL resources
+   inside it. Cannot be undone.` Three leading `!!!` picked over
+   the ⚠ glyph the shared delete prompt uses so the two
+   warnings are visually distinct at a glance — routine deletes
+   get ⚠, namespace deletes get three loud bangs. Both the `D`
+   hotkey and the Space menu Delete entry route through the
+   same `deleteConfirmSurface` helper, so the text stays in
+   one place. The global `y` key pivots from "copy focused
+   panel" to "copy focus content": when the focus target has a
+   cursor (sidebar Kind, panel-2 row, panel-3 Relatives /
+   History row, YAML popup in visual mode), `y` copies just
+   that row / selection — tab-separated raw values ready for
+   `pbpaste | awk -F$'\t'`. When there's no cursor (Logs /
+   Events / Conditions tabs, App Log popup, YAML popup outside
+   visual mode), `y` still copies the whole focus content.
+
 ## [v1.7.9] - 2026-07-06
 
 A UI-polish release on top of v1.7.8. Two threads:
