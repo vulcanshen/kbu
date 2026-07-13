@@ -1348,6 +1348,10 @@ func TestDetailModel_FollowTail_TabSwitchResetsToFollow(t *testing.T) {
 // Color was used as the indicator in v1.5–v1.7.2 but conflicted with the
 // "color = signal" mindset (color reserved for abnormal status / cursor
 // / lock), so the live/paused state is now a Nerd Font glyph instead.
+//
+// Events tab also carries the same glyph pair (see Events follow test),
+// so this test asserts on the Logs-labelled segment specifically rather
+// than the whole TabTitle string.
 func TestDetailModel_TabTitle_LogsFollowGlyph(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
@@ -1357,12 +1361,13 @@ func TestDetailModel_TabTitle_LogsFollowGlyph(t *testing.T) {
 	if !m.FollowTail() {
 		t.Fatal("setup: expected followTail=true initially after switching to Logs")
 	}
-	if !strings.Contains(m.TabTitle(), logsLiveGlyph) {
-		t.Errorf("followTail=true: TabTitle must carry the live glyph (%q), got %q",
-			logsLiveGlyph, m.TabTitle())
+	logsSeg := tabTitleSegment(m.TabTitle(), "Logs")
+	if !strings.Contains(logsSeg, logsLiveGlyph) {
+		t.Errorf("followTail=true: Logs segment must carry the live glyph (%q), got %q",
+			logsLiveGlyph, logsSeg)
 	}
-	if strings.Contains(m.TabTitle(), logsPausedGlyph) {
-		t.Errorf("followTail=true: TabTitle must NOT carry the paused glyph, got %q", m.TabTitle())
+	if strings.Contains(logsSeg, logsPausedGlyph) {
+		t.Errorf("followTail=true: Logs segment must NOT carry the paused glyph, got %q", logsSeg)
 	}
 
 	// Pause via scroll up — glyph flips to paused.
@@ -1373,13 +1378,208 @@ func TestDetailModel_TabTitle_LogsFollowGlyph(t *testing.T) {
 	if m.FollowTail() {
 		t.Fatal("expected followTail=false after k scroll")
 	}
-	if !strings.Contains(m.TabTitle(), logsPausedGlyph) {
-		t.Errorf("followTail=false: TabTitle must carry the paused glyph (%q), got %q",
-			logsPausedGlyph, m.TabTitle())
+	logsSeg = tabTitleSegment(m.TabTitle(), "Logs")
+	if !strings.Contains(logsSeg, logsPausedGlyph) {
+		t.Errorf("followTail=false: Logs segment must carry the paused glyph (%q), got %q",
+			logsPausedGlyph, logsSeg)
 	}
-	if strings.Contains(m.TabTitle(), logsLiveGlyph) {
-		t.Errorf("followTail=false: TabTitle must NOT carry the live glyph, got %q", m.TabTitle())
+	if strings.Contains(logsSeg, logsLiveGlyph) {
+		t.Errorf("followTail=false: Logs segment must NOT carry the live glyph, got %q", logsSeg)
 	}
+}
+
+// eventsSample returns a batch large enough that maxScrollOffset() is
+// non-zero at width=80 — needed for follow-tail assertions to detect
+// whether scroll actually snaps to the bottom.
+func eventsSample(n int) []k8s.EventItem {
+	out := make([]k8s.EventItem, n)
+	for i := 0; i < n; i++ {
+		out[i] = k8s.EventItem{
+			Type:    "Normal",
+			Reason:  "Pulled",
+			Object:  fmt.Sprintf("Pod/p%d", i),
+			Message: fmt.Sprintf("event %d — a moderately long message that pushes the events viewport past a single screen", i),
+			Age:     "1m",
+		}
+	}
+	return out
+}
+
+func TestDetailModel_FollowEventsTail_DefaultOn(t *testing.T) {
+	m := newTestDetail()
+	if !m.FollowEventsTail() {
+		t.Error("expected followEventsTail=true by default")
+	}
+}
+
+func TestDetailModel_FollowEventsTail_SetDetailSnapsToBottom(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	// Switch to Events first so SetDetail's sticky-bottom branch fires.
+	m.SetDetail(sampleDetail(), eventsSample(50))
+	evtIdx := -1
+	for i, name := range m.tabs {
+		if name == "Events" {
+			evtIdx = i
+			break
+		}
+	}
+	if evtIdx < 0 {
+		t.Fatal("expected Events tab on Pods")
+	}
+	m = m.switchToTab(DetailTab(evtIdx))
+
+	if !m.followEventsTail {
+		t.Fatal("expected followEventsTail=true on Events tab by default")
+	}
+	if m.maxScrollOffset() == 0 {
+		t.Skip("Events content fits in one viewport — cannot verify snap behavior")
+	}
+
+	// Second SetDetail (watcher tick) with a fresh batch: sticky-bottom
+	// keeps us glued to the newest event.
+	m.SetDetail(sampleDetail(), eventsSample(100))
+	if m.scrollOffset != m.maxScrollOffset() {
+		t.Errorf("expected scroll glued to bottom while following: offset=%d, max=%d",
+			m.scrollOffset, m.maxScrollOffset())
+	}
+}
+
+func TestDetailModel_FollowEventsTail_ScrollUpDisables(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), eventsSample(50))
+	evtIdx := -1
+	for i, name := range m.tabs {
+		if name == "Events" {
+			evtIdx = i
+			break
+		}
+	}
+	m = m.switchToTab(DetailTab(evtIdx))
+
+	if m.maxScrollOffset() == 0 {
+		t.Skip("Events content fits in one viewport")
+	}
+
+	// k scroll → followEventsTail off.
+	m, _ = m.Update(keyMsg('k'))
+	if m.followEventsTail {
+		t.Error("scrolling up on Events must disable followEventsTail")
+	}
+}
+
+func TestDetailModel_FollowEventsTail_GReEnables(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), eventsSample(50))
+	evtIdx := -1
+	for i, name := range m.tabs {
+		if name == "Events" {
+			evtIdx = i
+			break
+		}
+	}
+	m = m.switchToTab(DetailTab(evtIdx))
+
+	if m.maxScrollOffset() == 0 {
+		t.Skip("Events content fits in one viewport")
+	}
+
+	m, _ = m.Update(keyMsg('k')) // pause
+	if m.followEventsTail {
+		t.Fatal("setup: k must disable followEventsTail")
+	}
+	m, _ = m.Update(keyMsg('G'))
+	if m.scrollOffset != m.maxScrollOffset() {
+		t.Errorf("expected G to jump to bottom on Events, got offset=%d max=%d",
+			m.scrollOffset, m.maxScrollOffset())
+	}
+	if !m.followEventsTail {
+		t.Error("expected G on Events to re-enable followEventsTail")
+	}
+}
+
+func TestDetailModel_FollowEventsTail_PausedIgnoresNewBatch(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), eventsSample(50))
+	evtIdx := -1
+	for i, name := range m.tabs {
+		if name == "Events" {
+			evtIdx = i
+			break
+		}
+	}
+	m = m.switchToTab(DetailTab(evtIdx))
+	if m.maxScrollOffset() == 0 {
+		t.Skip("Events content fits in one viewport")
+	}
+
+	// Pause and record the scroll position.
+	m, _ = m.Update(keyMsg('k'))
+	pausedAt := m.scrollOffset
+	if m.followEventsTail {
+		t.Fatal("setup: expected paused after k")
+	}
+
+	// New watcher tick → scroll offset MUST NOT snap to bottom.
+	// Same UID via sampleDetail() → sameItem branch preserves scroll.
+	m.SetDetail(sampleDetail(), eventsSample(100))
+	if m.scrollOffset != pausedAt {
+		t.Errorf("paused Events must not snap: was %d, now %d (max %d)",
+			pausedAt, m.scrollOffset, m.maxScrollOffset())
+	}
+}
+
+func TestDetailModel_FollowEventsTail_TabSwitchResetsToFollow(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), eventsSample(50))
+	evtIdx, logsIdx := -1, -1
+	for i, name := range m.tabs {
+		if name == "Events" {
+			evtIdx = i
+		}
+		if name == "Logs" {
+			logsIdx = i
+		}
+	}
+	m = m.switchToTab(DetailTab(evtIdx))
+	if m.maxScrollOffset() == 0 {
+		t.Skip("Events content fits in one viewport")
+	}
+
+	m, _ = m.Update(keyMsg('k')) // pause
+	if m.followEventsTail {
+		t.Fatal("setup: k must pause")
+	}
+	// Leave and return → follow re-arms (matches Logs behavior).
+	m = m.switchToTab(DetailTab(logsIdx))
+	m = m.switchToTab(DetailTab(evtIdx))
+	if !m.followEventsTail {
+		t.Error("re-entering Events tab must reset followEventsTail to true")
+	}
+}
+
+// tabTitleSegment picks out the piece of TabTitle around the named label
+// so per-tab glyph assertions can ignore other tabs (e.g. Events also
+// carries the live/paused glyph and would otherwise poison a
+// Contains(title, glyph) check for the Logs branch). Returns the raw
+// substring from the tab name to the next E0B0 / E0B1 chevron, which
+// is more than enough context for `Contains(seg, glyph)` checks.
+func tabTitleSegment(title, tabName string) string {
+	i := strings.Index(title, tabName)
+	if i < 0 {
+		return ""
+	}
+	tail := title[i:]
+	// Cut at the next chevron so the segment covers only this tab's
+	// label + inline glyph, not the whole tab bar tail.
+	if cut := strings.IndexAny(tail, ""); cut > 0 {
+		return tail[:cut]
+	}
+	return tail
 }
 
 // TestDetailModel_TabTitle_LogsGlyphPersistsWhenInactive pins the
@@ -1400,17 +1600,26 @@ func TestDetailModel_TabTitle_LogsGlyphPersistsWhenInactive(t *testing.T) {
 	}
 }
 
-// TestDetailModel_TabTitle_NoLogsGlyphForKindsWithoutLogsTab guards that the
-// glyph only attaches to a Logs tab — non-workload kinds (no Logs tab in
-// tabs list) must not have the glyph appear anywhere.
-func TestDetailModel_TabTitle_NoLogsGlyphForKindsWithoutLogsTab(t *testing.T) {
+// TestDetailModel_TabTitle_LogsGlyphOnlyOnStreamingTabs guards that the
+// live/paused glyph attaches only to streaming tabs (Logs, Events) —
+// static-content tabs (Relatives, Conditions, History, Info) must
+// not carry it. Kinds without a Logs tab still get the glyph on
+// Events; the invariant is per-tab, not per-kind.
+func TestDetailModel_TabTitle_LogsGlyphOnlyOnStreamingTabs(t *testing.T) {
 	m := newTestDetail()
-	m.SetResourceType(k8s.ResourceConfigMaps) // no Logs tab
+	m.SetResourceType(k8s.ResourceConfigMaps) // no Logs, has Events
 	m.SetDetail(sampleDetail(), nil)
 
-	title := m.TabTitle()
-	if strings.Contains(title, logsLiveGlyph) || strings.Contains(title, logsPausedGlyph) {
-		t.Errorf("kind without Logs tab must NOT carry the glyph anywhere, got %q", title)
+	// Events segment carries the glyph.
+	eventsSeg := tabTitleSegment(m.TabTitle(), "Events")
+	if !strings.Contains(eventsSeg, logsLiveGlyph) && !strings.Contains(eventsSeg, logsPausedGlyph) {
+		t.Errorf("Events tab must carry the live/paused glyph, got segment %q", eventsSeg)
+	}
+
+	// Relatives segment does NOT.
+	relSeg := tabTitleSegment(m.TabTitle(), "Relatives")
+	if strings.Contains(relSeg, logsLiveGlyph) || strings.Contains(relSeg, logsPausedGlyph) {
+		t.Errorf("Relatives tab must NOT carry the glyph, got segment %q", relSeg)
 	}
 }
 
@@ -1437,36 +1646,61 @@ func TestDetailModel_BorderBottomLeftHint_RelativesDrillDepth(t *testing.T) {
 		t.Errorf("depth>1: expected %q, got %q", want, got)
 	}
 
-	// Switch to a non-Relatives tab → hint clears (Enter/Esc semantics
-	// are Relatives-contextual; other tabs either have their own
-	// hint — Logs — or none — Info, Events, History).
-	m = m.switchToTab(2) // Events
+	// Switch to a non-hint-bearing tab → hint clears. Conditions is a
+	// static-content tab (no scroll semantics beyond default) so it
+	// exposes no border hint. Logs and Events both carry their own
+	// u/d/gg/G hint — see the LogsTab test — and the Relatives-
+	// contextual Enter/Esc semantics live on Relatives only.
+	m.SetResourceType(k8s.ResourceHorizontalPodAutoscalers) // has Relatives / Events / Conditions
+	m.SetDetail(sampleDetail(), nil)
+	condIdx := -1
+	for i, name := range m.tabs {
+		if name == "Conditions" {
+			condIdx = i
+			break
+		}
+	}
+	if condIdx < 0 {
+		t.Fatalf("expected HPA to have a Conditions tab; got tabs %v", m.tabs)
+	}
+	m = m.switchToTab(DetailTab(condIdx))
 	if got := m.BorderBottomLeftHint(); got != "" {
-		t.Errorf("non-Relatives tab: expected empty hint, got %q", got)
+		t.Errorf("Conditions tab: expected empty hint, got %q", got)
 	}
 }
 
-func TestDetailModel_BorderBottomLeftHint_LogsTab(t *testing.T) {
-	// Logs tab surfaces u/d/gg/G scroll keys so users discover them on
-	// the border instead of needing to open the help popup. `G` says
-	// "live" because scrollToBottom on Logs also re-attaches the live
-	// tail (followTail flips true), and dropping that nuance would
-	// mislead users into reading G as a plain "jump to end".
+func TestDetailModel_BorderBottomLeftHint_StreamingTabs(t *testing.T) {
+	// Logs and Events both surface u/d/gg/G scroll keys on the border
+	// so users discover them without opening the help popup. `G` says
+	// "live" because scrollToBottom on either streaming tab re-attaches
+	// its follow-tail (followTail / followEventsTail flip true), and
+	// dropping that nuance would mislead users into reading G as a
+	// plain "jump to end".
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods) // tabs = [Logs, Relatives, Events]
 	m.SetDetail(sampleDetail(), nil)
-	m = m.switchToTab(0) // Logs
 
 	want := "u/d: page  gg: top  G: live"
+
+	m = m.switchToTab(0) // Logs
 	if got := m.BorderBottomLeftHint(); got != want {
 		t.Errorf("Logs tab: expected %q, got %q", want, got)
 	}
 
-	// Off Logs → Logs hint clears (Relatives has its own contextual
-	// hint covered by the Relatives test).
-	m = m.switchToTab(2) // Events — no hint
-	if got := m.BorderBottomLeftHint(); got != "" {
-		t.Errorf("Events tab: expected empty hint, got %q", got)
+	// Find Events tab index (order varies per kind — Pods has Events last).
+	evtIdx := -1
+	for i, name := range m.tabs {
+		if name == "Events" {
+			evtIdx = i
+			break
+		}
+	}
+	if evtIdx < 0 {
+		t.Fatalf("expected Pods to have an Events tab; got tabs %v", m.tabs)
+	}
+	m = m.switchToTab(DetailTab(evtIdx))
+	if got := m.BorderBottomLeftHint(); got != want {
+		t.Errorf("Events tab: expected %q, got %q", want, got)
 	}
 }
 

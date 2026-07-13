@@ -53,6 +53,16 @@ type DetailModel struct {
 	resourceType k8s.ResourceType
 	followTail   bool // Logs tab: stick to bottom on new lines until user scrolls up
 
+	// followEventsTail mirrors followTail for the Events tab. K8s events
+	// arrive via SetDetail (not a per-line stream like logs), so the
+	// sticky-bottom snap fires inside SetDetail rather than on each
+	// append. Same u/scrollUp-pauses / G-resumes contract as Logs.
+	// Same live/paused glyph in the tab title. Rationale: Aggregate
+	// Events for workload kinds funnels many streams into one view; a
+	// long-lived observer wants "always show me the latest" by default
+	// with a pause escape hatch when they need to freeze a snapshot.
+	followEventsTail bool
+
 	// Relatives tab state: entries are the logical rows (drillable + info +
 	// section headers); relativeCursor is the index of the currently-selected
 	// entry within the *current level*. Cursor only lands on selectable
@@ -126,14 +136,19 @@ func NewDetailModel(t *theme.Theme) DetailModel {
 		activeTab:      DetailTabInfo,
 		tabs:           []string{"Relatives", "Events"},
 		theme:          t,
-		maxLogLines:    1000,
-		followTail:     true,
-		relativeCursor: -1,
+		maxLogLines:      1000,
+		followTail:       true,
+		followEventsTail: true,
+		relativeCursor:   -1,
 	}
 }
 
 // FollowTail reports whether the Logs tab auto-scrolls to the bottom on new lines.
 func (m DetailModel) FollowTail() bool { return m.followTail }
+
+// FollowEventsTail reports whether the Events tab auto-scrolls to the
+// bottom when a fresh events batch arrives via SetDetail.
+func (m DetailModel) FollowEventsTail() bool { return m.followEventsTail }
 
 // Init implements tea.Model.
 func (m DetailModel) Init() tea.Cmd {
@@ -186,7 +201,7 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 		m.pendingG = false
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == 'g' {
 			m.scrollOffset = 0
-			m = m.disableFollowIfLogs()
+			m = m.disableFollowOnScroll()
 			return m, nil
 		}
 		// Not a second g — fall through to normal handling.
@@ -228,7 +243,7 @@ func (m DetailModel) handleKey(msg tea.KeyMsg) (DetailModel, tea.Cmd) {
 			if m.scrollOffset < 0 {
 				m.scrollOffset = 0
 			}
-			m = m.disableFollowIfLogs()
+			m = m.disableFollowOnScroll()
 		}
 
 	case tea.KeyDown:
@@ -410,22 +425,32 @@ func (m DetailModel) scrollUp() DetailModel {
 	if m.scrollOffset > 0 {
 		m.scrollOffset--
 	}
-	return m.disableFollowIfLogs()
+	return m.disableFollowOnScroll()
 }
 
 func (m DetailModel) scrollToBottom() DetailModel {
 	m.scrollOffset = m.maxScrollOffset()
-	if m.ActiveTabName() == "Logs" {
+	switch m.ActiveTabName() {
+	case "Logs":
 		m.followTail = true
+	case "Events":
+		m.followEventsTail = true
 	}
 	return m
 }
 
-// disableFollowIfLogs turns off follow-tail when the user manually scrolls up
-// inside the Logs tab. Outside of Logs it is a no-op.
-func (m DetailModel) disableFollowIfLogs() DetailModel {
-	if m.ActiveTabName() == "Logs" {
+// disableFollowOnScroll turns off follow-tail when the user manually
+// scrolls up. Fires for both streaming tabs (Logs / Events) — each
+// carries its own follow flag. A no-op on any other tab. Named for
+// the WHEN not the WHERE: the trigger is "user scrolled up" regardless
+// of which streaming tab they're on. Replaces the earlier
+// disableFollowOnScroll, which was Logs-only.
+func (m DetailModel) disableFollowOnScroll() DetailModel {
+	switch m.ActiveTabName() {
+	case "Logs":
 		m.followTail = false
+	case "Events":
+		m.followEventsTail = false
 	}
 	return m
 }
@@ -452,8 +477,16 @@ func (m DetailModel) switchToTab(tab DetailTab) DetailModel {
 		m.activeTab = tab
 		m.scrollOffset = 0
 		m.buildContentLines()
-		if m.ActiveTabName() == "Logs" {
+		// Streaming tabs land at the bottom with follow re-enabled — the
+		// user's mental model on entering Logs or Events is "show me the
+		// latest", not "start from the top of history". Any prior pause
+		// state is dropped, matching how Logs behaved pre-Events.
+		switch m.ActiveTabName() {
+		case "Logs":
 			m.followTail = true
+			m.scrollOffset = m.maxScrollOffset()
+		case "Events":
+			m.followEventsTail = true
 			m.scrollOffset = m.maxScrollOffset()
 		}
 	}
@@ -549,7 +582,10 @@ func (m *DetailModel) SetSize(width, height int) {
 	m.height = height
 	if widthChanged && m.hasData {
 		m.buildContentLines()
-		if m.ActiveTabName() == "Logs" && m.followTail {
+		switch {
+		case m.ActiveTabName() == "Logs" && m.followTail:
+			m.scrollOffset = m.maxScrollOffset()
+		case m.ActiveTabName() == "Events" && m.followEventsTail:
 			m.scrollOffset = m.maxScrollOffset()
 		}
 	}
@@ -637,6 +673,15 @@ func (m *DetailModel) SetDetail(detail k8s.ResourceDetail, events []k8s.EventIte
 	m.events = events
 	m.hasData = true
 	m.buildContentLines()
+	// Sticky-bottom for Events: mirrors AppendLogLine's Logs branch.
+	// Events arrive in batches via SetDetail (unlike Logs' per-line
+	// stream), so the snap fires here after buildContentLines. When
+	// the user has manually scrolled up (followEventsTail=false), the
+	// snap is skipped and their pause point is preserved across
+	// subsequent watcher ticks — same contract as Logs.
+	if m.ActiveTabName() == "Events" && m.followEventsTail {
+		m.scrollOffset = m.maxScrollOffset()
+	}
 }
 
 // PushDrillFrame appends a level to the Relatives drill chain — used after a
@@ -743,9 +788,16 @@ func (m DetailModel) TabTitle() string {
 
 	labelOf := func(i int) string {
 		label := m.tabLabel(tabs[i])
-		if tabs[i] == "Logs" {
+		switch tabs[i] {
+		case "Logs":
 			marker := logsPausedGlyph
 			if m.followTail {
+				marker = logsLiveGlyph
+			}
+			label = label + " " + marker
+		case "Events":
+			marker := logsPausedGlyph
+			if m.followEventsTail {
 				marker = logsLiveGlyph
 			}
 			label = label + " " + marker
@@ -853,6 +905,10 @@ func (m DetailModel) BorderTopRightHint() string {
 //     keys at hand. `G` says "live" rather than "bottom" because
 //     scrollToBottom on Logs also re-attaches the live tail
 //     (followTail flips true) — losing that nuance would mislead.
+//   - Same "u/d: page  gg: top  G: live" hint on Events, and for the
+//     same rule-satisfying reason: G on Events re-attaches the events
+//     watcher tail (followEventsTail flips true), so its behavior is
+//     non-default and the border hint is justified.
 func (m DetailModel) BorderBottomLeftHint() string {
 	switch m.ActiveTabName() {
 	case "Relatives":
@@ -860,7 +916,7 @@ func (m DetailModel) BorderBottomLeftHint() string {
 			return "enter: drill  esc: back"
 		}
 		return "enter: drill"
-	case "Logs":
+	case "Logs", "Events":
 		return "u/d: page  gg: top  G: live"
 	}
 	return ""
