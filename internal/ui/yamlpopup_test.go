@@ -81,45 +81,65 @@ func TestYamlPopup_RenderContainsResourceTitle(t *testing.T) {
 	}
 }
 
-func TestYamlPopup_ScrollJK(t *testing.T) {
+func TestYamlPopup_JKMovesCursor(t *testing.T) {
+	// v1.7.10 vim-buffer semantics: j/k moves the cursor line (with
+	// auto-scroll to keep it visible), not just the scroll viewport.
 	m := newTestYamlPopup()
 	m.SetSize(80, 10) // small height → force scrollable content
 	m = openTestPopup(m, sampleYAML)
-	if m.ScrollOffset() != 0 {
-		t.Fatalf("expected initial scrollOffset=0, got %d", m.ScrollOffset())
+	if m.cursorLine != 0 {
+		t.Fatalf("expected initial cursorLine=0, got %d", m.cursorLine)
 	}
 
 	m, _ = m.Update(keyMsg('j'))
-	if m.ScrollOffset() != 1 {
-		t.Errorf("expected scrollOffset=1 after j, got %d", m.ScrollOffset())
+	if m.cursorLine != 1 {
+		t.Errorf("expected cursorLine=1 after j, got %d", m.cursorLine)
 	}
 
 	m, _ = m.Update(keyMsg('k'))
-	if m.ScrollOffset() != 0 {
-		t.Errorf("expected scrollOffset=0 after k, got %d", m.ScrollOffset())
+	if m.cursorLine != 0 {
+		t.Errorf("expected cursorLine=0 after k, got %d", m.cursorLine)
 	}
 
-	// k at top stays at 0
+	// k at top stays at 0.
 	m, _ = m.Update(keyMsg('k'))
-	if m.ScrollOffset() != 0 {
-		t.Errorf("expected scrollOffset=0 at top, got %d", m.ScrollOffset())
+	if m.cursorLine != 0 {
+		t.Errorf("expected cursorLine=0 at top, got %d", m.cursorLine)
 	}
 }
 
-func TestYamlPopup_PageScroll(t *testing.T) {
+func TestYamlPopup_JKAutoScrolls(t *testing.T) {
+	// Moving the cursor past the visible viewport auto-scrolls to keep
+	// it in view — matches vim's cursor-follows-scroll behavior. Small
+	// popup height forces the auto-scroll path to fire.
+	m := newTestYamlPopup()
+	m.SetSize(80, 10)
+	m = openTestPopup(m, sampleYAML)
+
+	// Press j enough times to drive the cursor past the initial
+	// viewport (contentHeight is small at height=10).
+	for i := 0; i < 20; i++ {
+		m, _ = m.Update(keyMsg('j'))
+	}
+	if m.ScrollOffset() == 0 {
+		t.Errorf("expected scrollOffset > 0 after cursor moved past viewport, got %d", m.ScrollOffset())
+	}
+}
+
+func TestYamlPopup_UDMovesCursorHalfPage(t *testing.T) {
 	m := newTestYamlPopup()
 	m.SetSize(80, 10)
 	m = openTestPopup(m, sampleYAML)
 
 	m, _ = m.Update(keyMsg('d'))
-	if m.ScrollOffset() == 0 {
-		t.Error("expected scrollOffset > 0 after d page-down")
+	if m.cursorLine == 0 {
+		t.Error("expected cursorLine > 0 after d half-page-down")
 	}
-	prev := m.ScrollOffset()
+	prev := m.cursorLine
 
 	m, _ = m.Update(keyMsg('u'))
-	if m.ScrollOffset() >= prev {
-		t.Errorf("expected scrollOffset to decrease after u; was %d, now %d", prev, m.ScrollOffset())
+	if m.cursorLine >= prev {
+		t.Errorf("expected cursorLine to decrease after u; was %d, now %d", prev, m.cursorLine)
 	}
 }
 
@@ -348,6 +368,396 @@ func TestYamlPopup_BottomBarFitsInAvailableWidth(t *testing.T) {
 			t.Errorf("bottomBarStrings overflowed at available=%d: hint=%q indicator=%q (w=%d)",
 				available, hint, indicator, w)
 		}
+	}
+}
+
+// --- v1.7.10 vim-buffer mode tests -----------------------------------------
+
+func TestYamlPopup_HLMovesCursorInLine(t *testing.T) {
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	// Cursor starts at (0, 0). l moves right, h moves left, bounded.
+	m, _ = m.Update(keyMsg('l'))
+	if m.cursorCol != 1 {
+		t.Errorf("expected cursorCol=1 after l, got %d", m.cursorCol)
+	}
+	m, _ = m.Update(keyMsg('h'))
+	if m.cursorCol != 0 {
+		t.Errorf("expected cursorCol=0 after h, got %d", m.cursorCol)
+	}
+	// h at col 0 stays put.
+	m, _ = m.Update(keyMsg('h'))
+	if m.cursorCol != 0 {
+		t.Errorf("expected cursorCol=0 stays at 0, got %d", m.cursorCol)
+	}
+}
+
+func TestYamlPopup_ZeroDollarLineEndpoints(t *testing.T) {
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	// Position cursor mid-line via l.
+	for i := 0; i < 5; i++ {
+		m, _ = m.Update(keyMsg('l'))
+	}
+	m, _ = m.Update(keyMsg('$'))
+	// $ lands on the last valid col of the current line.
+	last := m.lastColOf(m.cursorLine)
+	if m.cursorCol != last {
+		t.Errorf("$ expected cursorCol=%d, got %d", last, m.cursorCol)
+	}
+	m, _ = m.Update(keyMsg('0'))
+	if m.cursorCol != 0 {
+		t.Errorf("0 expected cursorCol=0, got %d", m.cursorCol)
+	}
+}
+
+func TestYamlPopup_WordMotions(t *testing.T) {
+	// sampleYAML line 0: "apiVersion: v1" — words: apiVersion / v1
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	if m.cursorLine != 0 || m.cursorCol != 0 {
+		t.Fatalf("expected cursor at (0,0), got (%d,%d)", m.cursorLine, m.cursorCol)
+	}
+	// e → end of "apiVersion" (rune index 9).
+	m, _ = m.Update(keyMsg('e'))
+	if m.cursorCol != 9 {
+		t.Errorf("expected cursorCol=9 (end of apiVersion), got %d", m.cursorCol)
+	}
+	// w → next word ":" is punctuation; the next word start after ": " is "v1" at col 12.
+	m, _ = m.Update(keyMsg('w'))
+	if m.cursorCol == 9 {
+		t.Errorf("w should have advanced from col 9, still at %d", m.cursorCol)
+	}
+	// b → back to previous word start on this line.
+	prevCol := m.cursorCol
+	m, _ = m.Update(keyMsg('b'))
+	if m.cursorCol >= prevCol {
+		t.Errorf("b should decrease col (from %d), got %d", prevCol, m.cursorCol)
+	}
+}
+
+func TestYamlPopup_VisualModeEnterExit(t *testing.T) {
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	m, _ = m.Update(keyMsg('v'))
+	if !m.visualMode {
+		t.Error("v should enter visual mode")
+	}
+	if m.visualAnchorLine != m.cursorLine || m.visualAnchorCol != m.cursorCol {
+		t.Errorf("anchor must snap to cursor position on v; anchor=(%d,%d), cursor=(%d,%d)",
+			m.visualAnchorLine, m.visualAnchorCol, m.cursorLine, m.cursorCol)
+	}
+	// Esc exits visual (but does NOT close popup — Esc-during-visual is a two-step out).
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.visualMode {
+		t.Error("Esc must exit visual mode")
+	}
+	if !m.IsActive() {
+		t.Error("Esc-during-visual must leave the popup open (first Esc exits visual only)")
+	}
+	// Second Esc closes.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if cmd == nil {
+		t.Error("second Esc must dispatch a close animator cmd")
+	}
+}
+
+func TestYamlPopup_VisualModeSelectionExtendsWithHJKL(t *testing.T) {
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	m, _ = m.Update(keyMsg('v'))
+	// Move cursor 3 chars right — selection now covers "api".
+	m, _ = m.Update(keyMsg('l'))
+	m, _ = m.Update(keyMsg('l'))
+	m, _ = m.Update(keyMsg('l'))
+	if !m.visualMode {
+		t.Fatal("still expected visual mode after l l l")
+	}
+	sL, sC, eL, eC := m.selectionRange()
+	if sL != 0 || sC != 0 || eL != 0 || eC != 3 {
+		t.Errorf("expected selection (0,0)→(0,3), got (%d,%d)→(%d,%d)", sL, sC, eL, eC)
+	}
+	// Selection text: "apiV" (4 chars).
+	if got := m.selectionText(); got != "apiV" {
+		t.Errorf("expected selection text %q, got %q", "apiV", got)
+	}
+}
+
+func TestYamlPopup_VisualModeMultiLineSelection(t *testing.T) {
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	m, _ = m.Update(keyMsg('v'))
+	// v at (0,0), j once → selection covers all of line 0 + col 0 of line 1.
+	m, _ = m.Update(keyMsg('j'))
+	got := m.selectionText()
+	// Line 0 fully: "apiVersion: v1", + \n + "k" (first char of "kind: Pod").
+	if !strings.HasPrefix(got, "apiVersion: v1\n") {
+		t.Errorf("expected selection to start with 'apiVersion: v1\\n', got %q", got)
+	}
+	if !strings.HasSuffix(got, "k") {
+		t.Errorf("expected selection to end with 'k' (first char of kind line), got %q", got)
+	}
+}
+
+func TestYamlPopup_YInVisualModeCopiesSelectionAndExits(t *testing.T) {
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	m, _ = m.Update(keyMsg('v'))
+	m, _ = m.Update(keyMsg('l'))
+	m, _ = m.Update(keyMsg('l'))
+	m, _ = m.Update(keyMsg('l')) // selection: "apiV"
+	_, cmd := m.Update(keyMsg('y'))
+	if cmd == nil {
+		t.Fatal("expected copyToClipboardCmd from y in visual mode")
+	}
+	// y in visual must ALSO exit visual mode (vim convention: yank
+	// completes the operator + returns to normal).
+	m, _ = m.Update(keyMsg('y'))
+	if m.visualMode {
+		t.Error("y in visual mode must exit visual mode")
+	}
+}
+
+func TestYamlPopup_EscClearsLockedSearchBeforeClosingPopup(t *testing.T) {
+	// v1.7.10 layered-Esc contract: while search results are on
+	// screen (m.searching=false but m.searchQuery / m.matchLines
+	// non-empty), Esc must clear the search filter FIRST rather than
+	// closing the popup. A second Esc closes as usual.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+
+	// Open search, type a query, commit.
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n', 'g', 'i', 'n', 'x'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.searchQuery == "" || len(m.matchLines) == 0 {
+		t.Fatalf("setup: expected search committed with matches, got query=%q matches=%d",
+			m.searchQuery, len(m.matchLines))
+	}
+
+	// First Esc clears search state — popup STAYS open.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.searchQuery != "" {
+		t.Errorf("expected searchQuery cleared, got %q", m.searchQuery)
+	}
+	if len(m.matchLines) != 0 {
+		t.Errorf("expected matchLines cleared, got %d", len(m.matchLines))
+	}
+	if !m.IsActive() {
+		t.Error("first Esc (with locked search) must NOT close the popup")
+	}
+
+	// Second Esc closes.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if cmd == nil {
+		t.Error("second Esc (no search, no visual) must dispatch a close cmd")
+	}
+}
+
+func TestYamlPopup_EscInVisualModeTakesPrecedenceOverSearch(t *testing.T) {
+	// Layering order: visual first, then search. If both are active,
+	// Esc peels visual before touching search state.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+
+	// Commit a search.
+	m, _ = m.Update(keyMsg('/'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n', 'g', 'i', 'n', 'x'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Enter visual mode.
+	m, _ = m.Update(keyMsg('v'))
+	if !m.visualMode {
+		t.Fatal("setup: visual mode should be on after v")
+	}
+
+	// First Esc: exits visual, leaves search intact.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.visualMode {
+		t.Error("first Esc must exit visual mode")
+	}
+	if m.searchQuery == "" {
+		t.Errorf("first Esc must NOT touch search; expected query preserved, got empty")
+	}
+
+	// Second Esc: clears search.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.searchQuery != "" {
+		t.Errorf("second Esc must clear search; got %q", m.searchQuery)
+	}
+}
+
+func TestYamlPopup_YInNormalModeCopiesFullYAML(t *testing.T) {
+	// Regression: non-visual y still copies the whole YAML, unchanged
+	// from pre-v1.7.10 behavior — TestYamlPopup_CopyEmitsClipboardCmd
+	// covers the exact bytes; this test only guards the mode gate.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	if m.visualMode {
+		t.Fatal("setup: expected normal mode after Open")
+	}
+	_, cmd := m.Update(keyMsg('y'))
+	if cmd == nil {
+		t.Error("expected copyToClipboardCmd from y in normal mode")
+	}
+}
+
+func TestOverlayCursorOnStyledLine_PreservesSurroundingANSI(t *testing.T) {
+	// Regression: cursor-only line MUST keep highlightYAMLLine's
+	// key coloring. Before the ansi.Cut splice, the cursor-line
+	// render walked contentPlain and lost the ANSI escapes — the
+	// YAML key appeared as default white instead of the theme's
+	// key color. This test drives the splice helper directly with
+	// a known-styled input so it doesn't depend on lipgloss's
+	// runtime color-profile detection (which degrades to ASCII
+	// under `go test` because stdout isn't a TTY).
+	styled := "\x1b[1;38;2;137;180;250mapiVersion\x1b[0m\x1b[38;2;127;132;156m:\x1b[0m v1"
+	plain := "apiVersion: v1"
+	cursorStyle := lipgloss.NewStyle().Reverse(true)
+
+	// Cursor at col 5 lands on the 'r' in "apiVersion". The result
+	// MUST still contain the opening style escape for the key ("\x1b[1;...").
+	got := overlayCursorOnStyledLine(styled, plain, 5, cursorStyle)
+	if !strings.Contains(got, "\x1b[1;38;2;137;180;250m") {
+		t.Errorf("expected key ANSI style preserved before cursor, got %q", got)
+	}
+	// Value part after cursor should also survive with its own style.
+	if !strings.Contains(got, "v1") {
+		t.Errorf("expected 'v1' value preserved after cursor, got %q", got)
+	}
+	// Cursor cell character 'r' must be present at the splice point.
+	// (Not asserting reverse-video escape: lipgloss's Reverse() emits
+	// nothing when stdout isn't a TTY under go test.)
+	if !strings.Contains(got, "r") {
+		t.Errorf("cursor cell 'r' missing from splice output, got %q", got)
+	}
+}
+
+func TestOverlayCursorOnStyledLine_EmptyLine(t *testing.T) {
+	// Empty line: cursor becomes a single reverse-video space so
+	// it stays visible. (Only assert non-empty output — lipgloss
+	// degrades Reverse() to a plain space when stdout isn't a TTY,
+	// so the ANSI 7m escape isn't reliable under `go test`.)
+	cursorStyle := lipgloss.NewStyle().Reverse(true)
+	got := overlayCursorOnStyledLine("", "", 0, cursorStyle)
+	if got == "" {
+		t.Error("expected non-empty output for empty-line cursor")
+	}
+}
+
+func TestOverlaySelectionOnStyledLine_PreservesSurroundingANSI(t *testing.T) {
+	// Regression for the "visual mode turns key white" bug: the
+	// selection overlay must preserve syntax coloring OUTSIDE the
+	// selected rune range. Before the ansi.Cut splice for
+	// selection, we stripped ANSI and re-styled the whole line,
+	// which killed key colors for a 1-char selection.
+	styled := "\x1b[1;38;2;137;180;250mapiVersion\x1b[0m\x1b[38;2;127;132;156m:\x1b[0m v1"
+	plain := "apiVersion: v1"
+	selectionStyle := lipgloss.NewStyle().Background(lipgloss.Color("#b4befe"))
+	cursorStyle := lipgloss.NewStyle().Reverse(true)
+
+	// Select col 12..13 ("v1"). The KEY at col 0..9 must retain
+	// its opening ANSI escape sequence untouched.
+	got := overlaySelectionOnStyledLine(styled, plain, 12, 13, false, 0, selectionStyle, cursorStyle)
+	if !strings.Contains(got, "\x1b[1;38;2;137;180;250m") {
+		t.Errorf("expected key ANSI style preserved before selection, got %q", got)
+	}
+	if !strings.Contains(got, "v1") {
+		t.Errorf("expected selected 'v1' text present in output, got %q", got)
+	}
+	if !strings.Contains(got, "apiVersion") {
+		t.Errorf("expected 'apiVersion' preserved outside selection, got %q", got)
+	}
+}
+
+func TestPanelStateStringRoundTrip(t *testing.T) {
+	// The Panel enum <-> yaml string mapping must round-trip so
+	// state.yaml survives km8 upgrades that reorder the enum values.
+	cases := []Panel{SidebarPanel, TablePanel, DetailPanel}
+	for _, p := range cases {
+		s := panelToStateString(p)
+		if got := panelFromStateString(s); got != p {
+			t.Errorf("Panel %v → %q → %v, want %v", p, s, got, p)
+		}
+	}
+	// Unknown / empty string falls back to sidebar.
+	if got := panelFromStateString(""); got != SidebarPanel {
+		t.Errorf("empty state string must fall back to SidebarPanel, got %v", got)
+	}
+	if got := panelFromStateString("unknown"); got != SidebarPanel {
+		t.Errorf("unknown state string must fall back to SidebarPanel, got %v", got)
+	}
+}
+
+func TestYamlPopup_LineNumberGutterRendered(t *testing.T) {
+	// Gutter should carry the raw line number (1-indexed) on the
+	// left. sampleYAML is 22 lines, so gutterWidth = 3 ("22 ").
+	// Render should contain " 1 apiVersion" and " 2 kind" (padded)
+	// somewhere on the appropriate rows.
+	m := newTestYamlPopup()
+	m.SetSize(120, 40)
+	m = openTestPopup(m, sampleYAML)
+
+	if m.gutterWidth() != 3 {
+		t.Errorf("expected gutterWidth=3 for 22-line YAML, got %d", m.gutterWidth())
+	}
+	view := m.RenderPopup()
+	// Look for " 1 " gutter marker followed by content — matches the
+	// per-line right-aligned number + separator.
+	if !strings.Contains(view, " 1 ") || !strings.Contains(view, "apiVersion") {
+		t.Errorf("expected line 1 gutter + apiVersion content in render, view:\n%s", view)
+	}
+}
+
+func TestYamlPopup_GutterDoesNotAffectCursorOrSelection(t *testing.T) {
+	// Cursor at col 0 lands on the FIRST CONTENT CHARACTER, not on
+	// the gutter. `h` at col 0 stays at 0. y in visual mode copies
+	// content only (no line numbers). Regression guard for the
+	// "gutter is not addressable" contract.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	if m.cursorCol != 0 {
+		t.Fatalf("setup: expected cursorCol=0, got %d", m.cursorCol)
+	}
+	// h at col 0 stays at 0.
+	m, _ = m.Update(keyMsg('h'))
+	if m.cursorCol != 0 {
+		t.Errorf("h at cursorCol=0 must not move into gutter, got %d", m.cursorCol)
+	}
+	// Visual mode + copy first line: substring must be "apiVersion: v1"
+	// (no leading digits).
+	m, _ = m.Update(keyMsg('v'))
+	m, _ = m.Update(keyMsg('$'))
+	sel := m.selectionText()
+	if strings.HasPrefix(sel, "1") || strings.HasPrefix(sel, " ") {
+		t.Errorf("selection must start at content, not gutter; got %q", sel)
+	}
+	if !strings.HasPrefix(sel, "apiVersion") {
+		t.Errorf("expected selection to start with 'apiVersion', got %q", sel)
+	}
+}
+
+func TestYamlPopup_GutterBlankOnContinuationLines(t *testing.T) {
+	// When a raw line is wrap-split into multiple display lines, the
+	// gutter shows the number only on the FIRST display row and stays
+	// blank on continuation rows. Pin via a small popup + long raw
+	// line that forces wrapping.
+	m := newTestYamlPopup()
+	m.SetSize(40, 20) // narrow → force wrap
+	longYAML := "verylongfieldname: " + strings.Repeat("value ", 20)
+	m.Open(longYAML, k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.animator.Finalize()
+	if len(m.contentLineRaw) < 2 {
+		t.Skip("YAML didn't wrap; test premise not met")
+	}
+	// First display line: raw=0, gutter shows "1".
+	// Second display line: also raw=0, gutter should be blank.
+	g0 := m.gutter(0)
+	g1 := m.gutter(1)
+	if !strings.Contains(g0, "1") {
+		t.Errorf("first display line gutter should contain '1', got %q", g0)
+	}
+	if strings.Contains(g1, "1") {
+		t.Errorf("continuation gutter should NOT repeat the raw line number, got %q", g1)
 	}
 }
 
