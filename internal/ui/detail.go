@@ -983,8 +983,13 @@ func (m DetailModel) ActiveTabName() string {
 // Pass pod = "" for single-pod streams. For aggregate streams (Deployment
 // and other workload kinds), pass the source pod name so the render path can
 // label each line with its origin.
+//
+// text is passed through sanitizeLogText so carriage-return progress
+// redraws (apt update / npm install / pip install / docker pull) can't
+// leak `\r` into the terminal and jump the cursor to column 0 outside
+// the panel — see sanitizeLogText's docstring for the semantics.
 func (m *DetailModel) AppendLogLine(pod, container, text string) {
-	m.logLines = append(m.logLines, logLine{pod: pod, container: container, text: text})
+	m.logLines = append(m.logLines, logLine{pod: pod, container: container, text: sanitizeLogText(text)})
 	if len(m.logLines) > m.maxLogLines {
 		m.logLines = m.logLines[len(m.logLines)-m.maxLogLines:]
 	}
@@ -1480,6 +1485,44 @@ func (m DetailModel) SelectedHistoryRevision() *k8s.ReleaseRevision {
 // wrapPlain wraps plain (no ANSI) text to the given width, breaking at word
 // boundaries when possible. Returns one string per output line. The returned
 // lines do not include any indentation — callers prepend continuation indent.
+// sanitizeLogText collapses carriage-return-based progress redraws to
+// their final visible state before the text enters the log buffer.
+//
+// Container output for `apt update`, `npm install`, `pip install`,
+// `docker pull` and similar progress-bar UX uses `\r` (or `\r` plus
+// ANSI erase escapes) to rewrite the same terminal line in place.
+// bufio.Scanner's default SplitFunc only breaks on `\n`, so those
+// intra-line `\r`s survive into scanner.Text() and are then written
+// through lipgloss to the real terminal. When a raw `\r` reaches the
+// terminal it moves the cursor to column 0 of the *terminal* row —
+// not the panel's inner column 0 — and subsequent bytes overwrite
+// the panel border. The Logs tab visibly bleeds past its left edge.
+//
+// The pragmatic fix: split on `\r` and keep the last non-empty
+// segment. That matches what a real terminal would end up showing
+// after all the in-place rewrites resolve (the final progress-bar
+// frame, `100%` line, etc.). Empty segments (trailing `\r`, `\r\r`
+// runs) are skipped so a `foo\r` line still renders `foo` instead
+// of "".
+//
+// ANSI color escapes (`\x1b[…m`) are untouched — they don't move
+// the cursor and the log renderer already accepts styled input.
+// ANSI cursor-move escapes (`\x1b[K`, `\x1b[G`, etc.) are rarer than
+// `\r` progress refreshes and are left for a follow-up if they show
+// up in practice; sanitizing them requires a real ANSI parser.
+func sanitizeLogText(s string) string {
+	if !strings.ContainsRune(s, '\r') {
+		return s
+	}
+	parts := strings.Split(s, "\r")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] != "" {
+			return parts[i]
+		}
+	}
+	return ""
+}
+
 func wrapPlain(text string, width int) []string {
 	if width <= 0 {
 		return []string{text}
