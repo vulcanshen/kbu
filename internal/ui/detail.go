@@ -830,19 +830,23 @@ func (m DetailModel) TabTitle() string {
 
 	labelOf := func(i int) string {
 		label := m.tabLabel(tabs[i])
+		// Glyph appended directly after the label text with no
+		// separator space — keeps the tab bar compact. The glyph's
+		// own visual footprint provides enough separation from the
+		// letters "s". Same convention for Events for consistency.
 		switch tabs[i] {
 		case "Logs":
 			marker := logsPausedGlyph
 			if m.followTail {
 				marker = logsLiveGlyph
 			}
-			label = label + " " + marker
+			label = label + marker
 		case "Events":
 			marker := logsPausedGlyph
 			if m.followEventsTail {
 				marker = logsLiveGlyph
 			}
-			label = label + " " + marker
+			label = label + marker
 		}
 		return label
 	}
@@ -860,13 +864,13 @@ func (m DetailModel) TabTitle() string {
 		if i == 0 {
 			if isBlue {
 				// First tab active: merge with [N] chip. No boundary cap
-				// -- just continue the blue chip with " Label ".
-				b.WriteString(chipStyle.Render(" " + labelOf(0) + " "))
+				// -- just continue the blue chip with " Label".
+				b.WriteString(chipStyle.Render(" " + labelOf(0)))
 			} else {
 				// Close [N] chip; first tab label sits flush against the
 				// close cap (cap is the separator).
 				b.WriteString(closeCap.Render("\uE0B0"))
-				b.WriteString(baseLabel.Render(labelOf(0) + " "))
+				b.WriteString(baseLabel.Render(labelOf(0)))
 			}
 			prevBlue = isBlue
 			continue
