@@ -36,26 +36,46 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Session state is best-effort: a corrupt or unreadable state file
+	// must not lock the user out of km8. LoadState errors are stashed
+	// on the state value's LoadError field and surfaced in the App Log
+	// once NewAppModel builds it — the user notices the nudge in `!`
+	// without paying an exit-code for a stale-position file.
+	state, stateErr := config.LoadState()
+	if stateErr != nil {
+		state = config.DefaultState()
+	}
+
 	t, err := theme.LoadTheme(config.ThemePath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error loading theme: %v\n", err)
 		os.Exit(1)
 	}
 
-	client, err := k8s.NewClient(cfg.DefaultContext)
+	// State wins over config for context / namespace when present —
+	// "where the user left off" is a stronger signal than the static
+	// default. Missing state falls back to config's DefaultContext /
+	// DefaultNamespace as before.
+	initialContext := cfg.DefaultContext
+	if state.Context != "" {
+		initialContext = state.Context
+	}
+	client, err := k8s.NewClient(initialContext)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error connecting to cluster: %v\n", err)
 		os.Exit(1)
 	}
 
-	if cfg.DefaultNamespace != "" {
+	if state.Namespace != "" {
+		client.SetNamespace(state.Namespace)
+	} else if cfg.DefaultNamespace != "" {
 		client.SetNamespace(cfg.DefaultNamespace)
 	}
 
 	// Optional Helm Releases category — only registered when `helm` is on PATH.
 	k8s.RegisterHelmIfAvailable()
 
-	app := ui.NewAppModel(t, client, cfg)
+	app := ui.NewAppModel(t, client, cfg, state, stateErr)
 
 	p := tea.NewProgram(app,
 		tea.WithAltScreen(),
