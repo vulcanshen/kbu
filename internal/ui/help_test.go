@@ -71,6 +71,36 @@ func TestHelpModel_CloseWithQuestionMark(t *testing.T) {
 	}
 }
 
+// TestHelpModel_RenderNeverPanicsAcrossSizes was added after a real
+// crash at 60x30 in v1.7.10: the desc-string change ("Copy focus:
+// cursor row when it has one, else full content") pushed the
+// splitGroupsForColumns balance heuristic to put every section on
+// the left column, and the "empty right column" case wasn't
+// guarded before the row-zip loop indexed rightLines[i] out of
+// bounds. Guards against a recurrence across the terminal sizes
+// users are likely to hit.
+func TestHelpModel_RenderNeverPanicsAcrossSizes(t *testing.T) {
+	sizes := []struct{ w, h int }{
+		{40, 20}, {50, 25}, {60, 30}, {70, 30},
+		{80, 40}, {100, 40}, {120, 50}, {160, 60}, {220, 80},
+	}
+	for _, sz := range sizes {
+		sz := sz
+		t.Run("", func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("panic at %dx%d: %v", sz.w, sz.h, r)
+				}
+			}()
+			m := newTestHelp()
+			m.SetSize(sz.w, sz.h)
+			m.Toggle()
+			m.animator.Finalize()
+			_ = m.View()
+		})
+	}
+}
+
 func TestHelpModel_ViewContainsKeybindings(t *testing.T) {
 	m := newTestHelp()
 	m.Toggle()
