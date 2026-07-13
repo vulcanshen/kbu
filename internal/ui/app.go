@@ -1070,8 +1070,37 @@ func (m *AppModel) saveSessionState() {
 		m.items,
 		m.table.SelectedRow(),
 	)
+	s.Panel = panelToStateString(m.activePanel)
 	if err := s.Save(); err != nil {
 		m.appLog.Warn(fmt.Sprintf("state: save on quit failed (%v) — next launch starts from defaults", err))
+	}
+}
+
+// panelToStateString + panelFromStateString translate between the
+// runtime Panel enum and the yaml-friendly string form used in
+// state.yaml. Keeping the mapping in one place so a future panel
+// reorder (or an added panel) doesn't silently corrupt saved state.
+// Unknown / empty strings fall back to SidebarPanel — safest default
+// since the sidebar is the natural launch focus.
+func panelToStateString(p Panel) string {
+	switch p {
+	case TablePanel:
+		return "table"
+	case DetailPanel:
+		return "detail"
+	default:
+		return "sidebar"
+	}
+}
+
+func panelFromStateString(s string) Panel {
+	switch s {
+	case "table":
+		return TablePanel
+	case "detail":
+		return DetailPanel
+	default:
+		return SidebarPanel
 	}
 }
 
@@ -1274,11 +1303,35 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 	sidebar.SetSelected(initialResource)
 	detail.SetResourceType(initialResource)
 
+	// Sync the status bar with whatever namespace main.go applied to
+	// the client (either state.Namespace or cfg.DefaultNamespace).
+	// Without this, NewStatusBarModel defaults to "All Namespaces"
+	// even though the client is scoped to a specific ns, and the
+	// mismatch persists until the user opens the ns picker or hits a
+	// path that fires SetNamespace (e.g. NamespaceChangedMsg).
+	statusBar := NewStatusBarModel(t, info)
+	statusBar.SetNamespace(client.GetNamespace())
+
+	// Restore the focused panel from state. Defaults to SidebarPanel
+	// when state is empty / unknown — same as the pre-restore behavior.
+	// Focus flags for the three panel models must all be reset here
+	// so unfocused ones lose the "focused=true" default that sidebar
+	// carries from line 1170 (NewSidebarModel + SetFocused(true) is
+	// hardcoded for the fresh-launch path).
+	table := NewTableModel(t)
+	initialPanel := SidebarPanel
+	if state != nil {
+		initialPanel = panelFromStateString(state.Panel)
+	}
+	sidebar.SetFocused(initialPanel == SidebarPanel)
+	table.SetFocused(initialPanel == TablePanel)
+	detail.SetFocused(initialPanel == DetailPanel)
+
 	return AppModel{
 		sidebar:         sidebar,
-		table:           NewTableModel(t),
+		table:           table,
 		detail:          detail,
-		statusBar:       NewStatusBarModel(t, info),
+		statusBar:       statusBar,
 		statusLine:      NewStatusLineModel(t),
 		namespacePicker: NewNamespacePickerModel(t),
 		contextPicker:   NewContextPickerModel(t),
@@ -1297,7 +1350,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 		hintPopup:       NewHintPopupModel(t),
 		listPicker:      NewListPickerModel(t),
 		settingsPopup:   NewSettingsPopupModel(t),
-		activePanel:     SidebarPanel,
+		activePanel:     initialPanel,
 		theme:           t,
 		cfg:             cfg,
 		cfgEditor:       cfg.Editor,
