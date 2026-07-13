@@ -156,6 +156,56 @@ func TestTerminalTitle_PrefixAndSuffix(t *testing.T) {
 	// because the user wants the raw hostname. No suffix assertion.
 }
 
+func TestBuildSessionState_PopulatesFromCursor(t *testing.T) {
+	items := []k8s.ResourceItem{
+		{Name: "svc-a", Namespace: "ns-a"},
+		{Name: "svc-b", Namespace: "ns-b"},
+	}
+	s := buildSessionState("orbstack", "kube-system", k8s.ResourceServices, items, 1)
+	if s.Context != "orbstack" {
+		t.Errorf("Context = %q, want orbstack", s.Context)
+	}
+	if s.Namespace != "kube-system" {
+		t.Errorf("Namespace = %q, want kube-system", s.Namespace)
+	}
+	if s.Kind != k8s.ResourceServices.KubectlName() {
+		t.Errorf("Kind = %q, want %q", s.Kind, k8s.ResourceServices.KubectlName())
+	}
+	if s.ObjectName != "svc-b" || s.ObjectNamespace != "ns-b" {
+		t.Errorf("Object = %s/%s, want ns-b/svc-b", s.ObjectNamespace, s.ObjectName)
+	}
+}
+
+func TestBuildSessionState_CursorOutOfRangeLeavesObjectEmpty(t *testing.T) {
+	items := []k8s.ResourceItem{{Name: "svc-a", Namespace: "ns-a"}}
+
+	cases := []struct {
+		name   string
+		cursor int
+	}{
+		{"negative cursor", -1},
+		{"empty items", 0}, // items has 1, cursor 0 IS in range — flipped below
+		{"cursor past end", 5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			its := items
+			if tc.name == "empty items" {
+				its = nil
+			}
+			s := buildSessionState("ctx", "", k8s.ResourcePods, its, tc.cursor)
+			if s.ObjectName != "" || s.ObjectNamespace != "" {
+				t.Errorf("expected empty object, got %s/%s", s.ObjectNamespace, s.ObjectName)
+			}
+			// Rest of state still populated — quit with no row selected is a
+			// legitimate case (empty namespace, fresh cluster).
+			if s.Context != "ctx" || s.Kind != k8s.ResourcePods.KubectlName() {
+				t.Errorf("non-object fields missing: %+v", *s)
+			}
+		})
+	}
+}
+
 // appWithItems builds a minimal AppModel for currentItemUID + ResourceDetailMsg
 // testing. NewAppModel needs a real k8s.Client; for these tests we only need
 // the items list, table cursor, and a detail model — wire those by hand.

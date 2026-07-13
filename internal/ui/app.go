@@ -1050,6 +1050,52 @@ func (m *AppModel) syncCompareLockToTable() {
 	m.table.SetLockedRow(-1)
 }
 
+// saveSessionState snapshots the user's current cursor position
+// (context / namespace / kind / row) to state.yaml so the next launch
+// can restore it. Best-effort: a write failure does NOT block the
+// quit path — worst case the user's next launch starts from stale
+// state, which the load-side fallback handles cleanly.
+//
+// Drill-down state is intentionally NOT preserved. The recorded kind
+// is m.currentResource, which for a drilled-down view is the CHILD
+// kind (Pods inside a Deployment drill); next launch subscribes to
+// that kind at top level rather than trying to reconstruct the drill
+// chain. If the recorded object still exists next launch it lights up
+// in the top-level view.
+func (m *AppModel) saveSessionState() {
+	s := buildSessionState(
+		m.k8sClient.ContextName(),
+		m.k8sClient.GetNamespace(),
+		m.currentResource,
+		m.items,
+		m.table.SelectedRow(),
+	)
+	if err := s.Save(); err != nil {
+		m.appLog.Warn(fmt.Sprintf("state: save on quit failed (%v) — next launch starts from defaults", err))
+	}
+}
+
+// buildSessionState turns the app's current cursor position into a
+// State struct ready for persistence. Split out from saveSessionState
+// so tests can drive it without a real k8s.Client — the I/O half
+// (state.yaml write, error surfacing) is covered by state_test.go,
+// this function covers the projection from AppModel fields into the
+// yaml shape. `cursor` follows m.table.SelectedRow() semantics:
+// negative or out-of-range means "no row selected", in which case
+// ObjectName / ObjectNamespace stay empty.
+func buildSessionState(ctx, ns string, rt k8s.ResourceType, items []k8s.ResourceItem, cursor int) *config.State {
+	s := &config.State{
+		Context:   ctx,
+		Namespace: ns,
+		Kind:      rt.KubectlName(),
+	}
+	if cursor >= 0 && cursor < len(items) {
+		s.ObjectNamespace = items[cursor].Namespace
+		s.ObjectName = items[cursor].Name
+	}
+	return s
+}
+
 // honorPendingTableSelect snaps the table cursor onto the requested
 // name+namespace when a ResourceDataMsg for the matching kind arrives,
 // then clears the pending pointer. If the target isn't in the result
@@ -1088,7 +1134,7 @@ func parseCompareLayout(s string) CompareLayout {
 	return CompareLayoutUnified
 }
 
-func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppModel {
+func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *config.State, stateLoadErr error) AppModel {
 	info := client.GetClusterInfo()
 
 	sidebar := NewSidebarModel(t)
@@ -1186,6 +1232,48 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 		appLog.Warn("env: $KM8__LOGIN_SHELL is deprecated, rename to $KM8__ALTERM_LOGIN_SHELL (the old name is still read this release; remove next release)")
 	}
 
+	// Session state resolution. main.go already applied state.Context /
+	// state.Namespace before constructing us (both are load-time actions
+	// on the k8s client). What remains is the Kind + object cursor: the
+	// initial resource kind + the row to select once its ResourceDataMsg
+	// arrives. When state came in bad (stateLoadErr non-nil) OR the
+	// recorded kind is no longer registered (CRD uninstalled, etc.), we
+	// fall back to Pods and INFO the applog so the user notices in `!`.
+	//
+	// pendingTableSelect ties into the existing Relatives-jump machinery
+	// (honorPendingTableSelect fires on ResourceDataMsg): the field is
+	// consumed as soon as the first watcher tick lands with a matching
+	// item, or dropped silently if the target row isn't in the result
+	// set. That "silently dropped" case corresponds to "the recorded
+	// object is gone" — we surface an INFO after a short delay only if
+	// we can prove it (we don't want to alarm on a slow first tick).
+	initialResource := k8s.ResourcePods
+	var pendingSelect *k8s.RefTarget
+	if stateLoadErr != nil {
+		appLog.Warn(fmt.Sprintf("state: failed to load %s (%v) — starting from defaults", config.StatePath(), stateLoadErr))
+	}
+	if state != nil && state.Kind != "" {
+		if rt := client.Registry().LookupByKubectlName(state.Kind); rt != "" {
+			initialResource = rt
+			if state.ObjectName != "" {
+				pendingSelect = &k8s.RefTarget{
+					Type:      rt,
+					Name:      state.ObjectName,
+					Namespace: state.ObjectNamespace,
+				}
+			}
+		} else {
+			// Registry lookup miss at startup can also mean "the kind is
+			// a CRD not yet discovered" — DiscoverCRDs runs async. Treat
+			// as a fallback but don't shout too loudly; if the user's
+			// last kind IS a CRD they'll notice the Pods default and the
+			// applog line has the context.
+			appLog.Info(fmt.Sprintf("state: recorded kind %q not in registry, falling back to Pods", state.Kind))
+		}
+	}
+	sidebar.SetSelected(initialResource)
+	detail.SetResourceType(initialResource)
+
 	return AppModel{
 		sidebar:         sidebar,
 		table:           NewTableModel(t),
@@ -1213,17 +1301,18 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config) AppMode
 		theme:           t,
 		cfg:             cfg,
 		cfgEditor:       cfg.Editor,
-		k8sClient:       client,
-		watcher:         watcher,
-		logStreamer:     logStreamer,
-		currentResource: k8s.ResourcePods,
+		k8sClient:          client,
+		watcher:            watcher,
+		logStreamer:        logStreamer,
+		currentResource:    initialResource,
+		pendingTableSelect: pendingSelect,
 	}
 }
 
 type appInitMsg struct{ info k8s.ClusterInfo }
 
 func (m AppModel) Init() tea.Cmd {
-	m.watcher.Start(k8s.ResourcePods, m.k8sClient.GetNamespace())
+	m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
 	info := m.k8sClient.GetClusterInfo()
 	return tea.Batch(
 		m.sidebar.Init(),
@@ -1260,6 +1349,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.txPty != nil && m.txPty.IsAlive() {
 			m.txPty.Stop()
 		}
+		// Session state snapshot on quit. Best-effort: a Save failure
+		// (perms, disk full, read-only fs) must not block the exit —
+		// worst case is next launch reads a slightly stale state file,
+		// which is exactly the fallback path is designed for. Written
+		// synchronously here because tea.Quit runs post-return and we
+		// need the write to land before the process teardown starts.
+		m.saveSessionState()
 		return m, tea.Quit
 	}
 
