@@ -4403,7 +4403,7 @@ func sanitizeEditorEnv(cfgEditor string) []string {
 // (3020s) — share one text source and tests can hit it directly.
 func deleteConfirmSurface(rt k8s.ResourceType, item k8s.ResourceItem) (message, detail string) {
 	if rt == k8s.ResourceNamespaces {
-		return fmt.Sprintf("⚠ Delete namespace %q? This will remove ALL resources inside it. Cannot be undone.", item.Name),
+		return fmt.Sprintf("!!! Delete namespace %q? This will remove ALL resources inside it. Cannot be undone.", item.Name),
 			fmt.Sprintf("kubectl delete namespace %s", item.Name)
 	}
 	if item.Namespace == "" {
