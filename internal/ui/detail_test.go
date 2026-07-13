@@ -1052,6 +1052,50 @@ func TestDetailModel_ClearDetail_ClearsLogs(t *testing.T) {
 	}
 }
 
+func TestSanitizeLogText(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"no cr passthrough", "hello world", "hello world"},
+		{"empty passthrough", "", ""},
+		{"single progress refresh keeps final", "Get:1 [50%]\rGet:1 [100%]", "Get:1 [100%]"},
+		{"many progress refreshes keep final", "10%\r30%\r70%\r100%", "100%"},
+		{"trailing cr keeps preceding content", "downloading\r", "downloading"},
+		{"multiple trailing crs keep preceding content", "downloading\r\r\r", "downloading"},
+		{"leading cr drops empty prefix", "\rreal content", "real content"},
+		{"only crs collapse to empty", "\r\r\r", ""},
+		{"ansi color escape preserved with cr", "\x1b[32mfoo\x1b[0m\r\x1b[32mbar\x1b[0m", "\x1b[32mbar\x1b[0m"},
+		{"crlf never appears here since scanner strips it", "a\nb", "a\nb"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sanitizeLogText(tc.in); got != tc.want {
+				t.Errorf("sanitizeLogText(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDetailModel_AppendLogLine_StripsCarriageReturn(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+
+	// Simulated `apt update` line with in-place progress refreshes.
+	m.AppendLogLine("", "nginx", "Get:1 http://deb.debian.org [50%]\rGet:1 http://deb.debian.org [100%]")
+
+	if len(m.logLines) != 1 {
+		t.Fatalf("expected 1 logLine, got %d", len(m.logLines))
+	}
+	if strings.ContainsRune(m.logLines[0].text, '\r') {
+		t.Errorf("stored text must not contain \\r, got %q", m.logLines[0].text)
+	}
+	if m.logLines[0].text != "Get:1 http://deb.debian.org [100%]" {
+		t.Errorf("expected final progress state, got %q", m.logLines[0].text)
+	}
+}
+
 func TestWrapPlain(t *testing.T) {
 	tests := []struct {
 		name  string
