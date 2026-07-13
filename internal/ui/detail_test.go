@@ -1184,6 +1184,117 @@ func TestDetailModel_CopyableContent_EmptyWhenNoData(t *testing.T) {
 	}
 }
 
+func TestDetailModel_CopyableContent_RelativesCursorRowTabSep(t *testing.T) {
+	// v1.7.9 focus-content semantics: on cursor-bearing tabs (Relatives,
+	// History), y copies just the cursor's row — label \t value — not
+	// the whole tab. Non-cursor tabs (Logs, Events, …) keep full-tab
+	// copy, covered by StripsANSI above.
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods) // Pods carries a rich Relatives tab
+	detail := sampleDetail()
+	detail.PodRelatives = &k8s.PodRelativesData{
+		Node: &k8s.RefTarget{Type: k8s.ResourceNodes, Name: "worker-1"},
+	}
+	m.SetDetail(detail, nil)
+	// Find the Relatives tab index (Pods orders Logs first).
+	relIdx := -1
+	for i, name := range m.tabs {
+		if name == "Relatives" {
+			relIdx = i
+			break
+		}
+	}
+	if relIdx < 0 {
+		t.Fatal("expected Pods to expose a Relatives tab")
+	}
+	m = m.switchToTab(DetailTab(relIdx))
+
+	// Land the cursor on a selectable entry (skip section headers).
+	m.relativeCursor = -1
+	for i, e := range m.relativeEntries {
+		if e.isSelectable() {
+			m.relativeCursor = i
+			break
+		}
+	}
+	if m.relativeCursor < 0 {
+		t.Fatalf("no selectable Relatives entry after seeding PodRelatives.Node; entries=%+v", m.relativeEntries)
+	}
+
+	got := m.CopyableContent()
+	if got == "" {
+		t.Fatal("expected non-empty Relatives cursor content")
+	}
+	if strings.Contains(got, "\n") {
+		t.Errorf("Relatives cursor copy must be single-line, got:\n%s", got)
+	}
+	if !strings.Contains(got, "\t") {
+		t.Errorf("Relatives cursor copy must be tab-separated label\\tvalue, got %q", got)
+	}
+	e := m.relativeEntries[m.relativeCursor]
+	if !strings.Contains(got, e.label) || !strings.Contains(got, e.value) {
+		t.Errorf("expected label %q and value %q in output, got %q", e.label, e.value, got)
+	}
+}
+
+func TestDetailModel_CopyableContent_RelativesEmptyWhenNoCursor(t *testing.T) {
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+	m.SetDetail(sampleDetail(), nil)
+	relIdx := -1
+	for i, name := range m.tabs {
+		if name == "Relatives" {
+			relIdx = i
+			break
+		}
+	}
+	m = m.switchToTab(DetailTab(relIdx))
+	m.relativeCursor = -1 // no cursor set
+
+	if got := m.CopyableContent(); got != "" {
+		t.Errorf("no cursor on Relatives: expected empty, got %q", got)
+	}
+}
+
+func TestDetailModel_CopyableContent_HistoryCursorRowTabSep(t *testing.T) {
+	// History tab (Helm releases only). Cursor row → tab-separated
+	// revision fields matching ReleaseRevision field order.
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourceReleases)
+	m.SetDetail(k8s.ResourceDetail{
+		UID: "rel-1",
+		ReleaseHistory: []k8s.ReleaseRevision{
+			{Revision: 1, Updated: "2026-07-01T10:00:00Z", Status: "superseded", Chart: "nginx-1.0.0", AppVersion: "1.25", Description: "install"},
+			{Revision: 2, Updated: "2026-07-05T14:30:00Z", Status: "deployed", Chart: "nginx-1.1.0", AppVersion: "1.26", Description: "upgrade"},
+		},
+	}, nil)
+	histIdx := -1
+	for i, name := range m.tabs {
+		if name == "History" {
+			histIdx = i
+			break
+		}
+	}
+	if histIdx < 0 {
+		t.Fatal("Releases should expose a History tab")
+	}
+	m = m.switchToTab(DetailTab(histIdx))
+	m.historyCursor = 1 // second revision
+
+	got := m.CopyableContent()
+	if got == "" {
+		t.Fatal("expected non-empty History cursor content")
+	}
+	if strings.Contains(got, "\n") {
+		t.Errorf("History cursor copy must be single-line, got:\n%s", got)
+	}
+	// Field order: revision, updated, status, chart, app_version, description.
+	want := "2\t2026-07-05T14:30:00Z\tdeployed\tnginx-1.1.0\t1.26\tupgrade"
+	if got != want {
+		t.Errorf("History cursor copy:\n got  %q\n want %q", got, want)
+	}
+}
+
 func TestDetailModel_ClearDetail(t *testing.T) {
 	m := newTestDetail()
 	m.SetDetail(sampleDetail(), sampleEvents())

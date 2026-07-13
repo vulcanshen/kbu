@@ -153,7 +153,7 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 - **Per-container colored log labels** -- multi-container pods are visually distinguishable line-by-line; stable color per container name
 - **Resource deletion** -- `D` (uppercase, both as a hotkey and via the `Space` menu) with confirmation dialog
 - **Search/filter** -- `/` to search in the sidebar and table panels, and in the namespace/context picker popups. Sidebar search also matches category names (e.g. "cluster" expands the Cluster category). Search clears automatically when focus moves to another panel — selection persists, the filter doesn't
-- **Clipboard copy (`y`)** -- copies the focused panel's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required). Inside the App Log popup (`!`), `y` copies the full log; inside the YAML popup, `y` copies the full YAML
+- **Clipboard copy (`y`)** -- copies the focused element's content via OSC 52 (works through tmux/SSH, no `xclip`/`pbcopy` required). Semantics track focus: if the focus target has a cursor (sidebar kind, panel-2 row, panel-3 Relatives/History row), `y` copies just that row — tab-separated raw values ready for `awk`/`cut`. If it doesn't (panel-3 Logs/Events/Conditions, App Log popup, YAML popup), `y` copies the entire focus content, same as before
 - **Toast notifications with levels** -- info-level (1s, popup-layer border + `󰵅 km8` title, hint reads `auto-dismiss`) for confirmations like "Copied!"; warning-level (2s Catppuccin Peach + `󰀦 km8` title) for blocked actions like Relatives cycle detection or drill failures; sticky variant for modal state contracts (drag mode hint) — hint switches to `Esc: close`, no auto-dismiss timer
 - **Namespace and context switching** -- `N` for namespace, `C` for context (uppercase — trigger keys are uppercase to avoid mis-triggering while typing search queries)
 - **Session-local context** -- switching context in km8 doesn't touch `~/.kube/config`. Run `kubectl` in another terminal in parallel without interference
@@ -219,7 +219,7 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 |---|---|
 | `>` | Open the global Settings popup (mouse on/off, scroll direction; future settings) |
 | `Alt+t` | Toggle Alterm (spawn / show / hide; shell stays alive across hide) |
-| `y` | Copy focused panel content to clipboard (OSC 52) |
+| `y` | Copy focused element to clipboard (OSC 52) -- cursor row when the focus has one, whole content otherwise |
 | `!` | App log |
 | `?` | Help |
 | `q` | Quit km8 (asks for confirmation) |

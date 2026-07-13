@@ -609,13 +609,27 @@ func (m *DetailModel) SetFocused(focused bool) {
 	m.buildContentLines()
 }
 
-// CopyableContent returns the current tab's content as plain text (no ANSI
-// codes), respecting the active search filter. Used by the global `y` key
-// to copy the visible panel content to the clipboard. For raw YAML, the
-// user opens the `Y` popup and copies from there.
+// CopyableContent returns the FOCUS content of the panel-3 detail
+// view, following the "focus content" mental model driving the global
+// `y` key:
+//
+//   - Cursor-bearing tabs (Relatives, History) copy the CURSOR ROW's
+//     raw fields, tab-separated — matches Panel 2 / Sidebar semantics.
+//   - Non-cursor tabs (Logs, Events, Conditions, Info) copy the full
+//     visible content (ANSI-stripped) as before — with no cursor,
+//     "focus" IS the whole tab.
+//
+// For raw YAML, the user opens the Y popup and copies from there
+// (yamlpopup.go's own y).
 func (m DetailModel) CopyableContent() string {
 	if !m.hasData {
 		return ""
+	}
+	switch m.ActiveTabName() {
+	case "Relatives":
+		return m.relativeCursorLineText()
+	case "History":
+		return m.historyCursorLineText()
 	}
 	lines := m.contentLines
 	plain := make([]string, len(lines))
@@ -623,6 +637,34 @@ func (m DetailModel) CopyableContent() string {
 		plain[i] = strings.TrimRight(ansi.Strip(l), " ")
 	}
 	return strings.Join(plain, "\n")
+}
+
+// relativeCursorLineText returns the currently-highlighted relative
+// entry as "label\tvalue". Section headers and unselectable slots
+// yield "" so an accidental y on a non-navigable row is a silent
+// no-op rather than copying header text.
+func (m DetailModel) relativeCursorLineText() string {
+	if m.relativeCursor < 0 || m.relativeCursor >= len(m.relativeEntries) {
+		return ""
+	}
+	e := m.relativeEntries[m.relativeCursor]
+	if e.section || !e.isSelectable() {
+		return ""
+	}
+	return e.label + "\t" + e.value
+}
+
+// historyCursorLineText returns the highlighted release revision as a
+// tab-separated line: revision, updated, status, chart, app_version,
+// description. Matches ReleaseRevision's field order so `awk` / `cut`
+// positions are stable across kmi releases.
+func (m DetailModel) historyCursorLineText() string {
+	if m.historyCursor < 0 || m.historyCursor >= len(m.detail.ReleaseHistory) {
+		return ""
+	}
+	r := m.detail.ReleaseHistory[m.historyCursor]
+	return fmt.Sprintf("%d\t%s\t%s\t%s\t%s\t%s",
+		r.Revision, r.Updated, r.Status, r.Chart, r.AppVersion, r.Description)
 }
 
 // ScrollInfo returns scroll position for the detail panel. Position is the
