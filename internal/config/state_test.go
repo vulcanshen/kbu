@@ -16,6 +16,8 @@ func TestState_RoundTrip(t *testing.T) {
 		Kind:            "pods",
 		ObjectNamespace: "kube-system",
 		ObjectName:      "coredns-abc123",
+		Panel:           "detail",
+		Tab:             "Events",
 	}
 	if err := in.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
