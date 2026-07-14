@@ -42,6 +42,15 @@ const (
 	// the level glyph + a stable "km8" identifier tell the user "your
 	// app is talking" without leaking per-toast specifics into chrome.
 	toastTitleText = "km8"
+
+	// toastMinInnerW is the minimum cell budget for the toast body
+	// row. Short messages like "Copied!" (7 cells) used to size the
+	// popup down to the hint-bar floor (~14 cells) and looked cramped
+	// on screen — the text sat swallowed by chrome. The 28-cell floor
+	// gives every auto-dismiss / sticky toast a consistent visual
+	// weight regardless of how short the payload is; long messages
+	// still grow past this via the max() below.
+	toastMinInnerW = 28
 )
 
 // ToastModel renders a transient centered popup that auto-dismisses.
@@ -216,9 +225,14 @@ func (m ToastModel) RenderPopup() string {
 	hintW := lipgloss.Width(hint)
 
 	// innerW must fit the widest of: title (+ 2 lead dashes + 1 trail
-	// minimum), message body (+2 padding 1 each side), and the bottom
-	// hint. Taking the max keeps the borders straight across all rows.
-	innerW := titleW + 3
+	// minimum), message body (+2 padding 1 each side), the bottom
+	// hint, AND the toastMinInnerW floor so short messages don't
+	// visually collapse into the chrome. Taking the max keeps the
+	// borders straight across all rows.
+	innerW := toastMinInnerW
+	if w := titleW + 3; w > innerW {
+		innerW = w
+	}
 	if hintW > innerW {
 		innerW = hintW
 	}
