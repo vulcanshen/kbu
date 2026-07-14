@@ -392,6 +392,92 @@ func TestYamlPopup_HLMovesCursorInLine(t *testing.T) {
 	}
 }
 
+func TestYamlPopup_HWrapsToPreviousLineEnd(t *testing.T) {
+	// v1.7.10 vim-buffer refinement: h at col 0 of a non-top line
+	// wraps to the end of the previous line rather than stopping.
+	// Matches the behavior vim gives with `set whichwrap+=h,l` and
+	// makes cursor navigation across wrap-continuation rows feel
+	// natural. Symmetric with l at end-of-line wrapping down.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	// Move to line 1 col 0. sampleYAML line 1 = "kind: Pod".
+	m, _ = m.Update(keyMsg('j'))
+	if m.cursorLine != 1 || m.cursorCol != 0 {
+		t.Fatalf("setup: expected cursor at (1,0), got (%d,%d)", m.cursorLine, m.cursorCol)
+	}
+	m, _ = m.Update(keyMsg('h'))
+	if m.cursorLine != 0 {
+		t.Errorf("expected h at (1,0) to wrap to line 0, got line %d", m.cursorLine)
+	}
+	// Line 0 = "apiVersion: v1" — last col = 13 (14 runes).
+	if want := m.lastColOf(0); m.cursorCol != want {
+		t.Errorf("expected cursorCol at end of prev line (%d), got %d", want, m.cursorCol)
+	}
+}
+
+func TestYamlPopup_HAtBufferTopDoesNotCrash(t *testing.T) {
+	// Guard against a crash when h is pressed at (0,0). The switch
+	// in moveCursorLeft must fall through both cases and leave the
+	// cursor where it is.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	if m.cursorLine != 0 || m.cursorCol != 0 {
+		t.Fatalf("setup: expected cursor at (0,0), got (%d,%d)", m.cursorLine, m.cursorCol)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("panic on h at buffer top: %v", r)
+		}
+	}()
+	m, _ = m.Update(keyMsg('h'))
+	if m.cursorLine != 0 || m.cursorCol != 0 {
+		t.Errorf("expected cursor to stay at (0,0), got (%d,%d)", m.cursorLine, m.cursorCol)
+	}
+}
+
+func TestYamlPopup_LWrapsToNextLineStart(t *testing.T) {
+	// Symmetric with h-wrap: l at end-of-line wraps to col 0 of the
+	// next line rather than stopping.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	// Jump to end of line 0.
+	m, _ = m.Update(keyMsg('$'))
+	if m.cursorLine != 0 {
+		t.Fatalf("setup: expected line 0, got %d", m.cursorLine)
+	}
+	m, _ = m.Update(keyMsg('l'))
+	if m.cursorLine != 1 || m.cursorCol != 0 {
+		t.Errorf("expected l at end-of-line to wrap to (1,0), got (%d,%d)", m.cursorLine, m.cursorCol)
+	}
+}
+
+func TestYamlPopup_LAtBufferBottomEndDoesNotCrash(t *testing.T) {
+	// Guard against a crash when l is pressed at the last col of the
+	// last line — mirrors the h-at-(0,0) no-op guard. Both switch
+	// cases in moveCursorRight must evaluate false and leave the
+	// cursor where it is.
+	m := newTestYamlPopup()
+	m = openTestPopup(m, sampleYAML)
+	m, _ = m.Update(keyMsg('G')) // jump to last line
+	m, _ = m.Update(keyMsg('$')) // jump to end of that line
+	lastLine := m.lastLine()
+	lastCol := m.lastColOf(lastLine)
+	if m.cursorLine != lastLine || m.cursorCol != lastCol {
+		t.Fatalf("setup: expected cursor at (%d,%d), got (%d,%d)",
+			lastLine, lastCol, m.cursorLine, m.cursorCol)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("panic on l at buffer bottom-end: %v", r)
+		}
+	}()
+	m, _ = m.Update(keyMsg('l'))
+	if m.cursorLine != lastLine || m.cursorCol != lastCol {
+		t.Errorf("expected cursor to stay at (%d,%d), got (%d,%d)",
+			lastLine, lastCol, m.cursorLine, m.cursorCol)
+	}
+}
+
 func TestYamlPopup_ZeroDollarLineEndpoints(t *testing.T) {
 	m := newTestYamlPopup()
 	m = openTestPopup(m, sampleYAML)

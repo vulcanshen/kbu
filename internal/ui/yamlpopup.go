@@ -497,16 +497,32 @@ func (m *YamlPopupModel) clampCursor() {
 }
 
 func (m YamlPopupModel) moveCursorLeft() YamlPopupModel {
-	if m.cursorCol > 0 {
+	switch {
+	case m.cursorCol > 0:
 		m.cursorCol--
+	case m.cursorLine > 0:
+		// Wrap to the end of the previous line so the cursor can
+		// walk backwards through wrapped continuation rows and
+		// short lines without dead-ending at col 0. At (0, 0) the
+		// switch falls through and the cursor stays put — no crash
+		// on the buffer-top corner.
+		m.cursorLine--
+		m.cursorCol = m.lastColOf(m.cursorLine)
 	}
 	m.ensureCursorVisible()
 	return m
 }
 
 func (m YamlPopupModel) moveCursorRight() YamlPopupModel {
-	if last := m.lastColOf(m.cursorLine); m.cursorCol < last {
+	switch last := m.lastColOf(m.cursorLine); {
+	case m.cursorCol < last:
 		m.cursorCol++
+	case m.cursorLine < m.lastLine():
+		// Symmetric wrap to the start of the next line — matches
+		// the left-wrap behavior above so `l` at end-of-line and
+		// `h` at start-of-line both cross the boundary.
+		m.cursorLine++
+		m.cursorCol = 0
 	}
 	m.ensureCursorVisible()
 	return m
