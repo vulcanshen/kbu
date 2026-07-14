@@ -1177,6 +1177,40 @@ func TestDetailModel_CopyableContent_StripsANSI(t *testing.T) {
 	}
 }
 
+func TestDetailModel_SwitchToTabByName(t *testing.T) {
+	// Pods carry [Logs, Relatives, Events, Conditions]. Verify the
+	// switch honors a valid name, updates ActiveTabName, and returns
+	// true.
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourcePods)
+
+	if got := m.ActiveTabName(); got != "Logs" {
+		t.Fatalf("setup: expected first tab Logs, got %q", got)
+	}
+	if !m.SwitchToTabByName("Events") {
+		t.Fatal("expected true when switching to a valid tab")
+	}
+	if got := m.ActiveTabName(); got != "Events" {
+		t.Errorf("expected active tab Events after switch, got %q", got)
+	}
+}
+
+func TestDetailModel_SwitchToTabByName_UnknownReturnsFalse(t *testing.T) {
+	// A stale recorded tab from state.yaml (kind switched to one that
+	// doesn't carry the tab) must not crash and must not change the
+	// current tab. Returns false so callers can log / ignore.
+	m := newTestDetail()
+	m.SetResourceType(k8s.ResourceConfigMaps) // no Logs tab
+	before := m.ActiveTabName()
+
+	if m.SwitchToTabByName("Logs") {
+		t.Error("expected false when tab not in list")
+	}
+	if got := m.ActiveTabName(); got != before {
+		t.Errorf("unknown tab must not change active tab; was %q, now %q", before, got)
+	}
+}
+
 func TestDetailModel_CopyableContent_EmptyWhenNoData(t *testing.T) {
 	m := newTestDetail()
 	if got := m.CopyableContent(); got != "" {

@@ -1109,6 +1109,24 @@ func (m DetailModel) ActiveTabName() string {
 	return "YAML"
 }
 
+// SwitchToTabByName sets the active tab by looking up name in the
+// current tab list. Returns true when the switch happened and false
+// when the name isn't in tabs — callers that want to restore a saved
+// tab (session state) can silently ignore the miss so a stale name
+// falls back to the current first-tab default. Used at startup by
+// NewAppModel to honor state.yaml's recorded Panel 3 tab; runtime
+// tab switches go through the arrow / hjkl handlers or Panel 2 row
+// changes which set the tab index directly.
+func (m *DetailModel) SwitchToTabByName(name string) bool {
+	for i, tab := range m.tabs {
+		if tab == name {
+			*m = m.switchToTab(DetailTab(i))
+			return true
+		}
+	}
+	return false
+}
+
 // AppendLogLine appends a formatted log line to the log buffer.
 // If the buffer exceeds maxLogLines, the oldest lines are trimmed.
 // If the Logs tab is active, content lines are rebuilt.

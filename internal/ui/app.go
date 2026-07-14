@@ -1071,6 +1071,7 @@ func (m *AppModel) saveSessionState() {
 		m.table.SelectedRow(),
 	)
 	s.Panel = panelToStateString(m.activePanel)
+	s.Tab = m.detail.ActiveTabName()
 	if err := s.Save(); err != nil {
 		m.appLog.Warn(fmt.Sprintf("state: save on quit failed (%v) — next launch starts from defaults", err))
 	}
@@ -1302,6 +1303,16 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 	}
 	sidebar.SetSelected(initialResource)
 	detail.SetResourceType(initialResource)
+
+	// Restore the recorded Panel 3 tab. SetResourceType above rebuilt
+	// the tab list for initialResource, so the lookup runs against
+	// the correct set. A stale tab name (kind switched to one that
+	// doesn't have the recorded tab — e.g. was on "Events" for a
+	// Pod, now on ConfigMaps which has no Events tab) silently falls
+	// back to the current first-tab default.
+	if state != nil && state.Tab != "" {
+		detail.SwitchToTabByName(state.Tab)
+	}
 
 	// Sync the status bar with whatever namespace main.go applied to
 	// the client (either state.Namespace or cfg.DefaultNamespace).

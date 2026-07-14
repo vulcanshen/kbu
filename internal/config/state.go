@@ -59,6 +59,16 @@ type State struct {
 	// the YAML stays readable and the enum can be reordered without
 	// breaking existing state files.
 	Panel string `yaml:"panel,omitempty"`
+
+	// Tab is the active Panel 3 tab at quit time — one of the tab
+	// names as they appear in DetailModel.tabs (e.g. "Logs",
+	// "Relatives", "Events", "Conditions", "History"). Empty falls
+	// back to the kind's first tab (default entry behavior). Stored
+	// by name rather than index because a tab index is kind-specific
+	// — "Events" is index 2 on Pods but index 1 on Namespaces, so
+	// the recorded index wouldn't survive a kind switch. Tab names
+	// are stable across km8 upgrades AND kinds.
+	Tab string `yaml:"tab,omitempty"`
 }
 
 // DefaultState returns an empty State. Used both as the load-file-missing
