@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.11] - 2026-07-14
+
+A polish release on top of v1.7.10. Four small threads:
+
+1. **YAML popup — h/l cross line boundaries.** In the v1.7.10
+   vim-buffer rewrite `h` at column 0 was a dead-end (cursor sat)
+   and `l` at end-of-line was the same. v1.7.11 wraps them: `h`
+   at col 0 jumps to the previous line's last col, `l` at the
+   last col jumps to the next line's col 0. Buffer corners stay
+   no-op — `h` at `(0, 0)` and `l` at the last line's last col
+   fall through the `switch` without a case match, so the natural
+   Go idiom is the natural UI corner behaviour. Visual mode
+   inherits the wrap for free (the cursor motion drives the
+   selection anchor).
+
+2. **Toast — min inner width for tiny messages.** `Copied!` used
+   to render as a five-cell popup that read as a rendering
+   glitch rather than a confirmation. `toastMinInnerW = 28` now
+   seeds the inner-width calculation before the max-of
+   (title / hint / message) pass — short messages float
+   centered in a comfortable box, long messages still expand
+   past the floor. The change is a single min-guard in
+   `renderFullPopup`, no per-toast tuning knob.
+
+3. **Panel 3 tab bar — palette rework for readability.** The
+   v1.7.10 tab bar (blue chip on base bg with the same blue
+   `E0B1` divider) had two problems: the active chip's `fg`
+   competed with the panel body text below it, and the interior
+   dividers pulled the eye off the active tab. v1.7.11 splits
+   the tab bar's colour roles: `chipFg` (dark text on blue chip)
+   / `tabBg` (crust — deeper than the panel base for contrast
+   against non-chip tab cells) / `dividerFg` (focus-tiered:
+   `surface0` when panel 3 has focus, `base` when it doesn't —
+   dividers dim as the panel dims). Non-first tabs also drop
+   their leading space regardless of active state, so a tab's
+   width stays constant across focus + active-tab changes and
+   the bar no longer jitters when you cycle tabs. Same Powerline
+   vocabulary (E0B6 round-left cap, E0B0 hard chevron), just
+   with per-role hues instead of a single blue-on-base rule.
+
+4. **Panel 3 active tab persistence.** `state.yaml` grows a
+   `tab:` field alongside `panel:` from v1.7.10. Quit on the
+   Events tab, relaunch, and you land on Events — not the
+   per-kind default. Restore is silent-fallback via
+   `DetailModel.SwitchToTabByName(name)`: if the recorded tab
+   name doesn't exist on the newly-selected Kind (say you were
+   on Helm `History` and next launch loads Deployments), it
+   returns `false` and the per-kind default wins. No warning,
+   no toast — same trust boundary as the rest of state
+   restoration.
+
 ## [v1.7.10] - 2026-07-13
 
 A backlog-collapsing release: five queued TODO items shipped as
