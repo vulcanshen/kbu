@@ -808,21 +808,42 @@ func (m DetailModel) TabTitle() string {
 		borderHex = m.theme.Sidebar.CategoryFg
 	}
 	bc := lipgloss.Color(borderHex)
-	baseColor := lipgloss.Color("#1e1e2e")
+	// Two role-specific colours:
+	//   - chipFg (base #1e1e2e) is the DARK text colour rendered
+	//     inside the active blue chip. Kept as base for legibility
+	//     on top of the blue bg.
+	//   - tabBg (crust #11111b) is the TAB AREA bg outside the
+	//     active chip. Sitting one Catppuccin surface tier below
+	//     base gives the tab area a subtly recessed look vs the
+	//     panel body, so the active chip reads as raised.
+	chipFg := lipgloss.Color("#1e1e2e")
+	tabBg := lipgloss.Color("#11111b")
 
 	// Powerline chip chain (starship-inspired). Only the active tab is
-	// highlighted (blue chip); non-active tabs sit on base bg with thin
-	// E0B1 chevrons between them. When the first tab is active, its chip
-	// merges with the [N] chip left open by plainTitlePrefix, becoming
-	// one continuous blue segment "[N] Label" (avoids double chevron
-	// at the boundary). Otherwise [N] closes with its own cap and every
-	// tab renders under the standard base/blue rule.
-	chipStyle := lipgloss.NewStyle().Foreground(baseColor).Background(bc).Bold(true)
-	closeCap := lipgloss.NewStyle().Foreground(bc).Background(baseColor)
-	openCap := lipgloss.NewStyle().Foreground(baseColor).Background(bc)
-	baseLabel := lipgloss.NewStyle().Foreground(bc).Background(baseColor)
-	divider := lipgloss.NewStyle().Foreground(bc).Background(baseColor)
-	trailingBase := lipgloss.NewStyle().Foreground(baseColor)
+	// highlighted (blue chip); non-active tabs sit on tabBg (crust)
+	// with thin E0B1 chevrons between them. When the first tab is
+	// active, its chip merges with the [N] chip left open by
+	// plainTitlePrefix, becoming one continuous blue segment "[N]
+	// Label" (avoids double chevron at the boundary). Otherwise [N]
+	// closes with its own cap and every tab renders under the standard
+	// tabBg/blue rule.
+	chipStyle := lipgloss.NewStyle().Foreground(chipFg).Background(bc).Bold(true)
+	closeCap := lipgloss.NewStyle().Foreground(bc).Background(tabBg)
+	openCap := lipgloss.NewStyle().Foreground(tabBg).Background(bc)
+	baseLabel := lipgloss.NewStyle().Foreground(bc).Background(tabBg)
+	// Divider (E0B1 thin chevron) between two non-active tabs —
+	// focus-aware, both visible on the crust tab bg but one tier
+	// apart so the focused panel's chevron reads slightly brighter
+	// than the unfocused panel's:
+	//   - Focused panel: surface0 (#313244)
+	//   - Unfocused panel: base (#1e1e2e) — one Catppuccin surface
+	//     tier below focused
+	dividerFg := lipgloss.Color("#1e1e2e")
+	if m.focused {
+		dividerFg = lipgloss.Color("#313244")
+	}
+	divider := lipgloss.NewStyle().Foreground(dividerFg).Background(tabBg)
+	trailingBase := lipgloss.NewStyle().Foreground(tabBg)
 	trailingBlue := lipgloss.NewStyle().Foreground(bc)
 
 	activeIdx := int(m.activeTab)
@@ -830,23 +851,23 @@ func (m DetailModel) TabTitle() string {
 
 	labelOf := func(i int) string {
 		label := m.tabLabel(tabs[i])
-		// Glyph appended directly after the label text with no
-		// separator space — keeps the tab bar compact. The glyph's
-		// own visual footprint provides enough separation from the
-		// letters "s". Same convention for Events for consistency.
+		// Single space between label text and follow-tail glyph so
+		// the play/pause icon breathes against the trailing "s"
+		// rather than butting into it. Same convention for Logs
+		// and Events for visual consistency.
 		switch tabs[i] {
 		case "Logs":
 			marker := logsPausedGlyph
 			if m.followTail {
 				marker = logsLiveGlyph
 			}
-			label = label + marker
+			label = label + " " + marker
 		case "Events":
 			marker := logsPausedGlyph
 			if m.followEventsTail {
 				marker = logsLiveGlyph
 			}
-			label = label + marker
+			label = label + " " + marker
 		}
 		return label
 	}
@@ -867,9 +888,12 @@ func (m DetailModel) TabTitle() string {
 				// -- just continue the blue chip with " Label".
 				b.WriteString(chipStyle.Render(" " + labelOf(0)))
 			} else {
-				// Close [N] chip; first tab label sits flush against the
-				// close cap (cap is the separator).
-				b.WriteString(closeCap.Render("\uE0B0"))
+				// First tab inactive: emit the E0B0 close cap to
+				// transition from the [N] chip's blue bg to the base
+				// bg tab area. Label sits flush against the wedge \u2014
+				// the triangle IS the visual separator, no extra
+				// leading space needed.
+				b.WriteString(closeCap.Render("\ue0b0"))
 				b.WriteString(baseLabel.Render(labelOf(0)))
 			}
 			prevBlue = isBlue
@@ -883,10 +907,17 @@ func (m DetailModel) TabTitle() string {
 		case !prevBlue && !isBlue:
 			b.WriteString(divider.Render("\uE0B1"))
 		}
+		// Non-first tabs sit flush against their leading boundary
+		// (chevron / cap) regardless of active/inactive state. Both
+		// branches render the label without a leading space so tab
+		// width stays STABLE across focus / activeTab changes —
+		// without this, the chip's leading padding space would make
+		// the whole tab bar shift 1 cell every time the active tab
+		// swaps and popup / border alignment jitters.
 		if isBlue {
-			b.WriteString(chipStyle.Render(" " + labelOf(i)))
+			b.WriteString(chipStyle.Render(labelOf(i)))
 		} else {
-			b.WriteString(baseLabel.Render(" " + labelOf(i)))
+			b.WriteString(baseLabel.Render(labelOf(i)))
 		}
 		prevBlue = isBlue
 	}
