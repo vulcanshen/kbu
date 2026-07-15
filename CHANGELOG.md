@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v1.7.12] - 2026-07-15
+
+Single-thread build fix on top of v1.7.11.
+
+1. **Static Linux binaries — no glibc dependency.** v1.7.11 (and
+   every prior release) shipped Linux binaries dynamically linked
+   against the GitHub-hosted runner's glibc (Ubuntu 22.04 →
+   glibc 2.35+). Users on older distros — Debian 11, Ubuntu 20.04,
+   RHEL / CentOS 7-8 — saw `version 'GLIBC_2.32' not found` /
+   `GLIBC_2.34' not found` when trying to launch. `.goreleaser.yaml`
+   builds now set `CGO_ENABLED=0`, producing fully static binaries
+   that link against no shared library at all. km8 has no CGO
+   dependencies (bubbletea / lipgloss / client-go / viper are all
+   pure Go), so the switch is a no-op at the code level — same
+   behaviour on macOS + Windows, functional on any Linux kernel
+   with the standard syscalls (~2.6.32+). Matches the K8s
+   ecosystem norm: `kubectl` / `helm` / `k9s` all ship as
+   CGO_ENABLED=0 static binaries for exactly this reason.
+   No user-visible behavioural change; if you were running
+   v1.7.11 fine, v1.7.12 does the same thing, just with a
+   binary that also runs on your friend's older Ubuntu box.
+
 ## [v1.7.11] - 2026-07-14
 
 A polish release on top of v1.7.10. Four small threads:
