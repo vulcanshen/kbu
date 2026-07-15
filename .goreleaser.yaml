@@ -5,6 +5,8 @@ project_name: km8
 builds:
   - main: ./cmd
     binary: km8
+    env:
+      - CGO_ENABLED=0
     ldflags:
       - -s -w -X github.com/vulcanshen/km8/internal/version.Version={{.Version}}
     goos:
