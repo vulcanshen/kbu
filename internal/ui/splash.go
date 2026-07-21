@@ -18,10 +18,12 @@ type splashHintMsg struct{}
 // SplashModel renders the kbu logo as a hidden easter egg.
 type SplashModel struct {
 	active          bool
-	pixelOrder      []int // colored pixel indices (row*cols + col): row-major M background, then shuffled K/8 foreground
+	pixelOrder      []int // reveal order: full background sheet (top-down), U frame (bottom-up), then K/B letters (shuffled)
 	revealedCount   int
-	bgCount         int // step-size boundary — first bgCount indices are M pixels
-	boundaryPaused  bool
+	bgCount         int  // end of stage 1 — first bgCount indices are the full background sheet (every cell)
+	uEnd            int  // end of stage 2 — indices [bgCount:uEnd] are U frame pixels
+	pausedBg        bool // beat consumed at the D→U boundary
+	pausedU         bool // beat consumed at the U→K/B boundary
 	identityVisible bool // "KubeUI" line
 	taglineVisible  bool // "A single-pane Kubernetes workspace"
 	versionVisible  bool
@@ -37,89 +39,95 @@ func (m SplashModel) IsActive() bool { return m.active }
 func (m *SplashModel) Show() tea.Cmd {
 	m.active = true
 	m.revealedCount = 0
-	m.boundaryPaused = false
+	m.pausedBg = false
+	m.pausedU = false
 	m.identityVisible = false
 	m.taglineVisible = false
 	m.versionVisible = false
 	m.hintVisible = false
 
-	// Five-phase reveal:
-	// (1) M background — row-major top-to-bottom sweep.
-	// (2) beat — brief hold at the M→K/8 boundary.
-	// (3) K/8 foreground shuffled — identity emerging from noise.
-	// (4) 400ms hold → KubeUI + version + tagline appear together (all blue).
-	// (5) 500ms hold → esc hint appears.
+	// Reveal phases:
+	// (1) background - a full dark-gray sheet, row-major top-to-bottom sweep.
+	// (2) beat - brief hold at the background->U boundary.
+	// (3) U frame (navy) - bottom-to-top, rising from the base, over the sheet.
+	// (4) beat - brief hold at the U->K/B boundary.
+	// (5) K/B letters (gold) - shuffled, painted over the sheet.
+	// (6) 400ms hold -> KubeUI + version + tagline appear together (all blue).
+	// (7) 500ms hold -> esc hint appears.
 	rows, cols := len(logoPixels), len(logoPixels[0])
-	var bg, fg []int
+	// Background pass covers EVERY cell so the dark-gray sheet fills solid;
+	// the U and K/B passes come later and paint over it (overwrite, not gaps).
+	bg := make([]int, 0, rows*cols)
 	for r := 0; r < rows; r++ {
 		for c := 0; c < cols; c++ {
-			switch logoPixels[r][c] {
-			case 'M':
-				bg = append(bg, r*cols+c)
-			case 'K', '8':
-				fg = append(fg, r*cols+c)
+			bg = append(bg, r*cols+c)
+		}
+	}
+	// U frame collected bottom-to-top so it rises from the base.
+	var frame []int
+	for r := rows - 1; r >= 0; r-- {
+		for c := 0; c < cols; c++ {
+			if logoPixels[r][c] == 'U' {
+				frame = append(frame, r*cols+c)
 			}
 		}
 	}
-	// bg stays in row-major order for top-to-bottom sweep; fg shuffled.
-	rand.Shuffle(len(fg), func(i, j int) { fg[i], fg[j] = fg[j], fg[i] })
-	m.pixelOrder = append(bg, fg...)
+	// K/B letters shuffled.
+	var letters []int
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			if b := logoPixels[r][c]; b == 'K' || b == 'B' {
+				letters = append(letters, r*cols+c)
+			}
+		}
+	}
+	rand.Shuffle(len(letters), func(i, j int) { letters[i], letters[j] = letters[j], letters[i] })
+	m.pixelOrder = append(append(bg, frame...), letters...)
 	m.bgCount = len(bg)
+	m.uEnd = len(bg) + len(frame)
 
 	return tea.Tick(10*time.Millisecond, func(time.Time) tea.Msg {
 		return splashTickMsg{}
 	})
 }
 
-// kbu logo (reference: .references/logo.txt): 18x18 grid.
-// M=navy (background), K/8=gold, space=transparent.
-// Pixel art still spells K/8 through v2.0 — L5 (v2.0 release) refreshed
-// only the text lines. Redesign to K/B (or another kbu identity) is a
-// separate follow-up so the two decisions can be made independently.
-var logoPixels = [18]string{
-	"MMMMMMMMMMMMMMMMMM",
-	"MMMMMMMMMMMMMMMMMM",
-	"MMKK  KKMM888888MM",
-	"MMKK  KKMM888888MM",
-	"MMKK  KKMM88  88MM",
-	"MMKK  KKMM88  88MM",
-	"MMKK KKKMM88  88MM",
-	"MMKKKKKKMM88  88MM",
-	"MMKKKKK MM88  88MM",
-	"MMKK    MM888888MM",
-	"MMKK    MM888888MM",
-	"MMKKKKK MM88  88MM",
-	"MMKKKKKKMM88  88MM",
-	"MMKK KKKMM88  88MM",
-	"MMKK  KKMM88  88MM",
-	"MMKK  KKMM88  88MM",
-	"MMKK  KKMM888888MM",
-	"MMKK  KKMM888888MM",
+// kbu logo — generated from docs/kbu-icon.svg (25x23). The mark spells
+// KBU: K and B in gold, U as the navy frame (side rails + base) that
+// wraps them. D=dark-gray background, U=navy frame, K/B=gold letters.
+var logoPixels = [23]string{
+	"DDDDDDDDDDDDDDDDDDDDDDDDD",
+	"DDDDDDDDDDDDDDDDDDDDDDDDD",
+	"DDUUUDKKDDKKDBBBBBDDUUUDD",
+	"DDDUUDKKDDKKDBBBBBBDUUDDD",
+	"DDDUUDKKDDKKDBBDDBBDUUDDD",
+	"DDDUUDKKDDKKDBBDDBBDUUDDD",
+	"DDDUUDKKDKKKDBBDDBBDUUDDD",
+	"DDDUUDKKKKKKDBBDDBBDUUDDD",
+	"DDDUUDKKKKKDDBBDDBBDUUDDD",
+	"DDDUUDKKDDDDDBBBBBDDUUDDD",
+	"DDDUUDKKDDDDDBBBBBDDUUDDD",
+	"DDDUUDKKKKKDDBBDDBBDUUDDD",
+	"DDDUUDKKKKKKDBBDDBBDUUDDD",
+	"DDDUUDKKDKKKDBBDDBBDUUDDD",
+	"DDDUUDKKDDKKDBBDDBBDUUDDD",
+	"DDDUUDKKDDKKDBBDDBBDUUDDD",
+	"DDDUUDKKDDKKDBBBBBBDUUDDD",
+	"DDDUUDKKDDKKDBBBBBDDUUDDD",
+	"DDDUUDDDDDDDDDDDDDDDUUDDD",
+	"DDUUUUUUUUUUUUUUUUUUUUUDD",
+	"DUUUUUUUUUUUUUUUUUUUUUUUD",
+	"DDDDDDDDDDDDDDDDDDDDDDDDD",
+	"DDDDDDDDDDDDDDDDDDDDDDDDD",
 }
 
 const (
-	logoNavy = "#1D4685"
-	logoGold = "#F0AE49"
+	logoBg   = "#313244" // dark-gray background (catppuccin surface0)
+	logoNavy = "#205090" // U frame — side rails + base (kbu-icon.svg)
+	logoGold = "#f2b753" // K / B letters (kbu-icon.svg)
 )
 
-func pixelColor(p byte) string {
-	switch p {
-	case 'M':
-		return logoNavy
-	case 'K', '8':
-		return logoGold
-	}
-	return ""
-}
-
-func pixelGlyph(p byte) string {
-	switch p {
-	case 'K', '8':
-		return "" // nf-fa-paw
-	case 'M':
-		return "\U000f011b" // nf-md-cat
-	}
-	return ""
+func pixelGlyph(byte) string {
+	return "\uf0c8" // nf-fa-square: one solid pixel, same glyph for every cell
 }
 
 func (m SplashModel) Render(width, height int) string {
@@ -127,21 +135,29 @@ func (m SplashModel) Render(width, height int) string {
 		return ""
 	}
 
-	// Build set of revealed pixel indices for O(1) lookup.
-	revealed := make(map[int]bool, m.revealedCount)
-	for _, idx := range m.pixelOrder[:m.revealedCount] {
-		revealed[idx] = true
+	// Colour each cell by the reveal pass that last touched it. The background
+	// pass paints every cell dark gray; the U and K/B passes come later in
+	// pixelOrder, so they overwrite the gray where they land (no gaps left).
+	cols := len(logoPixels[0])
+	cellColor := make([]string, len(logoPixels)*cols)
+	for i := 0; i < m.revealedCount; i++ {
+		idx := m.pixelOrder[i]
+		switch {
+		case i < m.bgCount:
+			cellColor[idx] = logoBg
+		case i < m.uEnd:
+			cellColor[idx] = logoNavy
+		default:
+			cellColor[idx] = logoGold
+		}
 	}
 
-	cols := len(logoPixels[0])
 	var logoLines []string
 	for r := 0; r < len(logoPixels); r++ {
 		var line strings.Builder
 		for c := 0; c < cols; c++ {
-			color := pixelColor(logoPixels[r][c])
-			if color != "" && revealed[r*cols+c] {
-				glyph := pixelGlyph(logoPixels[r][c])
-				line.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(glyph + " "))
+			if color := cellColor[r*cols+c]; color != "" {
+				line.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(pixelGlyph(0) + " "))
 			} else {
 				line.WriteString("  ")
 			}
@@ -192,42 +208,56 @@ func (m SplashModel) Update(msg tea.Msg) (SplashModel, tea.Cmd) {
 			m.revealedCount = 0
 			m.pixelOrder = nil
 			m.bgCount = 0
-			m.boundaryPaused = false
+			m.uEnd = 0
+			m.pausedBg = false
+			m.pausedU = false
 			m.identityVisible = false
 			m.taglineVisible = false
 			m.versionVisible = false
 			m.hintVisible = false
 		}
 	case splashTickMsg:
-		// Beat at the M→K/8 boundary — brief hold so the M reveal registers
-		// before the K/8 shuffle starts.
-		if m.bgCount > 0 && m.revealedCount == m.bgCount && !m.boundaryPaused {
-			m.boundaryPaused = true
+		// Beat at the D->U boundary - brief hold before the frame rises.
+		if m.bgCount > 0 && m.revealedCount == m.bgCount && !m.pausedBg {
+			m.pausedBg = true
+			return m, tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
+				return splashTickMsg{}
+			})
+		}
+		// Beat at the U->K/B boundary - brief hold before the letters shuffle in.
+		if m.uEnd > m.bgCount && m.revealedCount == m.uEnd && !m.pausedU {
+			m.pausedU = true
 			return m, tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
 				return splashTickMsg{}
 			})
 		}
 		if m.revealedCount < len(m.pixelOrder) {
-			// Stage 1 (M background): 4 pixels/tick @ 10ms — top-to-bottom sweep.
-			// Stage 2 (K/8 foreground): 2 pixels/tick @ 10ms — accelerated shuffle.
-			step, delay := 4, 10*time.Millisecond
-			if m.revealedCount >= m.bgCount {
-				step, delay = 2, 10*time.Millisecond
+			// Stage 1 (background sheet): one full row per tick — fast top-to-bottom fill.
+			// Stage 2 (U frame): 3 px/tick, bottom-to-top sweep.
+			// Stage 3 (K/B letters): 2 px/tick, shuffled.
+			step := 2
+			switch {
+			case m.revealedCount < m.bgCount:
+				step = len(logoPixels[0])
+			case m.revealedCount < m.uEnd:
+				step = 3
 			}
 			newCount := m.revealedCount + step
-			// Clamp to the boundary so the M→K/8 beat fires cleanly.
+			// Clamp to each boundary so the beats fire cleanly.
 			if m.revealedCount < m.bgCount && newCount > m.bgCount {
 				newCount = m.bgCount
+			} else if m.revealedCount < m.uEnd && newCount > m.uEnd {
+				newCount = m.uEnd
 			}
 			if newCount > len(m.pixelOrder) {
 				newCount = len(m.pixelOrder)
 			}
 			m.revealedCount = newCount
-			return m, tea.Tick(delay, func(time.Time) tea.Msg {
+			return m, tea.Tick(10*time.Millisecond, func(time.Time) tea.Msg {
 				return splashTickMsg{}
 			})
 		}
-		// K/8 done — schedule the identity caption reveal after a brief hold.
+		// Letters done - schedule the identity caption reveal after a brief hold.
 		if !m.identityVisible {
 			return m, tea.Tick(400*time.Millisecond, func(time.Time) tea.Msg {
 				return splashIdentityMsg{}
