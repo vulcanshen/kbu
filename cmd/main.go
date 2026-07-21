@@ -99,7 +99,7 @@ func main() {
 		// tea.ErrProgramPanic. Handle it separately for a clear crash message.
 		if errors.Is(err, tea.ErrProgramPanic) {
 			path := config.WriteCrashLog(err)
-			fmt.Fprintf(os.Stderr, "\n\x1b[31;1mkbu crashed!\x1b[0m\n")
+			fmt.Fprintf(os.Stderr, "\n\x1b[31;1mKubeUI crashed!\x1b[0m\n")
 			fmt.Fprintf(os.Stderr, "panic: %v\n", err)
 			if path != "" {
 				fmt.Fprintf(os.Stderr, "crash log: %s\n", path)
