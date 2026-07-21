@@ -12,17 +12,17 @@ import (
 )
 
 type splashTickMsg struct{}
-type splashIdentityMsg struct{} // fires KubeMate + version + tagline together
+type splashIdentityMsg struct{} // fires KubeUI + version + tagline together
 type splashHintMsg struct{}
 
-// SplashModel renders the km8 logo as a hidden easter egg.
+// SplashModel renders the kbu logo as a hidden easter egg.
 type SplashModel struct {
 	active          bool
 	pixelOrder      []int // colored pixel indices (row*cols + col): row-major M background, then shuffled K/8 foreground
 	revealedCount   int
 	bgCount         int // step-size boundary — first bgCount indices are M pixels
 	boundaryPaused  bool
-	identityVisible bool // "KubeMate" line
+	identityVisible bool // "KubeUI" line
 	taglineVisible  bool // "A single-pane Kubernetes workspace"
 	versionVisible  bool
 	hintVisible     bool
@@ -47,7 +47,7 @@ func (m *SplashModel) Show() tea.Cmd {
 	// (1) M background — row-major top-to-bottom sweep.
 	// (2) beat — brief hold at the M→K/8 boundary.
 	// (3) K/8 foreground shuffled — identity emerging from noise.
-	// (4) 400ms hold → KubeMate + version + tagline appear together (all blue).
+	// (4) 400ms hold → KubeUI + version + tagline appear together (all blue).
 	// (5) 500ms hold → esc hint appears.
 	rows, cols := len(logoPixels), len(logoPixels[0])
 	var bg, fg []int
@@ -71,8 +71,11 @@ func (m *SplashModel) Show() tea.Cmd {
 	})
 }
 
-// km8 logo (reference: .references/logo.txt): 18x18 grid.
+// kbu logo (reference: .references/logo.txt): 18x18 grid.
 // M=navy (background), K/8=gold, space=transparent.
+// Pixel art still spells K/8 through v2.0 — L5 (v2.0 release) refreshed
+// only the text lines. Redesign to K/B (or another kbu identity) is a
+// separate follow-up so the two decisions can be made independently.
 var logoPixels = [18]string{
 	"MMMMMMMMMMMMMMMMMM",
 	"MMMMMMMMMMMMMMMMMM",
@@ -153,7 +156,7 @@ func (m SplashModel) Render(width, height int) string {
 	logoW := cols * 2
 	identityText, taglineText, versionText, hintText := " ", " ", " ", " "
 	if m.identityVisible {
-		identityText = blueStyle.Bold(true).Render("KubeMate")
+		identityText = blueStyle.Bold(true).Render("KubeUI")
 	}
 	if m.versionVisible {
 		versionText = blueStyle.Render(version.Display())
