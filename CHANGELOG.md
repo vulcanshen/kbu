@@ -4,6 +4,100 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.0.0] - 2026-07-21
+
+Identity rename: km8 → **kbu**. The tool doesn't change, just the
+name — the tagline for the Family the Kubernetes TUI is the first
+member of. Future TUIs Vulcan Shen builds will share a `u`-ending
+naming pattern (`u` privately means "UI"; kept implicit like Apple's
+`i` prefix). One release, one story, no feature or workflow changes
+buried inside — the diff is entirely rename plumbing.
+
+Reason: **km8** was a mouthful (three syllables, unclear "M8"),
+searched poorly, and didn't compose into a family for later tools.
+**kbu** is three letters, home-row-friendly to type, ends in a vowel
+so it reads naturally in any language, and leaves room for `filu` /
+`hostu` / etc. later. Splash caption changed from `KubeMate` (the
+v1.7.x display name) to `KubeUI` in the same beat — the long-form
+identity that "kbu" is short for.
+
+Six threads make up the rename:
+
+1. **Go module + binary + goreleaser.** `go.mod` module directive
+   `github.com/vulcanshen/km8` → `github.com/vulcanshen/kbu` (54 `.go`
+   files touched, symmetric import path replace, no logic change).
+   `.goreleaser.yaml` `project_name` / `binary` / ldflags version
+   injection module path / brew + scoop homepage all → `kbu`. Local
+   build now `go build -o kbu ./cmd/`; release artifacts land as
+   `kbu_2.0.0_<os>_<arch>.tar.gz`.
+
+2. **Config directory + env vars + one-shot migration.** Default
+   config dir moves from `~/.config/km8/` to `~/.config/kbu/` (same
+   on every platform: `~/Library/Application Support/kbu/` on macOS,
+   `%APPDATA%/kbu/` on Windows). First launch on v2.0 detects the
+   legacy `~/.config/km8/` and copies its contents into `~/.config/
+   kbu/` (recursive file copy — `config.yaml`, `state.yaml`,
+   `theme.yaml`, `logs/`). Old directory is left in place for the
+   user to remove at their leisure. Migration is a one-shot:
+   subsequent launches find the new dir already populated and skip
+   silently.
+
+   Env vars follow the same pattern: `KBU__CONFIGPATH` /
+   `KBU__STATEPATH` / `KBU__ALTERM_SHELL` / `KBU__ALTERM_LOGIN_SHELL`
+   are the new names. Legacy `KM8__*` counterparts are still read as
+   fallbacks in v2.0 (removable in v2.1) so a `.zshrc` from a v1.7.x
+   install keeps working across the upgrade. When both a `KBU__` and
+   its legacy `KM8__` are set, `KBU__` wins; a legacy-only value
+   fires a per-launch deprecation warning in the App Log until the
+   user renames.
+
+   The pre-v2.0 `KM8__SHELL` / `KM8__LOGIN_SHELL` tier (deprecated
+   since v1.7.5 in favor of `KM8__ALTERM_*`) is fully removed in
+   v2.0 — that grace period spanned six minor releases, well past
+   the "remove next release" commitment. Anyone still setting them
+   after v1.7.5 will get a shell fallback to `$SHELL` / non-login,
+   with no warning noise for the removed tier.
+
+3. **User-facing strings.** Every literal `km8` in a rendered
+   surface — `--version` prefix (`km8 dev` → `kbu dev`), splash
+   caption (`KubeMate` → `KubeUI`), `?` help popup title, toast
+   title (`󰵅 km8` / `󰀦 km8` → `󰵅 kbu` / `󰀦 kbu`), quit hotkey
+   description, confirm popup message (`Quit km8?` → `Quit kbu?`),
+   startup App Log line, crash banner — all read `kbu` in v2.0.
+   The 18×18 splash pixel-art logo still spells K/8 through this
+   release; a redesign to K/B (or another kbu identity) is deferred
+   as a separate follow-up so the two decisions can be made
+   independently.
+
+4. **Documentation.** README.md + README-zh_TW.md rewritten with the
+   new identity throughout — title line, badges, install commands
+   (`brew install vulcanshen/tap/kbu`, `scoop install kbu`,
+   `go install github.com/vulcanshen/kbu/cmd@latest`), quick-start
+   snippet, feature bullets, keybinding table, env var table,
+   config path table. Both README variants now open with a v2.0
+   rename callout so users landing from old km8 links understand
+   what they're looking at. Every `.go` file's dev-facing comments
+   swept for `km8` → `kbu` where the reference is to the current
+   project (legitimate legacy refs — `legacyAppName = "km8"`, the
+   Alterm-migration `km8erm_shell` deprecated key, migration code's
+   `~/.config/km8/` path — are preserved verbatim).
+
+5. **Distribution + promotion.** Homebrew tap and Scoop bucket get
+   new `kbu` formulas alongside the existing `km8` formulas (the
+   `km8` formulas stay as `deprecated!` shims pointing at `kbu` for
+   one release; removable when v2.1 lands). Merged promotion PRs
+   (kubetools, charm-in-the-wild) get follow-up rename PRs so the
+   listings match the new identity.
+
+6. **GitHub repo rename.** `github.com/vulcanshen/km8` renamed to
+   `github.com/vulcanshen/kbu`. GitHub's redirect keeps old URLs
+   working — anyone with a browser bookmark or a `git remote` still
+   resolves — but the canonical URL is now the new one. Everyone
+   who cloned the repo before v2.0 should `git remote set-url
+   origin git@github.com:vulcanshen/kbu.git` at their convenience;
+   the redirect is opt-in future insurance, not a permanent
+   contract.
+
 ## [v1.7.12] - 2026-07-15
 
 Single-thread build fix on top of v1.7.11.
