@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.0.1] - 2026-07-22
+
+Branding polish following the v2.0.0 rename — no functional or workflow
+changes, just finishing the visual identity that km8 → kbu started.
+
+- **Splash easter egg** (`V`) redesigned: the pixel logo now spells
+  **KBU** (K and B in gold, U as the navy frame that wraps them) instead
+  of the old `K8`. New staged reveal — a dark-gray background sheet
+  sweeps top-to-bottom, the U frame rises from the base, then the K/B
+  letters shuffle in; every cell is a single solid-square glyph.
+- **User-facing display text** now uses the full name **KubeUI** where
+  the product is named to the user: quit confirm dialog, the `Space`
+  menu title, toast title, applog startup line, and crash messages.
+  Command / identity strings (`--version`, config dir, migration notes)
+  keep `kbu` — they name the binary, not the product.
+- **README icon + GitHub social preview** refreshed to the KBU logo (old
+  K8 art kept as `docs/km8-icon.svg`). Social preview wordmark set in the
+  Tiny5 pixel font on a full-black canvas.
+- **Removed the Go Report Card badge** — goreportcard.com was permanently
+  sunset on 2026-07-01.
+- **`.gitignore`** now ignores `kbu` / `kbu.exe` (was still `km8` /
+  `km8.exe`, a v2.0 rename straggler).
+
 ## [v2.0.0] - 2026-07-21
 
 Identity rename: km8 → **kbu**. The tool doesn't change, just the
