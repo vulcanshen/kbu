@@ -431,7 +431,7 @@ func containerUsesSecret(cs []corev1.Container, name string) bool {
 // Static builders (no API call)
 // ---------------------------------------------------------------------------
 
-// buildEventRelatives: drill to the involved object when km8 recognizes the kind.
+// buildEventRelatives: drill to the involved object when kbu recognizes the kind.
 // Empty when the object's kind isn't in kindToResourceType (e.g. CRDs).
 func buildEventRelatives(e *corev1.Event) []RelativeSection {
 	if e.InvolvedObject.Name == "" {
@@ -519,7 +519,7 @@ func buildEndpointSliceRelatives(es *discoveryv1.EndpointSlice) []RelativeSectio
 
 // buildClusterRoleBindingRelatives / buildRoleBindingRelatives: RoleRef + Subjects.
 // Subjects with Kind=ServiceAccount become drillable; Users/Groups remain
-// info-only since they're not km8 resources.
+// info-only since they're not kbu resources.
 func buildClusterRoleBindingRelatives(crb *rbacv1.ClusterRoleBinding) []RelativeSection {
 	sections := roleRefSection(crb.RoleRef, "")
 	sections = appendSubjects(sections, crb.Subjects)

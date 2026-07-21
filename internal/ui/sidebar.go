@@ -420,7 +420,7 @@ func newSidebarFromRegistry(t *theme.Theme, reg *k8s.Registry) SidebarModel {
 // kind name (e.g. "pods", "crontabs.stable.example.com"), not the
 // whole sidebar tree.
 //
-// KubectlName over DisplayName: raw, stable across km8 upgrades, and
+// KubectlName over DisplayName: raw, stable across kbu upgrades, and
 // pipes cleanly into `kubectl get $(pbpaste)`. Category-header
 // cursor positions return "" so an accidental y on a header line
 // silently skips rather than copying the header label — categories
@@ -595,7 +595,7 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 // to press Tab again to actually switch focus, which is the safe
 // interpretation when the user said "anything else cancels."
 //
-// Enter as commit aligns with km8's global "Enter = commit / into"
+// Enter as commit aligns with kbu's global "Enter = commit / into"
 // gesture (one of the four core gestures Tab/Enter/Esc/Space) — D
 // is the contextual entry key that also serves as exit.
 func (m SidebarModel) handleDragKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {

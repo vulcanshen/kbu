@@ -130,7 +130,7 @@ func (m *CompareYamlPopupModel) SetLayer(layer int) {
 
 // SetDefaultLayout sets the initial layout used by subsequent Open calls.
 // Hook for config-driven defaults — AppModel wires this from the loaded
-// km8 config.yaml `compare.layout` value at startup.
+// kbu config.yaml `compare.layout` value at startup.
 func (m *CompareYamlPopupModel) SetDefaultLayout(l CompareLayout) {
 	m.layout = l
 }

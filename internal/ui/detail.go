@@ -794,7 +794,7 @@ func (m *DetailModel) ResetDrillStack() {
 // a chain-level suffix when drilled. Embed in Panel 3's border title —
 // Panel 2 stays clean with just its breadcrumb.
 //
-// The follow-tail marker is intentionally a glyph, not a color: km8's color
+// The follow-tail marker is intentionally a glyph, not a color: kbu's color
 // vocabulary is reserved for "this row / cell needs your attention"
 // (abnormal status, cursor, lock). Painting the Logs label green to mean
 // "follow on" would have overloaded color with a fourth meaning ("a state
@@ -1074,7 +1074,7 @@ func (m *DetailModel) SetResourceType(rt k8s.ResourceType) {
 
 // resourceHasConditions reports whether kind kind exposes .status.conditions
 // worth a tab. Matches the set ExtractConditions handles. CRDs and other
-// kinds may have conditions but km8 doesn't surface them here.
+// kinds may have conditions but kbu doesn't surface them here.
 func resourceHasConditions(rt k8s.ResourceType) bool {
 	switch rt {
 	case k8s.ResourcePods,

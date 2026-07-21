@@ -51,7 +51,7 @@ func FetchResourceEvents(ctx context.Context, clientset kubernetes.Interface, na
 // Rationale: kubectl describe of a Deployment shows only the Deployment's own
 // events, which are sparse (ScalingReplicaSet only). The interesting events
 // during a rollout / outage are on the child Pods (BackOff, ImagePullBackOff,
-// Killing). km8 aggregates them so the Events tab is useful one level up,
+// Killing). kbu aggregates them so the Events tab is useful one level up,
 // mirroring the aggregate-logs pattern.
 func FetchResourceEventsAggregated(ctx context.Context, clientset kubernetes.Interface, item ResourceItem) ([]EventItem, error) {
 	raw, err := fetchEventsRaw(ctx, clientset, item.Name, item.Namespace)
@@ -557,15 +557,15 @@ func volumeRefFromPodVolume(v corev1.Volume, ns string) VolumeRef {
 }
 
 // kindToResourceType maps a K8s "Kind" string (as it appears in
-// OwnerReferences / TypeMeta) to the corresponding km8 ResourceType. Returns
-// ok=false for kinds km8 doesn't recognize so the caller can fall back to a
+// OwnerReferences / TypeMeta) to the corresponding kbu ResourceType. Returns
+// ok=false for kinds kbu doesn't recognize so the caller can fall back to a
 // non-drillable display.
 func kindToResourceType(kind string) (ResourceType, bool) {
 	switch kind {
 	case "Pod":
 		return ResourcePods, true
 	case "ReplicaSet":
-		// km8 doesn't have ReplicaSet as a first-class resource yet — fall
+		// kbu doesn't have ReplicaSet as a first-class resource yet — fall
 		// back to Deployment which is what users really want to inspect.
 		// (The RS is an implementation detail of Deployment rollouts.)
 		return ResourceDeployments, true
@@ -2291,7 +2291,7 @@ func detailHorizontalPodAutoscaler(item ResourceItem) ResourceDetail {
 	return d
 }
 
-// hpaTargetChildType returns the km8 ResourceType matching the HPA's
+// hpaTargetChildType returns the kbu ResourceType matching the HPA's
 // scaleTargetRef.Kind. Returns "" for unsupported kinds (ReplicaSet and
 // anything we don't render in the sidebar).
 func hpaTargetChildType(item ResourceItem) ResourceType {

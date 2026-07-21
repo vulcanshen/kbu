@@ -960,7 +960,7 @@ func TestSidebarModel_Drag_DCommitsAndEmitsMsg(t *testing.T) {
 }
 
 func TestSidebarModel_Drag_EnterAlsoCommits(t *testing.T) {
-	// Enter is the global "commit / into" gesture in km8 — it must
+	// Enter is the global "commit / into" gesture in kbu — it must
 	// also drop a drag, mirroring D.
 	m, _ := pinnedDragSetup()
 	m.EnterDrag()
@@ -1007,7 +1007,7 @@ func TestSidebarModel_Drag_EscCancelsAndReverts(t *testing.T) {
 }
 
 func TestSidebarModel_Drag_SpaceOpensDropMenuNotCancel(t *testing.T) {
-	// Space is one of km8's core gestures (Tab/Enter/Esc/Space) — in
+	// Space is one of kbu's core gestures (Tab/Enter/Esc/Space) — in
 	// drag mode it opens the drop-only menu instead of cancelling
 	// like every other non-j/k/D/Enter key. Sidebar emits the
 	// request msg; app.go renders the popup.

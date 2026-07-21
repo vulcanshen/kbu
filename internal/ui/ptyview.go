@@ -50,7 +50,7 @@ const (
 
 // PtyView renders an embedded PTY in a popup overlay. Used for `kubectl edit`,
 // `kubectl exec`, and the Alterm internal shell so subprocess output stays
-// inside km8 instead of leaking into the host terminal scrollback after quit.
+// inside kbu instead of leaking into the host terminal scrollback after quit.
 //
 // The Shell-kind variant is *persistent*: pressing Alt+T inside the popup
 // hides it without killing the subprocess. The shell keeps running in the
@@ -399,7 +399,7 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 		// Alt+T hides Alterm popup without killing the shell — persistent PTY.
 		// Always intercepted for PtyKindShell regardless of alt-screen mode;
 		// users running vim *inside* Alterm still need an escape hatch to
-		// peek at km8 panels without losing their shell session.
+		// peek at kbu panels without losing their shell session.
 		// Edit/Exec popups pass it through (transient — no hide concept).
 		if p.kind == PtyKindShell {
 			switch msg.String() {

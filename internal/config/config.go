@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds application-level settings for km8.
+// Config holds application-level settings for kbu.
 // Theme settings are intentionally excluded — see internal/theme/.
 type Config struct {
 	// DefaultContext is the kubeconfig context to use on startup.
@@ -43,7 +43,7 @@ type Config struct {
 	// prompt; the v1.7.2 baseline runs non-login interactive so
 	// .bashrc / .zshrc still loads but no PS1 surprise.
 	//
-	// Flip true when km8 is launched from a NON-login parent shell
+	// Flip true when kbu is launched from a NON-login parent shell
 	// (Raycast / Alfred / cron / tmux configured non-login) and your
 	// PATH lives in .zprofile / .bash_profile rather than .zshrc —
 	// without `-l` those dotfiles never run and Alterm sees a
@@ -63,7 +63,7 @@ type Config struct {
 
 	// ResourceKindConfig holds per-kind user preferences keyed by
 	// KubectlName (e.g. "pod" / "namespace" / "configmap"). Single
-	// home for everything km8 lets the user tune about a kind: pin
+	// home for everything kbu lets the user tune about a kind: pin
 	// state, sort, future column visibility / filter. Unknown kinds
 	// at load time stay in the map but are dropped from the sidebar
 	// (CRD uninstalled, etc.) — the entry is preserved so a re-install
@@ -390,7 +390,7 @@ func LoadFrom(path string) (*Config, error) {
 				}
 			}
 			cfg.DeprecationWarnings = append(cfg.DeprecationWarnings,
-				"config: 'km8erm_shell' is deprecated, rename to 'alterm_shell' (auto-migrated this session — the next km8 save will rewrite your config.yaml with the new key)")
+				"config: 'km8erm_shell' is deprecated, rename to 'alterm_shell' (auto-migrated this session — the next kbu save will rewrite your config.yaml with the new key)")
 		}
 
 		_, newLoginPresent := raw["alterm_login_shell"]
@@ -401,7 +401,7 @@ func LoadFrom(path string) (*Config, error) {
 				}
 			}
 			cfg.DeprecationWarnings = append(cfg.DeprecationWarnings,
-				"config: 'km8erm_login_shell' is deprecated, rename to 'alterm_login_shell' (auto-migrated this session — the next km8 save will rewrite your config.yaml with the new key)")
+				"config: 'km8erm_login_shell' is deprecated, rename to 'alterm_login_shell' (auto-migrated this session — the next kbu save will rewrite your config.yaml with the new key)")
 		}
 	}
 
@@ -584,7 +584,7 @@ func (c *Config) NextPinOrder() int {
 
 // Save persists the config to the default path via atomic write
 // (write to a tempfile in the same dir, then rename). The atomic step
-// matters because km8 mutates the file during use (pin / unpin) and a
+// matters because kbu mutates the file during use (pin / unpin) and a
 // crash mid-write must not leave a half-written config that fails to
 // parse on next startup.
 //
@@ -631,7 +631,7 @@ func (c *Config) SaveTo(path string) error {
 // before any Save-triggered rewrite that goes through yaml.Marshal
 // — which can't preserve those. Returns the backup path on success.
 //
-// `vers` is the running km8 release with dots replaced by
+// `vers` is the running kbu release with dots replaced by
 // underscores so the suffix sorts cleanly and doesn't confuse
 // path-splitters that special-case dot (e.g. `1_7_5`, or `dev` for
 // local builds).

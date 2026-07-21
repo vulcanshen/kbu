@@ -8,7 +8,7 @@ type ClusterInfo struct {
 	Namespace   string
 }
 
-// ResourceType identifies a Kubernetes resource kind supported by km8.
+// ResourceType identifies a Kubernetes resource kind supported by kbu.
 type ResourceType string
 
 const (
@@ -42,7 +42,7 @@ const (
 	ResourceEndpointSlices  ResourceType = "endpointslices"
 	ResourceIngressClasses  ResourceType = "ingressclasses"
 
-	// ResourceReleases is the km8 27th ResourceType — Helm releases. Treated as
+	// ResourceReleases is the kbu 27th ResourceType — Helm releases. Treated as
 	// a normal ResourceType so existing graph/drill machinery is reused, but the
 	// fetcher goes through `helm` CLI rather than client-go. Registered at
 	// runtime only when `helm` is found on PATH (see helm.go).
@@ -119,7 +119,7 @@ type RelativeRow struct {
 }
 
 // RefTarget identifies another Kubernetes resource that the Relatives tab can
-// drill into. Type is the km8 ResourceType (Pod, Secret, ConfigMap, Node, ...);
+// drill into. Type is the kbu ResourceType (Pod, Secret, ConfigMap, Node, ...);
 // Namespace is empty for cluster-scoped kinds.
 type RefTarget struct {
 	Type      ResourceType

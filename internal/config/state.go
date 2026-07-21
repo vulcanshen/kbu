@@ -13,11 +13,11 @@ import (
 // State captures the user's last-known TUI position across restarts.
 //
 // Separate from Config on purpose. Config is user-authored preferences
-// (mouse, editor, pins) — a human hand-edits the YAML and expects km8
+// (mouse, editor, pins) — a human hand-edits the YAML and expects kbu
 // to leave comments and structure alone. State is auto-recorded runtime
 // position (last context / namespace / kind / cursor) written on every
 // quit. Mixing them would pollute the user's hand-editable config with
-// values km8 mutates automatically and defeat the "config.yaml is my
+// values kbu mutates automatically and defeat the "config.yaml is my
 // document" trust boundary.
 //
 // Persisted at StatePath() — same config dir as config.yaml but a
@@ -40,8 +40,8 @@ type State struct {
 	// Kind is the last-selected sidebar entry's KubectlName (e.g.
 	// "pods", "deployments", "crontabs.stable.example.com"). Empty
 	// falls through to the sidebar's first entry. KubectlName is
-	// used instead of the km8 ResourceType constant because it's
-	// stable across km8 upgrades (a rename of the internal constant
+	// used instead of the kbu ResourceType constant because it's
+	// stable across kbu upgrades (a rename of the internal constant
 	// wouldn't invalidate a user's saved state) and it also identifies
 	// CRDs unambiguously via their fully-qualified name.
 	Kind string `yaml:"kind,omitempty"`
@@ -67,7 +67,7 @@ type State struct {
 	// by name rather than index because a tab index is kind-specific
 	// — "Events" is index 2 on Pods but index 1 on Namespaces, so
 	// the recorded index wouldn't survive a kind switch. Tab names
-	// are stable across km8 upgrades AND kinds.
+	// are stable across kbu upgrades AND kinds.
 	Tab string `yaml:"tab,omitempty"`
 }
 
@@ -107,7 +107,7 @@ func StatePath() string {
 // so the user notices when their file is corrupt rather than silently
 // resetting their session; callers typically log the error and continue
 // with DefaultState() so a bad state file can't lock the user out of
-// km8.
+// kbu.
 func LoadState() (*State, error) {
 	return LoadStateFrom(StatePath())
 }

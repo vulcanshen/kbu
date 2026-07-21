@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// LogDir returns the path to the km8 logs directory.
+// LogDir returns the path to the kbu logs directory.
 func LogDir() string {
 	return filepath.Join(ConfigDir(), "logs")
 }
@@ -27,7 +27,7 @@ func WriteCrashLog(panicVal interface{}) string {
 	buf := make([]byte, 8192)
 	n := runtime.Stack(buf, false)
 
-	content := fmt.Sprintf("---\nkm8 crash at %s\n\npanic: %v\n\n%s\n",
+	content := fmt.Sprintf("---\nkbu crash at %s\n\npanic: %v\n\n%s\n",
 		time.Now().Format(time.RFC3339), panicVal, buf[:n])
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)

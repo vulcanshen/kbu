@@ -1,4 +1,4 @@
-// Package version holds the km8 build version, injected at build time via
+// Package version holds the kbu build version, injected at build time via
 // goreleaser ldflags (-X github.com/vulcanshen/kbu/internal/version.Version=...).
 // Local `go build` produces a "dev" build that surfaces in --version output
 // and the splash screen tagline.

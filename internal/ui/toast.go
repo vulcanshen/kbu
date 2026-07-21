@@ -39,7 +39,7 @@ const (
 
 	// toastTitleText is the fixed title text for every toast — the
 	// popup-convention rule requires `glyph + text` in border titles;
-	// the level glyph + a stable "km8" identifier tell the user "your
+	// the level glyph + a stable "kbu" identifier tell the user "your
 	// app is talking" without leaking per-toast specifics into chrome.
 	toastTitleText = "kbu"
 

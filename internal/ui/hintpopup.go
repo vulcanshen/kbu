@@ -297,7 +297,7 @@ const drillUpIcon = "\U000f0fc5"
 // search-mode Enter looked like a duplicate of normal-mode Enter.
 const drillArrow = "\U000f060d"
 
-// titleIcon is the km8 wheel glyph (\U000f094b) — same across all hint popups
+// titleIcon is the kbu wheel glyph (\U000f094b) — same across all hint popups
 // so the user associates the icon with "this is the cheatsheet for here".
 const titleIcon = "\U000f094b"
 
@@ -513,7 +513,7 @@ func (m HintPopupModel) renderFullPopup() string {
 	for i, a := range m.actions {
 		if a.separator {
 			// Same purple horizontal rule the listpicker / panel2menu
-			// use between regions — keeps every km8 popup's internal
+			// use between regions — keeps every kbu popup's internal
 			// divider visually consistent.
 			actionRows = append(actionRows, bStyle.Render(strings.Repeat("─", innerW)))
 			continue

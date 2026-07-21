@@ -370,7 +370,7 @@ func (m ListPickerModel) renderFullPopup() string {
 		if it.Separator {
 			// Same purple horizontal rule the hintpopup uses to split
 			// its action region from the cheatsheet below — keeps
-			// every km8 popup's internal divider visually consistent.
+			// every kbu popup's internal divider visually consistent.
 			rows = append(rows, bStyle.Render(strings.Repeat("─", innerW)))
 			continue
 		}

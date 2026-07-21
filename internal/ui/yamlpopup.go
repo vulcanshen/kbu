@@ -1036,7 +1036,7 @@ func (m YamlPopupModel) renderFullPopup() string {
 	// Colours:
 	//   - Cursor uses lipgloss inverse-video so it reads as a caret
 	//     against any bg.
-	//   - Visual-mode SELECTION uses lavender (#b4befe) per km8's
+	//   - Visual-mode SELECTION uses lavender (#b4befe) per kbu's
 	//     color mindset: lavender = user-state (the user is actively
 	//     picking a region), same accent as sidebar Pinned / statusbar
 	//     [C]ontext / [N]amespace values, so "you selected this"
@@ -1226,7 +1226,7 @@ func overlayCursorOnStyledLine(styled, plain string, cursorCol int, cursorStyle 
 
 // bottomBarStrings produces the bottom-border hint + indicator pair that fits
 // in `available` columns. Vim conventions (j/k u/d gg/G n/N) are intentionally
-// omitted — they apply everywhere in km8 and don't need to live in the local
+// omitted — they apply everywhere in kbu and don't need to live in the local
 // hint. Falls back to a short hint and finally drops the indicator if the
 // popup width is too tight.
 func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicator string) {
