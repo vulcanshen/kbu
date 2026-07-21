@@ -276,12 +276,16 @@ func DefaultConfig() *Config {
 }
 
 // appName is the directory name used under the OS config directory.
-const appName = "km8"
+const appName = "kbu"
 
-// ConfigDir returns the config directory for km8.
-// Priority: $XDG_CONFIG_HOME/km8 → platform default → ~/.config/km8
-// Platform defaults: macOS=~/Library/Application Support/km8,
-// Linux=~/.config/km8, Windows=%APPDATA%/km8
+// legacyAppName is the pre-v2.0 app name. Kept for one-shot config
+// dir migration (see MigrateLegacyConfigDir).
+const legacyAppName = "km8"
+
+// ConfigDir returns the config directory for kbu.
+// Priority: $XDG_CONFIG_HOME/kbu → platform default → ~/.config/kbu
+// Platform defaults: macOS=~/Library/Application Support/kbu,
+// Linux=~/.config/kbu, Windows=%APPDATA%/kbu
 func ConfigDir() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, appName)
@@ -294,29 +298,51 @@ func ConfigDir() string {
 	return filepath.Join(dir, appName)
 }
 
-// ConfigPath returns the full path to the km8 config file.
+// legacyConfigDir mirrors ConfigDir but for the pre-v2.0 app name.
+// Only used by MigrateLegacyConfigDir; every other caller uses
+// ConfigDir directly.
+func legacyConfigDir() string {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, legacyAppName)
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".config", legacyAppName)
+	}
+	return filepath.Join(dir, legacyAppName)
+}
+
+// ConfigPath returns the full path to the kbu config file.
 //
-// $KM8__CONFIGPATH wins outright — lets the user point km8 at a config
+// $KBU__CONFIGPATH wins outright — lets the user point kbu at a config
 // file outside the normal config-dir layout (e.g. a per-project YAML
 // committed to a repo, or a tmpfs path on CI). Theme file is NOT
 // affected — it still lives at ConfigDir()/theme.yaml. Absolute path
 // recommended; a relative value resolves against CWD at load/save time.
 //
+// v2.0 rename transition: $KM8__CONFIGPATH is the legacy env var name.
+// If $KBU__CONFIGPATH is not set but $KM8__CONFIGPATH is, we fall back
+// to it silently (path resolution never fails just because the user
+// hasn't updated their env). EnvDeprecations() surfaces the deprecation
+// warning at startup so the user is nudged to rename.
+//
 // Leading / trailing whitespace is TrimSpace'd before the empty
-// check — without that, `KM8__CONFIGPATH=" /path/cfg.yaml"` (leading
+// check — without that, `KBU__CONFIGPATH=" /path/cfg.yaml"` (leading
 // space from copy-paste or a sourced .env) would slip through and
 // reach os.ReadFile verbatim → ENOENT → silent fallback to defaults
 // on load, plus a literal-space directory created under CWD on save.
-// The trim is the single source of truth so other readers of the env
-// (e.g. the NewAppModel startup notice) don't have to repeat it.
 func ConfigPath() string {
+	if p := strings.TrimSpace(os.Getenv("KBU__CONFIGPATH")); p != "" {
+		return p
+	}
 	if p := strings.TrimSpace(os.Getenv("KM8__CONFIGPATH")); p != "" {
 		return p
 	}
 	return filepath.Join(ConfigDir(), "config.yaml")
 }
 
-// ThemePath returns the full path to the km8 theme file.
+// ThemePath returns the full path to the kbu theme file.
 // This is provided for the theme package to use.
 func ThemePath() string {
 	return filepath.Join(ConfigDir(), "theme.yaml")

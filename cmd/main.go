@@ -30,6 +30,18 @@ func main() {
 	klog.SetLogger(logr.Discard())
 	log.SetOutput(io.Discard)
 
+	// v2.0 km8 → kbu rename: one-shot migrate ~/.config/km8 to
+	// ~/.config/kbu if the new dir doesn't exist yet. Returns silently
+	// when nothing to do (fresh install, or already migrated). A copy
+	// failure is fatal — proceeding with an empty new config dir would
+	// silently lose the user's pins / sort / theme, worse than exiting
+	// with a clear error message they can act on.
+	migrateNotice, err := config.MigrateLegacyConfigDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error migrating legacy config dir: %v\n", err)
+		os.Exit(1)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
@@ -75,7 +87,7 @@ func main() {
 	// Optional Helm Releases category — only registered when `helm` is on PATH.
 	k8s.RegisterHelmIfAvailable()
 
-	app := ui.NewAppModel(t, client, cfg, state, stateErr)
+	app := ui.NewAppModel(t, client, cfg, state, stateErr, migrateNotice)
 
 	p := tea.NewProgram(app,
 		tea.WithAltScreen(),

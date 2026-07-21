@@ -37,9 +37,22 @@ func unsetEnvForTest(t *testing.T, key string) {
 	})
 }
 
+// isolateAltermEnv unsets every env var that buildShellTerminalCmd reads
+// so a test can prove its own env value drives the result. Covers both
+// tiers: the current $KBU__ALTERM_* names and the v2.0 legacy $KM8__ALTERM_*
+// fallbacks.
+func isolateAltermEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{
+		"KBU__ALTERM_SHELL", "KBU__ALTERM_LOGIN_SHELL",
+		"KM8__ALTERM_SHELL", "KM8__ALTERM_LOGIN_SHELL",
+	} {
+		unsetEnvForTest(t, k)
+	}
+}
+
 func TestBuildShellTerminalCmd_UsesShellEnv(t *testing.T) {
-	unsetEnvForTest(t, "KM8__SHELL")
-	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	isolateAltermEnv(t)
 	t.Setenv("SHELL", "/usr/bin/fish")
 
 	cmd := buildShellTerminalCmd("", false)
@@ -55,8 +68,7 @@ func TestBuildShellTerminalCmd_UsesShellEnv(t *testing.T) {
 }
 
 func TestBuildShellTerminalCmd_FallbackWhenShellUnset(t *testing.T) {
-	unsetEnvForTest(t, "KM8__SHELL")
-	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	isolateAltermEnv(t)
 	unsetEnvForTest(t, "SHELL")
 
 	cmd := buildShellTerminalCmd("", false)
@@ -68,8 +80,7 @@ func TestBuildShellTerminalCmd_FallbackWhenShellUnset(t *testing.T) {
 func TestBuildShellTerminalCmd_ConfigOverridesShellEnv(t *testing.T) {
 	// alterm_shell config wins over $SHELL — the user wants fish inside
 	// alterm but their host shell is still zsh.
-	unsetEnvForTest(t, "KM8__SHELL")
-	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	isolateAltermEnv(t)
 	t.Setenv("SHELL", "/bin/zsh")
 
 	cmd := buildShellTerminalCmd("/opt/homebrew/bin/fish", false)
@@ -78,18 +89,47 @@ func TestBuildShellTerminalCmd_ConfigOverridesShellEnv(t *testing.T) {
 	}
 }
 
-func TestBuildShellTerminalCmd_KM8ShellEnvOverridesEverything(t *testing.T) {
-	// $KM8__SHELL is the top of the precedence stack: it beats both the
-	// alterm_shell config AND $SHELL. Use case: one-shot
-	// `KM8__SHELL=/bin/bash km8` to test a different shell without
+func TestBuildShellTerminalCmd_KBUAltermShellOverridesEverything(t *testing.T) {
+	// $KBU__ALTERM_SHELL is the top of the precedence stack: it beats
+	// both the alterm_shell config AND $SHELL. Use case: one-shot
+	// `KBU__ALTERM_SHELL=/bin/bash kbu` to test a different shell without
 	// touching the persisted config.
-	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
+	isolateAltermEnv(t)
 	t.Setenv("SHELL", "/bin/zsh")
-	t.Setenv("KM8__SHELL", "/bin/bash")
+	t.Setenv("KBU__ALTERM_SHELL", "/bin/bash")
 
 	cmd := buildShellTerminalCmd("/opt/homebrew/bin/fish", false)
 	if cmd.Args[0] != "/bin/bash" {
-		t.Errorf("expected $KM8__SHELL to win over config and $SHELL, got %q", cmd.Args[0])
+		t.Errorf("expected $KBU__ALTERM_SHELL to win over config and $SHELL, got %q", cmd.Args[0])
+	}
+}
+
+func TestBuildShellTerminalCmd_LegacyKM8AltermShellFallback(t *testing.T) {
+	// v2.0 rename: $KM8__ALTERM_SHELL still honored when $KBU__ALTERM_SHELL
+	// isn't set. Fallback ordering keeps existing shell rc / launchctl
+	// plists working through the transition; EnvDeprecations surfaces the
+	// nudge to rename.
+	isolateAltermEnv(t)
+	t.Setenv("SHELL", "/bin/zsh")
+	t.Setenv("KM8__ALTERM_SHELL", "/bin/bash")
+
+	cmd := buildShellTerminalCmd("/opt/homebrew/bin/fish", false)
+	if cmd.Args[0] != "/bin/bash" {
+		t.Errorf("expected legacy $KM8__ALTERM_SHELL to win when new not set, got %q", cmd.Args[0])
+	}
+}
+
+func TestBuildShellTerminalCmd_KBUWinsOverLegacyKM8(t *testing.T) {
+	// Both set: KBU__ALTERM_SHELL wins, KM8__ALTERM_SHELL silently ignored
+	// as the migration target.
+	isolateAltermEnv(t)
+	t.Setenv("SHELL", "/bin/zsh")
+	t.Setenv("KM8__ALTERM_SHELL", "/bin/dash")
+	t.Setenv("KBU__ALTERM_SHELL", "/bin/bash")
+
+	cmd := buildShellTerminalCmd("", false)
+	if cmd.Args[0] != "/bin/bash" {
+		t.Errorf("expected KBU__ to win over KM8__, got %q", cmd.Args[0])
 	}
 }
 
@@ -98,20 +138,19 @@ func TestBuildShellTerminalCmd_TrimsWhitespaceFromEnv(t *testing.T) {
 	// sourced .env file would previously slip past the empty-check and
 	// reach exec.Command verbatim → LookPath ENOENT, Alterm refuses to
 	// open with no obvious reason. TrimSpace closes the trap.
-	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
-	t.Setenv("KM8__SHELL", "  /opt/homebrew/bin/fish\t")
+	isolateAltermEnv(t)
+	t.Setenv("KBU__ALTERM_SHELL", "  /opt/homebrew/bin/fish\t")
 
 	cmd := buildShellTerminalCmd("", false)
 	if cmd.Args[0] != "/opt/homebrew/bin/fish" {
-		t.Errorf("expected whitespace stripped from $KM8__SHELL, got %q", cmd.Args[0])
+		t.Errorf("expected whitespace stripped from $KBU__ALTERM_SHELL, got %q", cmd.Args[0])
 	}
 }
 
 func TestBuildShellTerminalCmd_LoginConfigAppendsDashEll(t *testing.T) {
 	// alterm_login_shell: true should spawn the shell with `-l`,
 	// matching what the v1.7.1 baseline did unconditionally.
-	unsetEnvForTest(t, "KM8__LOGIN_SHELL")
-	unsetEnvForTest(t, "KM8__SHELL")
+	isolateAltermEnv(t)
 	t.Setenv("SHELL", "/bin/zsh")
 
 	cmd := buildShellTerminalCmd("", true)
@@ -121,29 +160,41 @@ func TestBuildShellTerminalCmd_LoginConfigAppendsDashEll(t *testing.T) {
 }
 
 func TestBuildShellTerminalCmd_LoginEnvOverridesConfig(t *testing.T) {
-	// $KM8__LOGIN_SHELL=true forces login even when config says false.
+	// $KBU__ALTERM_LOGIN_SHELL=true forces login even when config says false.
 	// Use case: ad-hoc rescue when launched from a non-login parent.
-	unsetEnvForTest(t, "KM8__SHELL")
+	isolateAltermEnv(t)
 	t.Setenv("SHELL", "/bin/zsh")
-	t.Setenv("KM8__LOGIN_SHELL", "true")
+	t.Setenv("KBU__ALTERM_LOGIN_SHELL", "true")
 
 	cmd := buildShellTerminalCmd("", false)
 	if len(cmd.Args) != 2 || cmd.Args[1] != "-l" {
-		t.Errorf("expected $KM8__LOGIN_SHELL=true to force login mode, got %v", cmd.Args)
+		t.Errorf("expected $KBU__ALTERM_LOGIN_SHELL=true to force login mode, got %v", cmd.Args)
 	}
 }
 
 func TestBuildShellTerminalCmd_LoginEnvFalseOverridesConfig(t *testing.T) {
-	// $KM8__LOGIN_SHELL is treated as set-but-truthy-check, so a value
-	// other than the canonical truthy set DISABLES login mode even
-	// when config opted in.
-	unsetEnvForTest(t, "KM8__SHELL")
+	// $KBU__ALTERM_LOGIN_SHELL="false" DISABLES login mode even when
+	// config opted in.
+	isolateAltermEnv(t)
 	t.Setenv("SHELL", "/bin/zsh")
-	t.Setenv("KM8__LOGIN_SHELL", "false")
+	t.Setenv("KBU__ALTERM_LOGIN_SHELL", "false")
 
 	cmd := buildShellTerminalCmd("", true)
 	if len(cmd.Args) != 1 {
-		t.Errorf("expected $KM8__LOGIN_SHELL=false to override cfgLogin=true, got %v", cmd.Args)
+		t.Errorf("expected $KBU__ALTERM_LOGIN_SHELL=false to override cfgLogin=true, got %v", cmd.Args)
+	}
+}
+
+func TestBuildShellTerminalCmd_LegacyKM8LoginFallback(t *testing.T) {
+	// v2.0 rename fallback: $KM8__ALTERM_LOGIN_SHELL still read when
+	// $KBU__ALTERM_LOGIN_SHELL isn't set.
+	isolateAltermEnv(t)
+	t.Setenv("SHELL", "/bin/zsh")
+	t.Setenv("KM8__ALTERM_LOGIN_SHELL", "true")
+
+	cmd := buildShellTerminalCmd("", false)
+	if len(cmd.Args) != 2 || cmd.Args[1] != "-l" {
+		t.Errorf("expected legacy $KM8__ALTERM_LOGIN_SHELL=true to force login mode, got %v", cmd.Args)
 	}
 }
 

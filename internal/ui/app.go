@@ -1164,7 +1164,7 @@ func parseCompareLayout(s string) CompareLayout {
 	return CompareLayoutUnified
 }
 
-func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *config.State, stateLoadErr error) AppModel {
+func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *config.State, stateLoadErr error, configMigrationNotice string) AppModel {
 	info := client.GetClusterInfo()
 
 	sidebar := NewSidebarModel(t)
@@ -1195,20 +1195,37 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 	newCompareModel.SetDefaultLayout(parseCompareLayout(cfg.Compare.Layout))
 
 	// Build appLog up-front so we can surface startup notices — chiefly
-	// a $KM8__CONFIGPATH override warning so the user knows pin / sort
+	// a $KBU__CONFIGPATH override warning so the user knows pin / sort
 	// persistence will land at the override path, not the default
 	// config dir. Without this nudge, a leftover env var from a debug
 	// session silently writes the user's mutations to /tmp and the
 	// next session sees pristine config; the user assumes pins were
 	// lost. `!` opens the App Log popup where this message lives.
+	//
+	// v2.0 rename: prefer $KBU__CONFIGPATH; $KM8__CONFIGPATH still read
+	// for one release as a fallback (see EnvDeprecations for the nudge).
 	appLog := NewAppLogModel(t)
-	if p := strings.TrimSpace(os.Getenv("KM8__CONFIGPATH")); p != "" {
+	overridePath := strings.TrimSpace(os.Getenv("KBU__CONFIGPATH"))
+	overrideName := "$KBU__CONFIGPATH"
+	if overridePath == "" {
+		if legacy := strings.TrimSpace(os.Getenv("KM8__CONFIGPATH")); legacy != "" {
+			overridePath = legacy
+			overrideName = "$KM8__CONFIGPATH"
+		}
+	}
+	if overridePath != "" {
 		// Use Info (not Warn) — Warn increments errorCount and arms
 		// the status bar's red `! N errors` badge every launch with
 		// the env legitimately set. The point is a discoverable
 		// nudge in the App Log popup (`!`), not a recurring error
 		// signal for a setup the user chose.
-		appLog.Info(fmt.Sprintf("config: $KM8__CONFIGPATH=%s — loads AND saves redirected here, not the default config dir", p))
+		appLog.Info(fmt.Sprintf("config: %s=%s — loads AND saves redirected here, not the default config dir", overrideName, overridePath))
+	}
+	// v2.0 rename: main.go called config.MigrateLegacyConfigDir before
+	// loading the config; any resulting warning is threaded in here so
+	// the user notices in `!` that a one-shot migration happened.
+	if configMigrationNotice != "" {
+		appLog.Info(configMigrationNotice)
 	}
 	// v1.7.5 KM8erm → Alterm rename: surface any deprecation warnings
 	// the config loader collected (legacy yaml keys present) and any
@@ -1255,11 +1272,17 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 		// surface the same message.
 		cfg.DeprecationWarnings = nil
 	}
-	if v := strings.TrimSpace(os.Getenv("KM8__SHELL")); v != "" {
-		appLog.Warn("env: $KM8__SHELL is deprecated, rename to $KM8__ALTERM_SHELL (the old name is still read this release; remove next release)")
-	}
-	if v := strings.TrimSpace(os.Getenv("KM8__LOGIN_SHELL")); v != "" {
-		appLog.Warn("env: $KM8__LOGIN_SHELL is deprecated, rename to $KM8__ALTERM_LOGIN_SHELL (the old name is still read this release; remove next release)")
+	// v2.0 km8 → kbu rename: surface any legacy $KM8__* env vars still
+	// set. Fires per launch until the user renames them in their shell
+	// rc / launchctl plist. The current tier of KM8__ vars (CONFIGPATH,
+	// STATEPATH, ALTERM_SHELL, ALTERM_LOGIN_SHELL) is fallback-read this
+	// release; scheduled for removal in v2.1.
+	//
+	// The pre-v2.0 KM8__SHELL / KM8__LOGIN_SHELL tier (deprecated since
+	// v1.7.5 in favor of KM8__ALTERM_*) is fully removed in v2.0 — the
+	// grace period spanned multiple minor releases.
+	for _, w := range config.EnvDeprecations() {
+		appLog.Warn(w)
 	}
 
 	// Session state resolution. main.go already applied state.Context /
@@ -3902,35 +3925,35 @@ func buildKubectlExecCmd(podName, namespace, container, contextName string) *exe
 }
 
 // buildShellTerminalCmd assembles the user's login shell command for the
-// internal terminal popup. Inherits env / cwd from km8 so the user's aliases,
+// internal terminal popup. Inherits env / cwd from kbu so the user's aliases,
 // PATH, and current directory are exactly what they'd see in a regular
 // terminal — like `ssh localhost` but embedded.
 //
-// Shell precedence: $KM8__ALTERM_SHELL > $KM8__SHELL (deprecated) >
-// cfgShell (alterm_shell config) > $SHELL > /bin/sh. The env-var slot is
-// for ad-hoc overrides (one-shot `KM8__ALTERM_SHELL=... km8`) without
+// Shell precedence: $KBU__ALTERM_SHELL > $KM8__ALTERM_SHELL (v2.0 legacy)
+// > cfgShell (alterm_shell config) > $SHELL > /bin/sh. The env-var slot is
+// for ad-hoc overrides (one-shot `KBU__ALTERM_SHELL=... kbu`) without
 // editing the config; cfgShell is for persistent per-user preference;
-// $SHELL is the host fallback. $KM8__SHELL is the v1.7.5-deprecated name
-// kept readable for one release so existing shell rc / launchctl plists
-// don't silently break — NewAppModel logs a deprecation warning when
-// it's still set; remove next release.
+// $SHELL is the host fallback. $KM8__ALTERM_SHELL is the pre-v2.0 name,
+// still read this release so existing shell rc / launchctl plists don't
+// silently break — EnvDeprecations logs a nudge when it's the value in
+// effect. Remove next release.
 //
-// Login precedence: $KM8__ALTERM_LOGIN_SHELL > $KM8__LOGIN_SHELL
-// (deprecated) > cfgLogin (alterm_login_shell). Default is non-login
-// interactive — sources .bashrc / .zshrc, skips /etc/profile so macOS
-// bash doesn't clobber the user's PS1. Flip true when launched from a
-// non-login parent (Raycast/Alfred/cron/non-default tmux) and PATH
-// lives in .zprofile / .bash_profile — without `-l` those dotfiles
-// don't run and Alterm sees a stripped PATH.
+// Login precedence mirrors the same 2-tier fallback: $KBU__ALTERM_LOGIN_SHELL
+// > $KM8__ALTERM_LOGIN_SHELL > cfgLogin (alterm_login_shell). Default is
+// non-login interactive — sources .bashrc / .zshrc, skips /etc/profile so
+// macOS bash doesn't clobber the user's PS1. Flip true when launched from
+// a non-login parent (Raycast/Alfred/cron/non-default tmux) and PATH lives
+// in .zprofile / .bash_profile — without `-l` those dotfiles don't run and
+// Alterm sees a stripped PATH.
 //
 // All env-derived candidates are TrimSpace'd before the empty-string
-// check; otherwise a stray `KM8__ALTERM_SHELL=" /opt/.../fish"` (leading
+// check; otherwise a stray `KBU__ALTERM_SHELL=" /opt/.../fish"` (leading
 // space from copy-paste or a sourced .env) would fall through to
 // exec.Command verbatim and error with ENOENT.
 func buildShellTerminalCmd(cfgShell string, cfgLogin bool) *exec.Cmd {
-	sh := strings.TrimSpace(os.Getenv("KM8__ALTERM_SHELL"))
+	sh := strings.TrimSpace(os.Getenv("KBU__ALTERM_SHELL"))
 	if sh == "" {
-		sh = strings.TrimSpace(os.Getenv("KM8__SHELL"))
+		sh = strings.TrimSpace(os.Getenv("KM8__ALTERM_SHELL"))
 	}
 	if sh == "" {
 		sh = strings.TrimSpace(cfgShell)
@@ -3943,9 +3966,9 @@ func buildShellTerminalCmd(cfgShell string, cfgLogin bool) *exec.Cmd {
 	}
 
 	login := cfgLogin
-	loginEnv := strings.TrimSpace(os.Getenv("KM8__ALTERM_LOGIN_SHELL"))
+	loginEnv := strings.TrimSpace(os.Getenv("KBU__ALTERM_LOGIN_SHELL"))
 	if loginEnv == "" {
-		loginEnv = strings.TrimSpace(os.Getenv("KM8__LOGIN_SHELL"))
+		loginEnv = strings.TrimSpace(os.Getenv("KM8__ALTERM_LOGIN_SHELL"))
 	}
 	if loginEnv != "" {
 		// strconv.ParseBool covers the Go-canonical truthy set
