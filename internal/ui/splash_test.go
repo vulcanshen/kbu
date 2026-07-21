@@ -149,7 +149,7 @@ func TestSplashModel_CaptionRevealsAfterAnimation(t *testing.T) {
 		t.Error("identity must not be visible until splashIdentityMsg fires")
 	}
 
-	// splashIdentityMsg fires KubeMate + version + tagline together AND
+	// splashIdentityMsg fires KubeUI + version + tagline together AND
 	// schedules the hint reveal.
 	m, cmd = m.Update(splashIdentityMsg{})
 	if !m.identityVisible {
