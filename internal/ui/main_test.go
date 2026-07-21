@@ -10,7 +10,7 @@ import (
 // every test in the ui package. This is a defensive guard: any test
 // that calls cfg.Save() — directly or transitively via a method
 // like commitSortFlow — would otherwise hit the real
-// ~/.config/km8/config.yaml and overwrite the user's actual pins /
+// ~/.config/kbu/config.yaml and overwrite the user's actual pins /
 // sort / editor settings.
 //
 // This blanket setup is cheap (one mkdir per process) and prevents
@@ -20,7 +20,7 @@ import (
 // override XDG_CONFIG_HOME via t.Setenv if they want their own
 // isolated dir.
 func TestMain(m *testing.M) {
-	tmp, err := os.MkdirTemp("", "km8-ui-test-xdg-")
+	tmp, err := os.MkdirTemp("", "kbu-ui-test-xdg-")
 	if err != nil {
 		// Refuse to run without isolation — silently falling back to
 		// the real path is exactly the failure mode this guard

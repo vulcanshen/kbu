@@ -1316,7 +1316,7 @@ func TestAppModel_EscOnPanel2WithCompareMode_ClearsLockAndPopsDrill(t *testing.T
 	// place: ONE Esc must both release the compare lock AND pop one
 	// drill level. Without this combined handling Esc would either
 	// silently drop one of the actions or force the user to press
-	// Esc twice — both confusing relative to every other Esc in km8.
+	// Esc twice — both confusing relative to every other Esc in kbu.
 	items := []k8s.ResourceItem{
 		{Name: "a", UID: "uid-a", Row: []string{"a"}},
 		{Name: "b", UID: "uid-b", Row: []string{"b"}},

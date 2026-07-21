@@ -413,7 +413,7 @@ func TestKindToResourceType_NewKinds(t *testing.T) {
 }
 
 func TestKindToResourceType_UnknownReturnsFalse(t *testing.T) {
-	// CRDs and anything km8 doesn't register should drop out.
+	// CRDs and anything kbu doesn't register should drop out.
 	for _, kind := range []string{"ServiceMonitor", "Certificate", "VirtualService", "Issuer", ""} {
 		if _, ok := kindToResourceType(kind); ok {
 			t.Errorf("kindToResourceType(%q) ok=true, want false", kind)

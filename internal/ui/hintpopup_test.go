@@ -235,7 +235,7 @@ func TestHintPopup_Actions_EnterOnCursorCommits(t *testing.T) {
 }
 
 func TestHintPopup_Actions_SpaceClosesWithoutCommit(t *testing.T) {
-	// Space (the "close" convention across km8 popups) must close the
+	// Space (the "close" convention across kbu popups) must close the
 	// popup WITHOUT committing any action — pressing Space mid-decision
 	// would be a confusing way to silently pin/unpin.
 	m := newHintPopup(t)

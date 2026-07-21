@@ -342,7 +342,7 @@ func TestCommitSortFlow_PersistsAndApplies(t *testing.T) {
 	// Full happy path: flow caches kind+column, commit writes config,
 	// re-applies sort to live items, and refreshes the header
 	// indicator. XDG redirect MUST come before commit — otherwise
-	// the test's cfg.Save() would write to the real ~/.config/km8.
+	// the test's cfg.Save() would write to the real ~/.config/kbu.
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	items := []k8s.ResourceItem{makePod("zzz", 5), makePod("aaa", 0), makePod("mmm", 2)}

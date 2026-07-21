@@ -113,14 +113,14 @@ func TestStatePath_LegacyKM8EnvFallback(t *testing.T) {
 	// v2.0 rename transition: $KM8__STATEPATH honored when $KBU__STATEPATH
 	// is not set. Silent fallback; deprecation surfaced via EnvDeprecations.
 	t.Setenv("KBU__STATEPATH", "")
-	t.Setenv("KM8__STATEPATH", "/tmp/legacy-km8-state.yaml")
-	if got := StatePath(); got != "/tmp/legacy-km8-state.yaml" {
-		t.Errorf("legacy KM8 env fallback: got %q, want %q", got, "/tmp/legacy-km8-state.yaml")
+	t.Setenv("KM8__STATEPATH", "/tmp/legacy-kbu-state.yaml")
+	if got := StatePath(); got != "/tmp/legacy-kbu-state.yaml" {
+		t.Errorf("legacy KM8 env fallback: got %q, want %q", got, "/tmp/legacy-kbu-state.yaml")
 	}
 }
 
 func TestStatePath_KBUWinsOverKM8(t *testing.T) {
-	t.Setenv("KM8__STATEPATH", "/tmp/legacy-km8-state.yaml")
+	t.Setenv("KM8__STATEPATH", "/tmp/legacy-kbu-state.yaml")
 	t.Setenv("KBU__STATEPATH", "/tmp/new-kbu-state.yaml")
 	if got := StatePath(); got != "/tmp/new-kbu-state.yaml" {
 		t.Errorf("KBU should win over KM8: got %q, want %q", got, "/tmp/new-kbu-state.yaml")

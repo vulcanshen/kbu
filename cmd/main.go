@@ -49,7 +49,7 @@ func main() {
 	}
 
 	// Session state is best-effort: a corrupt or unreadable state file
-	// must not lock the user out of km8. LoadState errors are stashed
+	// must not lock the user out of kbu. LoadState errors are stashed
 	// on the state value's LoadError field and surfaced in the App Log
 	// once NewAppModel builds it — the user notices the nudge in `!`
 	// without paying an exit-code for a stale-position file.

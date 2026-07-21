@@ -79,9 +79,9 @@ func TestConfigPath_LegacyKM8EnvFallback(t *testing.T) {
 	// $KBU__CONFIGPATH is not set. Silent fallback — the deprecation
 	// warning is surfaced separately by EnvDeprecations() at startup.
 	t.Setenv("KBU__CONFIGPATH", "")
-	t.Setenv("KM8__CONFIGPATH", "/tmp/legacy-km8.yaml")
-	if got := ConfigPath(); got != "/tmp/legacy-km8.yaml" {
-		t.Errorf("legacy KM8 env fallback: got %q, want %q", got, "/tmp/legacy-km8.yaml")
+	t.Setenv("KM8__CONFIGPATH", "/tmp/legacy-kbu.yaml")
+	if got := ConfigPath(); got != "/tmp/legacy-kbu.yaml" {
+		t.Errorf("legacy KM8 env fallback: got %q, want %q", got, "/tmp/legacy-kbu.yaml")
 	}
 }
 
@@ -89,7 +89,7 @@ func TestConfigPath_KBUWinsOverKM8(t *testing.T) {
 	// Both env vars set: KBU__ takes precedence. Legacy KM8__ silently
 	// ignored (the deprecation warning still fires from EnvDeprecations
 	// on the presence, not the win).
-	t.Setenv("KM8__CONFIGPATH", "/tmp/legacy-km8.yaml")
+	t.Setenv("KM8__CONFIGPATH", "/tmp/legacy-kbu.yaml")
 	t.Setenv("KBU__CONFIGPATH", "/tmp/new-kbu.yaml")
 	if got := ConfigPath(); got != "/tmp/new-kbu.yaml" {
 		t.Errorf("KBU should win over KM8: got %q, want %q", got, "/tmp/new-kbu.yaml")
@@ -612,7 +612,7 @@ func TestBackupBeforeMigration_PreservesContent(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 	original := []byte("# user-added comment about fish\n" +
 		"km8erm_shell: /opt/homebrew/bin/fish\n" +
-		"future_field: 42  # km8 doesn't know this yet\n" +
+		"future_field: 42  # kbu doesn't know this yet\n" +
 		"editor: vim\n")
 	if err := os.WriteFile(path, original, 0o644); err != nil {
 		t.Fatalf("seeding source: %v", err)
@@ -636,7 +636,7 @@ func TestBackupBeforeMigration_PreservesContent(t *testing.T) {
 }
 
 // TestBackupBeforeMigration_OverwritesExisting — re-running migration
-// in the same km8 release overwrites a prior backup of the same name
+// in the same kbu release overwrites a prior backup of the same name
 // so the user has the latest pre-migration snapshot, not a stale one
 // from a previous failed attempt.
 func TestBackupBeforeMigration_OverwritesExisting(t *testing.T) {

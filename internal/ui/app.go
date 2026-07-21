@@ -966,7 +966,7 @@ const resetIcon = "\uF0E2"
 
 // sortPopupIcon (U+F0DC, nf-fa-sort) sits in the sort picker's title
 // border so the popup's purpose is recognisable at a glance — same
-// surface convention as hintpopup's titleIcon (km8 wheel) and
+// surface convention as hintpopup's titleIcon (kbu wheel) and
 // settingspopup's cog.
 const sortPopupIcon = "\uF0DC"
 
@@ -990,7 +990,7 @@ func sortDirectionGlyph(direction string) string {
 // restart restores the same order.
 //
 // Critical invariant: pins for unregistered kinds (CRDs that
-// disappeared mid-session, or were never installed when km8 started
+// disappeared mid-session, or were never installed when kbu started
 // but are listed in config) MUST survive this rewrite. The
 // ResourceKindConfigEntry contract is "Unknown kinds at load time
 // stay in the map but are dropped from the sidebar — the entry is
@@ -1240,7 +1240,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 	// behavior — the user needs to know migration didn't persist.
 	//
 	// Env-var warnings keep recurring per launch — they live in the
-	// user's shell rc / launchctl plist and km8 can't (and shouldn't)
+	// user's shell rc / launchctl plist and kbu can't (and shouldn't)
 	// rewrite those. Persistent nudge is appropriate until the user
 	// updates their env.
 	for _, w := range cfg.DeprecationWarnings {
@@ -1251,7 +1251,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 		// rewrite goes through yaml.Marshal which can't preserve user-
 		// added comments or unknown yaml keys — the backup is the
 		// escape hatch for power users who hand-edited their config.
-		// File suffix carries the km8 release tag (dots → underscores
+		// File suffix carries the kbu release tag (dots → underscores
 		// so the suffix sorts cleanly and doesn't confuse path tools).
 		// If backup fails we ABORT the Save — losing the user's custom
 		// content would be worse than recurring the warning next launch.
@@ -1429,7 +1429,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.watcher.Stop()
 		m.logStreamer.Stop()
 		// Kill any persistent PTY (hidden Alterm shell, mid-edit, mid-exec)
-		// so we don't orphan the subprocess after km8 exits.
+		// so we don't orphan the subprocess after kbu exits.
 		if m.shellPty != nil && m.shellPty.IsAlive() {
 			m.shellPty.Stop()
 		}
@@ -1896,7 +1896,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// ALL keypresses to the sidebar first so global hotkeys like
 		// Tab / 1 / 2 / 3 / q can't slip past — pressing them mid-
 		// drag should cancel, not switch focus or quit. ctrl+c stays
-		// special: it still kills km8 (the sidebar's cancel will
+		// special: it still kills kbu (the sidebar's cancel will
 		// fire on the way out, harmless).
 		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && msg.String() != "ctrl+c" {
 			sidebar, cmd := m.sidebar.Update(msg)
@@ -2055,7 +2055,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// also pops one drill level if applicable. The
 				// alternative (two-press: one for lock, one for
 				// drill-back) made Esc feel inconsistent — every
-				// other Esc in km8 does its work in one press.
+				// other Esc in kbu does its work in one press.
 				if m.activePanel == TablePanel && m.inCompareMode() {
 					m.clearCompareLock()
 				}
@@ -2205,7 +2205,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					// Kind-level gate (mirrors panel 2 menu): Events / Nodes /
 					// Namespaces are blocked from delete here too — too far
-					// from km8's scout-tool scope to gate via "asks for
+					// from kbu's scout-tool scope to gate via "asks for
 					// confirmation" alone.
 					if !resourceAllowsDelete(m.currentResource) {
 						return m, m.toast.Show("Delete not supported on " + m.currentResource.KubectlName())

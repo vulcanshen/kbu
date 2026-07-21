@@ -9,7 +9,7 @@ import (
 
 // setupIsolatedConfigDirs points ConfigDir + legacyConfigDir at
 // TempDir-backed paths so migration tests don't touch the real
-// $HOME/.config/{km8,kbu}. Works by setting $XDG_CONFIG_HOME —
+// $HOME/.config/{kbu,kbu}. Works by setting $XDG_CONFIG_HOME —
 // both ConfigDir and legacyConfigDir honor it.
 func setupIsolatedConfigDirs(t *testing.T) (newDir, oldDir string) {
 	t.Helper()

@@ -148,7 +148,7 @@ func (m CompareMenuPopupModel) Render(frame string) string {
 	top := borderStyle.Render("╭"+strings.Repeat("─", leadDashCount)) +
 		titleStyle.Render(title) +
 		borderStyle.Render(strings.Repeat("─", trailDashCount)+"╮")
-	// Top + bottom padding row matches the km8 popup convention —
+	// Top + bottom padding row matches the kbu popup convention —
 	// every other bordered popup (hintpopup, panel2menu, helmdocmenu,
 	// settingspopup, breadcrumb, listpicker) leaves one blank row of
 	// breathing space between the title border and the first content

@@ -252,7 +252,7 @@ func (m HelmDocMenuPopupModel) renderFullPopup() string {
 	// when the popup overlays a busy panel. k8s.HelmIcon() — the
 	// nf-md-ship_wheel PUA glyph (U+F0833) — is the same source the
 	// panel 2 row marker uses, so the helm-managed signal stays
-	// visually consistent between row and popup. NF is km8's
+	// visually consistent between row and popup. NF is kbu's
 	// baseline icon design language; terminals without NF render a
 	// fallback box here, same as every other popup title.
 	title := k8s.HelmIcon() + " Helm: " + m.releaseName

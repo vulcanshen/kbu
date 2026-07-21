@@ -1,6 +1,6 @@
 package k8s
 
-// Helm CLI integration. km8 treats a Helm release as the 27th ResourceType so
+// Helm CLI integration. kbu treats a Helm release as the 27th ResourceType so
 // existing graph / drill machinery stays uniform — the only divergence is that
 // the fetcher shells out to `helm` instead of using client-go. Registration is
 // gated on `helm` being present on PATH; if not found, the entire Helm
@@ -209,11 +209,11 @@ func ToggleHelmHideManaged() bool {
 
 // HelmIcon returns the popup-title glyph U+F0833 (Nerd Font ship's
 // wheel from the Material Design family). Picked over standard
-// Unicode ⎈ (U+2388) because every other km8 popup title icon
+// Unicode ⎈ (U+2388) because every other kbu popup title icon
 // (context / namespace / yamlpopup / settings / ...) is in the same
 // NF Material Design range — the Unicode helm symbol renders ~half
 // the optical height in JetBrains Mono and read as an outlier next
-// to the other popup icons. NF is already km8's baseline icon
+// to the other popup icons. NF is already kbu's baseline icon
 // design, so falling back to standard Unicode for one popup didn't
 // buy any portability the rest of the surface didn't already lack.
 func HelmIcon() string { return "󰠳" }
@@ -221,7 +221,7 @@ func HelmIcon() string { return "󰠳" }
 // HelmRowMark returns the panel 2 row marker for helm-managed items.
 // Same glyph as HelmIcon so the helm-managed signal stays visually
 // consistent between the per-row mark and the popup title. NF is
-// already km8's baseline icon design — a row-marker fallback box on
+// already kbu's baseline icon design — a row-marker fallback box on
 // non-NF terminals is no worse than the kind icons already broken
 // in those same terminals.
 func HelmRowMark() string { return "󰠳" }
@@ -238,7 +238,7 @@ func MarkHelm(item ResourceItem) string {
 }
 
 // FormatHelmHistoryDate converts the RFC3339 timestamp in
-// ReleaseRevision.Updated into the same age string the rest of km8 uses
+// ReleaseRevision.Updated into the same age string the rest of kbu uses
 // (e.g. "5d", "12h"). Falls back to the raw string when parsing fails so
 // users still see something rather than an empty cell.
 func FormatHelmHistoryDate(s string) string {
@@ -313,7 +313,7 @@ func fetchReleases(ctx context.Context, _ kubernetes.Interface, namespace string
 
 // formatHelmUpdated converts the helm CLI's `updated` field (Go time.String()
 // layout, e.g. "2024-05-19 14:31:22.123456 +0800 CST") into an age string
-// matching the rest of km8. Falls back to the raw string on parse failure.
+// matching the rest of kbu. Falls back to the raw string on parse failure.
 func formatHelmUpdated(s string) string {
 	if s == "" {
 		return "<unknown>"

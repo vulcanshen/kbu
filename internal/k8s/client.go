@@ -13,7 +13,7 @@ import (
 
 // Client wraps a Kubernetes clientset and tracks the current context and
 // namespace filter. It is the primary entry point for all cluster operations
-// in km8.
+// in kbu.
 type Client struct {
 	clientset     kubernetes.Interface
 	dynamicClient dynamic.Interface

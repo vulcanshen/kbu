@@ -312,7 +312,7 @@ func (m Panel2MenuPopupModel) RenderPopup() string {
 //  2. resourceAllowsEdit / resourceAllowsDelete — opinionated dev-workflow
 //     gates that hide kubectl actions which technically work but have no
 //     practical purpose for a scout tool (e.g. Events can't be edited
-//     meaningfully; Node deletion is admin-scope, not km8's audience).
+//     meaningfully; Node deletion is admin-scope, not kbu's audience).
 //  3. resourceHasContainer — Shell only on kinds with containers (Pod).
 //
 // Layout (top → bottom):
@@ -496,13 +496,13 @@ func resourceAllowsEdit(rt k8s.ResourceType) bool {
 }
 
 // resourceAllowsDelete returns false for kinds where `kubectl delete` is
-// blocked by km8's scout-tool stance. Events (no point — they're
+// blocked by kbu's scout-tool stance. Events (no point — they're
 // system-generated immutable records), Nodes (admin infra action, not
-// km8's audience).
+// kbu's audience).
 //
 // Namespaces is intentionally NOT blocked here — the cascading destruction
 // of every resource in the namespace makes it the single most dangerous
-// delete km8 exposes, but blocking it entirely also makes km8 useless
+// delete kbu exposes, but blocking it entirely also makes kbu useless
 // for "kubectl delete ns test-XYZ" cleanup which IS a normal dev-workflow
 // action. The tradeoff resolves through the confirm popup: the delete-
 // triggering paths (d hotkey + Space menu Delete) build a stronger
@@ -618,7 +618,7 @@ func (m Panel2MenuPopupModel) renderFullPopup() string {
 		if it.separator {
 			// Same purple horizontal rule the hintpopup uses to
 			// split its action region from the cheatsheet below —
-			// keeps every km8 popup's internal divider visually
+			// keeps every kbu popup's internal divider visually
 			// consistent.
 			rows = append(rows, bStyle.Render(strings.Repeat("─", innerW)))
 			continue

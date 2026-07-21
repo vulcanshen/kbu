@@ -757,7 +757,7 @@ func TestOverlaySelectionOnStyledLine_PreservesSurroundingANSI(t *testing.T) {
 
 func TestPanelStateStringRoundTrip(t *testing.T) {
 	// The Panel enum <-> yaml string mapping must round-trip so
-	// state.yaml survives km8 upgrades that reorder the enum values.
+	// state.yaml survives kbu upgrades that reorder the enum values.
 	cases := []Panel{SidebarPanel, TablePanel, DetailPanel}
 	for _, p := range cases {
 		s := panelToStateString(p)

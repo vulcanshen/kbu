@@ -11,7 +11,7 @@ import (
 // TestCompareYamlPopup_MenuAnimator_OpenCloseLifecycle pins the in-popup
 // Space-menu animation wiring. The menu lives in its own file
 // (comparemenu.go) with its own PopupAnimator and shares the
-// Line → Expand / Compress → Line lifecycle every other km8 popup uses.
+// Line → Expand / Compress → Line lifecycle every other kbu popup uses.
 func TestCompareYamlPopup_MenuAnimator_OpenCloseLifecycle(t *testing.T) {
 	m := NewCompareYamlPopupModel(theme.DefaultTheme())
 	m.SetSize(120, 40)

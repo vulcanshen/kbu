@@ -47,7 +47,7 @@ func PopupLayerColor(layer int) lipgloss.Color {
 	}
 }
 
-// Theme defines colors for all UI elements in km8.
+// Theme defines colors for all UI elements in kbu.
 type Theme struct {
 	Sidebar    SidebarColors    `yaml:"sidebar"`
 	Table      TableColors      `yaml:"table"`
