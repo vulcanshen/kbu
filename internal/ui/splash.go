@@ -91,7 +91,7 @@ func (m *SplashModel) Show() tea.Cmd {
 	})
 }
 
-// kbu logo — generated from docs/kbu-icon.svg (25x23). The mark spells
+// kbu logo — generated from docs/icon.svg (25x23). The mark spells
 // KBU: K and B in gold, U as the navy frame (side rails + base) that
 // wraps them. D=dark-gray background, U=navy frame, K/B=gold letters.
 var logoPixels = [23]string{
@@ -122,8 +122,8 @@ var logoPixels = [23]string{
 
 const (
 	logoBg   = "#313244" // dark-gray background (catppuccin surface0)
-	logoNavy = "#205090" // U frame — side rails + base (kbu-icon.svg)
-	logoGold = "#f2b753" // K / B letters (kbu-icon.svg)
+	logoNavy = "#205090" // U frame — side rails + base (icon.svg)
+	logoGold = "#f2b753" // K / B letters (icon.svg)
 )
 
 func pixelGlyph(byte) string {
