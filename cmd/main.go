@@ -20,7 +20,7 @@ import (
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		fmt.Println("km8 " + version.Display())
+		fmt.Println("kbu " + version.Display())
 		return
 	}
 	// Suppress k8s client-go / klog output that would corrupt the TUI.
@@ -99,7 +99,7 @@ func main() {
 		// tea.ErrProgramPanic. Handle it separately for a clear crash message.
 		if errors.Is(err, tea.ErrProgramPanic) {
 			path := config.WriteCrashLog(err)
-			fmt.Fprintf(os.Stderr, "\n\x1b[31;1mkm8 crashed!\x1b[0m\n")
+			fmt.Fprintf(os.Stderr, "\n\x1b[31;1mkbu crashed!\x1b[0m\n")
 			fmt.Fprintf(os.Stderr, "panic: %v\n", err)
 			if path != "" {
 				fmt.Fprintf(os.Stderr, "crash log: %s\n", path)

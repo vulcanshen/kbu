@@ -41,7 +41,7 @@ const (
 	// popup-convention rule requires `glyph + text` in border titles;
 	// the level glyph + a stable "km8" identifier tell the user "your
 	// app is talking" without leaking per-toast specifics into chrome.
-	toastTitleText = "km8"
+	toastTitleText = "kbu"
 
 	// toastMinInnerW is the minimum cell budget for the toast body
 	// row. Short messages like "Copied!" (7 cells) used to size the

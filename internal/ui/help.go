@@ -520,7 +520,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{key: "z", desc: "Toggle expand panel"},
 		{key: "!", desc: "App log"},
 		{key: "?", desc: "Toggle help"},
-		{key: "q", desc: "Quit km8"},
+		{key: "q", desc: "Quit kbu"},
 		{isSection: true, text: "Alterm (embedded shell)"},
 		{key: "PgUp / PgDn", desc: "Scroll history"},
 		{key: "Home / End", desc: "Top / back to live"},
