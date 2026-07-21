@@ -1926,7 +1926,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return quitConfirmedMsg{}
 			}
 			m.confirm.SetLayer(m.popupDepth() + 1)
-			return m, m.confirm.Show(ConfirmQuit, "Quit kbu?", "", quitCmd)
+			return m, m.confirm.Show(ConfirmQuit, "Quit KubeUI?", "", quitCmd)
 		case "V":
 			return m, m.splash.Show()
 		case ">":
@@ -3030,7 +3030,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case appInitMsg:
-		m.appLog.Info("kbu started")
+		m.appLog.Info("KubeUI started")
 		m.appLog.Info(fmt.Sprintf("connected to %s (%s)", msg.info.ContextName, msg.info.ServerURL))
 		if !k8s.HelmAvailable() {
 			m.appLog.Info("helm CLI not found — Helm Releases category hidden")
