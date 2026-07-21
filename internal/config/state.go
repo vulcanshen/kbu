@@ -78,17 +78,23 @@ func DefaultState() *State {
 	return &State{}
 }
 
-// StatePath returns the full path to the km8 state file. Sits alongside
+// StatePath returns the full path to the kbu state file. Sits alongside
 // config.yaml in ConfigDir() rather than under a subdirectory so the
 // user's config-dir stays flat and both files are equally discoverable
 // on `ls`.
 //
-// $KM8__STATEPATH override mirrors the $KM8__CONFIGPATH pattern —
+// $KBU__STATEPATH override mirrors the $KBU__CONFIGPATH pattern —
 // useful for tests, sandboxed launches, or a per-project state file.
+// v2.0 rename transition: $KM8__STATEPATH is the legacy env var name;
+// if $KBU__STATEPATH is not set but $KM8__STATEPATH is, we fall back
+// to it silently. EnvDeprecations() surfaces the warning at startup.
 // Whitespace-trimmed for the same reason ConfigPath is: a leading
 // space from a copy-pasted .env value would otherwise create a
 // literal-space directory.
 func StatePath() string {
+	if p := strings.TrimSpace(os.Getenv("KBU__STATEPATH")); p != "" {
+		return p
+	}
 	if p := strings.TrimSpace(os.Getenv("KM8__STATEPATH")); p != "" {
 		return p
 	}
