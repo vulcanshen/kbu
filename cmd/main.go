@@ -11,11 +11,11 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/klog/v2"
 
-	"github.com/vulcanshen/km8/internal/config"
-	"github.com/vulcanshen/km8/internal/k8s"
-	"github.com/vulcanshen/km8/internal/theme"
-	"github.com/vulcanshen/km8/internal/ui"
-	"github.com/vulcanshen/km8/internal/version"
+	"github.com/vulcanshen/kbu/internal/config"
+	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/internal/theme"
+	"github.com/vulcanshen/kbu/internal/ui"
+	"github.com/vulcanshen/kbu/internal/version"
 )
 
 func main() {

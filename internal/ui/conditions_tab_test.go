@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vulcanshen/km8/internal/k8s"
+	"github.com/vulcanshen/kbu/internal/k8s"
 )
 
 func TestSetResourceType_AppendsConditionsForKindsThatHaveThem(t *testing.T) {
