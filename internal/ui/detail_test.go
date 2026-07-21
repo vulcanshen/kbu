@@ -9,8 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
-	"github.com/vulcanshen/km8/internal/k8s"
-	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
 func newTestDetail() DetailModel {

@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/vulcanshen/km8/internal/k8s"
+import "github.com/vulcanshen/kbu/internal/k8s"
 
 // quitConfirmedMsg is emitted by the quit confirm dialog when the user
 // confirms exit. AppModel handles it by stopping streams and calling tea.Quit.

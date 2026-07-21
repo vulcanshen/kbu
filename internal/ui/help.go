@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
 // HelpModel is the Bubble Tea model for the help overlay.

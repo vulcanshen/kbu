@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/vulcanshen/km8/internal/version"
+	"github.com/vulcanshen/kbu/internal/version"
 )
 
 type splashTickMsg struct{}

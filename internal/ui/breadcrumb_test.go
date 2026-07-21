@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/vulcanshen/km8/internal/k8s"
-	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
 func newTestBreadcrumb() BreadcrumbPopupModel {

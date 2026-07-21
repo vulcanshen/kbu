@@ -6,8 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/vulcanshen/km8/internal/k8s"
-	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
 // Panel2MenuPopupModel is the per-row context menu opened by Space on a

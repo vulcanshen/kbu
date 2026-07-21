@@ -8,9 +8,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/vulcanshen/km8/internal/config"
-	"github.com/vulcanshen/km8/internal/k8s"
-	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/kbu/internal/config"
+	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
 // appWithCfg builds the smaller fixture the sort tests need: items

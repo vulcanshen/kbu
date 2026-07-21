@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/vulcanshen/km8/internal/k8s"
-	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
 // HelmDocMenuPopupModel is the 4-item picker that opens on panel 2 `Space`

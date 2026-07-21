@@ -1,4 +1,4 @@
-module github.com/vulcanshen/km8
+module github.com/vulcanshen/kbu
 
 go 1.26.2
 

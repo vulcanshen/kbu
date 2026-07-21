@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
 func TestHighlightYAMLLine_PreservesPlainText(t *testing.T) {

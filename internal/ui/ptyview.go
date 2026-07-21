@@ -16,7 +16,7 @@ import (
 	"github.com/creack/pty"
 	"github.com/hinshun/vt10x"
 
-	"github.com/vulcanshen/km8/internal/theme"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
 // ptyTickMsg is the 50ms heartbeat each PtyView uses to poll its done flag
