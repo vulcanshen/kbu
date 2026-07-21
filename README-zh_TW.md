@@ -6,7 +6,6 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/vulcanshen/kbu)](https://github.com/vulcanshen/kbu/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/vulcanshen/kbu)](https://go.dev/)
-[![Go Report Card](https://goreportcard.com/badge/github.com/vulcanshen/kbu)](https://goreportcard.com/report/github.com/vulcanshen/kbu)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 [![Kubetools](https://img.shields.io/static/v1?label=Curated&message=Kubetools&color=2a7f62)](https://collabnix.github.io/kubetools/#cluster-with-core-cli-tools)
 [![Charm in the Wild](https://img.shields.io/static/v1?label=Listed%20in&message=Charm%20in%20the%20Wild&color=6B5CE7)](https://github.com/charm-and-friends/charm-in-the-wild#cloud-and-devops)
