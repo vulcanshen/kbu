@@ -1,14 +1,14 @@
 version: 2
 
-project_name: km8
+project_name: kbu
 
 builds:
   - main: ./cmd
-    binary: km8
+    binary: kbu
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X github.com/vulcanshen/km8/internal/version.Version={{.Version}}
+      - -s -w -X github.com/vulcanshen/kbu/internal/version.Version={{.Version}}
     goos:
       - linux
       - darwin
@@ -40,7 +40,7 @@ brews:
       owner: vulcanshen
       name: homebrew-tap
       token: "{{ .Env.ACTION_TOKEN }}"
-    homepage: "https://github.com/vulcanshen/km8"
+    homepage: "https://github.com/vulcanshen/kbu"
     description: "Kubernetes TUI management tool inspired by Lens IDE"
 
 scoops:
@@ -48,5 +48,5 @@ scoops:
       owner: vulcanshen
       name: scoop-bucket
       token: "{{ .Env.ACTION_TOKEN }}"
-    homepage: "https://github.com/vulcanshen/km8"
+    homepage: "https://github.com/vulcanshen/kbu"
     description: "Kubernetes TUI management tool inspired by Lens IDE"
