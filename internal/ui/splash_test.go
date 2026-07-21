@@ -178,7 +178,7 @@ func TestSplashModel_CaptionRevealsAfterAnimation(t *testing.T) {
 func TestSplashModel_BoundaryBeatOnce(t *testing.T) {
 	m := newTestSplash()
 	m.Show()
-	m.revealedCount = m.bgCount // fast-forward to the M→K/8 boundary
+	m.revealedCount = m.bgCount // fast-forward to the D->U boundary
 
 	// First tick at boundary: hold, don't advance.
 	before := m.revealedCount
@@ -186,8 +186,8 @@ func TestSplashModel_BoundaryBeatOnce(t *testing.T) {
 	if m.revealedCount != before {
 		t.Errorf("boundary tick must not advance; before=%d after=%d", before, m.revealedCount)
 	}
-	if !m.boundaryPaused {
-		t.Error("boundary tick must set boundaryPaused = true")
+	if !m.pausedBg {
+		t.Error("boundary tick must set pausedBg = true")
 	}
 	if cmd == nil {
 		t.Error("boundary tick must return the resume cmd")
@@ -200,6 +200,32 @@ func TestSplashModel_BoundaryBeatOnce(t *testing.T) {
 	}
 	if m.versionVisible {
 		t.Error("version must not be visible while pixels are still revealing")
+	}
+}
+
+func TestSplashModel_SecondBoundaryBeat(t *testing.T) {
+	m := newTestSplash()
+	m.Show()
+	m.pausedBg = true        // first beat (D->U) already consumed
+	m.revealedCount = m.uEnd // fast-forward to the U->K/B boundary
+
+	// First tick at the boundary: hold, don't advance.
+	before := m.revealedCount
+	m, cmd := m.Update(splashTickMsg{})
+	if m.revealedCount != before {
+		t.Errorf("U->K/B boundary tick must not advance; before=%d after=%d", before, m.revealedCount)
+	}
+	if !m.pausedU {
+		t.Error("boundary tick must set pausedU = true")
+	}
+	if cmd == nil {
+		t.Error("boundary tick must return the resume cmd")
+	}
+
+	// Second tick: advance into stage 3 (letters).
+	m, _ = m.Update(splashTickMsg{})
+	if m.revealedCount <= before {
+		t.Errorf("second tick must advance into stage 3; before=%d after=%d", before, m.revealedCount)
 	}
 }
 
