@@ -1,10 +1,10 @@
-# km8 installer for Windows
-# Usage: irm https://raw.githubusercontent.com/vulcanshen/km8/main/install.ps1 | iex
+# kbu installer for Windows
+# Usage: irm https://raw.githubusercontent.com/vulcanshen/kbu/main/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
-$repo = "vulcanshen/km8"
-$installDir = "$env:LOCALAPPDATA\km8"
+$repo = "vulcanshen/kbu"
+$installDir = "$env:LOCALAPPDATA\kbu"
 
 # Detect architecture
 $arch = if ([Environment]::Is64BitOperatingSystem) {
@@ -21,7 +21,7 @@ $version = $release.tag_name -replace "^v", ""
 Write-Host "Latest version: $version"
 
 # Download
-$fileName = "km8_${version}_windows_${arch}.zip"
+$fileName = "kbu_${version}_windows_${arch}.zip"
 $downloadUrl = "https://github.com/$repo/releases/download/$($release.tag_name)/$fileName"
 $tempFile = Join-Path $env:TEMP $fileName
 
@@ -34,8 +34,8 @@ if (Test-Path $installDir) {
         Remove-Item $installDir -Recurse -Force -ErrorAction Stop
     } catch {
         Write-Host ""
-        Write-Host "Error: Cannot update km8 — the file is in use." -ForegroundColor Red
-        Write-Host "Please close km8 first, then run this installer again." -ForegroundColor Yellow
+        Write-Host "Error: Cannot update kbu — the file is in use." -ForegroundColor Red
+        Write-Host "Please close kbu first, then run this installer again." -ForegroundColor Yellow
         Remove-Item $tempFile -ErrorAction SilentlyContinue
         exit 1
     }
@@ -55,5 +55,5 @@ if ($userPath -notlike "*$installDir*") {
 }
 
 Write-Host ""
-Write-Host "km8 $version installed successfully!" -ForegroundColor Green
-Write-Host "Run 'km8 --version' to verify." -ForegroundColor Cyan
+Write-Host "kbu $version installed successfully!" -ForegroundColor Green
+Write-Host "Run 'kbu --version' to verify." -ForegroundColor Cyan
