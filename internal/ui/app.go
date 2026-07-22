@@ -4174,8 +4174,8 @@ type ScrollInfo struct {
 }
 
 // focusedPanelTitle builds a Panel 1/2 border title. Layout (both focus
-// states): <E0B6>[N] body<E0B0> — round left cap + single filled chip
-// wrapping prefix & body + hard right cap. Chip fg = Catppuccin base; bg
+// states): <E0B6>[N] body<E0B4> — round left cap + single filled chip
+// wrapping prefix & body + round right cap. Chip fg = Catppuccin base; bg
 // = border color (blue when focused, surface2 when not).
 func focusedPanelTitle(prefix, body string, t *theme.Theme, focused bool) string {
 	borderHex := t.Detail.BorderColor
@@ -4190,7 +4190,7 @@ func focusedPanelTitle(prefix, body string, t *theme.Theme, focused bool) string
 		Bold(true)
 	return capStyle.Render("\uE0B6") +
 		chipStyle.Render(prefix+" "+body) +
-		capStyle.Render("\uE0B0")
+		capStyle.Render("\uE0B4")
 }
 
 // plainTitlePrefix wraps the "[N]" panel-id in a Powerline chip matching

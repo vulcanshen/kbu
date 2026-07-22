@@ -873,7 +873,7 @@ func (m DetailModel) TabTitle() string {
 	}
 
 	if len(tabs) == 0 {
-		return trailingBlue.Render("\uE0B0")
+		return trailingBlue.Render("\uE0B4")
 	}
 
 	var b strings.Builder
@@ -922,9 +922,9 @@ func (m DetailModel) TabTitle() string {
 		prevBlue = isBlue
 	}
 	if prevBlue {
-		b.WriteString(trailingBlue.Render("\uE0B0"))
+		b.WriteString(trailingBlue.Render("\uE0B4"))
 	} else {
-		b.WriteString(trailingBase.Render("\uE0B0"))
+		b.WriteString(trailingBase.Render("\uE0B4"))
 	}
 	return b.String()
 }
