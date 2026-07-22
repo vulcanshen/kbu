@@ -39,9 +39,9 @@ const (
 
 	// toastTitleText is the fixed title text for every toast — the
 	// popup-convention rule requires `glyph + text` in border titles;
-	// the level glyph + a stable "KubeUI" identifier tell the user "your
+	// the level glyph + a stable "kbu" identifier tell the user "your
 	// app is talking" without leaking per-toast specifics into chrome.
-	toastTitleText = "KubeUI"
+	toastTitleText = "kbu"
 
 	// toastMinInnerW is the minimum cell budget for the toast body
 	// row. Short messages like "Copied!" (7 cells) used to size the

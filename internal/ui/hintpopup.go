@@ -302,7 +302,7 @@ const drillArrow = "\U000f060d"
 const titleIcon = "\U000f094b"
 
 func sidebarHintContent() (string, []hintRow) {
-	title := " " + titleIcon + " KubeUI — what can I do here?"
+	title := " " + titleIcon + " kbu — what can I do here?"
 	// P is intentionally omitted: the action area above already
 	// surfaces "[P]in <kind>" / "Unpin <kind>" contextually, so a
 	// separate cheatsheet row would just restate it.
