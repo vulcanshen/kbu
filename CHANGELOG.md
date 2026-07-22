@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.0.2] - 2026-07-22
+
+Course-correct the v2.0.1 branding experiment and round off a border
+detail — no functional or workflow changes.
+
+- **In-app display name reverted KubeUI → kbu.** v2.0.1 switched the
+  text the user reads directly to the full name "KubeUI"; v2.0.2 puts
+  the short name **kbu** back in the quit confirm dialog, the `Space`
+  menu / hint title, the toast title, the applog startup line, and the
+  crash messages. The splash easter-egg identity reveal keeps the full
+  **KubeUI**, and the README `kbu — KubeUI` subtitle stays — both are
+  deliberate full-name surfaces, not in-app chrome.
+- **Border-title trailing cap rounded.** Panel 1/2/3 title chips and the
+  panel-3 tab bar now close their right end with a round half-circle
+  (Powerline `E0B4`) instead of a hard triangle (`E0B0`), mirroring the
+  round left cap already in use. Between-tab boundary caps stay
+  triangular; only the final trailing cap changed.
+- **Docs:** added a self-contained "Panel chrome" spec (§8) to the ZLC
+  implementation doc — border title, tab bar, and border-hint styling,
+  written portably so other TUIs can reference it.
+
 ## [v2.0.1] - 2026-07-22
 
 Branding polish following the v2.0.0 rename — no functional or workflow
