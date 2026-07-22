@@ -12,7 +12,8 @@
 
 **Language**: [English](README.md) · 繁體中文
 
-> **v2.0 改名說明**：kbu 就是 v1.7.x 以前叫做 **km8** 的工具。使用方式全數保留 — 指令 binary 現在是 `kbu`、config 目錄從 `~/.config/km8/` 搬到 `~/.config/kbu/` 首次啟動會自動 migrate、`$KM8__*` 環境變數本次 release 仍會 fallback 讀（見環境變數表）。升級無需手動步驟。
+> [!WARNING]
+> **v2.0 改名說明**：kbu 就是 v1.7.x 以前叫做 **km8** 的工具。使用方式全數保留 — 指令 binary 現在是 `kbu`、config 目錄從 `~/.config/km8/` 搬到 `~/.config/kbu/` 首次啟動會自動 migrate、`$KM8__*` 環境變數仍會 fallback 讀、永久保留向下相容（見環境變數表）。升級無需手動步驟。
 
 **一個視窗搞定 Kubernetes** — `Tab` / `Space` / `Enter` / `Esc` 四鍵驅動一切，不用背快捷鍵、不用設定、零學習成本。Relatives 關聯導覽、YAML compare、常駐 shell 全都內建；其他你信任的 terminal 工具靠那個 shell 都能掛進來一起用。
 
@@ -357,7 +358,7 @@ resource_kind_config:
 
 這些變數會 override 對應的 config 欄位，用於不改 YAML 的一次性執行 — 適合 CI、demo 腳本、臨時試另一個 shell 的場合。
 
-> **v2.0 改名說明**：下表的 `KBU__*` 是 pre-v2.0 `KM8__*` 的新名。舊 `KM8__*` 在本次 release 仍會 fallback 讀（v2.1 移除）— 舊 `~/.zshrc` 裡的 `KM8__CONFIGPATH` 可以繼續用。同時設 `KBU__` 與對應 `KM8__` 時，`KBU__` 勝出。
+> **v2.0 改名說明**：下表的 `KBU__*` 是 pre-v2.0 `KM8__*` 的新名。舊 `KM8__*` 仍會 fallback 讀（永久保留、向下相容）— 舊 `~/.zshrc` 裡的 `KM8__CONFIGPATH` 可以繼續用。同時設 `KBU__` 與對應 `KM8__` 時，`KBU__` 勝出。
 
 | 變數 | 作用 | 優先順序 |
 |---|---|---|

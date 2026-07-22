@@ -12,7 +12,8 @@
 
 **Language**: English · [繁體中文](README-zh_TW.md)
 
-> **v2.0 rename note.** kbu is the same tool previously released as **km8** (v1.7.x and earlier). Everything you know still works — the command binary is now `kbu`, the config directory moved from `~/.config/km8/` to `~/.config/kbu/` with a one-shot auto-migration on first launch, and `$KM8__*` env vars are still read as a fallback for this release (see the Environment variables table). Upgrade is drop-in; no manual steps required.
+> [!WARNING]
+> **v2.0 rename note.** kbu is the same tool previously released as **km8** (v1.7.x and earlier). Everything you know still works — the command binary is now `kbu`, the config directory moved from `~/.config/km8/` to `~/.config/kbu/` with a one-shot auto-migration on first launch, and `$KM8__*` env vars are still read as a fallback, kept permanently for backward compatibility (see the Environment variables table). Upgrade is drop-in; no manual steps required.
 
 **A single-pane Kubernetes workspace** — `Tab` / `Space` / `Enter` / `Esc` drive everything. No hotkey memorization, no setup, no learning curve. Relatives navigation, YAML compare, and an embedded persistent shell are built in; any other terminal tool you trust rides along through the shell.
 
@@ -376,7 +377,7 @@ resource_kind_config:
 
 Override the corresponding config slot for one-shot runs without editing the YAML — useful for CI / scripted demos / quick "try this shell" sessions.
 
-> **v2.0 rename note.** The `KBU__*` names below replaced the pre-v2.0 `KM8__*` names. The old `KM8__*` names are still read as a fallback in v2.0 (removable in v2.1) — a `KM8__CONFIGPATH` in your `~/.zshrc` from a v1.7.x install keeps working. If both a `KBU__` and its legacy `KM8__` counterpart are set, `KBU__` wins.
+> **v2.0 rename note.** The `KBU__*` names below replaced the pre-v2.0 `KM8__*` names. The old `KM8__*` names are still read as a fallback (kept permanently for backward compatibility) — a `KM8__CONFIGPATH` in your `~/.zshrc` from a v1.7.x install keeps working. If both a `KBU__` and its legacy `KM8__` counterpart are set, `KBU__` wins.
 
 | Variable | Effect | Precedence |
 |---|---|---|
