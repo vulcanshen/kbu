@@ -1,10 +1,10 @@
 #!/bin/sh
-# km8 installer for macOS / Linux / Git Bash
-# Usage: curl -fsSL https://raw.githubusercontent.com/vulcanshen/km8/main/install.sh | sh
+# kbu installer for macOS / Linux / Git Bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/install.sh | sh
 
 set -e
 
-REPO="vulcanshen/km8"
+REPO="vulcanshen/kbu"
 
 # Detect OS
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -41,7 +41,7 @@ else
   fi
 fi
 
-FILENAME="km8_${VERSION}_${OS}_${ARCH}.${EXT}"
+FILENAME="kbu_${VERSION}_${OS}_${ARCH}.${EXT}"
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/v${VERSION}/$FILENAME"
 
 # Download
@@ -60,17 +60,17 @@ fi
 # Install
 mkdir -p "$INSTALL_DIR"
 if [ "$OS" = "windows" ]; then
-  cp "$TMPDIR/km8.exe" "$INSTALL_DIR/km8.exe"
+  cp "$TMPDIR/kbu.exe" "$INSTALL_DIR/kbu.exe"
 else
-  cp "$TMPDIR/km8" "$INSTALL_DIR/km8"
-  chmod +x "$INSTALL_DIR/km8"
+  cp "$TMPDIR/kbu" "$INSTALL_DIR/kbu"
+  chmod +x "$INSTALL_DIR/kbu"
 fi
 
 # Cleanup
 rm -rf "$TMPDIR"
 
 echo ""
-echo "km8 $VERSION installed to $INSTALL_DIR"
+echo "kbu $VERSION installed to $INSTALL_DIR"
 
 # Check if install dir is in PATH
 case ":$PATH:" in
@@ -89,4 +89,4 @@ case ":$PATH:" in
 esac
 
 echo ""
-echo "Run 'km8 --version' to verify."
+echo "Run 'kbu --version' to verify."

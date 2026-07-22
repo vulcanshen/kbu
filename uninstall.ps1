@@ -1,12 +1,12 @@
-# km8 uninstaller for Windows
-# Usage: irm https://raw.githubusercontent.com/vulcanshen/km8/main/uninstall.ps1 | iex
+# kbu uninstaller for Windows
+# Usage: irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
-$installDir = "$env:LOCALAPPDATA\km8"
+$installDir = "$env:LOCALAPPDATA\kbu"
 
-if (-not (Test-Path "$installDir\km8.exe")) {
-    Write-Host "km8 not found in $installDir" -ForegroundColor Red
+if (-not (Test-Path "$installDir\kbu.exe")) {
+    Write-Host "kbu not found in $installDir" -ForegroundColor Red
     exit 1
 }
 
@@ -22,7 +22,7 @@ if ($userPath -like "*$installDir*") {
 }
 
 # Remove config
-$configDir = Join-Path $env:APPDATA "km8"
+$configDir = Join-Path $env:APPDATA "kbu"
 if (Test-Path $configDir) {
     $answer = Read-Host "Remove config in $configDir? [y/N]"
     if ($answer -eq "y" -or $answer -eq "Y") {
@@ -34,4 +34,4 @@ if (Test-Path $configDir) {
 }
 
 Write-Host ""
-Write-Host "km8 uninstalled. Restart your terminal for PATH changes to take effect." -ForegroundColor Green
+Write-Host "kbu uninstalled. Restart your terminal for PATH changes to take effect." -ForegroundColor Green

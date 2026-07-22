@@ -1,6 +1,6 @@
 #!/bin/sh
-# km8 uninstaller for macOS / Linux / Git Bash
-# Usage: curl -fsSL https://raw.githubusercontent.com/vulcanshen/km8/main/uninstall.sh | sh
+# kbu uninstaller for macOS / Linux / Git Bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | sh
 
 set -e
 
@@ -12,9 +12,9 @@ esac
 
 # Determine install locations to check
 if [ "$OS" = "windows" ]; then
-  CANDIDATES="$HOME/bin/km8.exe"
+  CANDIDATES="$HOME/bin/kbu.exe"
 else
-  CANDIDATES="$HOME/.local/bin/km8 /usr/local/bin/km8"
+  CANDIDATES="$HOME/.local/bin/kbu /usr/local/bin/kbu"
 fi
 
 FOUND=""
@@ -26,7 +26,7 @@ for path in $CANDIDATES; do
 done
 
 if [ -z "$FOUND" ]; then
-  echo "km8 not found in expected locations."
+  echo "kbu not found in expected locations."
   echo "Checked: $CANDIDATES"
   exit 1
 fi
@@ -35,7 +35,7 @@ rm "$FOUND"
 echo "removed $FOUND"
 
 # Remove config if present
-CONFIG_DIR="$HOME/.config/km8"
+CONFIG_DIR="$HOME/.config/kbu"
 if [ -d "$CONFIG_DIR" ]; then
   printf "Remove config in %s? [y/N]: " "$CONFIG_DIR"
   read -r answer
@@ -51,4 +51,4 @@ if [ -d "$CONFIG_DIR" ]; then
 fi
 
 echo ""
-echo "km8 uninstalled."
+echo "kbu uninstalled."
