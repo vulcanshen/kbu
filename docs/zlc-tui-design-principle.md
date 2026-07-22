@@ -8,7 +8,7 @@
 支撐 ZLC 的周邊規範。
 
 > 本文件是 **interface**。某個 app 怎麼具體 implement、寫在它自己的
-> implementation doc 裡（範例：`km8-zlc-implementation.md`）。
+> implementation doc 裡（範例：`kbu-zlc-implementation.md`）。
 
 ---
 
