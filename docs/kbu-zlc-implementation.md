@@ -902,6 +902,135 @@ kbu panel 3 五個 tab 的 unfocus 處理：
 
 ---
 
+## §8. Panel chrome in kbu — border title / tab bar / border hint
+
+> 這一節把 kbu 三件 panel 外框裝飾抽成可攜 spec：**border title chip**、
+> **panel tab bar**、**border hint**。跟 §6 Popup Convention 平行——§6 講
+> 浮層怎麼畫、§8 講 panel 外框怎麼畫。另做工具時整套照搬即可，不用逐項
+> 重講。所有顏色引用 §2 錨點、glyph 規範接 §3.2、hint 承載規則接 §6.6.2。
+
+### §8.0 三件套、focus 二態、共用色
+
+kbu 每個 panel 的外框由這三件裝飾 + box 邊框組成：
+
+| 件 | 位置 | 由誰畫 | 出現在 |
+|---|---|---|---|
+| Border title chip | 上邊框左端 | `focusedPanelTitle` / `plainTitlePrefix` | panel 1 / 2 / 3 |
+| Panel tab bar | 上邊框左端（接在 title chip 後）| `DetailModel.TabTitle` | panel 3 |
+| Border hint | 上邊框右端 + 下邊框左端 + 下邊框右端 | `renderPanelWithScroll` | panel 2 / 3 |
+
+**Focus 是唯一的二態變數**——一個 panel 只有 focused / unfocused 兩種樣子，
+所有裝飾的顏色與字重都由它驅動：
+
+| 角色 | focused | unfocused | 常數 |
+|---|---|---|---|
+| 邊框 + chip 底色 | Blue `#89b4fa` | Surface2 `#585b70` | `Sidebar.CategoryFg` / `Detail.BorderColor` |
+| chip 文字 | base `#1e1e2e` | base `#1e1e2e` | 固定 base（暗字壓在亮底上求可讀）|
+| box 字元 | 雙線 `╔═╗╚╝║` | 圓角細線 `╭─╮╰╯│` | 見 §8.4 |
+| tab 區底色 | crust `#11111b` | crust `#11111b` | 固定 crust（比 base 低一階、tab 區顯得凹陷）|
+| tab chevron divider | surface0 `#313244` | base `#1e1e2e` | focus 差一階、聚焦 panel 的 chevron 略亮 |
+
+focused 的 Blue `#89b4fa` 是**結構色**（focus 訊號），不是 §2.5 的 popup layer
+scale，也不是 Lavender（user state）——panel chrome 只表達「哪個 panel 有焦點」，
+跟浮層層級、使用者足跡兩條色軸互不干涉。
+
+**Powerline glyph 例外（重要）**：§3.2 定 kbu 只用 `U+f...`、避開 `U+e...`。
+但 panel chrome 用的分隔符是 Powerline 私有區 `U+E0B0`–`U+E0B7`——這是
+`U+e...` 區段裡**唯一**該破例的子集：它是 powerline 事實標準（starship / tmux /
+vim-airline / lualine 全用），每套 Nerd Font 必附、跨終端機寬度穩定（都是 1 cell）。
+其餘 `U+e...`（Devicons / Codicons / Pomicons）照舊避開。
+
+本節用到的 Powerline cap：
+
+| Codepoint | 形狀 | kbu 用途 |
+|---|---|---|
+| `U+E0B6` | 實心左半圓（round 左）| 開 chip（title chip / tab bar 起點）|
+| `U+E0B4` | 實心右半圓（round 右）| **收尾** cap（title chip 尾、tab bar 尾）|
+| `U+E0B0` | 實心右三角（hard）| tab **之間**的 boundary cap（chip↔底色轉換）|
+| `U+E0B1` | 右三角細線（thin chevron）| 兩個 inactive tab 之間的 divider |
+
+**收尾用圓（`E0B4` / `E0B6`）、內部銜接用三角（`E0B0` / `E0B1`）** 是刻意的：
+圓角把整條 title 的頭尾收成柔邊，三角負責 chip 對 chip 的 starship 式流動銜接。
+
+### §8.1 Border title — powerline chip
+
+panel 1 / 2 的 title 是**單一 chip**：
+
+```
+<E0B6>[N] body<E0B4>
+ 圓左   ↑     ↑ 圓右
+      [N]=panel id   body=內容
+```
+
+- `[N]` 是 panel 編號（`[1]` Kinds / `[2]` breadcrumb / `[3]` tab bar），對應
+  §4.4 的 `[X]label` hotkey 入口語彙——數字即 focus 該 panel 的鍵。
+- chip = `fg base #1e1e2e + bg 邊框色 + bold`；兩端 cap = `fg 邊框色、無底`
+  （半圓貼在 panel 底色上）。
+- focused / unfocused 只換邊框色（Blue ↔ Surface2），chip 形狀、cell 數不變
+  ——換色不換版位，符合 §1.2 width stability。
+
+panel 3 的 title 不自己收尾：`plainTitlePrefix` 只畫 `<E0B6>[3]`（開 chip、
+不畫右 cap），把收尾交給緊接的 tab bar（§8.2）。理由是 panel 3 的 body 是一整
+條 tab chip chain、自帶收尾系統，共用同一顆 `[N]` chip 讓三個 panel 的視覺語言
+一致。
+
+### §8.2 Panel tab bar — starship chip chain（panel 3 專屬）
+
+panel 3 的 title body 是一條 starship 風格的 powerline chip chain。規則：
+
+- **只有 active tab 是亮 chip**（`fg base + bg 邊框色 + bold`）；其餘 tab 坐在
+  crust 底 (`fg 邊框色 + bg crust`)。
+- **首 tab active 時與 `[N]` chip 合併**：不畫邊界 cap，直接 ` Label` 續在藍
+  chip 上，成一段連續藍「`[3] Label`」，避免邊界處雙 chevron。
+- **tab 之間的銜接**依前後 tab 狀態選 cap：
+  - active→inactive：`E0B0` close cap（`fg 邊框色 + bg crust`）
+  - inactive→active：`E0B0` open cap（`fg crust + bg 邊框色`）
+  - inactive→inactive：`E0B1` thin chevron divider（focus-tiered 色，見 §8.0 表）
+- **尾端收圓** `E0B4`：末 tab 是 active 就用 `fg 邊框色` 的圓、是 inactive 就用
+  `fg crust` 的圓（把 crust tab 區以柔邊收進 panel 底色）。
+- **Width stability（硬約束）**：tab label 一律 `Label` 無 leading space、
+  active/inactive 都同寬；`Logs` / `Events` 的 live/paused glyph（`U+F0753` /
+  `U+F0754`）**不論 active 與否恆常渲染**。否則切 tab 時 tab bar 會伸縮 1–2 cell、
+  傳導到 panel 3 邊框對齊，popup 疊上去就抖。這是 §1.2 在 tab bar 上的具體落實。
+
+### §8.3 Border hint — 三個邊角
+
+border hint 把「當前 surface 能按什麼」織進邊框，不佔 body 行。三個位置：
+
+| 位置 | 格式 | kbu 內容來源 |
+|---|---|---|
+| 上邊框右端 | ` <hint>─`（前導空格 + hint + 1 dash 收角）| `BorderTopRightHint()` |
+| 下邊框左端 | `─<hint>─`（dash 夾 content）| `BorderBottomLeftHint()` / `tablePanelBottomLeft()` |
+| 下邊框右端 | ` X of Y `（收角前）| `ScrollInfo{Position, Total}` |
+
+- **樣式**：hint 文字 = `fg 邊框色 + bold`，dash / 邊框 = `fg 邊框色`——跟 title
+  同色系，讀成同一層 chrome。
+- **溢位一律靜默丟棄、不截斷**：小終端機寧可退回素邊框也不擠壞版位。下邊框的
+  丟棄有**優先序**——scroll 指示器（`X of Y`）比 bottom-left hint 有用，空間不夠
+  時先丟 hint、保 scroll。
+- **承載規則接 §6.6.2**：border hint **只承載 tab-contextual 鍵**（意義隨當前
+  tab 變的鍵）。core-key（Tab / Space / Esc / Enter / ?）語意 app-wide 恆定、
+  不重複進 hint、只住在 `?` help。例外：`Enter` / `Esc` 在 Relatives 上行為
+  ≠ app 預設（Enter drill 進引用資源、Esc 在 depth>1 退一層 drill）時才現身。
+  kbu 現行 hint：Relatives→`enter: drill`（depth>1 疊 `esc: back`）、
+  Logs / Events→`u/d: page  gg: top  G: live`（`G` 寫 live 因為它同時重掛
+  live tail、行為非預設所以進 hint）。
+
+### §8.4 Focus 訊號 — box 字重 + 色
+
+focus 用**兩個同時的訊號**表達，讀者掃一眼即知焦點在哪：
+
+| 訊號 | focused | unfocused |
+|---|---|---|
+| box 字元字重 | 雙線 `╔═╗╚╝║` | 圓角細線 `╭─╮╰╯│` |
+| 邊框 + chip 色 | Blue `#89b4fa` | Surface2 `#585b70` |
+
+兩套 box 字元**cell 數相同**——只換字形字重、不換寬高，focus 切換零位移
+（再次呼應 §1.2）。字重（雙線 vs 細線）是色盲也讀得到的第二訊號，不把 focus
+全押在顏色上。
+
+---
+
 ## 附錄 — kbu hotkey 全表
 
 ### Core key（跨 surface 不變、≤ 5 個）
