@@ -1,6 +1,6 @@
-# kbu — ZLC Implementation
+# kbu — Implementation
 
-本文件是 [`zlc-tui-design-principle.md`](./zlc-tui-design-principle.md) 在
+本文件是 [Vulcan's TUI Design Principle](https://github.com/vulcanshen/thoughts/blob/main/tui-design-principle.md) 在
 kbu 上的具體 implementation。通用規範是 **interface**、本文件是 **implementation
 class** — 每節對應通用規範同編號的條款、寫 kbu 的具體選擇、案例、hotkey 表。
 
@@ -13,24 +13,24 @@ PopupAnimator` 的 invariant 在這裡強制執行。
 
 ---
 
-## §A. ZLC implementation in kbu
+## §A. Implementation in kbu
 
-通用規範 §A.0（ZLC spectrum 量化框架）+ §A.1（Contextual track）+ §A.2
+通用規範 §A.0（設計原則的 spectrum 量化框架）+ §A.1（Contextual track）+ §A.2
 （Non-contextual track）在 kbu 的具體實現。
 
-### §A.0 kbu ZLC score 對照
+### §A.0 kbu score 對照
 
-kbu 在通用 §A.0 ZLC spectrum 上的位置：
+kbu 在通用 §A.0 spectrum 上的位置：
 
 | 軸 / 結果 | kbu 值 | 計算 |
 |---|---|---|
 | **X. 揭露程度** | 1.0（~100%）| Space menu 列出 contextual 動作 100%、`?` help popup 列出 non-contextual 動作 100%、X = (入口列出操作) / (app 全部操作) ≈ 1.0。**以 user 學習單位計算**（通用 §A.0 Action 粒度）：`Y` view YAML 對 30 個 resource type 通用、user 學一次 → 算 **1 個 action**、不是 30 個；同理 `E` edit / `D` delete / `C` compare / `S` shell 各算 1 個、不論底下 code 有幾個 switch case |
 | **Y. core-key role 數量** | 5 | 5 個 distinct role：「focus 切換」(`Tab`) / 「確認」(`Enter`) / 「取消」(`Esc`) / 「contextual 入口」(`Space`) / 「non-contextual 入口」(`?`)。**alias 共用 role 算 1 個**：若 kbu 補 `q` 跟 `Esc` 完整 alias 做「取消」（所有 surface 都同樣有效）、仍算 1 個取消 role、Y 不變、仍 = 5。若 `q` 只在某些 surface 取消、其他沒有 — 半套 alias、不算同 role、Y +1 變 6 |
 | `min(1, 5/Y)` 係數 | 1.0 | Y = 5、無 penalty |
-| **ZLC score** | `1.0 × 1.0 × 100%` = **100%** | user 不靠事先學就能用 |
+| **Score** | `1.0 × 1.0 × 100%` = **100%** | user 不靠事先學就能用 |
 | 事前認知門檻（反向）| `100% − 100%` = **0** | 不需要看 README |
 
-kbu 是「**高 ZLC + Kubernetes 操作工具**」這個 niche 的 prototypical
+kbu 是「**高易用性 + Kubernetes 操作工具**」這個 niche 的 prototypical
 案例 — 不靠事先學習就能用、靠 Space menu 跟 `?` help popup 走完所有
 功能。letter hotkey 是加速捷徑、不是必經之路。
 
@@ -72,7 +72,7 @@ kbu 每個 contextual letter hotkey（`Y` / `E` / `D` / `C` / `S` / `Alt-S` /
 「給知道的人」的加速捷徑、Space menu 是「給所有人」的完整界面。
 
 **完整性 audit**：新增一條 contextual 動作時、必須同時在 Space menu 加
-entry、不能只綁 letter hotkey。否則就是 ZLC 破洞（通用 §A.1）。
+entry、不能只綁 letter hotkey。否則就是原則破洞（通用 §A.1）。
 
 ### §A.2 Non-contextual track in kbu — `?` help popup 入口 + statusbar 揭露
 
@@ -1086,7 +1086,7 @@ focus 用**兩個同時的訊號**表達，讀者掃一眼即知焦點在哪：
 本文件捕捉 kbu 對通用規範的每條 implementation 選擇、含 popup convention
 v2 完整內容。增加新功能時：
 
-1. **先**回去看通用規範對應條款、確認新功能落在哪條 ZLC track（§A.1 contextual
+1. **先**回去看通用規範對應條款、確認新功能落在哪條 track（§A.1 contextual
    走 Space menu / §A.2 non-contextual 走 statusbar 揭露）
 2. **再**檢查本文件 kbu 是否已有對應 implementation pattern、follow 之
 3. 若涉及 popup、走 §6 完整 convention（一個 file、一個 PopupAnimator、
