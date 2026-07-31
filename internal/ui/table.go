@@ -88,28 +88,30 @@ func (m TableModel) CopyableContent() string {
 // every resource except Helm Releases (where every row is helm by
 // definition — the dedicated CHART / REV / STATUS columns carry the
 // release context already).
-// shouldInjectNamespace reports whether the panel-2 table should add a
-// synthetic Namespace column for this resource. True for namespaced
-// resources that don't already declare a Namespace column in their
-// registry def (a few, e.g. ConfigMaps, ship their own). Cluster-scoped
-// resources (Nodes, PVs, ClusterRoles, ...) never get one.
-//
-// The column is present for every namespaced resource regardless of how
-// many namespaces are selected ([E]) — the panel reads the same whether
-// you view one namespace or several. Kept in lockstep with the row
-// augmentation in augmentRowsWithHelm (same predicate → columns and cells
-// stay aligned).
-func shouldInjectNamespace(rt k8s.ResourceType) bool {
+// isNamespacedResource reports whether the resource is namespace-scoped,
+// and so gets a leading Namespace column in panel 2 ([E]). Cluster-scoped
+// resources (Nodes, PVs, ClusterRoles, ...) do not.
+func isNamespacedResource(rt k8s.ResourceType) bool {
 	def := k8s.DefaultRegistry.Get(rt)
-	if def == nil || def.ClusterScoped {
-		return false
+	return def != nil && !def.ClusterScoped
+}
+
+// ownNamespaceColumnIndex returns the index of a "Namespace" column the
+// resource declares in its own registry columns, or -1 if it has none. A
+// few (ConfigMaps, Roles, RoleBindings) ship one; it is hoisted to the
+// front so every namespaced resource shows Namespace first with no
+// duplicate.
+func ownNamespaceColumnIndex(rt k8s.ResourceType) int {
+	def := k8s.DefaultRegistry.Get(rt)
+	if def == nil {
+		return -1
 	}
-	for _, c := range def.Columns {
+	for i, c := range def.Columns {
 		if c.Title == "Namespace" {
-			return false
+			return i
 		}
 	}
-	return true
+	return -1
 }
 
 func ColumnsForResource(rt k8s.ResourceType) []Column {
@@ -117,8 +119,18 @@ func ColumnsForResource(rt k8s.ResourceType) []Column {
 	if rt == k8s.ResourceReleases || len(cols) == 0 {
 		return cols
 	}
+	namespaced := isNamespacedResource(rt)
+	skipIdx := -1
+	if namespaced {
+		skipIdx = ownNamespaceColumnIndex(rt) // hoisted to the front below
+	}
 	out := make([]Column, 0, len(cols)+2)
-	out = append(out, cols[0])
+	// Namespace leads for namespaced resources ([E]) — always the first
+	// column, ahead of Name, whether the resource declared its own or not.
+	if namespaced {
+		out = append(out, Column{Title: "Namespace", MinWidth: 15})
+	}
+	out = append(out, cols[0]) // Name
 	// Always-present empty column even for non-helm rows, so column
 	// alignment stays consistent. Cell value is k8s.HelmRowMark() — a
 	// Nerd Font PUA glyph (nf-md-ship_wheel, U+F0833) on the Helm-
@@ -127,13 +139,12 @@ func ColumnsForResource(rt k8s.ResourceType) []Column {
 	// terminals running EAW-double / NF non-Mono variants paint 2 —
 	// MinWidth: 2 keeps the column slot wide enough either way.
 	out = append(out, Column{Title: "", MinWidth: 2})
-	// Synthetic Namespace column right after the helm marker, matching
-	// the position the registry-declared one sits at (Name, helm,
-	// Namespace, ...) for the resources that ship their own.
-	if shouldInjectNamespace(rt) {
-		out = append(out, Column{Title: "Namespace", MinWidth: 15})
+	for i := 1; i < len(cols); i++ {
+		if i == skipIdx {
+			continue // resource's own Namespace column, hoisted to the front
+		}
+		out = append(out, cols[i])
 	}
-	out = append(out, cols[1:]...)
 	return out
 }
 
@@ -670,12 +681,13 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		// lipgloss.Width for the padding side.
 		if vw := lipgloss.Width(val); vw > w {
 			if w >= 1 {
-				// Name column: middle-truncate so distinctive front
-				// (app name) AND tail (pod hash / replicaset suffix)
-				// stay visible — kubectl-style names bury the identity
-				// signal at both ends. All other columns keep the
-				// tail-truncation (status/age/ip are prefix-heavy).
-				if i < len(m.columns) && m.columns[i].Title == "Name" {
+				// Name and Namespace columns middle-truncate so the
+				// distinctive front AND tail stay visible — kubectl-style
+				// names / namespaces bury the identity signal at both ends
+				// (app name + pod hash; team prefix + env suffix). Other
+				// columns keep tail-truncation (status/age/ip are
+				// prefix-heavy).
+				if i < len(m.columns) && (m.columns[i].Title == "Name" || m.columns[i].Title == "Namespace") {
 					val = truncateMiddle(val, w)
 				} else {
 					val = ansi.Truncate(val, w, "…")

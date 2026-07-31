@@ -4087,16 +4087,21 @@ func filterHelmIfHidden(items []k8s.ResourceItem, rt k8s.ResourceType) []k8s.Res
 	return out
 }
 
-// augmentRowsWithHelm inserts the helm-marker cell right after Name on
-// every row, and — for namespaced resources that don't ship their own
-// Namespace column — the item's namespace cell right after it ([E]). The
-// injected cells mirror ColumnsForResource exactly (same shouldInject
-// predicate, same Name/helm/Namespace/rest order) so columns and cells
-// stay aligned. Helm Releases get pass-through rows — their column set is
-// already helm-specific (CHART / REV / STATUS / ...). Drill rows from
-// container lists etc. don't pass through here, so they're unaffected.
+// augmentRowsWithHelm builds the panel-2 display rows: for namespaced
+// resources it leads each row with the item's namespace ([E]), then Name,
+// then the helm-marker cell, then the rest — dropping the resource's own
+// Namespace cell if it ships one (hoisted to the front). This mirrors
+// ColumnsForResource exactly (same namespaced / skip-index logic, same
+// Namespace/Name/helm/rest order) so columns and cells stay aligned. Helm
+// Releases get pass-through rows — their column set is already helm-
+// specific (CHART / REV / STATUS / ...). Drill rows from container lists
+// etc. don't pass through here, so they're unaffected.
 func augmentRowsWithHelm(items []k8s.ResourceItem, rt k8s.ResourceType) [][]string {
-	injectNS := shouldInjectNamespace(rt)
+	namespaced := isNamespacedResource(rt)
+	skipIdx := -1
+	if namespaced {
+		skipIdx = ownNamespaceColumnIndex(rt)
+	}
 	rows := make([][]string, len(items))
 	for i, item := range items {
 		if rt == k8s.ResourceReleases || len(item.Row) == 0 {
@@ -4104,12 +4109,17 @@ func augmentRowsWithHelm(items []k8s.ResourceItem, rt k8s.ResourceType) [][]stri
 			continue
 		}
 		out := make([]string, 0, len(item.Row)+2)
-		out = append(out, item.Row[0])
-		out = append(out, k8s.MarkHelm(item))
-		if injectNS {
-			out = append(out, item.Namespace)
+		if namespaced {
+			out = append(out, item.Namespace) // Namespace leads
 		}
-		out = append(out, item.Row[1:]...)
+		out = append(out, item.Row[0])        // Name
+		out = append(out, k8s.MarkHelm(item))  // helm marker
+		for j := 1; j < len(item.Row); j++ {
+			if j == skipIdx {
+				continue // resource's own namespace cell, hoisted to the front
+			}
+			out = append(out, item.Row[j])
+		}
 		rows[i] = out
 	}
 	return rows

@@ -581,6 +581,28 @@ func TestTableModel_SearchColumnMatch(t *testing.T) {
 	}
 }
 
+// The Namespace column middle-truncates too (front + tail kept), same as
+// Name — long team/env namespaces bury their identity signal at both ends.
+func TestTableModel_RenderRow_NamespaceMiddleTruncates(t *testing.T) {
+	m := newTestTable()
+	m.columns = []Column{{Title: "Namespace", MinWidth: 8}}
+	style := m.theme.TableRowStyle()
+
+	line := m.renderRow([]int{8}, []string{"team-prod-environment"}, style, false)
+	plain := strings.TrimRight(ansiStrip(line), " ")
+
+	if !strings.Contains(plain, "…") {
+		t.Fatalf("Namespace must truncate with an ellipsis, got %q", plain)
+	}
+	// Ellipsis in the MIDDLE (back kept), not at the end (tail-truncation).
+	if strings.HasSuffix(plain, "…") {
+		t.Errorf("Namespace must middle-truncate (back kept), got %q", plain)
+	}
+	if !strings.HasPrefix(plain, "t") {
+		t.Errorf("front of the namespace must be kept, got %q", plain)
+	}
+}
+
 func TestColumnsForResource(t *testing.T) {
 	allTypes := k8s.AllResourceTypes()
 
@@ -593,11 +615,15 @@ func TestColumnsForResource(t *testing.T) {
 		if len(cols) == 0 {
 			t.Errorf("ColumnsForResource(%v) returned empty columns", rt)
 		}
+		// The unlabeled helm-marker column sits right after Name — index 1
+		// for cluster-scoped kinds, index 2 for namespaced ones (which
+		// lead with the Namespace column). Helm Releases get no marker.
+		helmIdx := 1
+		if isNamespacedResource(rt) {
+			helmIdx = 2
+		}
 		for i, col := range cols {
-			// v1.5.1: index 1 is the unlabeled helm-marker column for
-			// every kind except Helm Releases (where the column isn't
-			// inserted). Title intentionally empty.
-			if col.Title == "" && !(i == 1 && rt != k8s.ResourceReleases) {
+			if col.Title == "" && !(i == helmIdx && rt != k8s.ResourceReleases) {
 				t.Errorf("ColumnsForResource(%v) column %d has empty title", rt, i)
 			}
 			if col.MinWidth <= 0 {
@@ -658,6 +684,10 @@ func TestTableModel_SetCursor_MapsThroughFilter(t *testing.T) {
 // content survives a narrow column intact.
 func TestTableModel_RenderRow_VisualWidthTruncation(t *testing.T) {
 	m := newTestTable()
+	// Pin column 0 to Name so the middle-truncation branch (keyed on the
+	// "Name" title) is exercised — panel-2 tables now lead with Namespace
+	// for namespaced kinds, which would otherwise put Name at index 1.
+	m.columns = []Column{{Title: "Name", MinWidth: 8}}
 	style := m.theme.TableRowStyle()
 	helmGlyph := "" // Nerd Font nf-dev-helm — 3 bytes, 1 cell
 
@@ -669,8 +699,8 @@ func TestTableModel_RenderRow_VisualWidthTruncation(t *testing.T) {
 	}{
 		{"helm glyph fits in width 2", helmGlyph, 2, helmGlyph},
 		{"helm glyph fits exact width 1", helmGlyph, 1, helmGlyph},
-		// Column 0 = Name (from newTestTable's default Pod columns); Name
-		// uses middle-truncation so the pod-hash tail stays visible.
+		// Name column (pinned above) uses middle-truncation so the
+		// distinctive pod-hash tail stays visible.
 		{"ascii truncates with mid ellipsis", "CrashLoopBackOff", 8, "Cras…Off"},
 		{"ascii short pads to width", "abc", 6, "abc"},
 		{"empty cell pads to width", "", 4, ""},
@@ -906,4 +936,3 @@ func TestStatusCellColor_OnLightBgUsesLatte(t *testing.T) {
 		t.Errorf("onLightBg CrashLoopBackOff = %q, want %q", got, wantRedDark)
 	}
 }
-
