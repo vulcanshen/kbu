@@ -88,12 +88,36 @@ func (m TableModel) CopyableContent() string {
 // every resource except Helm Releases (where every row is helm by
 // definition — the dedicated CHART / REV / STATUS columns carry the
 // release context already).
+// shouldInjectNamespace reports whether the panel-2 table should add a
+// synthetic Namespace column for this resource. True for namespaced
+// resources that don't already declare a Namespace column in their
+// registry def (a few, e.g. ConfigMaps, ship their own). Cluster-scoped
+// resources (Nodes, PVs, ClusterRoles, ...) never get one.
+//
+// The column is present for every namespaced resource regardless of how
+// many namespaces are selected ([E]) — the panel reads the same whether
+// you view one namespace or several. Kept in lockstep with the row
+// augmentation in augmentRowsWithHelm (same predicate → columns and cells
+// stay aligned).
+func shouldInjectNamespace(rt k8s.ResourceType) bool {
+	def := k8s.DefaultRegistry.Get(rt)
+	if def == nil || def.ClusterScoped {
+		return false
+	}
+	for _, c := range def.Columns {
+		if c.Title == "Namespace" {
+			return false
+		}
+	}
+	return true
+}
+
 func ColumnsForResource(rt k8s.ResourceType) []Column {
 	cols := k8s.DefaultRegistry.ColumnsFor(rt)
 	if rt == k8s.ResourceReleases || len(cols) == 0 {
 		return cols
 	}
-	out := make([]Column, 0, len(cols)+1)
+	out := make([]Column, 0, len(cols)+2)
 	out = append(out, cols[0])
 	// Always-present empty column even for non-helm rows, so column
 	// alignment stays consistent. Cell value is k8s.HelmRowMark() — a
@@ -103,6 +127,12 @@ func ColumnsForResource(rt k8s.ResourceType) []Column {
 	// terminals running EAW-double / NF non-Mono variants paint 2 —
 	// MinWidth: 2 keeps the column slot wide enough either way.
 	out = append(out, Column{Title: "", MinWidth: 2})
+	// Synthetic Namespace column right after the helm marker, matching
+	// the position the registry-declared one sits at (Name, helm,
+	// Namespace, ...) for the resources that ship their own.
+	if shouldInjectNamespace(rt) {
+		out = append(out, Column{Title: "Namespace", MinWidth: 15})
+	}
 	out = append(out, cols[1:]...)
 	return out
 }
