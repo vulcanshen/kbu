@@ -23,7 +23,7 @@ type Client struct {
 	registry      *Registry
 
 	mu        sync.RWMutex
-	namespace string // "" means all namespaces
+	selection NamespaceSelection // zero value = all namespaces
 }
 
 // NewClient creates a Client for the given context name. If contextName is
@@ -83,7 +83,6 @@ func NewClient(contextName string) (*Client, error) {
 		kubeConfig:    rawConfig,
 		contextName:   contextName,
 		registry:      DefaultRegistry,
-		namespace:     "",
 	}, nil
 }
 
@@ -121,19 +120,45 @@ func (c *Client) ListContexts() []string {
 	return contexts
 }
 
-// SetNamespace sets the namespace filter. An empty string means all namespaces.
+// SetNamespace sets a single-namespace (or, for "", all-namespaces)
+// selection. Retained as a compatibility shim over the selection model —
+// callers driving the multi-select picker should use SetSelection.
 func (c *Client) SetNamespace(ns string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.namespace = ns
+	if ns == "" {
+		c.selection = AllNamespaces()
+	} else {
+		c.selection = SelectedNamespaces(ns)
+	}
 }
 
-// GetNamespace returns the current namespace filter. An empty string means
-// all namespaces.
+// GetNamespace returns the single selected namespace, "" for all
+// namespaces, and "" for a multi-namespace selection (which has no single
+// representation — use Selection for the full picture).
 func (c *Client) GetNamespace() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.namespace
+	if list := c.selection.List(); len(list) == 1 {
+		return list[0]
+	}
+	return ""
+}
+
+// Selection returns the current namespace selection (All or an explicit
+// set). This is the source of truth the watcher fetches against.
+func (c *Client) Selection() NamespaceSelection {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.selection
+}
+
+// SetSelection replaces the namespace selection wholesale (the
+// multi-select picker's commit path).
+func (c *Client) SetSelection(sel NamespaceSelection) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.selection = sel
 }
 
 // Clientset returns the underlying Kubernetes clientset.

@@ -25,6 +25,12 @@ func FetchResources(ctx context.Context, clientset kubernetes.Interface, rt Reso
 	return DefaultRegistry.FetchResources(ctx, clientset, rt, namespace)
 }
 
+// FetchResourcesMulti lists resources across a namespace selection via the
+// DefaultRegistry. See Registry.FetchResourcesMulti.
+func FetchResourcesMulti(ctx context.Context, clientset kubernetes.Interface, rt ResourceType, sel NamespaceSelection) ([]ResourceItem, error) {
+	return DefaultRegistry.FetchResourcesMulti(ctx, clientset, rt, sel)
+}
+
 // GetResourceDetail extracts structured detail via the DefaultRegistry.
 func GetResourceDetail(rt ResourceType, item ResourceItem) ResourceDetail {
 	return DefaultRegistry.GetResourceDetail(rt, item)

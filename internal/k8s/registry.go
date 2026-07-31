@@ -173,6 +173,26 @@ func (r *Registry) FetchResources(ctx context.Context, clientset kubernetes.Inte
 	return def.Fetcher(ctx, clientset, namespace)
 }
 
+// FetchResourcesMulti lists resources across a namespace selection. For
+// All it issues a single cluster-wide list (the efficient path, design
+// note [A]); for an explicit set it lists each namespace separately in
+// name order (requirement [5]) and concatenates. A per-namespace error
+// aborts the whole fetch — callers re-list on the next watch tick.
+func (r *Registry) FetchResourcesMulti(ctx context.Context, clientset kubernetes.Interface, rt ResourceType, sel NamespaceSelection) ([]ResourceItem, error) {
+	if sel.IsAll() {
+		return r.FetchResources(ctx, clientset, rt, "")
+	}
+	var all []ResourceItem
+	for _, ns := range sel.List() {
+		items, err := r.FetchResources(ctx, clientset, rt, ns)
+		if err != nil {
+			return nil, fmt.Errorf("listing %s in namespace %s: %w", rt, ns, err)
+		}
+		all = append(all, items...)
+	}
+	return all, nil
+}
+
 // GetResourceDetail extracts detail using the registered detailer.
 func (r *Registry) GetResourceDetail(rt ResourceType, item ResourceItem) ResourceDetail {
 	def := r.Get(rt)
