@@ -28,6 +28,10 @@ type NamespacePickerModel struct {
 	searching   bool
 	searchQuery string
 
+	// pendingG tracks the first press of a gg (jump-to-top) chord, same
+	// as the panel-2 table. Any key other than a second g cancels it.
+	pendingG bool
+
 	// selection is the working checkbox state, seeded from the client's
 	// current selection on open (SetSelection). Each Enter toggles it and
 	// live-applies via NamespaceChangedMsg — the popup stays open ([D]).
@@ -107,6 +111,7 @@ func (m *NamespacePickerModel) OpenLoading() tea.Cmd {
 	m.cursor = 0
 	m.searching = false
 	m.searchQuery = ""
+	m.pendingG = false
 	m.loading = true
 	m.spinnerFrame = 0
 	return tea.Batch(m.animator.Open(), m.spinnerTickCmd())
@@ -192,6 +197,10 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		return m.handleSearchKey(keyMsg)
 	}
 	items := m.filtered()
+	// Any key other than a second g cancels a pending gg; reset up front
+	// and let the "g" case re-arm it.
+	wasPendingG := m.pendingG
+	m.pendingG = false
 	switch keyMsg.String() {
 	case "/":
 		m.searching = true
@@ -219,6 +228,16 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 			if m.cursor < 0 {
 				m.cursor = 0
 			}
+		}
+	case "g":
+		if wasPendingG {
+			m.cursor = 0
+		} else {
+			m.pendingG = true
+		}
+	case "G":
+		if len(items) > 0 {
+			m.cursor = len(items) - 1
 		}
 	case "enter":
 		return m.toggleCurrent(items)

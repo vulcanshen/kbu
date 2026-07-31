@@ -4057,19 +4057,27 @@ func filterHelmIfHidden(items []k8s.ResourceItem, rt k8s.ResourceType) []k8s.Res
 }
 
 // augmentRowsWithHelm inserts the helm-marker cell right after Name on
-// every row. Helm Releases get pass-through rows — their column set is
+// every row, and — for namespaced resources that don't ship their own
+// Namespace column — the item's namespace cell right after it ([E]). The
+// injected cells mirror ColumnsForResource exactly (same shouldInject
+// predicate, same Name/helm/Namespace/rest order) so columns and cells
+// stay aligned. Helm Releases get pass-through rows — their column set is
 // already helm-specific (CHART / REV / STATUS / ...). Drill rows from
 // container lists etc. don't pass through here, so they're unaffected.
 func augmentRowsWithHelm(items []k8s.ResourceItem, rt k8s.ResourceType) [][]string {
+	injectNS := shouldInjectNamespace(rt)
 	rows := make([][]string, len(items))
 	for i, item := range items {
 		if rt == k8s.ResourceReleases || len(item.Row) == 0 {
 			rows[i] = item.Row
 			continue
 		}
-		out := make([]string, 0, len(item.Row)+1)
+		out := make([]string, 0, len(item.Row)+2)
 		out = append(out, item.Row[0])
 		out = append(out, k8s.MarkHelm(item))
+		if injectNS {
+			out = append(out, item.Namespace)
+		}
 		out = append(out, item.Row[1:]...)
 		rows[i] = out
 	}

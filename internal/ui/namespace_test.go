@@ -250,6 +250,64 @@ func TestNamespacePickerModel_PageNavigation(t *testing.T) {
 	}
 }
 
+func TestNamespacePickerModel_GG_JumpsToTop(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('j'))
+	m, _ = m.Update(keyMsg('j'))
+	if m.cursor == 0 {
+		t.Fatal("setup: cursor should have moved off row 0")
+	}
+	m, _ = m.Update(keyMsg('g'))
+	if !m.pendingG {
+		t.Error("first g must arm pendingG")
+	}
+	m, _ = m.Update(keyMsg('g'))
+	if m.cursor != 0 {
+		t.Errorf("gg must jump to top, got cursor %d", m.cursor)
+	}
+	if m.pendingG {
+		t.Error("gg must clear pendingG")
+	}
+}
+
+func TestNamespacePickerModel_G_JumpsToBottom(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('G'))
+	if want := len(m.filtered()) - 1; m.cursor != want {
+		t.Errorf("G must jump to last row (%d), got %d", want, m.cursor)
+	}
+}
+
+// A gg chord interrupted by any other key must not fire — g, j, g stays a
+// single pending g, not a jump-to-top.
+func TestNamespacePickerModel_PendingGCancelledByOtherKey(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('g'))
+	if !m.pendingG {
+		t.Fatal("g must arm pendingG")
+	}
+	m, _ = m.Update(keyMsg('j'))
+	if m.pendingG {
+		t.Error("a non-g key must cancel pendingG")
+	}
+	if m.cursor != 1 {
+		t.Errorf("j after g should move cursor to 1, got %d", m.cursor)
+	}
+	m, _ = m.Update(keyMsg('g'))
+	if !m.pendingG {
+		t.Error("after cancel, a single g must re-arm pendingG")
+	}
+	if m.cursor != 1 {
+		t.Errorf("a single g after cancel must not jump, cursor got %d", m.cursor)
+	}
+}
+
 // ── Close ─────────────────────────────────────────────────────────────────
 
 func TestNamespacePickerModel_CloseOnEsc(t *testing.T) {
