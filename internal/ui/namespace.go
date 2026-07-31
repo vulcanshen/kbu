@@ -422,17 +422,25 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	case len(items) == 0:
 		lines = append(lines, normalStyle.Width(innerW).Render(" (no matches)"))
 	default:
+		green := lipgloss.Color(m.theme.Status.Running)
 		for i := start; i < end; i++ {
+			checked := m.isChecked(items[i])
 			box := nsUncheckedGlyph
-			if m.isChecked(items[i]) {
+			if checked {
 				box = nsCheckedGlyph
 			}
 			label := " " + box + " " + items[i]
+			style := normalStyle
 			if i == m.cursor {
-				lines = append(lines, selectedStyle.Width(innerW).Render(label))
-			} else {
-				lines = append(lines, normalStyle.Width(innerW).Render(label))
+				style = selectedStyle
 			}
+			// Checked namespaces read green (Catppuccin Running) — the
+			// cursor row keeps its highlight background, just the text
+			// turns green.
+			if checked {
+				style = style.Foreground(green)
+			}
+			lines = append(lines, style.Width(innerW).Render(label))
 		}
 	}
 	body := strings.Join(lines, "\n")

@@ -1065,7 +1065,7 @@ func (m *AppModel) syncCompareLockToTable() {
 func (m *AppModel) saveSessionState() {
 	s := buildSessionState(
 		m.k8sClient.ContextName(),
-		m.k8sClient.GetNamespace(),
+		m.k8sClient.Selection(),
 		m.currentResource,
 		m.items,
 		m.table.SelectedRow(),
@@ -1113,11 +1113,11 @@ func panelFromStateString(s string) Panel {
 // yaml shape. `cursor` follows m.table.SelectedRow() semantics:
 // negative or out-of-range means "no row selected", in which case
 // ObjectName / ObjectNamespace stay empty.
-func buildSessionState(ctx, ns string, rt k8s.ResourceType, items []k8s.ResourceItem, cursor int) *config.State {
+func buildSessionState(ctx string, sel k8s.NamespaceSelection, rt k8s.ResourceType, items []k8s.ResourceItem, cursor int) *config.State {
 	s := &config.State{
-		Context:   ctx,
-		Namespace: ns,
-		Kind:      rt.KubectlName(),
+		Context:    ctx,
+		Namespaces: sel.List(), // nil for All → omitted from the yaml
+		Kind:       rt.KubectlName(),
 	}
 	if cursor >= 0 && cursor < len(items) {
 		s.ObjectNamespace = items[cursor].Namespace
@@ -1344,7 +1344,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 	// mismatch persists until the user opens the ns picker or hits a
 	// path that fires SetNamespace (e.g. NamespaceChangedMsg).
 	statusBar := NewStatusBarModel(t, info)
-	statusBar.SetNamespace(client.GetNamespace())
+	statusBar.SetNamespace(namespaceSelectionLabel(client.Selection()))
 
 	// Restore the focused panel from state. Defaults to SidebarPanel
 	// when state is empty / unknown — same as the pre-restore behavior.
@@ -1401,13 +1401,21 @@ type appInitMsg struct{ info k8s.ClusterInfo }
 func (m AppModel) Init() tea.Cmd {
 	m.watcher.Start(m.currentResource, m.k8sClient.Selection())
 	info := m.k8sClient.GetClusterInfo()
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		m.sidebar.Init(),
 		m.table.Init(),
 		waitForWatchUpdate(m.watcher, m.currentResource),
 		discoverCRDs(m.k8sClient),
 		func() tea.Msg { return appInitMsg{info: info} },
-	)
+	}
+	// A persisted multi/single-namespace selection may reference
+	// namespaces that no longer exist — reconcile it against the live
+	// list once at startup (drop the dead ones, fall back to all if none
+	// survive). All-namespaces needs no check.
+	if !m.k8sClient.Selection().IsAll() {
+		cmds = append(cmds, validateNamespaceSelection(m.k8sClient))
+	}
+	return tea.Batch(cmds...)
 }
 
 func discoverCRDs(client *k8s.Client) tea.Cmd {
@@ -2874,6 +2882,29 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// landed, SetNamespaces is a harmless state poke.
 		m.namespacePicker.SetNamespaces(msg.Namespaces)
 		return m, nil
+
+	case namespaceValidationMsg:
+		if msg.Err != nil {
+			// Couldn't list namespaces — keep the optimistic selection
+			// rather than wiping a valid one on a transient error.
+			m.appLog.Warn("namespace validation skipped: " + msg.Err.Error())
+			return m, nil
+		}
+		sel := m.k8sClient.Selection()
+		validated := sel.FilterExisting(msg.Namespaces)
+		if validated.Equal(sel) {
+			return m, nil // every persisted namespace still exists
+		}
+		if validated.IsAll() {
+			m.appLog.Info("saved namespaces no longer exist — showing all namespaces")
+		} else {
+			m.appLog.Info("dropped deleted namespaces from the saved selection")
+		}
+		m.k8sClient.SetSelection(validated)
+		m.statusBar.SetNamespace(namespaceSelectionLabel(validated))
+		m.watcher.Start(m.currentResource, validated)
+		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
+		return m, tea.Batch(cmds...)
 
 	case NamespaceChangedMsg:
 		m.k8sClient.SetSelection(msg.Selection)
@@ -4350,8 +4381,10 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 
 // namespaceSelectionLabel formats a namespace selection for the status
 // bar: "" for All (SetNamespace renders that as "All Namespaces"), the
-// single namespace name for a one-namespace selection, or "multiple N"
-// for a multi-namespace selection ([G]).
+// single namespace name for a one-namespace selection, or "N selected"
+// for a multi-namespace selection ([G]). "N selected" rather than a name
+// list keeps the status bar width stable and reads cleanly after the
+// "Namespace:" prefix.
 func namespaceSelectionLabel(sel k8s.NamespaceSelection) string {
 	if sel.IsAll() {
 		return ""
@@ -4359,7 +4392,7 @@ func namespaceSelectionLabel(sel k8s.NamespaceSelection) string {
 	if sel.Count() == 1 {
 		return sel.List()[0]
 	}
-	return fmt.Sprintf("multiple %d", sel.Count())
+	return fmt.Sprintf("%d selected", sel.Count())
 }
 
 func fetchNamespaces(client *k8s.Client) tea.Cmd {
@@ -4373,6 +4406,24 @@ func fetchNamespaces(client *k8s.Client) tea.Cmd {
 			names[i] = item.Name
 		}
 		return NamespaceListMsg{Namespaces: names}
+	}
+}
+
+// validateNamespaceSelection lists the live namespaces once at startup so
+// a persisted selection can be reconciled against what still exists. Same
+// query as fetchNamespaces but tagged with namespaceValidationMsg so it
+// drives selection validation rather than populating the picker.
+func validateNamespaceSelection(client *k8s.Client) tea.Cmd {
+	return func() tea.Msg {
+		items, err := k8s.FetchResources(context.Background(), client.Clientset(), k8s.ResourceNamespaces, "")
+		if err != nil {
+			return namespaceValidationMsg{Err: err}
+		}
+		names := make([]string, len(items))
+		for i, item := range items {
+			names[i] = item.Name
+		}
+		return namespaceValidationMsg{Namespaces: names}
 	}
 }
 

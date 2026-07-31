@@ -35,7 +35,18 @@ type State struct {
 	// all: a missing file falls through to config default, a present
 	// file with an empty Namespace field is an explicit "user was on
 	// all-namespaces last time".
+	//
+	// Superseded by Namespaces (the multi-select set) for writing —
+	// Namespace is kept for reading state files written by older kbu
+	// versions. See Namespaces.
 	Namespace string `yaml:"namespace,omitempty"`
+
+	// Namespaces is the last-selected multi-namespace set. Non-empty is
+	// an explicit selection; empty falls back to the legacy single
+	// Namespace field, then config default, then all namespaces. On load
+	// the set is reconciled against the namespaces that still exist —
+	// survivors are kept, and if none survive it falls back to all.
+	Namespaces []string `yaml:"namespaces,omitempty"`
 
 	// Kind is the last-selected sidebar entry's KubectlName (e.g.
 	// "pods", "deployments", "crontabs.stable.example.com"). Empty

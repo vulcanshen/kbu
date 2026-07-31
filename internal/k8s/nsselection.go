@@ -102,6 +102,32 @@ func (s NamespaceSelection) Toggle(ns string) NamespaceSelection {
 	return NamespaceSelection{set: next}
 }
 
+// FilterExisting drops any selected namespace that isn't in the given set
+// of currently-existing namespaces. If every selected namespace has
+// disappeared, the selection falls back to All (there is no empty state).
+// All is returned unchanged — it needs no existence check. Used at startup
+// to reconcile a persisted selection against the namespaces that still
+// exist: keep the survivors, fall back to All only when none survive.
+func (s NamespaceSelection) FilterExisting(existing []string) NamespaceSelection {
+	if s.IsAll() {
+		return s
+	}
+	present := make(map[string]struct{}, len(existing))
+	for _, n := range existing {
+		present[n] = struct{}{}
+	}
+	kept := make([]string, 0, len(s.set))
+	for n := range s.set {
+		if _, ok := present[n]; ok {
+			kept = append(kept, n)
+		}
+	}
+	if len(kept) == 0 {
+		return AllNamespaces()
+	}
+	return SelectedNamespaces(kept...)
+}
+
 // Equal reports whether two selections cover the same namespaces. Used to
 // skip redundant re-fetches when a toggle results in no net change.
 func (s NamespaceSelection) Equal(other NamespaceSelection) bool {

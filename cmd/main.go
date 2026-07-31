@@ -78,9 +78,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	if state.Namespace != "" {
+	// Apply the persisted namespace selection optimistically — a set may
+	// include namespaces that have since been deleted; the app reconciles
+	// it against the live namespace list at startup (dropping any that
+	// no longer exist, falling back to all if none survive).
+	switch {
+	case len(state.Namespaces) > 0:
+		client.SetSelection(k8s.SelectedNamespaces(state.Namespaces...))
+	case state.Namespace != "":
 		client.SetNamespace(state.Namespace)
-	} else if cfg.DefaultNamespace != "" {
+	case cfg.DefaultNamespace != "":
 		client.SetNamespace(cfg.DefaultNamespace)
 	}
 
