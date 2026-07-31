@@ -1399,7 +1399,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 type appInitMsg struct{ info k8s.ClusterInfo }
 
 func (m AppModel) Init() tea.Cmd {
-	m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
+	m.watcher.Start(m.currentResource, m.k8sClient.Selection())
 	info := m.k8sClient.GetClusterInfo()
 	return tea.Batch(
 		m.sidebar.Init(),
@@ -2142,7 +2142,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			k8s.ToggleHelmHideManaged()
-			m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
+			m.watcher.Start(m.currentResource, m.k8sClient.Selection())
 			return m, waitForWatchUpdate(m.watcher, m.currentResource)
 		case "S":
 			// Panel-1: open the sort column picker on the cursor's
@@ -2556,7 +2556,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.seq != m.switchSeq {
 			return m, nil
 		}
-		m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
+		m.watcher.Start(m.currentResource, m.k8sClient.Selection())
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		return m, tea.Batch(cmds...)
 
@@ -2887,7 +2887,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
 		m.rowSeq++                         // invalidate any in-flight rowSwitchTickMsg from the prior namespace
 		m.detail.ClearDetail()
-		m.watcher.Start(m.currentResource, msg.Namespace)
+		m.watcher.Start(m.currentResource, m.k8sClient.Selection())
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		return m, tea.Batch(cmds...)
 
@@ -2921,7 +2921,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentResource = k8s.ResourcePods
 		}
 		m.sidebar.RefreshCategories(newClient.Registry())
-		m.watcher.Start(m.currentResource, m.k8sClient.GetNamespace())
+		m.watcher.Start(m.currentResource, m.k8sClient.Selection())
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		cmds = append(cmds, discoverCRDs(newClient))
 		return m, tea.Batch(cmds...)
