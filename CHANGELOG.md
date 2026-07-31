@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.1.0] - 2026-07-31
+
+Multi-namespace selection — view several namespaces at once, not just one
+or all.
+
+- **Multi-select namespace picker.** `N` now opens a checkbox list. Move
+  with `j`/`k` (`u`/`d` page, `gg`/`G` jump), and `Enter` toggles the
+  namespace under the cursor — the popup stays open so you can check
+  several in a row, and each toggle live-applies (panel 2 re-fetches
+  immediately). Checked namespaces read green. `Esc`/`Space` close.
+  "All Namespaces" and specific namespaces are mutually exclusive:
+  checking a specific one clears All, unchecking the last falls back to
+  All. `/` search still works.
+- **Per-namespace fetch, namespace-ordered.** A specific selection lists
+  each namespace separately (client-go's namespaced List) in name order,
+  rendering incrementally as each returns; "All Namespaces" keeps the
+  single cluster-wide list. No fetch-all-then-filter.
+- **Namespace column.** Every namespaced resource's panel-2 list now
+  leads with a Namespace column (first, ahead of Name) so rows from
+  different namespaces are distinguishable; it middle-truncates like Name
+  (front + tail kept). Cluster-scoped kinds (Nodes, PVs, ClusterRoles,
+  ...) are unchanged. The status bar shows the single namespace, "All
+  Namespaces", or "N selected" for a multi-selection.
+- **Selection persists, reconciled on launch.** The selection is saved to
+  `state.yaml` and restored next launch. Namespaces that no longer exist
+  are dropped on startup (kbu lists the live namespaces once and keeps the
+  survivors); if none survive it falls back to All. Precedence: persisted
+  selection > `default_namespace` config > all.
+- **`Makefile`** added with essentials-only targets (build / run / test /
+  test-race / vet / fmt / help). Release packaging stays with goreleaser.
+
 ## [v2.0.2] - 2026-07-22
 
 Course-correct the v2.0.1 branding experiment and round off a border
