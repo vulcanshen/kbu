@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/vulcanshen/kbu/internal/k8s"
 	"github.com/vulcanshen/kbu/internal/theme"
 )
 
@@ -128,7 +130,7 @@ func TestNamespacePickerModel_NavigateDown_WrapsAtEnd(t *testing.T) {
 
 // ── Select ─────────────────────────────────────────────────────────────────
 
-func TestNamespacePickerModel_SelectAllNamespaces_SendsEmptyNS(t *testing.T) {
+func TestNamespacePickerModel_ToggleAllNamespaces_EmitsAllSelection(t *testing.T) {
 	m := newTestNamespacePicker()
 	openNamespacePicker(&m)
 	// cursor=0 = "All Namespaces"
@@ -137,17 +139,16 @@ func TestNamespacePickerModel_SelectAllNamespaces_SendsEmptyNS(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("Enter must return a cmd")
 	}
-	// Execute the batch and look for NamespaceChangedMsg.
 	msg := runBatchForMsg[NamespaceChangedMsg](cmd)
 	if msg == nil {
 		t.Fatal("Enter must emit NamespaceChangedMsg")
 	}
-	if msg.Namespace != "" {
-		t.Errorf("selecting 'All Namespaces' must send empty namespace, got %q", msg.Namespace)
+	if !msg.Selection.IsAll() {
+		t.Errorf("toggling 'All Namespaces' must emit an All selection, got %d specific", msg.Selection.Count())
 	}
 }
 
-func TestNamespacePickerModel_SelectSpecific_SendsNamespace(t *testing.T) {
+func TestNamespacePickerModel_ToggleSpecific_EmitsSelectionWithNamespace(t *testing.T) {
 	m := newTestNamespacePicker()
 	openNamespacePicker(&m)
 
@@ -158,8 +159,94 @@ func TestNamespacePickerModel_SelectSpecific_SendsNamespace(t *testing.T) {
 	if msg == nil {
 		t.Fatal("Enter must emit NamespaceChangedMsg")
 	}
-	if msg.Namespace != "default" {
-		t.Errorf("expected namespace %q, got %q", "default", msg.Namespace)
+	if msg.Selection.IsAll() {
+		t.Error("toggling a specific namespace must clear the All state ([4])")
+	}
+	if !msg.Selection.Contains("default") || msg.Selection.Count() != 1 {
+		t.Errorf("expected selection {default}, got Count=%d contains(default)=%v",
+			msg.Selection.Count(), msg.Selection.Contains("default"))
+	}
+}
+
+// Enter toggles but must NOT close the popup — the user keeps checking
+// namespaces ([D]).
+func TestNamespacePickerModel_ToggleKeepsPopupOpen(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('j')) // cursor=1 = "default"
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !m.IsActive() {
+		t.Error("Enter (toggle) must keep the picker open ([D])")
+	}
+}
+
+// Toggling the same specific namespace twice returns to All (via Toggle's
+// fall-back-to-All when the set empties).
+func TestNamespacePickerModel_ToggleSpecificTwice_BackToAll(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+
+	m, _ = m.Update(keyMsg('j')) // default
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.selection.IsAll() {
+		t.Fatal("first toggle should select {default}")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // toggle default off
+	if !m.selection.IsAll() {
+		t.Error("toggling the last namespace off must fall back to All")
+	}
+}
+
+// Checking "All Namespaces" from a multi-selection clears every specific
+// namespace ([4] mutual exclusion).
+func TestNamespacePickerModel_ToggleAll_ClearsSpecifics(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+	m.SetSelection(k8s.SelectedNamespaces("default", "monitoring"))
+
+	// cursor=0 = "All Namespaces"
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !m.selection.IsAll() {
+		t.Error("toggling All must clear the specific set")
+	}
+	if m.isChecked("default") || m.isChecked("monitoring") {
+		t.Error("no specific namespace may stay checked once All is on")
+	}
+	if !m.isChecked("All Namespaces") {
+		t.Error("'All Namespaces' row must render checked when selection is All")
+	}
+}
+
+// SetSelection seeds the checkbox state the picker renders.
+func TestNamespacePickerModel_SetSelection_SeedsCheckboxes(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+	m.SetSelection(k8s.SelectedNamespaces("monitoring"))
+
+	if m.isChecked("All Namespaces") {
+		t.Error("All must be unchecked when a specific namespace is selected")
+	}
+	if !m.isChecked("monitoring") {
+		t.Error("seeded namespace must render checked")
+	}
+	if m.isChecked("default") {
+		t.Error("unseeded namespace must render unchecked")
+	}
+}
+
+// u / d page the cursor by nsPageJump, clamped to the list bounds.
+func TestNamespacePickerModel_PageNavigation(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m) // 4 rows: All + default + kube-system + monitoring
+
+	m, _ = m.Update(keyMsg('d'))
+	if m.cursor != len(m.filtered())-1 {
+		t.Errorf("d must clamp to last row (%d), got %d", len(m.filtered())-1, m.cursor)
+	}
+	m, _ = m.Update(keyMsg('u'))
+	if m.cursor != 0 {
+		t.Errorf("u must clamp to first row, got %d", m.cursor)
 	}
 }
 
@@ -420,6 +507,34 @@ func TestNamespacePickerModel_SetNamespaces_SwapsListInPlace(t *testing.T) {
 	}
 	if m.cursor != 0 {
 		t.Errorf("SetNamespaces must reset cursor to 0, got %d", m.cursor)
+	}
+}
+
+// The rendered popup carries a checked glyph for selected rows and an
+// unchecked glyph for the rest.
+func TestNamespacePickerModel_RendersCheckboxes(t *testing.T) {
+	m := newTestNamespacePicker()
+	openNamespacePicker(&m)
+	m.SetSelection(k8s.SelectedNamespaces("default"))
+
+	out := m.RenderPopup()
+	if !strings.Contains(out, nsCheckedGlyph) {
+		t.Error("rendered popup must show the checked glyph for the selected namespace")
+	}
+	if !strings.Contains(out, nsUncheckedGlyph) {
+		t.Error("rendered popup must show the unchecked glyph for unselected rows")
+	}
+}
+
+func TestNamespaceSelectionLabel(t *testing.T) {
+	if got := namespaceSelectionLabel(k8s.AllNamespaces()); got != "" {
+		t.Errorf("All → %q, want empty (status bar renders 'All Namespaces')", got)
+	}
+	if got := namespaceSelectionLabel(k8s.SelectedNamespaces("prod")); got != "prod" {
+		t.Errorf("single → %q, want 'prod'", got)
+	}
+	if got := namespaceSelectionLabel(k8s.SelectedNamespaces("prod", "dev", "stg")); got != "multiple 3" {
+		t.Errorf("multi → %q, want 'multiple 3'", got)
 	}
 }
 

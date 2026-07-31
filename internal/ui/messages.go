@@ -28,9 +28,12 @@ type ResourceSelectedMsg struct {
 	Type k8s.ResourceType
 }
 
-// NamespaceChangedMsg is sent when the namespace filter changes.
+// NamespaceChangedMsg is sent when the namespace selection changes. It
+// carries the full selection (All or an explicit set) because the picker
+// is multi-select — each Enter toggles a namespace and live-applies the
+// resulting selection.
 type NamespaceChangedMsg struct {
-	Namespace string
+	Selection k8s.NamespaceSelection
 }
 
 // ResourceDataMsg carries updated resource data from the watcher.

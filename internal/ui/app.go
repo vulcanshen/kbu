@@ -2070,6 +2070,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// in the real list when it arrives — no flicker because
 			// the animator stays in open state across SetNamespaces.
 			m.namespacePicker.SetLayer(m.popupDepth() + 1)
+			m.namespacePicker.SetSelection(m.k8sClient.Selection())
 			openCmd := m.namespacePicker.OpenLoading()
 			return m, tea.Batch(openCmd, fetchNamespaces(m.k8sClient))
 		case "C":
@@ -2875,13 +2876,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case NamespaceChangedMsg:
-		ns := msg.Namespace
-		if ns == "" {
-			ns = "All Namespaces"
+		m.k8sClient.SetSelection(msg.Selection)
+		label := namespaceSelectionLabel(msg.Selection)
+		logLabel := label
+		if logLabel == "" {
+			logLabel = "All Namespaces"
 		}
-		m.appLog.Info("namespace switched to " + ns)
-		m.k8sClient.SetNamespace(msg.Namespace)
-		m.statusBar.SetNamespace(msg.Namespace)
+		m.appLog.Info("namespace selection → " + logLabel)
+		m.statusBar.SetNamespace(label)
 		m.logStreamer.Stop()
 		m.logsActive = false
 		m.nextAggregateRetry = time.Time{} // per-target throttle; see ResourceSelectedMsg
@@ -4336,6 +4338,20 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	}
 
 	return b.String()
+}
+
+// namespaceSelectionLabel formats a namespace selection for the status
+// bar: "" for All (SetNamespace renders that as "All Namespaces"), the
+// single namespace name for a one-namespace selection, or "multiple N"
+// for a multi-namespace selection ([G]).
+func namespaceSelectionLabel(sel k8s.NamespaceSelection) string {
+	if sel.IsAll() {
+		return ""
+	}
+	if sel.Count() == 1 {
+		return sel.List()[0]
+	}
+	return fmt.Sprintf("multiple %d", sel.Count())
 }
 
 func fetchNamespaces(client *k8s.Client) tea.Cmd {
