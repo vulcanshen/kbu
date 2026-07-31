@@ -6,8 +6,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/vulcanshen/kbu/internal/k8s"
 	"github.com/vulcanshen/kbu/internal/theme"
 )
+
+// Checkbox glyphs for the multi-select rows (Material Design Icons PUA).
+const (
+	nsCheckedGlyph   = "\U000f0856" // checked
+	nsUncheckedGlyph = "\U000f0131" // unchecked (blank outline)
+)
+
+// nsPageJump is how far u/d move the cursor — half the 10-row visible
+// window, matching the vim ctrl-u/ctrl-d half-page feel.
+const nsPageJump = 5
 
 type NamespacePickerModel struct {
 	namespaces  []string
@@ -16,6 +27,11 @@ type NamespacePickerModel struct {
 	theme       *theme.Theme
 	searching   bool
 	searchQuery string
+
+	// selection is the working checkbox state, seeded from the client's
+	// current selection on open (SetSelection). Each Enter toggles it and
+	// live-applies via NamespaceChangedMsg — the popup stays open ([D]).
+	selection k8s.NamespaceSelection
 
 	// loading=true means the popup is open with a placeholder row
 	// while fetchNamespaces is still in flight. Update gates out all
@@ -66,6 +82,14 @@ func (m *NamespacePickerModel) SetLayer(layer int) {
 	m.layer = layer
 	m.borderColor = theme.PopupLayerColor(layer)
 	m.animator.Color = m.borderColor
+}
+
+// SetSelection seeds the picker's checkbox state from the client's current
+// namespace selection, so the boxes reflect what is live when the popup
+// opens. The all-on-launch reset ([2]) happens because the client itself
+// boots into All — not because the picker forces it.
+func (m *NamespacePickerModel) SetSelection(sel k8s.NamespaceSelection) {
+	m.selection = sel
 }
 
 // OpenLoading opens the popup IMMEDIATELY in its loading state — no
@@ -182,8 +206,22 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		if len(items) > 0 {
 			m.cursor = (m.cursor - 1 + len(items)) % len(items)
 		}
+	case "d":
+		if len(items) > 0 {
+			m.cursor += nsPageJump
+			if m.cursor >= len(items) {
+				m.cursor = len(items) - 1
+			}
+		}
+	case "u":
+		if len(items) > 0 {
+			m.cursor -= nsPageJump
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+		}
 	case "enter":
-		return m.selectCurrent(items)
+		return m.toggleCurrent(items)
 	case "esc", "n", "N", " ":
 		if m.searchQuery != "" {
 			m.searchQuery = ""
@@ -236,9 +274,9 @@ func (m NamespacePickerModel) handleSearchKey(msg tea.KeyMsg) (NamespacePickerMo
 }
 
 // HandleMouse routes a click against the picker. Left-click on a
-// namespace row selects that namespace (mirror of cursor+Enter).
-// Right-click closes the picker. Clicks during the loading state
-// only respond to right-click (no rows to act on).
+// namespace row toggles that namespace (mirror of cursor+Enter) and
+// keeps the popup open. Right-click closes the picker. Clicks during the
+// loading state only respond to right-click (no rows to act on).
 //
 // The render shape adapts to whether the user has the search box
 // open, which pushes the namespace rows down by 3 lines (search-box
@@ -288,25 +326,40 @@ func (m NamespacePickerModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int
 	switch msg.Button {
 	case tea.MouseButtonLeft:
 		m.cursor = realIdx
-		return m.selectCurrent(items)
+		return m.toggleCurrent(items)
 	case tea.MouseButtonRight:
 		return m, m.animator.Close()
 	}
 	return m, nil
 }
 
-func (m NamespacePickerModel) selectCurrent(items []string) (NamespacePickerModel, tea.Cmd) {
+// isChecked reports whether a row label is currently selected. The
+// "All Namespaces" row is checked when the selection spans all namespaces.
+func (m NamespacePickerModel) isChecked(label string) bool {
+	if label == "All Namespaces" {
+		return m.selection.IsAll()
+	}
+	return m.selection.Contains(label)
+}
+
+// toggleCurrent flips the checkbox on the cursor row and live-applies the
+// resulting selection via NamespaceChangedMsg. The popup stays open so the
+// user can toggle several namespaces in a row ([D]). "All Namespaces"
+// resets to the cluster-wide selection; any specific namespace toggles
+// into/out of the explicit set (Toggle clears All on the way, [4]).
+func (m NamespacePickerModel) toggleCurrent(items []string) (NamespacePickerModel, tea.Cmd) {
 	if len(items) == 0 || m.cursor >= len(items) {
 		return m, nil
 	}
-	ns := ""
-	if items[m.cursor] != "All Namespaces" {
-		ns = items[m.cursor]
+	if items[m.cursor] == "All Namespaces" {
+		m.selection = k8s.AllNamespaces()
+	} else {
+		m.selection = m.selection.Toggle(items[m.cursor])
 	}
-	closeCmd := m.animator.Close()
-	return m, tea.Batch(closeCmd, func() tea.Msg {
-		return NamespaceChangedMsg{Namespace: ns}
-	})
+	sel := m.selection
+	return m, func() tea.Msg {
+		return NamespaceChangedMsg{Selection: sel}
+	}
 }
 
 func (m NamespacePickerModel) View() string {
@@ -351,7 +404,11 @@ func (m NamespacePickerModel) renderFullPopup() string {
 		lines = append(lines, normalStyle.Width(innerW).Render(" (no matches)"))
 	default:
 		for i := start; i < end; i++ {
-			label := " " + items[i]
+			box := nsUncheckedGlyph
+			if m.isChecked(items[i]) {
+				box = nsCheckedGlyph
+			}
+			label := " " + box + " " + items[i]
 			if i == m.cursor {
 				lines = append(lines, selectedStyle.Width(innerW).Render(label))
 			} else {
@@ -400,7 +457,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := " Enter: select  /: search  Space: cancel "
+	hint := " Enter: toggle  /: search  Esc: close "
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
