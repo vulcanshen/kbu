@@ -75,6 +75,16 @@ type NamespaceListMsg struct {
 	Err        error
 }
 
+// namespaceValidationMsg carries the live namespace list fetched once at
+// startup so a persisted multi-namespace selection can be reconciled
+// against what still exists (drop deleted namespaces, fall back to all if
+// none survive). Distinct from NamespaceListMsg, which populates the
+// picker — this one drives selection validation, not the popup.
+type namespaceValidationMsg struct {
+	Namespaces []string
+	Err        error
+}
+
 // RelativeDrillMsg is emitted when the user presses Y on a Relatives-tab entry —
 // it asks AppModel to fetch the cursor-pointed resource and open its
 // YAML in a popup. (Y replaces the Enter-opens-YAML behavior that used to

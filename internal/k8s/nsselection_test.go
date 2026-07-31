@@ -100,6 +100,32 @@ func TestNamespaceSelection_ToggleBlankNoop(t *testing.T) {
 	}
 }
 
+func TestNamespaceSelection_FilterExisting(t *testing.T) {
+	existing := []string{"prod", "dev", "kube-system"}
+
+	// All is unchanged — it needs no existence check.
+	if !AllNamespaces().FilterExisting(existing).IsAll() {
+		t.Error("All must stay All after FilterExisting")
+	}
+
+	// Survivors kept, deleted namespaces dropped.
+	got := SelectedNamespaces("prod", "gone", "dev").FilterExisting(existing)
+	if got.IsAll() || got.Count() != 2 || !got.Contains("prod") || !got.Contains("dev") || got.Contains("gone") {
+		t.Errorf("must keep {prod, dev} and drop gone, got IsAll=%v count=%d", got.IsAll(), got.Count())
+	}
+
+	// None survive → fall back to All ([2]).
+	if !SelectedNamespaces("gone1", "gone2").FilterExisting(existing).IsAll() {
+		t.Error("when no selected namespace survives, must fall back to All")
+	}
+
+	// All survive → unchanged.
+	all := SelectedNamespaces("prod", "dev")
+	if !all.FilterExisting(existing).Equal(all) {
+		t.Error("when every namespace survives, the selection is unchanged")
+	}
+}
+
 func TestNamespaceSelection_Equal(t *testing.T) {
 	cases := []struct {
 		a, b NamespaceSelection

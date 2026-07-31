@@ -591,8 +591,8 @@ func TestNamespaceSelectionLabel(t *testing.T) {
 	if got := namespaceSelectionLabel(k8s.SelectedNamespaces("prod")); got != "prod" {
 		t.Errorf("single → %q, want 'prod'", got)
 	}
-	if got := namespaceSelectionLabel(k8s.SelectedNamespaces("prod", "dev", "stg")); got != "multiple 3" {
-		t.Errorf("multi → %q, want 'multiple 3'", got)
+	if got := namespaceSelectionLabel(k8s.SelectedNamespaces("prod", "dev", "stg")); got != "3 selected" {
+		t.Errorf("multi → %q, want '3 selected'", got)
 	}
 }
 

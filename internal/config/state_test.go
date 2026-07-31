@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -13,6 +14,7 @@ func TestState_RoundTrip(t *testing.T) {
 	in := &State{
 		Context:         "orbstack",
 		Namespace:       "default",
+		Namespaces:      []string{"default", "monitoring"},
 		Kind:            "pods",
 		ObjectNamespace: "kube-system",
 		ObjectName:      "coredns-abc123",
@@ -27,7 +29,7 @@ func TestState_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStateFrom: %v", err)
 	}
-	if *out != *in {
+	if !reflect.DeepEqual(out, in) {
 		t.Errorf("round trip mismatch: got %+v, want %+v", *out, *in)
 	}
 }
@@ -43,7 +45,7 @@ func TestLoadStateFrom_MissingFileReturnsDefault(t *testing.T) {
 	if s == nil {
 		t.Fatal("expected non-nil default state")
 	}
-	if *s != (State{}) {
+	if !reflect.DeepEqual(*s, State{}) {
 		t.Errorf("expected empty state, got %+v", *s)
 	}
 }

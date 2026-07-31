@@ -282,12 +282,12 @@ func TestBuildSessionState_PopulatesFromCursor(t *testing.T) {
 		{Name: "svc-a", Namespace: "ns-a"},
 		{Name: "svc-b", Namespace: "ns-b"},
 	}
-	s := buildSessionState("orbstack", "kube-system", k8s.ResourceServices, items, 1)
+	s := buildSessionState("orbstack", k8s.SelectedNamespaces("kube-system"), k8s.ResourceServices, items, 1)
 	if s.Context != "orbstack" {
 		t.Errorf("Context = %q, want orbstack", s.Context)
 	}
-	if s.Namespace != "kube-system" {
-		t.Errorf("Namespace = %q, want kube-system", s.Namespace)
+	if len(s.Namespaces) != 1 || s.Namespaces[0] != "kube-system" {
+		t.Errorf("Namespaces = %v, want [kube-system]", s.Namespaces)
 	}
 	if s.Kind != k8s.ResourceServices.KubectlName() {
 		t.Errorf("Kind = %q, want %q", s.Kind, k8s.ResourceServices.KubectlName())
@@ -314,7 +314,7 @@ func TestBuildSessionState_CursorOutOfRangeLeavesObjectEmpty(t *testing.T) {
 			if tc.name == "empty items" {
 				its = nil
 			}
-			s := buildSessionState("ctx", "", k8s.ResourcePods, its, tc.cursor)
+			s := buildSessionState("ctx", k8s.AllNamespaces(), k8s.ResourcePods, its, tc.cursor)
 			if s.ObjectName != "" || s.ObjectNamespace != "" {
 				t.Errorf("expected empty object, got %s/%s", s.ObjectNamespace, s.ObjectName)
 			}
