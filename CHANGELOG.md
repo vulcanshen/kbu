@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [v2.1.1] - 2026-08-04
+
+Fix a copy-fidelity bug in the YAML popup's visual-mode yank.
+
+- **Visual yank no longer injects soft-wrap newlines.** Selecting across a
+  long YAML line that the popup soft-wrapped to fit the width used to copy
+  a newline at every wrap point — but those breaks aren't in the source
+  YAML. The selection is now reconstructed from the original document by
+  mapping the visual endpoints back to raw (line, column) and slicing the
+  source directly, so the copied text matches the YAML byte-for-byte:
+  newlines only where the document actually has them, and the spaces at
+  word-wrap boundaries preserved.
+
 ## [v2.1.0] - 2026-07-31
 
 Multi-namespace selection — view several namespaces at once, not just one
