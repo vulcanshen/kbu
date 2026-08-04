@@ -585,6 +585,102 @@ func TestYamlPopup_VisualModeMultiLineSelection(t *testing.T) {
 	}
 }
 
+// TestYamlPopup_VisualYankNoSoftWrapNewline is the regression guard for the
+// bug where selecting across a display soft-wrap boundary copied a spurious
+// newline that the source YAML never had. A single long raw line is wrapped
+// into several display rows; selecting the whole thing must reconstruct the
+// original raw line byte-for-byte with NO injected newline.
+func TestYamlPopup_VisualYankNoSoftWrapNewline(t *testing.T) {
+	m := newTestYamlPopup()
+	m.SetSize(40, 20) // narrow → force wrap
+	// A long value with no spaces → wrapPlain hard-breaks it into chunks
+	// with no dropped spaces, so the raw line is unambiguous.
+	longLine := "annotation: " + strings.Repeat("x", 100)
+	m.Open(longLine, k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.animator.Finalize()
+	if len(m.contentLineRaw) < 2 {
+		t.Skip("YAML didn't wrap; test premise not met")
+	}
+	// All display rows must belong to the single raw line 0.
+	for i, r := range m.contentLineRaw {
+		if r != 0 {
+			t.Fatalf("setup: display line %d unexpectedly maps to raw %d", i, r)
+		}
+	}
+	// Visual-select the entire wrapped line: v, G (last display row), $ (its end).
+	m, _ = m.Update(keyMsg('v'))
+	m, _ = m.Update(keyMsg('G'))
+	m, _ = m.Update(keyMsg('$'))
+	got := m.selectionText()
+	if strings.Contains(got, "\n") {
+		t.Errorf("selection across a soft-wrap must NOT contain a newline, got %q", got)
+	}
+	if got != longLine {
+		t.Errorf("selection must reconstruct the raw line exactly.\n got: %q\nwant: %q", got, longLine)
+	}
+}
+
+// TestYamlPopup_VisualYankPreservesWrapBoundarySpace guards the second half
+// of the fix: wrapPlain drops the space at a word-wrap break, so a naive
+// chunk-concat would jam two words together. Reconstructing from rawLines
+// keeps the space. The whole selection must equal the original raw line.
+func TestYamlPopup_VisualYankPreservesWrapBoundarySpace(t *testing.T) {
+	m := newTestYamlPopup()
+	m.SetSize(40, 20)
+	// Spaces present → wrapPlain word-wraps and trims boundary spaces.
+	// Trailing space stripped so the equality assertion is unambiguous.
+	longLine := "note: " + strings.TrimSpace(strings.Repeat("word ", 30))
+	m.Open(longLine, k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.animator.Finalize()
+	if len(m.contentLineRaw) < 2 {
+		t.Skip("YAML didn't wrap; test premise not met")
+	}
+	m, _ = m.Update(keyMsg('v'))
+	m, _ = m.Update(keyMsg('G'))
+	m, _ = m.Update(keyMsg('$'))
+	got := m.selectionText()
+	if strings.Contains(got, "\n") {
+		t.Errorf("selection across a soft-wrap must NOT contain a newline, got %q", got)
+	}
+	if got != longLine {
+		t.Errorf("selection must preserve wrap-boundary spaces.\n got: %q\nwant: %q", got, longLine)
+	}
+}
+
+// TestYamlPopup_VisualYankRealNewlineBetweenRawLines ensures the fix does not
+// over-correct: a selection spanning TWO real raw lines (the first of which
+// is soft-wrapped) must contain EXACTLY ONE newline — the real one between
+// the raw lines — not one per display row.
+func TestYamlPopup_VisualYankRealNewlineBetweenRawLines(t *testing.T) {
+	m := newTestYamlPopup()
+	m.SetSize(40, 20)
+	first := strings.Repeat("a", 90) // no spaces → hard wrap into ≥2 chunks
+	second := "second: line"
+	m.Open(first+"\n"+second, k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.animator.Finalize()
+	// Confirm the first raw line actually wrapped.
+	wrapped := 0
+	for _, r := range m.contentLineRaw {
+		if r == 0 {
+			wrapped++
+		}
+	}
+	if wrapped < 2 {
+		t.Skip("first raw line didn't wrap; test premise not met")
+	}
+	// Select from the very top through the whole buffer.
+	m, _ = m.Update(keyMsg('v'))
+	m, _ = m.Update(keyMsg('G'))
+	m, _ = m.Update(keyMsg('$'))
+	got := m.selectionText()
+	if n := strings.Count(got, "\n"); n != 1 {
+		t.Errorf("selection spanning two raw lines must contain exactly 1 newline, got %d in %q", n, got)
+	}
+	if got != first+"\n"+second {
+		t.Errorf("selection must reconstruct both raw lines exactly.\n got: %q\nwant: %q", got, first+"\n"+second)
+	}
+}
+
 func TestYamlPopup_YInVisualModeCopiesSelectionAndExits(t *testing.T) {
 	m := newTestYamlPopup()
 	m = openTestPopup(m, sampleYAML)

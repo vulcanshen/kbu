@@ -45,6 +45,15 @@ type YamlPopupModel struct {
 	// auto-scroll and (b) extend the current-match background highlight
 	// across all wrapped chunks of the same raw line.
 	contentLineRaw []int
+	// contentChunkStart[i] = rune offset into rawLines[contentLineRaw[i]]
+	// where display line i's content begins. For the first (or only)
+	// chunk of a raw line this is 0; for a wrapped continuation chunk it
+	// is the offset past the earlier chunks + the spaces wrapPlain trimmed
+	// at each break. This lets visual-mode yank map a display (line,col)
+	// back to a raw (line,col) so the copied text is reconstructed from
+	// rawLines — no soft-wrap newlines injected, no wrap-boundary spaces
+	// lost. See selectionText.
+	contentChunkStart []int
 	// lastBuiltWidth caches the body width content was wrapped for, so we
 	// only rebuild on actual width changes (not every render call).
 	lastBuiltWidth int
@@ -221,6 +230,7 @@ func (m *YamlPopupModel) rebuildContent() {
 		m.contentLines = nil
 		m.contentPlain = nil
 		m.contentLineRaw = nil
+		m.contentChunkStart = nil
 		m.lastBuiltWidth = 0
 		return
 	}
@@ -231,6 +241,7 @@ func (m *YamlPopupModel) rebuildContent() {
 	m.contentLines = m.contentLines[:0]
 	m.contentPlain = m.contentPlain[:0]
 	m.contentLineRaw = m.contentLineRaw[:0]
+	m.contentChunkStart = m.contentChunkStart[:0]
 	for i, raw := range m.rawLines {
 		chunks := wrapPlain(raw, w)
 		if len(chunks) == 0 {
@@ -239,12 +250,32 @@ func (m *YamlPopupModel) rebuildContent() {
 			m.contentLines = append(m.contentLines, "")
 			m.contentPlain = append(m.contentPlain, "")
 			m.contentLineRaw = append(m.contentLineRaw, i)
+			m.contentChunkStart = append(m.contentChunkStart, 0)
 			continue
 		}
+		// Track where each chunk starts within the raw line. wrapPlain
+		// trims the run of spaces at each soft-wrap break (TrimRight the
+		// chunk end + TrimLeft the next chunk start), so between two
+		// consecutive chunks the raw line holds only those trimmed spaces
+		// — skip past them to land exactly on the next chunk's first rune.
+		// A hard mid-word break leaves no gap, so the skip is a no-op there.
+		rawRunes := []rune(raw)
+		off := 0
 		for _, chunk := range chunks {
+			cr := []rune(chunk)
+			// Don't skip when the chunk itself starts with a space: that's
+			// the leading YAML indentation of the first chunk, which
+			// wrapPlain preserves (it only TrimRights the first chunk).
+			if len(cr) == 0 || cr[0] != ' ' {
+				for off < len(rawRunes) && rawRunes[off] == ' ' {
+					off++
+				}
+			}
 			m.contentLines = append(m.contentLines, highlightYAMLLine(chunk, m.theme))
 			m.contentPlain = append(m.contentPlain, chunk)
 			m.contentLineRaw = append(m.contentLineRaw, i)
+			m.contentChunkStart = append(m.contentChunkStart, off)
+			off += len(cr)
 		}
 	}
 	// Reflow can shrink line count — clamp cursor so it stays valid.
@@ -737,45 +768,81 @@ func (m YamlPopupModel) selectionRange() (sL, sC, eL, eC int) {
 	return
 }
 
-// selectionText extracts the character-wise selection out of
-// contentPlain — what the user visually selected. Multi-line
-// selections join with newlines (the selection spans the wrapped
-// display view, matching what's on screen). Empty when no lines
-// exist.
+// displayToRaw maps a display (line, col) — a cursor/anchor position over
+// the wrapped view — back to the source (raw line, raw col). rawCol is the
+// rune index into rawLines[rawLine]. Out-of-range inputs are clamped so
+// callers get a valid raw coordinate.
+func (m YamlPopupModel) displayToRaw(dl, dc int) (rawLine, rawCol int) {
+	if dl < 0 {
+		dl = 0
+	}
+	if dl >= len(m.contentLineRaw) {
+		dl = len(m.contentLineRaw) - 1
+	}
+	if dl < 0 {
+		return 0, 0
+	}
+	rawLine = m.contentLineRaw[dl]
+	if dc < 0 {
+		dc = 0
+	}
+	return rawLine, m.contentChunkStart[dl] + dc
+}
+
+// selectionText extracts the character-wise selection and reconstructs it
+// from rawLines — the ORIGINAL YAML — not from the wrapped display chunks.
+// This is why: a long raw line is soft-wrapped into several display lines
+// for rendering, but those wrap points are not real newlines, and wrapPlain
+// also drops the space at word-wrap breaks. Joining display chunks would
+// therefore inject newlines the source never had and lose wrap-boundary
+// spaces. Mapping the selection endpoints back to raw (line, col) via
+// displayToRaw and slicing rawLines yields exactly what the user sees,
+// byte-for-byte with the source. Empty when no lines exist.
 func (m YamlPopupModel) selectionText() string {
 	if len(m.contentPlain) == 0 {
 		return ""
 	}
 	sL, sC, eL, eC := m.selectionRange()
-	if sL == eL {
-		rr := m.lineRunes(sL)
+	rawS, startCol := m.displayToRaw(sL, sC)
+	rawE, endCol := m.displayToRaw(eL, eC)
+
+	clampEnd := func(rawIdx, col int) int {
+		rr := []rune(m.rawLines[rawIdx])
+		if col >= len(rr) {
+			col = len(rr) - 1
+		}
+		return col
+	}
+
+	if rawS == rawE {
+		rr := []rune(m.rawLines[rawS])
 		if len(rr) == 0 {
 			return ""
 		}
-		if eC >= len(rr) {
-			eC = len(rr) - 1
+		endCol = clampEnd(rawE, endCol)
+		if startCol > endCol {
+			return ""
 		}
-		return string(rr[sC : eC+1])
+		return string(rr[startCol : endCol+1])
 	}
+
 	var b strings.Builder
-	// First line: from sC to end.
-	startRunes := m.lineRunes(sL)
-	if sC < len(startRunes) {
-		b.WriteString(string(startRunes[sC:]))
+	// First raw line: from startCol to end.
+	first := []rune(m.rawLines[rawS])
+	if startCol < len(first) {
+		b.WriteString(string(first[startCol:]))
 	}
 	b.WriteByte('\n')
-	// Middle lines: whole line.
-	for i := sL + 1; i < eL; i++ {
-		b.WriteString(m.contentPlain[i])
+	// Middle raw lines: whole line (real newlines between them).
+	for i := rawS + 1; i < rawE; i++ {
+		b.WriteString(m.rawLines[i])
 		b.WriteByte('\n')
 	}
-	// Last line: from 0 to eC.
-	endRunes := m.lineRunes(eL)
-	if len(endRunes) > 0 {
-		if eC >= len(endRunes) {
-			eC = len(endRunes) - 1
-		}
-		b.WriteString(string(endRunes[0 : eC+1]))
+	// Last raw line: from 0 to endCol.
+	last := []rune(m.rawLines[rawE])
+	if len(last) > 0 {
+		endCol = clampEnd(rawE, endCol)
+		b.WriteString(string(last[0 : endCol+1]))
 	}
 	return b.String()
 }
@@ -1222,7 +1289,6 @@ func overlayCursorOnStyledLine(styled, plain string, cursorCol int, cursorStyle 
 	after := ansi.Cut(styled, cursorCol+1, largeRight)
 	return before + cursorStyle.Render(cell) + after
 }
-
 
 // bottomBarStrings produces the bottom-border hint + indicator pair that fits
 // in `available` columns. Vim conventions (j/k u/d gg/G n/N) are intentionally
