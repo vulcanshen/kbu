@@ -1,8 +1,8 @@
 # kbu — Implementation
 
-本文件是 [**VTP** — Vulcan's TUI Design Principle](https://github.com/vulcanshen/thoughts/blob/main/vtp.md) 在
-kbu 上的具體 implementation。VTP 是 **interface**、本文件是 **implementation
-class** — 每節對應 VTP 同編號的條款、寫 kbu 的具體選擇、案例、hotkey 表。
+本文件是 [this TUI Design Principle](https://github.com/vulcanshen/thoughts/blob/main/tui-design/README.md) 在
+kbu 上的具體 implementation。原則是 **interface**、本文件是 **implementation
+class** — 每節對應原則同編號的條款、寫 kbu 的具體選擇、案例、hotkey 表。
 
 新加入 kbu 開發的人讀這份文件、能直接知道「kbu 把每條原則 implement 成什
 麼樣」。想知道**為什麼**這樣做、回去看通用規範。
@@ -15,39 +15,40 @@ PopupAnimator` 的 invariant 在這裡強制執行。
 
 ## §A. Implementation in kbu
 
-通用規範 §A.0（設計原則的 spectrum 量化框架）+ §A.1（Contextual track）+ §A.2
-（Non-contextual track）在 kbu 的具體實現。
+通用規範 §A.0（揭露）+ §A.0.K（core-key 語意）+ §A.1（Contextual track）
++ §A.2（Non-contextual track）在 kbu 的具體實現。
 
-### §A.0 kbu score 對照
+### §A.0 kbu 揭露對照
 
-kbu 在通用 §A.0 spectrum 上的位置：
-
-| 軸 / 結果 | kbu 值 | 計算 |
-|---|---|---|
-| **X. 揭露程度** | 1.0（~100%）| Space menu 列出 contextual 動作 100%、`?` help popup 列出 non-contextual 動作 100%、X = (入口列出操作) / (app 全部操作) ≈ 1.0。**以 user 學習單位計算**（通用 §A.0 Action 粒度）：`Y` view YAML 對 30 個 resource type 通用、user 學一次 → 算 **1 個 action**、不是 30 個；同理 `E` edit / `D` delete / `C` compare / `S` shell 各算 1 個、不論底下 code 有幾個 switch case |
-| **Y. core-key role 數量** | 5 | 5 個 distinct role：「focus 切換」(`Tab`) / 「確認」(`Enter`) / 「取消」(`Esc`) / 「contextual 入口」(`Space`) / 「non-contextual 入口」(`?`)。**alias 共用 role 算 1 個**：若 kbu 補 `q` 跟 `Esc` 完整 alias 做「取消」（所有 surface 都同樣有效）、仍算 1 個取消 role、Y 不變、仍 = 5。若 `q` 只在某些 surface 取消、其他沒有 — 半套 alias、不算同 role、Y +1 變 6 |
-| `min(1, 5/Y)` 係數 | 1.0 | Y = 5、無 penalty |
-| **Score** | `1.0 × 1.0 × 100%` = **100%** | user 不靠事先學就能用 |
-| 事前認知門檻（反向）| `100% − 100%` = **0** | 不需要看 README |
+| Track | 入口 | 入口自身怎麼被揭露 | 完整性 |
+|---|---|---|---|
+| **Contextual** | `Space` | bottom statusline 常駐 `Space menu` | 當前 focus 的 contextual 動作 100% 在 Space menu 內。**以 user 學習單位計算**（通用 §A.0）：`Y` view YAML 對 30 個 resource type 通用、user 學一次 → 算 **1 個動作**、不是 30 個；同理 `E` edit / `D` delete / `C` compare / `S` shell 各算 1 個、不論底下 code 有幾個 switch case |
+| **Non-contextual** | `?` | bottom statusline 常駐 `? help` | 全域動作 100% 在 help popup 內；個別動作另有 statusbar chip 的 ambient 揭露（Layer 2、見 §A.2） |
 
 kbu 是「**高易用性 + Kubernetes 操作工具**」這個 niche 的 prototypical
 案例 — 不靠事先學習就能用、靠 Space menu 跟 `?` help popup 走完所有
 功能。letter hotkey 是加速捷徑、不是必經之路。
 
-### §A.0.Y kbu core-key 集合（5 個）
+### §A.0.K kbu core-key 語意
 
 | Core-key | kbu 語意 | 對應通用條款 |
 |---|---|---|
 | `Tab` | focus 切換到下個 panel | §4.1 |
 | `Enter` | 確認 / drill-down 進入 | §4.1 |
-| `Esc` | 取消 / 關閉最上層浮層（kbu §4.3 取消 key）| §4.3 |
-| `Space` | §A.1 contextual 入口（Space menu）| §A.1 |
-| `?` | §A.2 non-contextual 入口（help popup）| §A.2 |
+| `Esc` | 取消 / 關閉最上層浮層 | §4.3 |
+| `Space` | §A.1 contextual 入口（Space menu）；**再按一次關閉** | §A.1 |
+| `?` | §A.2 non-contextual 入口（help popup）；**再按一次關閉** | §A.2 |
 
-5 個、剛好通用 §A.0.Y 上限。letter hotkey（`Y` / `E` / `D` / `C` / `N` /
-`Alt-t` / `q` 等）**不算 core-key**、是兩個入口內動作的加速捷徑。
+通用 §A.0.K 規定這五個鍵的語意、不限總數。letter hotkey（`Y` / `E` /
+`D` / `C` / `N` / `Alt-t` / `q` 等）**不是 core-key**、是兩個入口內動作
+的加速捷徑。
 
 五個 core-key 的語意在 kbu 任意 panel / popup 都不變。
+
+**Alias 若要補、必須是完整 alias**（通用 §A.0.K）：若 kbu 之後讓 `q` 跟
+`Esc` 一樣做「取消」、它必須在**所有 surface** 都同樣有效才算同一個語意。
+若 `q` 只在某些 surface 取消、其他沒有 —— 半套 alias、user 要多學一條
+「哪裡可以、哪裡不行」的條件規則，比不做 alias 更糟。
 
 ### §A.1 Contextual track in kbu — Space menu
 
@@ -62,14 +63,33 @@ statusline 揭露：`? help`、`Esc exit`、`Space menu`、`Enter commit/into`�
 
 | Contextual 動作類型 | 出現位置 |
 |---|---|
-| 對 cursor 指的 item 做 YAML / Edit / Delete / Compare / Shell | panel 2 menu（cursor row region） |
-| 對當前 panel list 做 Sort / Pin | panel 2 menu（panel operation region） |
-| Mark / Unmark Compare anchor | panel 2 menu（cursor row region） |
+| 對 cursor 指的 item 做 YAML / Edit / Delete / Compare / Shell | panel 2 menu（`item operation` 區） |
+| 對當前 panel list 做 Sort / Pin | panel 2 menu（`panel operation` 區） |
+| Mark / Unmark Compare anchor | panel 2 menu（`item operation` 區） |
 | 對 Compare popup 內的 hunk 做 layout 切換 / 切顯隱 | comparemenu（compare popup 的子 menu） |
 
 kbu 每個 contextual letter hotkey（`Y` / `E` / `D` / `C` / `S` / `Alt-S` /
 `P`）對應的動作、都在對應 focus 的 Space menu 出現 — letter hotkey 是
 「給知道的人」的加速捷徑、Space menu 是「給所有人」的完整界面。
+
+`Space` 是 **toggle**（通用 §A.1）：menu 開著時再按 `Space` 收起來、`Esc`
+同樣可關 —— `panel2menu.go` 的 `case "esc", " "` 一條分支同時承擔兩者。
+
+**每一列的形狀**（通用 §A.1.2 / §A.1.3）：**`[X]label` + 一句說明**
+（`panel2MenuItem.label` / `.key` / `.hint`）。有 letter hotkey 才加
+bracket、沒有的列只有名稱（如 `Compare to anchor`、`Mark as Compare
+anchor`）。
+
+```
+ item operation
+ [Y]AML                              view resource manifest
+ [E]dit                                        kubectl edit
+ [S]hell                                    kubectl exec -it
+ [D]elete                                    kubectl delete
+ ──────────────────────────────────────────────────────────
+ panel operation
+ [Alt-S]ort                             sort the panel list
+```
 
 **完整性 audit**：新增一條 contextual 動作時、必須同時在 Space menu 加
 entry、不能只綁 letter hotkey。否則就是原則破洞（通用 §A.1）。
@@ -272,10 +292,10 @@ glyph + 固定 text 「kbu」）。
 
 ## §4. 互動 in kbu
 
-### 4.1 Core 4 鍵語意
+### 4.1 Core key 語意
 
-見 §A 上面的 core key 表。`Tab` / `Enter` / `Esc` / `Space` 在 kbu 任意
-surface 都做同一件事。
+見 §A.0.K 的 core key 表。`Tab` / `Enter` / `Esc` / `Space` / `?` 在 kbu
+任意 surface 都做同一件事。
 
 ### 4.2 Letter hotkey ⊆ Space menu
 
@@ -293,9 +313,9 @@ kbu 每個 contextual letter hotkey 都在對應 Space menu 出現：
 Non-contextual hotkey（`N` namespace / `C` context picker / `Alt-t` Alterm
 / `?` help / `q` quit）走 §A.2 statusbar 揭露、不擠進 Space menu。
 
-### 4.3 kbu 取消 key — 選 `Esc`
+### 4.3 取消 key — `Esc`
 
-通用 §4.3 要求指派一個 core key 當「全 app 取消/關閉」；**kbu 選 `Esc`**：
+通用 §A.0.K / §4.3 規定 `Esc` 是「取消 / 關閉當前最上層」；kbu 的落地：
 
 - 任何浮層按 `Esc` 立即關閉
 - auto-dismiss toast 也吃 `Esc` — toast 即使有 dismiss timer、`Esc` 也
@@ -722,7 +742,7 @@ Sticky toast 也適用 — `Esc` 必須能把它拿下、不只看「Esc: close�
 ### §6.6 Menu region cursor-first（對應通用 §6.6）
 
 kbu panel 2 menu 的 `buildPanel2MenuItems` 把 cursor 操作 region 排第一、
-panel operation region（Sort 等）排第二、每個 region 有自己的 header。
+`panel operation` 區（Sort 等）排第二、每個 region 有自己的 header。
 
 ### §6.6.1 Region 內主要意圖優先（kbu 額外規則）
 
