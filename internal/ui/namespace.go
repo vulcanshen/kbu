@@ -188,7 +188,7 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		// selections, so we just ignore them until the real list
 		// lands.
 		switch keyMsg.String() {
-		case "esc", "n", "N", " ":
+		case "esc", "n", "N":
 			return m, m.animator.Close()
 		}
 		return m, nil
@@ -241,7 +241,7 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		}
 	case "enter":
 		return m.toggleCurrent(items)
-	case "esc", "n", "N", " ":
+	case "esc", "n", "N":
 		if m.searchQuery != "" {
 			m.searchQuery = ""
 			m.cursor = 0

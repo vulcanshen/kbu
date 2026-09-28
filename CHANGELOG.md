@@ -20,6 +20,11 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   (Switch view / Close) is gone: `L` flips between unified and side by side,
   `Esc` closes, and the bottom hint says so. `Space` no longer opens a menu on
   top of a popup.
+- **`Space` only opens and closes the `Space` menu.** On a confirm, picker,
+  YAML or Compare viewer, the App Log, Settings or the key reference it no
+  longer closes the popup — `Esc` does. A confirm in particular can no longer
+  be cancelled by a stray `Space`; its hint now names what `Enter` will do
+  (`Enter delete · Esc cancel`).
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

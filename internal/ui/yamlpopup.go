@@ -336,12 +336,6 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 		}
 		m.pendingG = false
 		return m, m.animator.Close()
-	case " ":
-		// Space keeps closing the popup — it was the pre-vim-buffer
-		// close-shortcut and users may have muscle memory for it. Not
-		// used in visual mode either (no need for another exit path).
-		m.pendingG = false
-		return m, m.animator.Close()
 	case "h", "left":
 		m = m.moveCursorLeft()
 		m.pendingG = false

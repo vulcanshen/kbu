@@ -83,7 +83,7 @@ type ListPickerActionMsg struct {
 	Key      string
 }
 
-// ListPickerCancelMsg is emitted on Esc / Space. PickerID tags
+// ListPickerCancelMsg is emitted on Esc (or a right-click). PickerID tags
 // the cancelled step so app.go can drop any in-flight flow state
 // (e.g. the cached column from the column step when direction is
 // cancelled).
@@ -255,7 +255,7 @@ func (m ListPickerModel) Update(msg tea.Msg) (ListPickerModel, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.commit(m.items[m.cursor].Key)
-	case "esc", " ":
+	case "esc":
 		// Cancel — emit a tagged msg so app.go can drop in-flight
 		// flow state, then run the close animation. Order: close
 		// cmd comes FIRST so the popup starts closing immediately;

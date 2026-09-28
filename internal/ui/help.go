@@ -85,7 +85,7 @@ func (m HelpModel) Update(msg tea.Msg) (HelpModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc", "?", " ":
+		case "esc", "?":
 			return m, m.animator.Close()
 		case "j", "down":
 			content := m.helpContent()
@@ -262,7 +262,7 @@ func (m HelpModel) renderFullPopup() string {
 		b.WriteString("\n")
 	}
 	b.WriteString(padRow) // bottom padding row
-	hint := " Esc/?/Space:close j/k:scroll "
+	hint := " Esc/?:close j/k:scroll "
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
@@ -504,7 +504,7 @@ func (m HelpModel) helpContent() []helpEntry {
 		{key: "Tab", desc: "Cycle panels"},
 		{key: "Enter", desc: "Drill / commit (no focus shift)"},
 		{key: "Esc", desc: "Back / close"},
-		{key: "Space", desc: "Open menu / close popup"},
+		{key: "Space", desc: "Open / close the Space menu"},
 		{isSection: true, text: "Navigation"},
 		{key: "j / k", desc: "Up / down"},
 		{key: "u / d", desc: "Page up / down"},
