@@ -663,7 +663,7 @@ func TestPtyView_AltT_AsksToLeaveEditAndExec(t *testing.T) {
 func TestPtyView_BottomBorderShowsAltTHintForShell(t *testing.T) {
 	p := hookedPtyView(PtyKindShell)
 	out := p.RenderPopup()
-	if !strings.Contains(out, "Alt+t") {
+	if !strings.Contains(out, "Alt-t") {
 		t.Errorf("Shell-kind popup bottom border must surface Alt+T hint")
 	}
 }
@@ -672,11 +672,11 @@ func TestPtyView_BottomBorderShowsAltTHintForShell(t *testing.T) {
 // / exec too, alt-screen (the editor) included.
 func TestPtyView_BottomBorderShowsTheExitKeyForEdit(t *testing.T) {
 	p := hookedPtyView(PtyKindEdit)
-	if out := p.RenderPopup(); !strings.Contains(out, "Alt+t:leave") {
+	if out := p.RenderPopup(); !strings.Contains(out, "Alt-t:leave") {
 		t.Errorf("an edit PTY must show its exit key, got %q", out)
 	}
 	_, _ = p.term.Write([]byte("\x1b[?1049h")) // enter alt-screen, like the editor
-	if out := p.RenderPopup(); !strings.Contains(out, "Alt+t:leave") {
+	if out := p.RenderPopup(); !strings.Contains(out, "Alt-t:leave") {
 		t.Error("the exit key must stay shown in alt-screen")
 	}
 }

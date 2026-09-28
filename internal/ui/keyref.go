@@ -84,13 +84,15 @@ func (m *AppModel) keyRef() (string, []helpRow) {
 	return "Keys", nil
 }
 
-// keyName is how a hotkey is written in the reference.
+// keyName is how a hotkey is written in the reference — the way the
+// menus, the footer and the hints write it (tdp M5: one notation, the
+// key as pressed; Alt-S is Alt with a capital S).
 func keyName(k string) string {
 	switch k {
 	case "alt+S":
-		return "Alt+Shift+S"
+		return "Alt-S"
 	case "alt+t":
-		return "Alt+t"
+		return "Alt-t"
 	case "enter":
 		return "Enter"
 	case "esc":
@@ -203,7 +205,7 @@ func yamlVisualRows() []helpRow {
 		{key: "0 $", desc: "extend to line start / end"},
 		{key: "y", desc: "copy the selection and leave"},
 		{key: "v Esc", desc: "leave the selection"},
-		{key: "q Ctrl+C", desc: "quit kbu"},
+		{key: "q Ctrl-C", desc: "quit kbu"},
 	}
 }
 
@@ -237,7 +239,7 @@ func (m *AppModel) panelKeyRef() (string, []helpRow) {
 	}
 	rows = append(rows,
 		helpRow{header: true, desc: "panels"},
-		helpRow{key: "Tab", desc: "next panel (Shift+Tab: previous)"},
+		helpRow{key: "Tab", desc: "next panel (Shift-Tab: previous)"},
 		helpRow{key: "1 2 3", desc: "go to a panel"})
 	rows = append(rows, helpRow{header: true, desc: "core keys"})
 	if d := m.enterDesc(); d != "" && !hasKey(items, "enter") {
@@ -250,14 +252,14 @@ func (m *AppModel) panelKeyRef() (string, []helpRow) {
 		helpRow{key: "Space", desc: "the menu of what you can do here"},
 		helpRow{key: "?", desc: "these keys"},
 		helpRow{key: "q", desc: "quit kbu"},
-		helpRow{key: "Ctrl+C", desc: "quit kbu, even while typing"})
+		helpRow{key: "Ctrl-C", desc: "quit kbu, even while typing"})
 	rows = append(rows, helpRow{header: true, desc: "app-wide (also in Global operation)"})
 	rows = append(rows, helpRow{key: "N", desc: "pick which namespaces to show"})
 	if m.activePanel != TablePanel { // on panel 2, C is Compare
 		rows = append(rows, helpRow{key: "C", desc: "switch the kubeconfig context"})
 	}
 	rows = append(rows,
-		helpRow{key: "Alt+t", desc: "show / hide the embedded shell (Alterm)"},
+		helpRow{key: "Alt-t", desc: "show / hide the embedded shell (Alterm)"},
 		helpRow{key: ">", desc: "Settings"},
 		helpRow{key: "!", desc: "App log"})
 	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(title), menuTitleGlyph)) + " keys", rows
@@ -318,6 +320,6 @@ func dragKeyRef() (string, []helpRow) {
 		{key: "Enter D", desc: "drop it here (keep the new order)"},
 		{key: "Esc", desc: "cancel — back to the old order"},
 		{key: "?", desc: "these keys"},
-		{key: "q Ctrl+C", desc: "quit kbu (the drag is not kept)"},
+		{key: "q Ctrl-C", desc: "quit kbu (the drag is not kept)"},
 	}
 }

@@ -705,9 +705,9 @@ func (p *PtyView) renderBottomBorder(cols int, borderStyle, hintStyle lipgloss.S
 	altScreen := p.term != nil && p.term.Mode()&vt10x.ModeAltScreen != 0
 	// The exit key is always shown, alt-screen or not (tdp K10); the
 	// scroll keys only while kbu takes them (not in alt-screen).
-	exit := " Alt+t:leave "
+	exit := " Alt-t:leave "
 	if p.kind == PtyKindShell {
-		exit = " Alt+t:hide "
+		exit = " Alt-t:hide "
 	}
 	hint = exit
 	if !altScreen {
