@@ -21,108 +21,7 @@
 
 ## Demo
 
-### 認識 kbu
-
 ![basics](docs/demo-basics.gif)
-
-### 一次選多個 namespace
-
-![namespace](docs/demo-namespace.gif)
-
-### 順著 Relatives 走訪 Kubernetes
-
-![relatives](docs/demo-relatives.gif)
-
-### 透過 Space menu 編輯叢集中的資源
-
-![yaml-edit](docs/demo-yaml-edit.gif)
-
-### 並排比對兩個 resource
-
-![compare](docs/demo-compare.gif)
-
-### Helm 是第一級的 resource
-
-![helm](docs/demo-helm.gif)
-
-### TUI + 常駐 shell 都在同一個視窗
-
-![alterm](docs/demo-alterm.gif)
-
-## 四個鍵就能操作 kbu
-
-| 鍵 | 行為 |
-|---|---|
-| **`Tab`** | 切換 panel 焦點（也可以直接按 `1` / `2` / `3` 跳轉）|
-| **`Enter`** | 鑽入 / 確認選擇 |
-| **`Space`** | *這裡能幹嘛？* — 在每個 panel、每個 tab 上開啟對應的 menu 或 cheatsheet |
-| **`Esc`** | 退回 — 回上一層 / 關閉 popup |
-
-不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt+Shift+S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都能透過 `Space` menu 抵達 — 想記再記，不想記也沒關係。
-
-**滑鼠也能用**：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `>` 開 Settings popup 可以關掉滑鼠改成純鍵盤。
-
-## 安裝
-
-### Quick Install（macOS/Linux）
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/install.sh | sh
-```
-
-### Quick Install（Windows PowerShell）
-
-```powershell
-irm https://raw.githubusercontent.com/vulcanshen/kbu/main/install.ps1 | iex
-```
-
-### Homebrew（macOS/Linux）
-
-```bash
-brew install vulcanshen/tap/kbu
-```
-
-### Scoop（Windows）
-
-```powershell
-scoop bucket add vulcanshen https://github.com/vulcanshen/scoop-bucket
-scoop install kbu
-```
-
-### 從原始碼安裝
-
-```bash
-go install github.com/vulcanshen/kbu/cmd@latest
-```
-
-### 本地編譯
-
-```bash
-git clone https://github.com/vulcanshen/kbu.git
-cd kbu
-go build -o kbu ./cmd/
-./kbu
-```
-
-### 解除安裝
-
-```bash
-# macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | sh
-
-# Windows PowerShell
-irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
-```
-
-## Quick Start
-
-```bash
-kbu
-```
-
-kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出 context menu、`Esc` 退回、`Tab` 切 panel。
-
-靈感來自 [Lens IDE](https://k8slens.dev/)、[lazygit](https://github.com/jesseduffield/lazygit)、[lazydocker](https://github.com/jesseduffield/lazydocker) 與 [k9s](https://github.com/derailed/k9s)。以 Go 與 [Bubble Tea](https://github.com/charmbracelet/bubbletea) 建構。
 
 ## Features
 
@@ -162,6 +61,73 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 - **滑鼠** — 點擊切焦點與選取、雙擊鑽入、右鍵開 menu、滾輪捲動。偏好純鍵盤的話可以在 Settings（`>`）關掉。
 - **全螢幕（`z`）** — 放大列表或 detail panel，再按一次 `z` 還原。
 - **主題** — 用 `theme.yaml` 覆寫任何顏色。
+
+## 安裝
+
+### 需求
+
+- **kubectl** 在 `$PATH` 上（給 edit、delete、shell exec 用）
+- 有效的 **kubeconfig**（`~/.kube/config` 或 `$KUBECONFIG`）
+- 一個運作中的 Kubernetes cluster
+- **Nerd Font**，建議用 Mono 變體（例：JetBrains Mono Nerd Font Mono），icon 才會對齊格線。
+
+### Quick Install（macOS/Linux）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/install.sh | sh
+```
+
+### Quick Install（Windows PowerShell）
+
+```powershell
+irm https://raw.githubusercontent.com/vulcanshen/kbu/main/install.ps1 | iex
+```
+
+### Homebrew（macOS/Linux）
+
+```bash
+brew install vulcanshen/tap/kbu
+```
+
+### Scoop（Windows）
+
+```powershell
+scoop bucket add vulcanshen https://github.com/vulcanshen/scoop-bucket
+scoop install kbu
+```
+
+從原始碼建置寫在 [`docs/dev-remarks.md`](docs/dev-remarks.md)。
+
+### 解除安裝
+
+```bash
+# macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | sh
+
+# Windows PowerShell
+irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
+```
+
+## Quick Start
+
+```bash
+kbu
+```
+
+kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出 context menu、`Esc` 退回、`Tab` 切 panel。
+
+## 四個鍵就能操作 kbu
+
+| 鍵 | 行為 |
+|---|---|
+| **`Tab`** | 切換 panel 焦點（也可以直接按 `1` / `2` / `3` 跳轉）|
+| **`Enter`** | 鑽入 / 確認選擇 |
+| **`Space`** | *這裡能幹嘛？* — 在每個 panel、每個 tab 上開啟對應的 menu 或 cheatsheet |
+| **`Esc`** | 退回 — 回上一層 / 關閉 popup |
+
+不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt+Shift+S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都能透過 `Space` menu 抵達 — 想記再記，不想記也沒關係。
+
+**滑鼠也能用**：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `>` 開 Settings popup 可以關掉滑鼠改成純鍵盤。
 
 ## Key Bindings
 
@@ -383,18 +349,22 @@ status:
   unknown: "#7f849c"
 ```
 
-## 需求
+## 限制
 
-- **kubectl** 在 `$PATH` 上（給 edit、delete、shell exec 用）
-- 有效的 **kubeconfig**（`~/.kube/config` 或 `$KUBECONFIG`）
-- 一個運作中的 Kubernetes cluster
-- **Nerd Font**，建議用 Mono 變體（例：JetBrains Mono Nerd Font Mono），icon 才會對齊格線。
+- **Nerd Font 請用 Mono 變體。** 用比例寬度的變體、或終端機設成 East-Asian-Ambiguous=double（部分 tmux + iTerm2 的 CJK 設定）時，helm-managed 的列與 popup 上框可能偏離格線 1 格。換成 Mono 變體，或把 ambiguous-width 設成 single。
+- **Helm 需要 `helm` CLI。** `helm` 在 `PATH` 上時才會出現 Helm 分類，release 列表每 3 秒更新一次（Helm 沒有 watch API）。
+- **workload 的 log 跟的是選到那一列當下存在的 Pod。** rollout 之後，重新選一次那一列才會接上新的 Pod。
+- **有些刪除與編輯被擋下。** Events 與 Nodes 不能從 kbu 刪除；helm-managed 物件不能編輯或刪除 —— 請用 `helm upgrade` / `rollback` / `uninstall`。
+- **panel 3 沒有 `/` 搜尋。** 用 `Y` 打開 YAML，在那裡搜尋。
 
-## 延伸閱讀
+## 相關連結
 
-- [docs/dev-remarks.md](docs/dev-remarks.md) — 各功能背後的設計筆記與理由（英文）
-- [docs/kbu-implementation.md](docs/kbu-implementation.md) — kbu 如何實作它的 TUI 設計原則
 - [CHANGELOG.md](CHANGELOG.md) — 每個版本的變更
+- [`docs/dev-remarks.md`](docs/dev-remarks.md) — 開發者備忘錄：怎麼運作、為什麼、建置與測試
+
+## terminu family
+
+kbu 遵循 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle)：跟家族其他成員一樣的按鍵、一樣的 menu —— [filu](https://github.com/vulcanshen/filu)（檔案）、[sshu](https://github.com/vulcanshen/sshu)（ssh）、[webu](https://github.com/vulcanshen/webu)（網頁）、[locku](https://github.com/vulcanshen/locku)（螢幕鎖）。
 
 ## License
 
