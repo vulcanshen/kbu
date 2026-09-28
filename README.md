@@ -44,7 +44,7 @@
 - **Compare (`C`)** -- diff two resources of the same kind, unified or side by side (`L` switches). Status and server-managed fields are stripped so you only see what was authored.
 - **Problems stand out** -- status columns color only what needs attention: yellow for pending or degraded, red for failures. Healthy rows stay plain.
 - **Helm releases** -- when `helm` is on your `PATH`, releases get their own view: manifest, values, notes, and hooks; a revision history with one-key rollback. Objects a chart manages are marked, protected from accidental edits, and can be hidden with `.`.
-- **KubeConfig contexts** -- a read-only view of your kubeconfig. Credentials are never shown.
+- **KubeConfig contexts** -- a read-only view of your kubeconfig; `Enter` on a context switches kbu to it. Credentials are never shown.
 
 ### Get things done
 
@@ -121,7 +121,7 @@ Connects to your current kubeconfig context. Press `Enter` to drill, `Space` for
 | Key | Behavior |
 |---|---|
 | **`Tab`** | Switch panel focus (or `1` / `2` / `3` directly) |
-| **`Enter`** | Drill in / commit a choice |
+| **`Enter`** | The obvious action for what's selected: drill in (a workload → its pods), open the YAML of a kind that doesn't drill, switch to a kubeconfig context, shell into a container, roll back to a Helm revision. On panel 1 it shows the kind in panel 2; on a Logs / Events / Conditions tab it full-screens the panel |
 | **`Space`** | *What can I do here?* — the menu of everything this panel or tab can do, ending with **Global operation** (namespace, context, Alterm, settings, app log, quit) |
 | **`Esc`** | Back out — pop one drill level / close any popup |
 
@@ -168,7 +168,7 @@ Everything below is also in the `Space` menu -- these are just faster.
 | Gesture | Behavior |
 |---|---|
 | **Left-click** on a panel row | Focus that panel + move the cursor to the clicked row |
-| **Double-click** | Synthesizes `Enter` (drill into the cursor row) |
+| **Double-click** | Synthesizes `Enter` on panels 2 and 3; on panel 1 it only selects |
 | **Right-click** on a row | Synthesizes `Space` (opens the `Space` menu for that row) |
 | **Wheel up / down** | Synthesizes `u` / `d` (half-page move). Direction can be flipped via Settings popup (`scroll_direction: natural | reverse`) |
 | **Left-click** inside a list popup | Commits that row (same as cursor + `Enter`) |
@@ -181,7 +181,7 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 | Key | Where | Action |
 |---|---|---|
 | `Space` | Panel 2, Release row | The `Space` menu lists the release's documents next to `YAML` — `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks`; each opens over the menu, so you can read several in a row |
-| `Space` | Panel 3, History tab | The `Space` menu's **Roll back to this revision** (dimmed on the deployed revision); the confirm shows the exact `helm rollback` command |
+| `Enter` | Panel 3, History tab | Roll back to that revision (also in the `Space` menu; nothing on the deployed revision); the confirm shows the exact `helm rollback` command |
 | `.` | Any non-Releases panel 2 list | Toggle visibility of helm-managed objects |
 
 ### PTY popups (Alterm, edit, shell exec)

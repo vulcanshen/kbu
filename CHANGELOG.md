@@ -77,6 +77,13 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **Search lines take spaces.** The sidebar, panel 2, the YAML viewer and the
   namespace / context filters dropped the space bar, so a YAML search like
   `image: nginx` couldn't be typed.
+- **`Enter` does the obvious thing everywhere.** On panel 1 it shows the kind in
+  panel 2; on a panel 2 kind that doesn't drill it opens the YAML; on a
+  KubeConfig context it switches kbu to it (after a confirm); on a container
+  it opens a shell; on a Helm History revision it rolls back (after a
+  confirm); on a Logs / Events / Conditions tab it full-screens the panel. It
+  used to do nothing in all of these places. A double-click on panel 1 now only
+  selects.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

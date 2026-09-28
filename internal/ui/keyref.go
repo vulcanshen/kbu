@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/vulcanshen/kbu/internal/k8s"
 )
 
 // The `?` key reference lists the keys of the frontmost surface (tdp K6,
@@ -269,6 +271,21 @@ func hasKey(items []menuItem, key string) bool {
 // enterDesc is what Enter does on the focused panel when its Space menu
 // has no [Enter] row of its own (tdp K3). "" = Enter does nothing here.
 func (m *AppModel) enterDesc() string {
+	switch m.activePanel {
+	case TablePanel:
+		if m.drillDownPod != nil {
+			return "shell into the container (same as S)"
+		}
+		if len(m.items) > 0 && !m.currentResource.SupportsDrillDown() && m.currentResource != k8s.ResourceContexts {
+			return "open the YAML (same as Y)"
+		}
+	case DetailPanel:
+		switch m.detail.ActiveTabName() {
+		case "Relatives", "History":
+			return ""
+		}
+		return "full-screen this panel (same as z)"
+	}
 	return ""
 }
 

@@ -97,37 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 16. `Enter` 沒有動作的 panel、tab 與列 —— K3
-
-**現況**：
-
-- panel 1 kind 列（`sidebar.go` `handleKey()` 的 `tea.KeyEnter`）：刻意 no-op。註解：滑鼠雙擊合成 `Enter`，以前的「focus 移到
-  panel 2」會讓雙擊把 focus 帶走。
-- panel 2：`app.go` `case "enter"` 只在可 drill 的種類（`SupportsDrillDown()`、Pod → container）有動作；其他種類（ConfigMap、
-  Service、KubeConfig Contexts……）`enterDrillDown()` 回 `nil`；container 列（`m.drillDownPod != nil`）落到 `table.go` 的 `KeyEnter`，
-  也是 no-op。
-- panel 3（`detail.go` `handleKey()`）：只有 Relatives 的 `Enter` 會 drill；Logs / Events / Conditions / Info 是沒有項目的內容區、
-  History 有 revision 的 cursor，`Enter` 都沒有動作（History 的 rollback 在 `Space`，第 5 條）。
-
-**規則**：K3 —— `Enter` 對 focus 項目做最直觀的那個動作，同一種項目在同一個 app 裡永遠同一個動作；panel 本身是內容區、沒有項目
-可選時（例：預覽、log），`Enter` 對整個 panel 做最直觀的動作，由 app 決定（例：開一個可捲動的檢視；v0.1.11）。
-
-**已定案**（user，2026-09-28）：
-
-- panel 1 kind 列：`Enter` 把 focus 移到 panel 2（以前的行為）；滑鼠雙擊在 panel 1 只選列、不合成 `Enter`（X2：滑鼠對應哪個鍵由
-  app 決定）。`sidebar.go` 那段註解、README 兩份滑鼠表「雙擊 = `Enter`」、dev-remarks「滑鼠支援」一起改。
-- panel 2 不能 drill 的種類：`Enter` 開 YAML popup，跟 `[Y]AML` 同一條路。
-- panel 2 的 KubeConfig Contexts：`Enter` 切換到這個 context，**先跳 confirm**（問句寫出 context 名稱，hint `Enter switch ·
-  Esc cancel`，D3）；接受後跟 `C` picker 選定走同一條路。已經是目前的 context 時不作用，Space menu 那一列變暗（M6）。
-- panel 2 的 container 列：`Enter` 開 shell，跟 `[S]hell` 同一條路（`execShell()`，含它現有的「Exec into container?」confirm）。
-- panel 3 內容 tab（Logs、Events、Conditions、Info）：`Enter` 跟 `z` 一樣放大這個 panel。
-- panel 3 History：`Enter` 開 rollback confirm（現在 `Space` 的那條路；第 5 條把 `Space` 改回 Space menu）。目前部署的那一列
-  `Enter` 不作用，Space menu 裡的 rollback 列變暗（M6）。
-
-每個 `Enter` 動作同時是該 panel Space menu 的一列（`[Enter] …`，D4）；README 兩份「四個鍵」表的 `Enter` 說明與 dev-remarks 相關段落
-一起改。每處補 model test。
-
-
 ## 17. `kubectl edit` / `kubectl exec` 的 PTY 沒有出口鍵 —— K10
 
 **現況**：`ptyview.go` `Update()` 只有 `PtyKindShell`（Alterm）攔出口鍵 `Alt-t`；edit / exec 的 PTY 把所有鍵送給子程序，只能等

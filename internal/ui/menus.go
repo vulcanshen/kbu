@@ -110,7 +110,9 @@ func (m *AppModel) sidebarMenu() (string, []menuItem) {
 	if def := sortRegistry().Get(rt); def != nil && len(def.Columns) > 0 {
 		itemOps = append(itemOps, menuItem{label: "Sort panel 2 list", key: "S", hint: "order the " + label + " list by a column", opens: true})
 	}
-	itemOps = append(itemOps, menuItem{label: "Copy", key: "y", hint: "the kind's kubectl name"})
+	itemOps = append(itemOps,
+		menuItem{label: "[Enter] Show in panel 2", name: "Show in panel 2", key: "enter", action: "enter", hint: "focus panel 2 on this kind"},
+		menuItem{label: "Copy", key: "y", hint: "the kind's kubectl name"})
 	if m.sidebar.CursorPinned() {
 		panelOps = append(panelOps, menuItem{label: "Drag to reorder pinned kinds", key: "D",
 			hint: "move this kind among the pinned ones", disabled: len(m.sidebar.PinnedKinds()) < 2})
@@ -129,7 +131,7 @@ func (m *AppModel) tableMenu() (string, []menuItem, k8s.ResourceType, k8s.Resour
 		if idx := m.table.SelectedRow(); idx >= 0 && idx < len(m.drillDownContainers) {
 			title = menuTitle(menuTitleGlyph, "[2] container/"+m.drillDownContainers[idx].Name)
 			itemOps = []menuItem{
-				{label: "Shell", key: "S", hint: "kubectl exec -it into this container", opens: true},
+				{label: "Shell", key: "S", hint: "kubectl exec -it into this container (also Enter)", opens: true},
 				{label: "Copy", key: "y", hint: "this row, tab-separated"},
 			}
 		}
@@ -142,11 +144,17 @@ func (m *AppModel) tableMenu() (string, []menuItem, k8s.ResourceType, k8s.Resour
 	item := m.items[idx]
 	helmManaged := k8s.IsHelmManaged(item)
 	var itemOps []menuItem
-	if m.currentResource == k8s.ResourceReleases {
-		itemOps = append(itemOps, menuItem{label: "YAML", key: "Y", hint: "the release record", opens: true})
+	switch m.currentResource {
+	case k8s.ResourceReleases:
+		itemOps = append(itemOps, menuItem{label: "YAML", key: "Y", hint: "the release record (also Enter)", opens: true})
 		itemOps = append(itemOps, helmDocMenuItems()...)
 		itemOps = append(itemOps, menuItem{label: "Copy", key: "y", hint: "this row, tab-separated"})
-	} else {
+	case k8s.ResourceContexts:
+		itemOps = panel2ItemOps(m.currentResource, item, helmManaged, m.compareCtxForMenu(item))
+		itemOps = append([]menuItem{{label: "[Enter] Switch to this context", name: "Switch to this context", key: "enter",
+			action: "enter", hint: "kbu only; ~/.kube/config is not changed", opens: true,
+			disabled: item.Name == m.k8sClient.ContextName()}}, itemOps...)
+	default:
 		itemOps = panel2ItemOps(m.currentResource, item, helmManaged, m.compareCtxForMenu(item))
 	}
 	glyph := menuTitleGlyph
@@ -202,6 +210,9 @@ func (m *AppModel) detailMenu() (string, []menuItem) {
 	yaml := menuItem{label: "YAML", key: "Y", hint: "this resource's manifest", opens: true}
 	copyAll := menuItem{label: "Copy", key: "y", hint: "everything in this tab"}
 	zoom := menuItem{label: "Zoom", key: "z", hint: "full-screen this panel"}
+	if tab := m.detail.ActiveTabName(); tab != "Relatives" && tab != "History" {
+		zoom.hint = "full-screen this panel (also Enter)"
+	}
 	switchTab := menuItem{label: "Switch tab", key: "l", hint: "next tab (h: the previous one)", disabled: m.detail.TabCount() < 2}
 
 	var itemOps, panelOps []menuItem
@@ -232,7 +243,8 @@ func (m *AppModel) detailMenu() (string, []menuItem) {
 	case "History":
 		if rev, current := m.detail.HistoryCursor(); rev != nil {
 			itemOps = []menuItem{
-				{label: "Roll back to this revision", action: "rollback", hint: "helm rollback", opens: true, disabled: current},
+				{label: "[Enter] Roll back to this revision", name: "Roll back to this revision", key: "enter", action: "rollback",
+					hint: "helm rollback", opens: true, disabled: current},
 				{label: "Copy", key: "y", hint: "this row"},
 			}
 		}
@@ -296,6 +308,8 @@ func (m *AppModel) runSpaceAction(msg MenuActionMsg) tea.Cmd {
 		return m.breadcrumbPopup.Open(m.detail.DrillChain())
 	case "rollback":
 		return m.confirmRollback()
+	case "enter":
+		return m.enterKey()
 	}
 	if kind := helmDocKindOf(msg.Action); kind != "" {
 		return fetchHelmDocCmd(kind, msg.Item.Name, msg.Item.Namespace)
