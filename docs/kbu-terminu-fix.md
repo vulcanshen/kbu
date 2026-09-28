@@ -97,18 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 15. 搜尋列打不出空白 —— K8
-
-**現況**：各搜尋列的 `handleSearchKey()` 只把 `tea.KeyRunes` 當字元（`table.go`、`sidebar.go`、`yamlpopup.go`、`namespace.go`、
-`context.go`）；Bubble Tea v1 的空白鍵是 `tea.KeySpace`，所以打字中按 `Space` 什麼都不發生。YAML popup 的 `/` 要找 `image: nginx`
-這種含空白的字串時打不出來。
-
-**規則**：K8 —— 輸入態下 `Space`、`?`、`q` 與 letter hotkey 一律當成字元輸入。
-
-**怎麼改**：各搜尋列把 `tea.KeySpace` 也當成字元（`sidebar.go` 的拖曳分支已經兩種都認，照同一種寫法）。資源名稱本身不含空白，
-但 YAML 內容會有。
-
-
 ## 16. `Enter` 沒有動作的 panel、tab 與列 —— K3
 
 **現況**：

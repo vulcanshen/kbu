@@ -878,8 +878,8 @@ func (m YamlPopupModel) handleSearchKey(msg tea.KeyMsg) (YamlPopupModel, tea.Cmd
 			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 		}
 		return m, nil
-	case msg.Type == tea.KeyRunes:
-		for _, r := range msg.Runes {
+	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		for _, r := range typedRunes(msg) {
 			m.searchQuery += string(r)
 		}
 		return m, nil

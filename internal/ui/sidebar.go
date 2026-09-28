@@ -648,8 +648,8 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case msg.Type == tea.KeyUp:
 		visible := m.visibleItems()
 		return m.moveUp(visible)
-	case msg.Type == tea.KeyRunes:
-		for _, r := range msg.Runes {
+	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		for _, r := range typedRunes(msg) {
 			m.searchQuery += string(r)
 		}
 		m.resetCursorToFirstMatch()
