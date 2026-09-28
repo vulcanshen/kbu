@@ -234,7 +234,7 @@ func (m *AppModel) detailMenu() (string, []menuItem) {
 		if m.detail.Depth() > 1 {
 			panelOps = append(panelOps,
 				menuItem{label: "[Esc] Back", name: "Back", key: "esc", action: "rel-back", hint: "up one level of the chain"},
-				menuItem{label: "Jump to an ancestor", action: "breadcrumb", hint: "switch panels 1 and 2 to a resource up the chain", opens: true})
+				menuItem{label: "Breadcrumb", key: "B", hint: "switch panels 1 and 2 to a resource up the chain", opens: true})
 		}
 		if m.detail.SelectedRelativeRef() == nil {
 			panelOps = append(panelOps, yaml)
@@ -299,13 +299,6 @@ func (m *AppModel) runSpaceAction(msg MenuActionMsg) tea.Cmd {
 		return nil
 	case "rel-back":
 		return m.dispatchToPanel(tea.KeyMsg{Type: tea.KeyEsc})
-	case "breadcrumb":
-		if m.detail.Depth() <= 1 {
-			return nil
-		}
-		m.breadcrumbPopup.SetSize(m.width, m.height)
-		m.breadcrumbPopup.SetLayer(m.popupDepth() + 1)
-		return m.breadcrumbPopup.Open(m.detail.DrillChain())
 	case "rollback":
 		return m.confirmRollback()
 	case "enter":

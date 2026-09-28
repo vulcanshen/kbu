@@ -16,6 +16,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   answers. The mouse wheel also scrolls a YAML viewer opened over a menu, and
   no longer types `u` / `d` into a visible Alterm or `kubectl edit` / `exec`
   terminal.
+- **`B` opens the Relatives breadcrumb.** Drilled into a Relatives chain,
+  `B` (or `[B]readcrumb` in the `Space` menu) lists the chain so far and
+  switches panels 1 and 2 to any step of it.
 - **Compare remembers its layout.** The layout `L` switches to is written back
   to `compare.layout` in `config.yaml`, so the next start opens the diff the
   way you left it.
@@ -35,7 +38,7 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   settings, app log and quit. The read-only cheatsheets (panel 1's lower half,
   Logs / Events / Conditions, the empty list, Relatives), the separate Helm
   document menu and the History tab's `Space` rollback are gone: the Helm
-  documents are rows next to `YAML`, and rollback and "jump to an ancestor"
+  documents are rows next to `YAML`, and rollback and the Relatives breadcrumb
   are rows of their tab's menu. Actions that were hotkey-only are rows now too
   — search, copy, zoom, go live, switch tab, show/hide helm-managed rows, exit
   compare mode.

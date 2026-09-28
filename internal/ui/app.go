@@ -1913,14 +1913,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail.PushDrillFrame(msg.ref, msg.item, msg.detail)
 		return m, nil
 
-	case RelativeBreadcrumbMsg:
-		if m.detail.Depth() <= 1 {
-			return m, nil
-		}
-		m.breadcrumbPopup.SetSize(m.width, m.height)
-		m.breadcrumbPopup.SetLayer(m.popupDepth() + 1)
-		return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
-
 	case RelativeJumpMsg:
 		m.detail.JumpToDrillLevel(msg.Level)
 		return m, nil
@@ -2603,6 +2595,16 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	case "z":
 		return m.toggleZoom()
+	case "B":
+		// Relatives, drilled in: the breadcrumb of the chain walked so
+		// far, to switch panels 1 and 2 to any step of it. At the first
+		// level there is nothing up the chain.
+		if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Relatives" && m.detail.Depth() > 1 {
+			m.breadcrumbPopup.SetSize(m.width, m.height)
+			m.breadcrumbPopup.SetLayer(m.popupDepth() + 1)
+			return m.breadcrumbPopup.Open(m.detail.DrillChain())
+		}
+		return nil
 	case "y":
 		return copyToClipboardCmd(m.focusedPanelContent())
 	case "Y":
