@@ -123,14 +123,16 @@ func (m StatusBarModel) ViewFull(unreadErrors, unreadWarns int, successNotice st
 	if m.activePanel == TablePanel {
 		cBracketStyle = greyStyle
 	}
-	// tdp L2: the context and namespace sit in fixed-width fields
-	// (long names are cut in the middle, like panel 2's Name column),
-	// so switching context or namespace never shifts the chips after
-	// them.
+	// The context and namespace take the width of their names, up to a
+	// cap (a longer name is cut in the middle, like panel 2's Name
+	// column). Not padded to the cap: a short name would leave a hole
+	// and push the chips off a narrow terminal. Switching context or
+	// namespace moves what follows — a deviation from tdp L2, see
+	// dev-remarks.
 	ctx := cBracketStyle.Render("[C]") +
-		greyStyle.Render("ontext: ") + valueStyle.Render(fixedField(m.clusterInfo.ContextName, statusCtxW))
+		greyStyle.Render("ontext: ") + valueStyle.Render(cappedField(m.clusterInfo.ContextName, statusCtxW))
 	ns := blueStyle.Render("[N]") +
-		greyStyle.Render("amespace: ") + valueStyle.Render(fixedField(m.namespace, statusNsW))
+		greyStyle.Render("amespace: ") + valueStyle.Render(cappedField(m.namespace, statusNsW))
 
 	barStyle := m.theme.StatusBarStyle().Padding(0, 0)
 	badgeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Bold(true)
@@ -190,20 +192,20 @@ func (m StatusBarModel) ViewFull(unreadErrors, unreadWarns int, successNotice st
 	return fitRow(left, badgePart, m.width, barStyle)
 }
 
-// Statusbar field widths (tdp L2): wide enough for the usual context /
-// namespace names, fixed so the row doesn't move when they change.
+// The most a statusbar field takes: an EKS ARN context can't crowd the
+// namespace and the chips off the row.
 const (
 	statusCtxW = 24
 	statusNsW  = 16
 )
 
-// fixedField fits s into exactly w cells: cut in the middle when longer,
-// padded when shorter.
-func fixedField(s string, w int) string {
+// cappedField cuts s in the middle when it is wider than w cells; a
+// shorter s is left as it is.
+func cappedField(s string, w int) string {
 	if ansi.StringWidth(s) > w {
-		s = truncateMiddle(s, w)
+		return truncateMiddle(s, w)
 	}
-	return s + strings.Repeat(" ", max(w-ansi.StringWidth(s), 0))
+	return s
 }
 
 // fitRow lays out one row exactly width cells wide: left, then right
