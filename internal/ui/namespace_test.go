@@ -378,7 +378,9 @@ func TestNamespacePickerModel_SearchFiltersList(t *testing.T) {
 	}
 }
 
-func TestNamespacePickerModel_EnterInSearchReleasesFocusOnly(t *testing.T) {
+// tdp F1, K3: while typing, Enter acts on the highlighted candidate — the
+// same toggle as Enter on the list — and typing continues.
+func TestNamespacePickerModel_EnterWhileTypingTogglesHighlighted(t *testing.T) {
 	m := newTestNamespacePicker()
 	openNamespacePicker(&m)
 
@@ -386,19 +388,15 @@ func TestNamespacePickerModel_EnterInSearchReleasesFocusOnly(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("default")})
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
-	if m.searching {
-		t.Error("Enter in search mode must release search focus")
+	msg := runBatchForMsg[NamespaceChangedMsg](cmd)
+	if msg == nil || !msg.Selection.Contains("default") {
+		t.Fatalf("Enter while typing must toggle the highlighted namespace, got %+v", msg)
 	}
-	if m.searchQuery != "default" {
-		t.Errorf("Enter must keep filter, got query %q", m.searchQuery)
+	if !m.searching || m.searchQuery != "default" {
+		t.Errorf("typing must continue after Enter (searching=%v query=%q)", m.searching, m.searchQuery)
 	}
 	if !m.IsActive() {
-		t.Error("Enter in search mode must not close popup")
-	}
-	if cmd != nil {
-		if msg := runBatchForMsg[NamespaceChangedMsg](cmd); msg != nil {
-			t.Error("Enter in search mode must NOT emit NamespaceChangedMsg")
-		}
+		t.Error("Enter while typing must not close the picker")
 	}
 }
 
@@ -430,39 +428,43 @@ func TestNamespacePickerModel_ArrowsInSearchModeNavigate(t *testing.T) {
 	}
 }
 
-func TestNamespacePickerModel_JNavigatesAfterEnterReleasesFocus(t *testing.T) {
+// tdp F1: Tab moves focus from the typing line to the list (filter kept),
+// and back.
+func TestNamespacePickerModel_TabSwitchesBetweenTypingAndList(t *testing.T) {
 	m := newTestNamespacePicker()
 	openNamespacePicker(&m)
 
 	m, _ = m.Update(keyMsg('/'))
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}) // matches All Namespaces & default
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})                     // exit search
-
-	if m.searching {
-		t.Fatal("expected search released after Enter")
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}) // All Namespaces, default
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.searching || m.searchQuery != "a" {
+		t.Fatalf("Tab must move focus to the list keeping the filter (searching=%v query=%q)", m.searching, m.searchQuery)
 	}
 	m, _ = m.Update(keyMsg('j'))
 	if m.cursor != 1 {
-		t.Errorf("j after Enter must navigate filtered list, got cursor %d", m.cursor)
+		t.Errorf("j on the list must move the cursor, got %d", m.cursor)
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if !m.searching || m.searchQuery != "a" {
+		t.Errorf("Tab on the list must return to typing with the filter (searching=%v query=%q)", m.searching, m.searchQuery)
 	}
 }
 
-func TestNamespacePickerModel_EscInSearchClearsFilter(t *testing.T) {
-	m := newTestNamespacePicker()
-	openNamespacePicker(&m)
-
-	m, _ = m.Update(keyMsg('/'))
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("xyz")})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
-
-	if m.searching {
-		t.Error("Esc in search must exit search mode")
-	}
-	if m.searchQuery != "" {
-		t.Errorf("Esc must clear query, got %q", m.searchQuery)
-	}
-	if !m.IsActive() {
-		t.Error("Esc in search must NOT close popup")
+// tdp F1, K4: filtering is a phase, not a layer — Esc closes the whole
+// picker from either phase.
+func TestNamespacePickerModel_EscClosesFromEitherPhase(t *testing.T) {
+	for _, toList := range []bool{false, true} {
+		m := newTestNamespacePicker()
+		openNamespacePicker(&m)
+		m, _ = m.Update(keyMsg('/'))
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("xyz")})
+		if toList {
+			m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+		if m.animator.Owns() {
+			t.Errorf("Esc (on the list: %v) must close the picker, not just the filter", toList)
+		}
 	}
 }
 

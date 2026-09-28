@@ -97,24 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 10. namespace / context picker 的 `/` 篩選沒照 F1 的階段 —— F1、K2、K3、K4
-
-**現況**（`namespace.go`、`context.go` 的 `Update()` 與 `handleSearchKey()`）：
-
-- `/` 進入打字（上方多一個三列的搜尋框）；打字時方向鍵移動候選、字元進搜尋字串；`Enter` 只是離開打字、保留篩選，要再按一次
-  `Enter` 才勾選 / 切換；`Esc` 清掉篩選、回到清單。
-- 清單上有篩選時 `Esc` 先清篩選、再按一次才關；`Tab` 沒有作用。
-- 打字時 `Space` 打不出來（第 15 條）。
-
-**規則**：F1 —— 一個 popup 可以依階段換類別（打字時是 input，清單取得 focus 時是 menu），`Tab` 在打字與清單之間切換 focus，
-`Esc` 關掉整個 popup（K4：階段不是一層）；input 附候選清單時，可列印的鍵都是字元、只有方向鍵在候選之間移動，`Enter` 送出選中的
-那一筆（K3）。
-
-**怎麼改**：照 filu、webu 的 finder：打字中 `Enter` 直接對反白那一筆做清單的 `Enter`（namespace 勾選、留在打字；context 切換並
-關閉）；`Tab` 在打字與清單之間切換；任何階段 `Esc` 關掉整個 picker（篩選隨之清掉）。下框 hint 依階段寫 `Tab` 的去向。dev-remarks
-「功能筆記」多 namespace 選取的 `/` 說明一起改。
-
-
 ## 11. `?` 的 key reference 是全 app 共用一份，不是最前端 surface 的 —— K6、M4
 
 **現況**：`app.go` `case "?"` 切換 `help.go` 的 `HelpModel`（標題 `󰘳 Keybindings`），內容是 `helpContent()` 的 Core / Navigation /

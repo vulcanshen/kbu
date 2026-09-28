@@ -207,6 +207,11 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		m.searchQuery = ""
 		m.cursor = 0
 		return m, nil
+	case "tab":
+		// tdp F1: Tab moves focus between the list and the typing
+		// line; the filter stays as it is.
+		m.searching = true
+		return m, nil
 	case "j", "down":
 		if len(items) > 0 {
 			m.cursor = (m.cursor + 1) % len(items)
@@ -242,26 +247,25 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 	case "enter":
 		return m.toggleCurrent(items)
 	case "esc", "n", "N":
-		if m.searchQuery != "" {
-			m.searchQuery = ""
-			m.cursor = 0
-			return m, nil
-		}
+		// tdp F1, K4: filtering is a phase of the picker, not a
+		// layer — Esc closes the whole picker, filter and all.
 		return m, m.animator.Close()
 	}
 	return m, nil
 }
 
+// handleSearchKey is the typing phase: an input with a candidate list
+// (tdp F1). Printable keys are characters, the arrows move between
+// candidates, Enter toggles the highlighted one — the same as Enter on
+// the list — and typing continues; Tab moves focus to the list; Esc
+// closes the whole picker.
 func (m NamespacePickerModel) handleSearchKey(msg tea.KeyMsg) (NamespacePickerModel, tea.Cmd) {
 	switch {
 	case msg.Type == tea.KeyEscape:
-		m.searching = false
-		m.searchQuery = ""
-		m.cursor = 0
-		return m, nil
+		return m, m.animator.Close()
 	case msg.Type == tea.KeyEnter:
-		// Release search focus, keep filter. j/k navigation becomes available;
-		// a second Enter then selects.
+		return m.toggleCurrent(m.filtered())
+	case msg.Type == tea.KeyTab:
 		m.searching = false
 		return m, nil
 	case msg.Type == tea.KeyBackspace:
@@ -484,7 +488,10 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := " Enter: toggle  /: search  Esc: close "
+	hint := " Enter:toggle  /,Tab:search  Esc:close "
+	if m.searching {
+		hint = " ↑↓ Enter:toggle  Tab:list  Esc:close "
+	}
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0

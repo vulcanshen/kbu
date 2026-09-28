@@ -201,6 +201,42 @@ func TestContextPickerModel_CloseOnUppercaseC(t *testing.T) {
 	}
 }
 
+// tdp F1, K3: while typing, Enter switches to the highlighted context and
+// closes the picker — the same as Enter on the list.
+func TestContextPickerModel_EnterWhileTypingSwitches(t *testing.T) {
+	m := newTestContextPicker()
+	m.Open([]string{"dev", "staging", "prod"}, "dev")
+	m.animator.Finalize()
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("stag")})
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	msg := runBatchForMsg[ContextChangedMsg](cmd)
+	if msg == nil || msg.Context != "staging" {
+		t.Fatalf("Enter while typing must switch to the highlighted context, got %+v", msg)
+	}
+	if m.animator.Owns() {
+		t.Error("switching must close the picker")
+	}
+}
+
+// tdp F1, K4: Esc while typing closes the whole picker; Tab moves to the
+// list and keeps the filter.
+func TestContextPickerModel_TypingPhaseKeys(t *testing.T) {
+	m := newTestContextPicker()
+	m.Open([]string{"dev", "staging"}, "dev")
+	m.animator.Finalize()
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("st")})
+	tabbed, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if tabbed.searching || tabbed.searchQuery != "st" {
+		t.Errorf("Tab must move to the list keeping the filter (searching=%v query=%q)", tabbed.searching, tabbed.searchQuery)
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.animator.Owns() {
+		t.Error("Esc while typing must close the picker")
+	}
+}
+
 func TestContextPickerModel_InactiveIgnoresInput(t *testing.T) {
 	m := newTestContextPicker()
 	// Not opened, should be inactive.
