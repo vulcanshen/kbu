@@ -80,12 +80,12 @@
 ### Popup 的分類與結構
 
 - **一個 popup 一個檔、一個 `PopupAnimator`**，animator 的 `Target` 對應檔名（同一個檔有多個 instance 時用 `_` 分隔，例如 `ptyview_shell`、`ptyview_tx`）。每個 popup 都在 `app.go View()` 照 `stackOrder()` composite；popup 上不再疊一個 popup 自己畫的子 menu —— popup 自己的操作用熱鍵，揭露在下框 hint 與它的 `?`（tdp K5）。`app.go View()` 以外出現裸的 `overlay.Composite` 是警訊。緣由：v1.7.4 發現 compare 裡的 menu 同時漏掉動畫與上下留白 —— 它是唯一住在別人檔案裡的 popup，以檔名做的盤點看不到它；那個 menu 後來照 K5 拿掉，換成 `L` 熱鍵。
-- **四類，各有固定版面**（tdp F1）：**menu**（`j/k` + `Enter` 從清單挑；上下留白一列）、**message**（短文 + 動作，例：applog、help、confirm、toast；上下留白一列）、**viewport**（長內容、垂直最大化、無留白，例：yamlpopup、comparepopup）、**pty**（框由 kbu 畫、內容由 subprocess 畫，例：Alterm、kubectl edit / exec）。標題一律 glyph + 文字；toast 的文字固定是 `kbu`，等級靠 glyph（`󰵅` info、`󰀦` warn）與邊框色區分。
+- **六類，一個時間只屬於一類**（tdp F1）：**menu**（`j/k` 移、`Enter` 或熱鍵執行：Space menu、global operation popup、sort 的欄位 / 方向、Settings、breadcrumb、namespace / context picker 的清單階段）、**confirm**（`Enter` 接受、`Esc` 取消：confirm，含 PTY 的離開）、**input**（打字：namespace / context picker 的篩選階段，附候選清單）、**note**（唯讀、可捲動：key reference、YAML、Compare、App log；YAML 有自己的熱鍵與 visual 模式）、**toast**（不握鍵盤）、**terminal**（框由 kbu 畫、內容由子程序畫：Alterm、kubectl edit / exec）。標題一律 glyph + 文字（D3）；toast 的文字固定是 `kbu`，等級靠 glyph（`󰵅` info、`󰀦` warn）與邊框色區分。
 - **動畫**（tdp F2）：開 / 關約 160ms。
 - **疊層只有一份順序**（tdp D3、F4、X2）：`stack.go` 的 `stackOrder()` 由下往上列出每個 popup。`View()` 照它畫；`Update()` 把按鍵與滑鼠交給最後一個 `owns()` 的那一層（`topLayer()`）；`popupDepth()` 照它數層、`closeAllBlockingPopups()` 照它關。順序依「誰開誰」：Space menu 在最底，從它開出的 picker、viewer、confirm 在上，key reference 在它們之上，PTY 最上（context-shift 會先清掉底下，見「設計決定」）。滾輪看的也是最上層：menu 類吞掉、viewer 轉成 `u` / `d`、PTY 不理。新 popup 只在 `stackOrder()` 插一次，路由、繪製、層數、滑鼠自動一致。
 - **`Esc` 與關閉中的 popup**（tdp F3）：判斷一層「還在不在」用 `owns()`（開啟中或已開），不用含關閉中的 `IsActive()`；`IsActive()` 只決定還要不要畫。正在跑關閉動畫的 popup 不再接鍵，下一鍵交給底下那一層。blocking popup 在自己的 `Update` 攔 `Esc`；toast 不是 blocking（按鍵穿透到底下的 panel），由 app 層的 `Esc` handler 在它 `Owns()` 時 dismiss，淡出中的 toast 不再吃 `Esc`。
 - **邊框色依層數**：`theme.PopupLayerColor(layer)` 是唯一來源，不寫死 hex。每個 popup 有 `layer` 與 `borderColor`，`SetLayer` 同時更新 animator 的顏色；開啟前以 `popupDepth() + 1` 蓋章。
-- 完整的 popup 規格（盤點清單、`padRow` 寫法、新 popup 的分類決策樹）在本機的 `.claude/rules/popup-convention.md`（不進版控）。
+- 新增 popup 的接線：欄位、`NewAppModel()`、`AnimTickMsg` 的 `HandleTick`、`stack.go` 的 `stackOrder()` 與 adapter、`keyref.go` 的 key reference、測試的共用 fixture（`appWithItems`、`appWithSizeAndCfg`）。
 
 ### Panel 外框
 
@@ -153,7 +153,7 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 
 ## 設計文件導讀
 
-kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)。popup 的完整規格在本機的 `.claude/rules/popup-convention.md`（不進版控）。
+kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle)。
 
 | 檔案 | 內容 |
 |---|---|

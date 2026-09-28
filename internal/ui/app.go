@@ -2159,13 +2159,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appLog.Warn("close active edit/exec PTY before opening shell")
 			return m, m.toast.Show("Close current edit/exec PTY first")
 		}
-		// §1.10 — PTY is a context-shift target; entry handler closes
+		// tdp T1 — PTY is a context-shift target; entry handler closes
 		// every blocking popup that launched this action so the user
 		// returns to a clean base view, not a stale source popup.
 		closeAll := m.closeAllBlockingPopups()
 		cmd := buildKubectlExecCmd(msg.podName, msg.namespace, msg.container, msg.contextName)
 		title := fmt.Sprintf("Shell: pod/%s → %s", msg.podName, msg.container)
-		// §1.10 context-shift target — always layer 1; see Alt+T handler
+		// tdp T1 context-shift target — always layer 1; see toggleAlterm
 		// for the rationale.
 		m.txPty.SetLayer(1)
 		return m, tea.Batch(closeAll, m.txPty.Start(cmd, title, m.width, m.height, PtyKindExec))
@@ -2175,7 +2175,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appLog.Warn("close active edit/exec PTY before editing")
 			return m, m.toast.Show("Close current edit/exec PTY first")
 		}
-		// §1.10 — see startShellExecMsg above.
+		// tdp T1 — see startShellExecMsg above.
 		closeAll := m.closeAllBlockingPopups()
 		m.editing = true
 		title := fmt.Sprintf("Edit: %s/%s", msg.resource.KubectlName(), msg.item.Name)
@@ -2185,7 +2185,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := buildKubectlEditCmd(msg.resource, msg.item, msg.contextName, m.cfgEditor)
 		config.WriteAuditEntry("edit", msg.resource.KubectlName()+"/"+msg.item.Name, msg.item.Namespace, "started") //nolint
 		m.appLog.Info("edit: " + msg.resource.KubectlName() + "/" + msg.item.Name)
-		// §1.10 context-shift target — always layer 1; see Alt+T handler
+		// tdp T1 context-shift target — always layer 1; see toggleAlterm
 		// for the rationale.
 		m.txPty.SetLayer(1)
 		return m, tea.Batch(closeAll, m.txPty.Start(cmd, title, m.width, m.height, PtyKindEdit))
@@ -2954,7 +2954,7 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 
 	// Pod → Container drill-down (special case)
 	if m.currentResource == k8s.ResourcePods {
-		// §1.10 — drill-down is a context-shift target; entry handler
+		// tdp T1 — drill-down is a context-shift target; entry handler
 		// closes every blocking popup that launched it so the user
 		// returns to a clean drilled-in view without a stale source
 		// popup (e.g. panel 2 menu) floating over swapped columns.
@@ -2986,7 +2986,7 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 		return nil
 	}
 
-	// §1.10 — see Pod branch above.
+	// tdp T1 — see Pod branch above.
 	closeAll := m.closeAllBlockingPopups()
 	parentType := m.currentResource
 	clientset := m.k8sClient.Clientset()

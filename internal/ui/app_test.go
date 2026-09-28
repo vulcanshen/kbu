@@ -774,7 +774,7 @@ func TestAppModel_DualSlot_TxAlive_BlocksAnotherExec(t *testing.T) {
 	}
 }
 
-// TestStartEditMsg_PtyAlwaysLayer1 pins the §1.10 layer contract:
+// TestStartEditMsg_PtyAlwaysLayer1 pins the tdp T1 layer contract:
 // PTY is a context-shift target that closes the popup tree underneath.
 // UX-wise the user sees a single popup on screen when the PTY is
 // visible, regardless of which chain launched it. Layer must be 1
@@ -804,7 +804,7 @@ func TestStartEditMsg_PtyAlwaysLayer1(t *testing.T) {
 	app := updated.(AppModel)
 
 	if got := app.txPty.layer; got != 1 {
-		t.Errorf("§1.10 PTY context-shift must always be layer 1, got %d "+
+		t.Errorf("tdp T1 PTY context-shift must always be layer 1, got %d "+
 			"(popupDepth-based stamp would have produced %d)", got, m.popupDepth()+1)
 	}
 }
@@ -827,7 +827,7 @@ func TestStartShellExecMsg_PtyAlwaysLayer1(t *testing.T) {
 	app := updated.(AppModel)
 
 	if got := app.txPty.layer; got != 1 {
-		t.Errorf("§1.10 PTY context-shift must always be layer 1, got %d", got)
+		t.Errorf("tdp T1 PTY context-shift must always be layer 1, got %d", got)
 	}
 }
 
@@ -1206,7 +1206,7 @@ func TestSpaceMenuC_CompareToAnchor_KeepsMenuBeneathTheDiff(t *testing.T) {
 var _ tea.Msg = struct{}{}
 
 func TestAppModel_CloseAllBlockingPopups_NilWhenIdle(t *testing.T) {
-	// §1.10 — helper must return nil (not a no-op tea.Batch wrapping
+	// tdp T1 — helper must return nil (not a no-op tea.Batch wrapping
 	// nothing) when no blocking popup is open. Callers rely on this
 	// to keep `tea.Batch(closeAll, mainCmd)` from carrying a payload
 	// when there is nothing to close.
@@ -1233,7 +1233,7 @@ func TestAppModel_CloseAllBlockingPopups_NilWhenIdle(t *testing.T) {
 }
 
 func TestAppModel_CloseAllBlockingPopups_ClosesActiveOnes(t *testing.T) {
-	// §1.10 — every active blocking popup must enter its closing
+	// tdp T1 — every active blocking popup must enter its closing
 	// animation when the helper fires. Mocks the post-commit state
 	// where panel2Menu launched a confirm: both popups are active,
 	// then a context-shift target (e.g. PTY) enters via its handler
@@ -1273,10 +1273,10 @@ func TestAppModel_CloseAllBlockingPopups_ClosesActiveOnes(t *testing.T) {
 	m.spaceMenu.animator.Finalize()
 	m.confirm.animator.Finalize()
 	if m.spaceMenu.IsActive() {
-		t.Error("§1.10: the Space menu must be closed after helper + finalize")
+		t.Error("tdp T1: the Space menu must be closed after helper + finalize")
 	}
 	if m.confirm.IsActive() {
-		t.Error("§1.10: confirm must be closed after helper + finalize")
+		t.Error("tdp T1: confirm must be closed after helper + finalize")
 	}
 }
 

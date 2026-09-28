@@ -178,7 +178,7 @@ func TestPtyView_StartEcho_Exits(t *testing.T) {
 	if cmd2 == nil {
 		t.Fatal("expected exit command from tick after done flag set")
 	}
-	// Two-phase teardown (popup-convention v2 §1.10 + close-anim fix):
+	// Two-phase teardown (tdp T1 + close-anim fix):
 	// done-detection batches a close-animation cmd + the PtyExitMsg
 	// emitter. cmd2() returns a BatchMsg carrying both — unwrap and
 	// find the PtyExitMsg.

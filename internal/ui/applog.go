@@ -267,7 +267,7 @@ func (m AppLogModel) renderAllLines() []string {
 	innerW := m.popupWidth() - 2
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Error))
 	// Warn entries use Catppuccin Peach — same hue as the status bar's
-	// peach warn badge, toast warn border, and the popup-convention §1.7
+	// peach warn badge, toast warn border, and the tdp D2
 	// warn signal. One warning colour app-wide. Status.Pending (yellow)
 	// is reserved for transitional/degraded resource states (Pending pod,
 	// etc.) — distinct semantic from "user-facing warning".
