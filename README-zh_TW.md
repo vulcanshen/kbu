@@ -70,6 +70,7 @@
 - 有效的 **kubeconfig**（`~/.kube/config` 或 `$KUBECONFIG`）
 - 一個運作中的 Kubernetes cluster
 - **Nerd Font**，建議用 Mono 變體（例：JetBrains Mono Nerd Font Mono），icon 才會對齊格線。
+- **支援 truecolor（24-bit 色）的終端機**。kbu 的淡色與疊起來的 popup 之間的明暗，在 256 色下分不出來。
 
 ### Quick Install（macOS/Linux）
 

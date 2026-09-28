@@ -70,6 +70,7 @@
 - A valid **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`)
 - A running Kubernetes cluster
 - **A Nerd Font**, preferably a Mono variant (e.g. JetBrains Mono Nerd Font Mono) so icons line up with the grid.
+- **A truecolor terminal** (24-bit color). kbu's soft colors and the shading between stacked popups can't be told apart in 256 colors.
 
 ### Quick Install (macOS/Linux)
 
