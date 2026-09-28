@@ -91,7 +91,7 @@ func (m StatusBarModel) ViewWithBadge(unreadErrors int, successNotice string) st
 // hiccups) surface a Catppuccin Peach ` N warnings` badge without
 // firing the red `! N errors` signal that should mean real failure. The
 // `` glyph is the Nerd Font Font-Awesome warning triangle, picked
-// over the unicode `⚠` (U+26A0) per design-guide §3.2 (glyphs limited
+// over the unicode `⚠` (U+26A0) per the glyph subset in docs/dev-remarks.md (glyphs limited
 // to the U+F... Nerd Font private-use range).
 func (m StatusBarModel) ViewFull(unreadErrors, unreadWarns int, successNotice string, pty *PtyMarker, compare *CompareMarker) string {
 	// `[C]ontext: <ctx>  [N]amespace: <ns>` — multi-segment rendering

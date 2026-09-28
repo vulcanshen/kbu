@@ -163,42 +163,6 @@ namespace `kube-system` + 兩個 chip + `! 3 errors` 就折成 2 列；EKS ARN �
 剛好等於終端機寬，含 popup 疊上去與長 context 名稱）—— 舊清單待確認的 L4 那題併進這裡，statusbar 正是這種測試會抓到的例子。
 
 
-## 25. 註解與 dev-remarks 仍引用舊的 popup convention 與舊分類 —— 文件對齊
-
-**現況**：
-
-- `internal/ui` 的註解與測試訊息用 popup convention 的 § 編號（`§1.6`–`§1.10`，源自 VTP 時期的 kbu implementation 文件 §6）與
-  「design-guide §3.2」。popup convention 在本機的 `.claude/rules/popup-convention.md`，那個目錄不進版控，公開的程式碼讀者找不到；
-  VTP 時期的 implementation 文件已經退場。不影響行為。`internal/k8s/contexts.go` 的 `project rule §7` 指的是本機的
-  `.claude/rules/project-rules.md`，不動。
-- `dev-remarks.md`「Popup 的分類與結構」寫「四類（tdp F1）：menu、message、viewport、pty」；tdp v0.1.8 起是六類（menu、confirm、input、
-  note、toast、terminal）。同一節與「設計文件導讀」指向本機不進版控的 `.claude/rules/popup-convention.md`。
-
-**怎麼改**：照 [terminu `vtp/README.md` 的對照表](https://github.com/vulcanshen/terminu/blob/v0.1.13/vtp/README.md) 與各處註解的內容
-換成 tdp 編號：`§1.10` context-shift 清掉 source = T1、`§1.8` source 保留 = F4、`§1.9` `Esc` 含自動消失 = F3、層色與警示色 = D2、
-標題 glyph + 文字 = D3。在該檔找「現在」那串，數量跟下表一致就直接換（共 39 處）：
-
-| 檔案 | 現在（處數） | 換成 |
-|---|---|---|
-| `app.go` | `§1.10`（11，含 `convention §1.10`、`(§1.10)`、`via §1.10`） | `tdp T1` |
-| `app.go` | `§1.8`（2：listPicker 路由、Compare-to-anchor 留住 menu） | `tdp F4` |
-| `app.go` | `§1.9`（1：`case "esc"` 的 toast） | `tdp F3` |
-| `app.go` | `.claude/rules/popup-convention.md §1.6`（1：`popupDepth()` 上方，講層色） | `tdp D2` |
-| `applog.go` | `popup-convention §1.7`（1：警示色） | `tdp D2` |
-| `toast.go` | `popup-convention rule`（1：標題 glyph + 文字） | `tdp D3` |
-| `comparepopup.go` | `see .claude/rules/popup-convention.md`（1：`menu` 欄位） | 第 3 條拿掉 `menu` 後隨之消失 |
-| `panel2menu.go` | `§1.8 popup-convention`（1：`commit()`） | `tdp F4` |
-| `statusbar.go` | `design-guide §3.2`（1） | dev-remarks「設計決定」的 glyph 子集 |
-| `comparemenu.go` | `popup-convention`、`kbu popup convention`（3） | 第 3 條刪檔後隨之消失 |
-| `app_test.go` | `§1.10`（7）、`§1.8`（3） | `tdp T1`、`tdp F4` |
-| `panel2menu_test.go` | `§1.8`（3） | `tdp F4` |
-| `sortflow_test.go` | `§1.8`（2） | `tdp F4` |
-| `ptyview_test.go` | `popup-convention v2 §1.10`（1） | `tdp T1` |
-
-`app_test.go` 與 `panel2menu_test.go` 有幾處是 `t.Error` 的訊息字串，不是註解，一起換。上一份清單把 `popupDepth()` 上方那處照 § 編號
-對到 D3，照內容（層色）應是 D2。dev-remarks 的「四類」改成六類，各 popup 的歸類照上方「popup 盤點」與修完後的樣子。
-
-
 ## 已經符合、不用修的（對照 v0.1.13）
 
 - **K1（letter hotkey 不佔 core key）**：`q` 只用在離開，`Space`、`?`、`Tab`、`Enter`、`Esc` 沒有被字母熱鍵借用；confirm 的 `y` / `n`、
