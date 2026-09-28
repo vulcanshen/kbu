@@ -409,18 +409,16 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 		return p, p.tick()
 
 	case tea.KeyMsg:
-		// Alt+t is the PTY's exit key (tdp K10), intercepted in every
-		// PTY regardless of alt-screen mode — users running vim inside
-		// still need a way out. Alterm hides without killing the shell
-		// (persistent PTY); a kubectl edit / exec session can't be kept
-		// in the background, so there Alt+t asks to end it
-		// (ptyLeaveRequestMsg → a confirm stacked over the PTY).
-		if p.kind != PtyKindShell {
-			switch msg.String() {
-			case "alt+t", "alt+T":
-				kind := p.kind
-				return p, func() tea.Msg { return ptyLeaveRequestMsg{kind: kind} }
-			}
+		// The exit keys (tdp K10), intercepted whatever the alt-screen
+		// mode — users running vim inside still need a way out. Alt-Esc
+		// is every PTY's exit, as in the rest of the family (sshu,
+		// filu): it asks, then ends the session (ptyLeaveRequestMsg → a
+		// confirm stacked over the PTY). Alt-t belongs to Alterm alone:
+		// it hides the shell and keeps it running; in a kubectl edit /
+		// exec session it goes to the subprocess like any other key.
+		if msg.Type == tea.KeyEsc && msg.Alt {
+			kind := p.kind
+			return p, func() tea.Msg { return ptyLeaveRequestMsg{kind: kind} }
 		}
 		if p.kind == PtyKindShell {
 			switch msg.String() {
@@ -705,9 +703,9 @@ func (p *PtyView) renderBottomBorder(cols int, borderStyle, hintStyle lipgloss.S
 	altScreen := p.term != nil && p.term.Mode()&vt10x.ModeAltScreen != 0
 	// The exit key is always shown, alt-screen or not (tdp K10); the
 	// scroll keys only while kbu takes them (not in alt-screen).
-	exit := " Alt-t:leave "
+	exit := " Alt-Esc:leave "
 	if p.kind == PtyKindShell {
-		exit = " Alt-t:hide "
+		exit = " Alt-t:hide  Alt-Esc:end "
 	}
 	hint = exit
 	if !altScreen {

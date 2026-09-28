@@ -134,14 +134,14 @@ func TestK10_EditExitKeyAsksThenEnds(t *testing.T) {
 	m.txPty = fakeAlivePtyView(PtyKindEdit, false)
 	m.txPty.animator.State = PopupOpen
 
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune{'t'}})
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc, Alt: true})
 	m = updated.(AppModel)
 	for _, msg := range drainCmd(cmd) {
 		next, _ := m.Update(msg)
 		m = next.(AppModel)
 	}
 	if !m.confirm.owns() || m.confirm.action != ConfirmLeaveEdit {
-		t.Fatal("Alt+t in kubectl edit must ask before leaving")
+		t.Fatal("Alt-Esc in kubectl edit must ask before leaving")
 	}
 	if m.topLayer() != &m.confirm {
 		t.Fatal("the question must stack over the PTY")
@@ -153,11 +153,46 @@ func TestK10_EditExitKeyAsksThenEnds(t *testing.T) {
 	}
 	accepted := false
 	for _, msg := range drainCmd(m.confirm.onConfirm) {
-		if _, ok := msg.(ptyKillMsg); ok {
+		if kill, ok := msg.(ptyKillMsg); ok && kill.kind == PtyKindEdit {
 			accepted = true
 		}
 	}
 	if !accepted {
 		t.Error("accepting must end the kubectl edit session")
+	}
+}
+
+// tdp K10: Alt-Esc in Alterm asks too, then ends the shell (not hides
+// it); Esc on the question returns to the shell.
+func TestK10_AltermAltEscAsksThenEnds(t *testing.T) {
+	m := stackTestApp(t)
+	m.shellPty = fakeAlivePtyView(PtyKindShell, false)
+	m.shellPty.animator.State = PopupOpen
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc, Alt: true})
+	m = updated.(AppModel)
+	for _, msg := range drainCmd(cmd) {
+		next, _ := m.Update(msg)
+		m = next.(AppModel)
+	}
+	if !m.confirm.owns() || m.confirm.message != "End the Alterm shell?" {
+		t.Fatalf("Alt-Esc in Alterm must ask before ending the shell, got %q", m.confirm.message)
+	}
+	if m.shellPty.IsHidden() {
+		t.Error("Alt-Esc must not hide Alterm")
+	}
+	m.confirm.animator.Finalize()
+	back, _ := m.Update(key("esc"))
+	if got := back.(AppModel); got.topLayer() != got.shellPty {
+		t.Error("Esc on the question must return to the shell")
+	}
+	ends := false
+	for _, msg := range drainCmd(m.confirm.onConfirm) {
+		if kill, ok := msg.(ptyKillMsg); ok && kill.kind == PtyKindShell {
+			ends = true
+		}
+	}
+	if !ends {
+		t.Error("accepting must end Alterm's shell")
 	}
 }

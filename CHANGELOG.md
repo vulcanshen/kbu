@@ -84,11 +84,12 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   confirm); on a Logs / Events / Conditions tab it full-screens the panel. It
   used to do nothing in all of these places. A double-click on panel 1 now only
   selects.
-- **`kubectl edit` and `kubectl exec` have a way out.** `Alt+t` in their
+- **`kubectl edit` and `kubectl exec` have a way out.** `Alt-Esc` in their
   terminal asks, then ends the session (an unsaved edit is dropped; nothing is
   applied); `Esc` on the question goes back to the terminal. The key is shown in
   the terminal's bottom border, in the editor too. Before, only the subprocess
-  exiting could close them.
+  exiting could close them. `Alt-Esc` closes Alterm the same way — it ends the
+  shell after asking; `Alt-t` still just hides it, and is now Alterm's alone.
 - **Any key closes the splash.** It used to answer only `Esc`, `Enter` and
   `Space` and ignore the rest; now any key closes it, and only closes it.
 - **A drill that fails says so.** `Enter` on a panel 2 row whose children

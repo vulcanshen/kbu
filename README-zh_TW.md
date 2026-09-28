@@ -51,7 +51,7 @@
 - **編輯（`E`）** — 在 kbu 內的 terminal popup 執行真正的 `kubectl edit`，使用你的 `$KUBE_EDITOR` / `$EDITOR`。
 - **Shell（`S`）** — `kubectl exec` 進 container，同樣在 kbu 內。
 - **刪除（`D`）** — 一定會先確認；刪 namespace 會多一道警告。
-- **Alterm（`Alt-t`）** — kbu 內的常駐 shell。同一個鍵隱藏、再按一次叫回來，目錄、history、執行中的 job 都還在。kbu 沒做的事，交給你平常用的工具在這裡做。
+- **Alterm（`Alt-t`）** — kbu 內的常駐 shell。同一個鍵隱藏、再按一次叫回來，目錄、history、執行中的 job 都還在；`Alt-Esc` 結束它。kbu 沒做的事，交給你平常用的工具在這裡做。
 - **複製（`y`）** — 透過 OSC 52 把目前這一列或整個畫面複製到剪貼簿，走 SSH 或 tmux 也能用。
 - **Audit log** — 從 kbu 做的每次編輯與刪除都會留下紀錄。
 
@@ -189,7 +189,8 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 | 鍵 | 動作 |
 |---|---|
-| `Alt-t` | 離開：Alterm 隱藏（shell 繼續跑）；`kubectl edit` / `exec` 先問，再結束那個 session（還沒存的編輯會丟掉）|
+| `Alt-t` | Alterm：隱藏（shell 繼續跑）|
+| `Alt-Esc` | 關閉 terminal —— 先問，再結束那個 session：Alterm 的 shell 與裡面跑的東西會停掉；還沒存的 `kubectl edit` 會丟掉 |
 | `PgUp` / `PgDn` | 歷史以一頁為單位捲動 |
 | `Home` / `End` | 跳到歷史頂端 / 回到 live |
 | 其他任何鍵 | 跳回 live、按鍵轉發給 subprocess |
