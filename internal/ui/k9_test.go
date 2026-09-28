@@ -126,3 +126,38 @@ func TestK9_PtyOnTopKeepsQAndCtrlC(t *testing.T) {
 		}
 	}
 }
+
+// tdp K10 + F4: confirming the exit key's question ends the edit / exec
+// session; Esc on the question returns to the PTY.
+func TestK10_EditExitKeyAsksThenEnds(t *testing.T) {
+	m := stackTestApp(t)
+	m.txPty = fakeAlivePtyView(PtyKindEdit, false)
+	m.txPty.animator.State = PopupOpen
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune{'t'}})
+	m = updated.(AppModel)
+	for _, msg := range drainCmd(cmd) {
+		next, _ := m.Update(msg)
+		m = next.(AppModel)
+	}
+	if !m.confirm.owns() || m.confirm.action != ConfirmLeaveEdit {
+		t.Fatal("Alt+t in kubectl edit must ask before leaving")
+	}
+	if m.topLayer() != &m.confirm {
+		t.Fatal("the question must stack over the PTY")
+	}
+	m.confirm.animator.Finalize()
+	back, _ := m.Update(key("esc"))
+	if got := back.(AppModel); got.topLayer() != got.txPty {
+		t.Error("Esc on the question must return to the PTY")
+	}
+	accepted := false
+	for _, msg := range drainCmd(m.confirm.onConfirm) {
+		if _, ok := msg.(ptyKillMsg); ok {
+			accepted = true
+		}
+	}
+	if !accepted {
+		t.Error("accepting must end the kubectl edit session")
+	}
+}

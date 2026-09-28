@@ -29,17 +29,18 @@ type stackLayer interface {
 // stackOrder is the popup stack bottom-first: View draws in this order,
 // and Update hands keys and clicks to the last layer that owns its
 // place, so the popup drawn on top is the one that answers. The order
-// follows who opens whom — a menu sits below the pickers, viewers and
-// confirms it opens, the key reference sits above them all, and the
-// PTYs (context-shift targets that clear everything beneath, tdp T1)
-// sit on top.
+// follows who opens whom — a menu sits below the pickers and viewers it
+// opens; the PTYs (context-shift targets that clear everything beneath
+// them, tdp T1) sit above those; a confirm sits above the PTYs too (the
+// PTY's exit key asks before ending a kubectl edit / exec session); and
+// the key reference sits above everything, the confirm included.
 func (m *AppModel) stackOrder() []stackLayer {
 	return []stackLayer{
 		&m.spaceMenu, &m.globalMenu,
 		&m.listPicker, &m.sortDirPicker, &m.settingsPopup, &m.namespacePicker, &m.contextPicker, &m.appLog,
 		&m.breadcrumbPopup, &m.yamlPopup, &m.comparePopup,
-		&m.confirm, &m.help,
 		m.shellPty, m.txPty,
+		&m.confirm, &m.help,
 	}
 }
 

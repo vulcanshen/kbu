@@ -1331,6 +1331,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	// The exit key in a kubectl edit / exec PTY (tdp K10): ask before
+	// ending the session — an edit in progress would be lost. The
+	// confirm stacks over the PTY; Esc returns to it.
+	if req, ok := msg.(ptyLeaveRequestMsg); ok {
+		action, question, detail := ConfirmEndShell, "End the shell session?", "the kubectl exec session is closed"
+		if req.kind == PtyKindEdit {
+			action, question, detail = ConfirmLeaveEdit, "Leave kubectl edit?", "the edit is cancelled; nothing is applied"
+		}
+		onConfirm := func() tea.Msg { return ptyKillMsg{} }
+		m.confirm.SetSize(m.width, m.height)
+		m.confirm.SetLayer(m.popupDepth() + 1)
+		return m, m.confirm.Show(action, question, detail, onConfirm)
+	}
+	if _, ok := msg.(ptyKillMsg); ok {
+		m.txPty.Kill()
+		return m, nil
+	}
+
 	// PtyExitMsg arrives AFTER ptyView has already Stop()ed itself, so this
 	// handler lives outside the IsActive() guard — it cleans up app-level
 	// state when the subprocess finishes.
@@ -2671,6 +2689,9 @@ func (m *AppModel) confirmContextSwitch(name string) tea.Cmd {
 	return m.confirm.Show(ConfirmContextSwitch, "Switch kbu to context "+name+"?",
 		"~/.kube/config is not changed", onConfirm)
 }
+
+// ptyKillMsg: the user confirmed leaving a kubectl edit / exec session.
+type ptyKillMsg struct{}
 
 // quitCmd starts the leave flow (tdp K9). kbu leaves straight away — no
 // confirm step; the quitMsg handler does the teardown (streams, PTYs,

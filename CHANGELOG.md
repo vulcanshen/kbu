@@ -84,6 +84,11 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   confirm); on a Logs / Events / Conditions tab it full-screens the panel. It
   used to do nothing in all of these places. A double-click on panel 1 now only
   selects.
+- **`kubectl edit` and `kubectl exec` have a way out.** `Alt+t` in their
+  terminal asks, then ends the session (an unsaved edit is dropped; nothing is
+  applied); `Esc` on the question goes back to the terminal. The key is shown in
+  the terminal's bottom border, in the editor too. Before, only the subprocess
+  exiting could close them.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.
