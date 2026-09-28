@@ -93,7 +93,7 @@
 - **panel 3 的 tab 列**：starship 風格的膠囊鏈，只有 active tab 是亮膠囊，其他坐在 crust 底；第一個 tab active 時跟 `[3]` 膠囊合併；tab 之間 active↔inactive 用 `E0B0`，inactive↔inactive 用 `E0B1` 細 chevron；尾端用 `E0B4` 收圓。tab 標籤一律同寬，`Logs` / `Events` 的 live / paused glyph 不論 active 與否都畫，切 tab 時 tab 列不伸縮（tdp L2）。
 - **邊框 hint**：上框右端 ` <hint>─`、下框左端 `─<hint>─`、下框右端 ` X of Y `。hint 與框同色系。放不下就整段靜默丟掉、不截斷；下框空間不夠時先丟左側 hint、保留捲動指示。
 - **focus 二態**（tdp L5）：focus 是雙線 `╔═╗` + Blue `#89b4fa`，非 focus 是圓角細線 `╭─╮` + Surface2 `#585b70`；兩套 box 字元同寬，切換零位移。框線粗細是不靠顏色的第二訊號。Blue 是結構色，跟 popup 層級色、使用者足跡的 Lavender 互不干涉。
-- **statusbar 一列、footer（status line）一列**，列數鎖死，內容放不下從尾端捨棄（tdp L3）。
+- **statusbar 一列、footer（status line）一列**，列數鎖死，內容放不下從尾端捨棄（tdp L3）。statusbar 的 context 與 namespace 是固定寬度的欄位（24 / 16 格，太長從中間截斷，跟 panel 2 的 Name 欄同一種做法），切 context / namespace 時後面的 chip 不位移（L2）；整列由 `fitRow()` 截到剛好終端機寬、badge 貼右，不交給 lipgloss 折行（L4）。`l4_test.go` 在多種終端機尺寸下量整個畫面：每一列剛好等於終端機寬、總列數剛好等於終端機高，含 popup 疊上去與超長的 EKS context 名稱。
 
 ## 設計決定
 

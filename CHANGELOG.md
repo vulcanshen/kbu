@@ -103,6 +103,11 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   (say a Deployment's Pods) with a compare anchor set, one `Esc` used to both
   drop the anchor and leave the drill; now the first `Esc` drops the anchor and
   the next one leaves the drill.
+- **The top bar stays one row.** A long context name (an EKS ARN, say) made
+  the status bar wrap onto two or three rows and push the whole screen down.
+  The context and namespace now have fixed-width fields — a long name is cut in
+  the middle — so the bar is always one row and switching namespace no longer
+  shifts the chips after it.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

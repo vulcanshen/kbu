@@ -146,23 +146,6 @@ truecolor，量背景：panel 的 powerline 膠囊、cursor 列、panel 3 active
 「依層數決定的 popup 邊框」補一句 dim。
 
 
-## 20. statusbar 的寬度跟著內容浮動，還會折成多列 —— L2、L3、L4
-
-**現況**：`statusbar.go` `ViewFull()` 把 `[C]ontext: <name>`、`[N]amespace: <name>` 直接串起來，後面接 `[Alt-t]erm`、`[C]ompare` chip；
-右邊的 badge（`! N errors`、`N warnings`、`✓ …`）寬度也隨內容變，切 context / namespace 時後面的 chip 左右位移。整段用
-`barStyle.Width(m.width − badge 寬)` 渲染，超寬時 lipgloss **折行**：2026-09-28 在 scratch 複本實測 80 欄，context `kind-dev` +
-namespace `kube-system` + 兩個 chip + `! 3 errors` 就折成 2 列；EKS ARN 那種長 context 折成 3 列，而且沒有 badge 的那幾列寬 68、
-不等於終端機寬。`panelSizes()` 把 statusbar 當 1 列算，折行時整個畫面比終端機高。dev-remarks「Panel 外框」寫「statusbar 一列……列數
-鎖死」，目前不成立。
-
-**規則**：L2 —— statusbar 等動態文字用固定寬度的欄位或 padding。L3 —— 常駐列的列數鎖死，放不下就截斷或從尾端捨棄，不折行。L4 ——
-每一列剛好等於終端機寬度。
-
-**怎麼改**：context 與 namespace 各給固定寬度的欄位（過長中間截斷，跟 panel 2 的 Name 欄同一種做法），chip 與 badge 用固定寬度；
-整列先截到終端機寬再 render，不交給 lipgloss 折行，放不下從尾端捨棄。補一個跨尺寸的整畫面測試（D6 的做法：多種終端機尺寸下每一列
-剛好等於終端機寬，含 popup 疊上去與長 context 名稱）—— 舊清單待確認的 L4 那題併進這裡，statusbar 正是這種測試會抓到的例子。
-
-
 ## 已經符合、不用修的（對照 v0.1.13）
 
 - **K1（letter hotkey 不佔 core key）**：`q` 只用在離開，`Space`、`?`、`Tab`、`Enter`、`Esc` 沒有被字母熱鍵借用；confirm 的 `y` / `n`、
