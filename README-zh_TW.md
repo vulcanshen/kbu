@@ -44,7 +44,7 @@
 - **比對（`C`）** — 比對同一種 kind 的兩個 resource，可選 unified 或左右並排（`L` 切換）。status 和伺服器管理的欄位都會先拿掉，你看到的只有真正寫進去的內容。
 - **有問題的一眼就看到** — status 欄只替需要注意的值上色：黃色是 pending 或降級、紅色是失敗。健康的 row 維持原色。
 - **Helm releases** — `helm` 在 `PATH` 上時，release 有專屬的檢視：manifest、values、notes、hooks；revision 歷史，一鍵 rollback。chart 管理的物件會被標記、擋掉誤編輯，也可以按 `.` 隱藏。
-- **KubeConfig contexts** — 唯讀檢視你的 kubeconfig，憑證永遠不會顯示。
+- **KubeConfig contexts** — 唯讀檢視你的 kubeconfig；在 context 上按 `Enter` 把 kbu 切換過去。憑證永遠不會顯示。
 
 ### 動手做事
 
@@ -121,7 +121,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | 鍵 | 行為 |
 |---|---|
 | **`Tab`** | 切換 panel 焦點（也可以直接按 `1` / `2` / `3` 跳轉）|
-| **`Enter`** | 鑽入 / 確認選擇 |
+| **`Enter`** | 對選到的東西做最直觀的事：鑽入（workload → 它的 pods）、打開不能鑽入的種類的 YAML、切換到 kubeconfig context、shell 進 container、rollback 到 Helm 版本。在 panel 1 把那個種類顯示到 panel 2；在 Logs / Events / Conditions tab 把 panel 放到全螢幕 |
 | **`Space`** | *這裡能幹嘛？* — 列出這個 panel 或 tab 能做的每一件事，最後一列 **Global operation** 是全域動作（namespace、context、Alterm、settings、app log、離開）|
 | **`Esc`** | 退回 — 回上一層 / 關閉 popup |
 
@@ -168,7 +168,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | 操作 | 行為 |
 |---|---|
 | **左鍵** 點 panel row | 切焦點到該 panel + cursor 移到該列 |
-| **雙擊** | 等同 `Enter`（鑽入 cursor 那列）|
+| **雙擊** | 在 panel 2、3 等同 `Enter`；在 panel 1 只選列 |
 | **右鍵** 點 row | 等同 `Space`（開那一列的 `Space` menu）|
 | **滾輪** 上 / 下 | 等同 `u` / `d`（半頁移動）。方向可在 Settings popup 切換 `scroll_direction: natural | reverse` |
 | **左鍵** 點 list popup 的列 | 選定該列（等同 cursor + `Enter`）|
@@ -181,7 +181,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | 鍵 | 位置 | 動作 |
 |---|---|---|
 | `Space` | Panel 2、Release row | `Space` menu 在 `YAML` 旁邊列出 release 的文件 — `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks`；每一份都開在 menu 上面，可以連看幾份 |
-| `Space` | Panel 3、History tab | `Space` menu 的 **Roll back to this revision**（目前部署的版本上變暗）；確認 popup 會顯示確切的 `helm rollback` 命令 |
+| `Enter` | Panel 3、History tab | rollback 到那個版本（`Space` menu 裡也有；目前部署的版本上不作用）；確認 popup 會顯示確切的 `helm rollback` 命令 |
 | `.` | 任何非 Releases 的 panel 2 list | 切換 helm-managed 物件的可見性 |
 
 ### PTY popups（Alterm、edit、shell exec）

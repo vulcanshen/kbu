@@ -559,12 +559,10 @@ func (m SidebarModel) handleKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 	case tea.KeyUp:
 		return m.moveUp(visible)
 	case tea.KeyEnter:
-		// Enter no longer forwards focus to panel 2. Mouse use brought
-		// double-click → Enter synthesis, and "click row → focus shifts
-		// to another panel" felt wrong (the user just pointed at THIS
-		// panel — they don't expect the focus to leave). Keyboard
-		// users still have Tab / 1 / 2 / 3 to switch focus, so this
-		// only costs one extra key per panel switch.
+		// Enter on a kind moves focus to panel 2 — AppModel.enterKey
+		// handles it before the sidebar sees the key (a double-click
+		// on panel 1 only selects, so it doesn't send focus away).
+		// On a category header there is nothing to do.
 		return m, nil
 	case tea.KeyEscape:
 		if m.searchQuery != "" {

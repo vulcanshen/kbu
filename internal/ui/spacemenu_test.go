@@ -197,8 +197,8 @@ func TestSpaceMenu_Panel1(t *testing.T) {
 	m.sidebar.SnapCursorToKind(k8s.ResourcePods)
 
 	_, items := openedMenu(t, m)
-	if got := regionKeys(items, "item operation"); strings.Join(got, " ") != "P S y" {
-		t.Errorf("panel 1 item operation = %v, want P S y", got)
+	if got := regionKeys(items, "item operation"); strings.Join(got, " ") != "P S enter y" {
+		t.Errorf("panel 1 item operation = %v, want P S enter y", got)
 	}
 	if got := regionKeys(items, "panel operation"); strings.Join(got, " ") != "D /" {
 		t.Errorf("panel 1 panel operation = %v, want D /", got)

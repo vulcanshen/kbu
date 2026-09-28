@@ -432,7 +432,11 @@ func panel2ItemOps(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool,
 	if compare.locked && compare.cursorComparable {
 		items = append(items, menuItem{label: "Compare to anchor", key: "C", hint: "open the YAML diff popup", opens: true})
 	}
-	items = append(items, menuItem{label: "YAML", key: "Y", hint: "view resource manifest", opens: true})
+	yaml := menuItem{label: "YAML", key: "Y", hint: "view resource manifest", opens: true}
+	if !rt.SupportsDrillDown() && rt != k8s.ResourceContexts {
+		yaml.hint = "view resource manifest (also Enter)"
+	}
+	items = append(items, yaml)
 	if resourceAllowsEdit(rt) {
 		items = append(items, menuItem{label: "Edit", key: "E", hint: "kubectl edit", opens: true, disabled: helmManaged})
 	}

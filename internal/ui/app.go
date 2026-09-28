@@ -725,7 +725,11 @@ func (m *AppModel) handleMousePress(msg tea.MouseMsg) tea.Cmd {
 		// when this turns out to also be the first half of a double.
 		m.setPanel(panel)
 		selCmd := m.cursorToScreenY(panel, msg.Y)
-		if isDouble {
+		// A double-click is Enter on panels 2 and 3. On panel 1 it only
+		// selects: Enter there moves focus to panel 2, and a click on
+		// panel 1 shouldn't send focus away from where the user
+		// pointed (tdp X2 leaves the mapping to the app).
+		if isDouble && panel != SidebarPanel {
 			// Reset so a third press isn't read as another double.
 			m.lastLeftPressAt = time.Time{}
 			enterCmd := func() tea.Msg { return tea.KeyMsg{Type: tea.KeyEnter} }
@@ -2388,9 +2392,7 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 			return nil
 		}
 	case "enter":
-		if m.activePanel == TablePanel && m.drillDownPod == nil {
-			return m.enterDrillDown()
-		}
+		return m.enterKey()
 	case "esc":
 		// tdp F3 — auto-dismiss toast still has to accept Esc. Toast
 		// is non-blocking (keys pass through to panels), so it
@@ -2539,23 +2541,7 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 			}
 		}
 	case "z":
-		// Toggle expand on the focused panel. If anything is expanded
-		// already, restore. Otherwise expand whichever panel (Table or
-		// Detail) currently has focus. Single-key toggle replaces the
-		// old `=`/`-` pair.
-		if m.detailExpanded || m.tableExpanded {
-			m.detailExpanded = false
-			m.tableExpanded = false
-			return nil
-		}
-		if m.activePanel == DetailPanel {
-			m.detailExpanded = true
-			return nil
-		}
-		if m.activePanel == TablePanel {
-			m.tableExpanded = true
-			return nil
-		}
+		return m.toggleZoom()
 	case "y":
 		return copyToClipboardCmd(m.focusedPanelContent())
 	case "Y":
@@ -2606,6 +2592,84 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 		return m.openSpaceMenu()
 	}
 	return m.dispatchToPanel(msg)
+}
+
+// enterKey is Enter on a panel (tdp K3): the most obvious action for the
+// focused item, the same one for the same kind of item everywhere.
+//   - panel 1, a kind: show it in panel 2 (focus moves there)
+//   - panel 2: drill in where the kind drills (Pods → containers,
+//     workloads → pods, …); a KubeConfig context: switch to it (after a
+//     confirm); a container: shell into it; any other kind: its YAML
+//   - panel 3: Relatives drills into the entry; History rolls back to the
+//     revision (after a confirm); a content tab (Logs, Events,
+//     Conditions, Info) — no item to act on — full-screens the panel,
+//     the same as z
+func (m *AppModel) enterKey() tea.Cmd {
+	enter := tea.KeyMsg{Type: tea.KeyEnter}
+	switch m.activePanel {
+	case SidebarPanel:
+		if m.sidebar.CursorResourceType() == "" {
+			return m.dispatchToPanel(enter)
+		}
+		m.setPanel(TablePanel)
+		return nil
+	case TablePanel:
+		if m.drillDownPod != nil {
+			return m.execShell()
+		}
+		idx := m.table.SelectedRow()
+		if idx < 0 || idx >= len(m.items) {
+			return nil
+		}
+		item := m.items[idx]
+		switch {
+		case m.currentResource == k8s.ResourceContexts:
+			return m.confirmContextSwitch(item.Name)
+		case m.currentResource.SupportsDrillDown():
+			return m.enterDrillDown()
+		}
+		return m.openYamlFor(m.currentResource, item)
+	case DetailPanel:
+		switch m.detail.ActiveTabName() {
+		case "Relatives":
+			return m.dispatchToPanel(enter)
+		case "History":
+			return m.confirmRollback()
+		}
+		return m.toggleZoom()
+	}
+	return nil
+}
+
+// toggleZoom is z: full-screen the focused panel 2 or 3, or restore.
+func (m *AppModel) toggleZoom() tea.Cmd {
+	if m.detailExpanded || m.tableExpanded {
+		m.detailExpanded = false
+		m.tableExpanded = false
+		return nil
+	}
+	switch m.activePanel {
+	case DetailPanel:
+		m.detailExpanded = true
+	case TablePanel:
+		m.tableExpanded = true
+	}
+	return nil
+}
+
+// confirmContextSwitch asks before switching kbu to another kubeconfig
+// context (Enter on a KubeConfig Contexts row); accepting takes the same
+// path as picking it in the context picker. The context kbu is already
+// on is not a switch: nothing happens.
+func (m *AppModel) confirmContextSwitch(name string) tea.Cmd {
+	if name == "" || name == m.k8sClient.ContextName() {
+		return nil
+	}
+	onConfirm := func() tea.Msg { return ContextChangedMsg{Context: name} }
+	m.confirm.SetSize(m.width, m.height)
+	m.confirm.SetLayer(m.popupDepth() + 1)
+	return m.confirm.Show(ConfirmContextSwitch, "Switch kbu to context "+name+"?",
+		"~/.kube/config is not changed", onConfirm)
 }
 
 // quitCmd starts the leave flow (tdp K9). kbu leaves straight away — no
