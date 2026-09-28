@@ -44,6 +44,11 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **Opening a picker from a menu keeps the menu.** Sort from panel 1's
   `Space` menu now stacks over the menu (`Esc` returns to it), like every
   other popup a menu opens.
+- **Sorting asks for the direction in its own popup.** Picking a column opens
+  the direction step over the column picker instead of swapping the picker's
+  contents; `Esc` there goes back to the columns (it used to end the whole
+  sort flow). Reset is always listed, dimmed while there is nothing to reset,
+  so the column picker no longer grows a row while it is open.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

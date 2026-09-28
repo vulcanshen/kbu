@@ -36,7 +36,7 @@ type stackLayer interface {
 func (m *AppModel) stackOrder() []stackLayer {
 	return []stackLayer{
 		&m.hintPopup, &m.spaceMenu, &m.globalMenu,
-		&m.listPicker, &m.settingsPopup, &m.namespacePicker, &m.contextPicker, &m.appLog,
+		&m.listPicker, &m.sortDirPicker, &m.settingsPopup, &m.namespacePicker, &m.contextPicker, &m.appLog,
 		&m.breadcrumbPopup, &m.yamlPopup, &m.comparePopup,
 		&m.confirm, &m.help,
 		m.shellPty, m.txPty,

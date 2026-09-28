@@ -105,10 +105,13 @@ type AppModel struct {
 	breadcrumbPopup BreadcrumbPopupModel
 	// spaceMenu is every panel's Space menu (tdp M2); globalMenu is the
 	// global operation popup its last row opens (M4).
-	spaceMenu     MenuPopupModel
-	globalMenu    MenuPopupModel
-	hintPopup     HintPopupModel
+	spaceMenu  MenuPopupModel
+	globalMenu MenuPopupModel
+	hintPopup  HintPopupModel
+	// listPicker is the sort flow's column step; sortDirPicker is its
+	// direction step, stacked on it (tdp F1: one popup per step).
 	listPicker    ListPickerModel
+	sortDirPicker ListPickerModel
 	settingsPopup SettingsPopupModel
 
 	activePanel     Panel
@@ -167,13 +170,13 @@ type AppModel struct {
 	// from the watcher stream. Nil = not in compare mode.
 	compareLock *compareLockedRef
 
-	// Sort flow in-flight state. The Sort menu is a 3-popup chain
-	// (sidebar hint → column picker → direction picker); these fields
+	// Sort flow in-flight state. The flow is two stacked popups — the
+	// column picker, then the direction picker over it; these fields
 	// carry the user's column choice across the column → direction
 	// step so the direction commit knows which column to persist.
-	// Cleared on direction commit, on cancel at either step, and on
-	// any path that closes the listPicker. Empty kind/column = no
-	// flow in progress.
+	// sortFlowColumn clears when the direction step ends (commit or
+	// Esc); sortFlowKind when the column picker closes. Empty
+	// kind/column = no flow in progress.
 	sortFlowKind   k8s.ResourceType
 	sortFlowColumn string
 
@@ -377,29 +380,38 @@ func (m *AppModel) togglePinnedKind(rt k8s.ResourceType) tea.Cmd {
 	return nil
 }
 
-// openSortColumnPicker opens the listPicker as the first step of the
-// Sort flow. Items are the kind's column titles; the column currently
-// in use (if any) is badged with its direction arrow so the user
-// sees where they are now. Caches kind in sortFlowKind so the
-// direction step knows what kind it's committing for even if the
-// sidebar cursor drifts mid-flow.
+// openSortColumnPicker opens the column picker, the first step of the
+// Sort flow. Items are the kind's column titles; a column already in the
+// sort chain is badged with its priority and direction. Caches kind in
+// sortFlowKind so the direction step knows what kind it's committing for
+// even if the sidebar cursor drifts mid-flow.
 func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
-	def := sortRegistry().Get(rt)
-	if def == nil || len(def.Columns) == 0 {
+	items := sortColumnItems(rt, m.cfg)
+	if items == nil {
 		return nil
 	}
+	def := sortRegistry().Get(rt)
 	m.sortFlowKind = rt
 	m.sortFlowColumn = ""
-	chain := m.cfg.GetSort(def.KubectlName)
-	// When a chain exists, render TWO operation regions (fields +
-	// reset) with section headers; flat single-region picker drops
-	// the headers to stay visually quiet. Matches the popup-design
-	// mindset: only annotate regions when there is more than one.
-	multiRegion := len(chain) > 0
-	items := make([]ListPickerItem, 0, len(def.Columns)+4)
-	if multiRegion {
-		items = append(items, ListPickerItem{Header: true, Label: "fields"})
+	title := sortPopupIcon + " Sort " + def.DisplayName + " by…"
+	m.listPicker.SetSize(m.width, m.height)
+	m.listPicker.SetLayer(m.popupDepth() + 1)
+	return m.listPicker.Open("sort:column", title, items)
+}
+
+// sortColumnItems builds the column picker's rows: the columns under
+// "fields" (the cursor's group, tdp M8), then Reset under "all". Reset is
+// always listed — dimmed while there is no sort to reset (tdp M6) — so
+// the picker's height is fixed from the moment it opens and doesn't grow
+// a row when the first tier lands (F7).
+func sortColumnItems(rt k8s.ResourceType, cfg *config.Config) []ListPickerItem {
+	def := sortRegistry().Get(rt)
+	if def == nil || len(def.Columns) == 0 || cfg == nil {
+		return nil
 	}
+	chain := cfg.GetSort(def.KubectlName)
+	items := make([]ListPickerItem, 0, len(def.Columns)+4)
+	items = append(items, ListPickerItem{Header: true, Label: "fields"})
 	for _, c := range def.Columns {
 		it := ListPickerItem{Key: c.Title, Label: c.Title}
 		// Columns in the chain get a priority+direction badge —
@@ -410,21 +422,18 @@ func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
 		}
 		items = append(items, it)
 	}
-	if multiRegion {
-		items = append(items, ListPickerItem{Separator: true})
-		items = append(items, ListPickerItem{Header: true, Label: "all"})
-		items = append(items, ListPickerItem{Key: sortResetKey, Label: "Reset " + resetIcon})
+	items = append(items, ListPickerItem{Separator: true})
+	items = append(items, ListPickerItem{Header: true, Label: "all"})
+	items = append(items, ListPickerItem{Key: sortResetKey, Label: "Reset " + resetIcon, Disabled: len(chain) == 0})
+	return items
+}
+
+// refreshSortColumnPicker redraws the open column picker's badges (and
+// Reset's dimming) in place after a tier lands or the chain resets.
+func (m *AppModel) refreshSortColumnPicker(rt k8s.ResourceType) {
+	if items := sortColumnItems(rt, m.cfg); items != nil && m.listPicker.owns() {
+		m.listPicker.SetItems(items)
 	}
-	title := sortPopupIcon + " Sort " + def.DisplayName + " by…"
-	m.listPicker.SetSize(m.width, m.height)
-	// SetLayer stamps the layer color; popupDepth() counts the picker
-	// itself when it's already active, which would double-bump the layer
-	// on a swap (column → direction, or direction → loop-back column).
-	// Only stamp on first open — the swap path keeps its original layer.
-	if !m.listPicker.owns() {
-		m.listPicker.SetLayer(m.popupDepth() + 1)
-	}
-	return m.listPicker.Open("sort:column", title, items)
 }
 
 // sortTierBadge formats the priority + direction marker used in the
@@ -441,14 +450,12 @@ func sortTierBadge(idx int, direction string, chainLen int) string {
 	return fmt.Sprintf("(%d) %s", idx+1, arrow)
 }
 
-// openSortDirectionPicker is the second step. Always offers
-// Ascending / Descending; offers Unset ONLY when the column is
-// already in the chain (otherwise Unset would be a guaranteed no-op
-// and surfacing it just clutters the picker — same logic the column
-// step uses to hide Reset when there's nothing to reset).
-//
-// When the column IS in the chain, its current direction gets
-// badged "current" so the user sees their existing pick.
+// openSortDirectionPicker opens the second step over the column picker
+// (tdp F1, F4): Esc on it returns to the column picker. Always offers
+// Ascending / Descending; offers Unset ONLY when the column is already in
+// the chain — for a column that isn't sorted there is no tier to unset.
+// When the column IS in the chain, its current direction gets badged
+// "current" so the user sees their existing pick.
 func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) tea.Cmd {
 	def := sortRegistry().Get(rt)
 	if def == nil {
@@ -469,58 +476,44 @@ func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) t
 		items = append(items, ListPickerItem{Key: "unset", Label: "Unset"})
 	}
 	title := sortPopupIcon + " Sort " + def.DisplayName + " by " + column + "…"
-	m.listPicker.SetSize(m.width, m.height)
-	// Swap path: listPicker is already active from the column step, so
-	// skip the layer re-stamp — same instance, same layer (see the same
-	// guard in openSortColumnPicker for the rationale).
-	if !m.listPicker.owns() {
-		m.listPicker.SetLayer(m.popupDepth() + 1)
-	}
-	return m.listPicker.Open("sort:direction", title, items)
+	m.sortDirPicker.SetSize(m.width, m.height)
+	m.sortDirPicker.SetLayer(m.popupDepth() + 1)
+	return m.sortDirPicker.Open("sort:direction", title, items)
 }
 
-// commitSortFlow finalises one tier — column + direction. Persists
-// the upsert (or removes the tier on "unset"), re-applies the sort
-// to live items, then LOOPS BACK to the column picker so the user
-// can stack additional tiers without re-invoking O each time.
-// Esc on the looped column picker is the canonical "I'm done"
-// gesture (ListPickerCancelMsg path), preserving the Esc=close
-// contract.
-//
-// One-tier users pay a single extra Esc compared to the old
-// auto-close model; multi-tier users save an O-press per tier and
-// keep their cognitive context inside the same popup.
+// commitSortFlow finalises one tier — column + direction. Persists the
+// upsert (or removes the tier on "unset"), re-applies the sort to live
+// items, closes the direction step and refreshes the column picker's
+// badges in place, so the user can stack another tier or Esc out. The
+// column picker stays open until the user closes it.
 func (m *AppModel) commitSortFlow(direction string) tea.Cmd {
 	rt := m.sortFlowKind
 	column := m.sortFlowColumn
-	// Only sortFlowColumn is consumed by the direction step;
-	// sortFlowKind stays set across the loop.
 	m.sortFlowColumn = ""
-	// Defensive: same "popup stays open" rule as resetSortFlow —
-	// inconsistent state (missing kind / column / cfg / registry
-	// entry) is treated as a silent no-op so the user keeps the
-	// picker they invoked and can Esc out on their own terms.
+	closeDir := m.sortDirPicker.Close()
+	// Defensive: inconsistent state (missing kind / column / cfg /
+	// registry entry) only ends the direction step.
 	if rt == "" || column == "" || m.cfg == nil {
-		return nil
+		return closeDir
 	}
 	def := sortRegistry().Get(rt)
 	if def == nil {
-		return nil
+		return closeDir
 	}
 	chain := m.cfg.GetSort(def.KubectlName)
 	switch direction {
 	case "unset":
-		// Unset removes just THIS tier from the chain. UI hides
-		// Unset for not-in-chain columns, but the guard stays as
-		// belt-and-suspenders against stale picker state.
+		// Unset removes just THIS tier from the chain. The direction
+		// step only offers Unset for in-chain columns; the guard stays
+		// against stale picker state.
 		if chain.IndexOf(column) < 0 {
-			return m.openSortColumnPicker(rt)
+			return closeDir
 		}
 		m.cfg.UnsetSortColumn(def.KubectlName, column)
 	case config.SortDirectionAscending, config.SortDirectionDescending:
 		m.cfg.SetSort(def.KubectlName, column, direction)
 	default:
-		return m.openSortColumnPicker(rt)
+		return closeDir
 	}
 	var saveErrCmd tea.Cmd
 	if err := m.cfg.Save(); err != nil {
@@ -538,44 +531,23 @@ func (m *AppModel) commitSortFlow(direction string) tea.Cmd {
 		rows := augmentRowsWithHelm(m.items, m.currentResource)
 		m.table.SetRows(rows)
 	}
-	// Loop back to column picker — Open swaps content in place
-	// (listPicker stays open), the updated chain badges show the
-	// just-committed tier with its "(N)" priority + arrow.
-	reopenCmd := m.openSortColumnPicker(rt)
-	return tea.Batch(reopenCmd, saveErrCmd)
+	m.refreshSortColumnPicker(rt)
+	return tea.Batch(closeDir, saveErrCmd)
 }
 
-// resetSortFlow is the "Reset" shortcut wired to the column picker:
-// drop the entire chain for this kind, re-apply the fallback sort
-// to live items, then LOOP BACK to the column picker so the user
-// can keep building a fresh chain without re-invoking the flow.
-// Only reachable when the chain has at least one tier (the column
-// picker omits the row otherwise), so we don't need the
-// "reset-against-nothing is a no-op" guard that commitSortFlow has.
-//
-// Mirrors commitSortFlow's loop pattern: sortFlowKind stays set
-// across the swap; Esc on the re-opened picker is the canonical
-// "I'm done" exit.
+// resetSortFlow is the column picker's Reset row: drop the entire chain
+// for this kind, re-apply the fallback sort to live items, and refresh
+// the column picker in place (Reset dims again). With nothing to reset
+// the row is dimmed and never reaches here; the guard stays defensive.
 func (m *AppModel) resetSortFlow() tea.Cmd {
 	rt := m.sortFlowKind
-	// sortFlowColumn was already consumed by the column step that
-	// fired Reset; sortFlowKind stays set across the loop.
 	m.sortFlowColumn = ""
-	// Defensive: in inconsistent state (kind unset, config absent,
-	// registry no longer knows the kind) we can't refresh the
-	// picker — but Reset must never close the popup unilaterally,
-	// so just no-op and let the user Esc out on their own terms.
 	if rt == "" || m.cfg == nil {
 		return nil
 	}
 	def := sortRegistry().Get(rt)
-	if def == nil {
+	if def == nil || len(m.cfg.GetSort(def.KubectlName)) == 0 {
 		return nil
-	}
-	if len(m.cfg.GetSort(def.KubectlName)) == 0 {
-		// Defensive: nothing to reset. Refresh the picker (still
-		// in flat single-region state) so cursor lands sanely.
-		return m.openSortColumnPicker(rt)
 	}
 	m.cfg.ResetSort(def.KubectlName)
 	var saveErrCmd tea.Cmd
@@ -589,11 +561,8 @@ func (m *AppModel) resetSortFlow() tea.Cmd {
 		rows := augmentRowsWithHelm(m.items, m.currentResource)
 		m.table.SetRows(rows)
 	}
-	// Loop back: the column picker re-renders without the chain
-	// badges, the Reset row, and the region headers (chain is now
-	// empty so multiRegion is false).
-	reopenCmd := m.openSortColumnPicker(rt)
-	return tea.Batch(reopenCmd, saveErrCmd)
+	m.refreshSortColumnPicker(rt)
+	return saveErrCmd
 }
 
 // applySortToItems re-orders m.items per the current kind's saved
@@ -1288,6 +1257,7 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 		globalMenu:         NewGlobalMenuModel(t),
 		hintPopup:          NewHintPopupModel(t),
 		listPicker:         NewListPickerModel(t),
+		sortDirPicker:      NewSortDirPickerModel(t),
 		settingsPopup:      NewSettingsPopupModel(t),
 		activePanel:        initialPanel,
 		theme:              t,
@@ -1418,6 +1388,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.listPicker.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.sortDirPicker.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.settingsPopup.HandleTick(tickMsg); c != nil {
@@ -2220,9 +2193,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ListPickerActionMsg:
 		// Sort flow commits routed by PickerID. Column step picks a
-		// column → opens the direction step (in-place swap on the
-		// same listPicker). Direction step persists the choice and
-		// closes the picker.
+		// column → opens the direction step over it. Direction step
+		// persists the choice and closes itself, back to the column
+		// step.
 		switch msg.PickerID {
 		case "sort:column":
 			if msg.Key == sortResetKey {
@@ -2284,11 +2257,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.hintPopup.OpenWithActions(title, actions, nil)
 
 	case ListPickerCancelMsg:
-		// Esc at any sort step: drop in-flight kind/column so a
-		// later sort flow starts fresh. The picker's own close
-		// animation is already queued by the Cancel msg.
+		// Esc on the direction step returns to the column step (tdp
+		// F4): only the chosen column is dropped. Esc on the column
+		// step ends the flow. The picker's own close animation is
+		// already queued by the Cancel msg.
 		switch msg.PickerID {
-		case "sort:column", "sort:direction":
+		case "sort:direction":
+			m.sortFlowColumn = ""
+		case "sort:column":
 			m.sortFlowKind = ""
 			m.sortFlowColumn = ""
 		}
