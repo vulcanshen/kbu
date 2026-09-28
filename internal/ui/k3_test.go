@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -159,3 +160,32 @@ func TestS3_AnyKeyOnlyClosesTheSplash(t *testing.T) {
 		}
 	}
 }
+
+// tdp F5: a panel 2 drill that fails says so at once — a warn toast and
+// an App log line — instead of Enter silently doing nothing. An empty
+// result says so too.
+func TestF5_DrillFailureIsVisible(t *testing.T) {
+	failed := drillResultMsg(k8s.ResourceDeployments, "web", k8s.ResourcePods, nil, errBoom)
+	m := stackTestApp(t)
+	updated, _ := m.Update(failed)
+	got := updated.(AppModel)
+	if !got.toast.Owns() || got.toast.level != toastWarn {
+		t.Error("a failed drill must raise a warn toast")
+	}
+	if got.appLog.UnreadWarnCount() == 0 {
+		t.Error("a failed drill must be written to the App log")
+	}
+
+	empty := drillResultMsg(k8s.ResourceCronJobs, "nightly", k8s.ResourceJobs, []k8s.ResourceItem{}, nil)
+	updated, _ = stackTestApp(t).Update(empty)
+	if got := updated.(AppModel); !got.toast.Owns() || !strings.Contains(got.toast.message, "nightly") {
+		t.Errorf("an empty drill must say there is nothing under nightly, got %q", got.toast.message)
+	}
+
+	ok := drillResultMsg(k8s.ResourceDeployments, "web", k8s.ResourcePods, []k8s.ResourceItem{{Name: "p"}}, nil)
+	if _, isDrill := ok.(drillDownMsg); !isDrill {
+		t.Errorf("children must drill, got %T", ok)
+	}
+}
+
+var errBoom = errors.New("forbidden")

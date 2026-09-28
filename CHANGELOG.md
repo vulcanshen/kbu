@@ -91,6 +91,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   exiting could close them.
 - **Any key closes the splash.** It used to answer only `Esc`, `Enter` and
   `Space` and ignore the rest; now any key closes it, and only closes it.
+- **A drill that fails says so.** `Enter` on a panel 2 row whose children
+  couldn't be fetched (RBAC, API error) did nothing at all; it now shows a
+  warning toast and writes the reason to the App log. A row with nothing under
+  it (a CronJob with no Jobs kept) says so in a toast.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

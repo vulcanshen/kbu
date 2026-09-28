@@ -163,17 +163,6 @@ namespace `kube-system` + 兩個 chip + `! 3 errors` 就折成 2 列；EKS ARN �
 剛好等於終端機寬，含 popup 疊上去與長 context 名稱）—— 舊清單待確認的 L4 那題併進這裡，statusbar 正是這種測試會抓到的例子。
 
 
-## 22. panel 2 drill-down 失敗時沒有任何訊息 —— F5
-
-**現況**：`app.go` `enterDrillDown()` 的非 Pod 分支，`k8s.FetchChildResources()` 回錯誤（或零個子項）時 cmd 回 `nil`：`Enter` 按下去
-什麼都沒發生，App log 也沒有記錄。Relatives 的 drill 失敗（`relativeDrillFetchedMsg`、`resourceFetchedForDrillMsg`）有 warn toast 與
-App log，這裡沒有。
-
-**規則**：F5 —— 錯誤必須立刻看得到（toast 或 popup），`Esc` 可關，不能阻塞 app。
-
-**怎麼改**：錯誤寫進 App log 並跳 warn toast（跟 Relatives 的 `drill failed` 同一種）；零個子項不是錯誤，要不要說一聲由 kbu 決定。
-
-
 ## 23. 刪除完成後 Space menu 還留在畫面上 —— T1
 
 **現況**：panel 2 Space menu 選 `[D]elete` → confirm 疊在 menu 上；`Enter` 接受後 confirm 關掉、`deleteResource()` 在背景跑，menu 還開著，

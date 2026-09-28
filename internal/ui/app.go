@@ -2083,6 +2083,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, discoverCRDs(newClient))
 		return m, tea.Batch(cmds...)
 
+	case drillDownFailedMsg:
+		if msg.err != nil {
+			m.appLog.Warn(fmt.Sprintf("drill %s/%s: %s", msg.parentType.KubectlName(), msg.parentName, msg.err.Error()))
+			return m, m.toast.ShowWarn("drill failed: " + msg.err.Error())
+		}
+		what := "children"
+		if msg.childType != "" {
+			what = msg.childType.String()
+		}
+		return m, m.toast.Show("no " + what + " under " + msg.parentName)
+
 	case drillDownMsg:
 		if msg.children == nil {
 			return m, nil
@@ -2970,20 +2981,31 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 
 	// §1.10 — see Pod branch above.
 	closeAll := m.closeAllBlockingPopups()
+	parentType := m.currentResource
+	clientset := m.k8sClient.Clientset()
 	return tea.Batch(closeAll, func() tea.Msg {
-		childType, children, err := k8s.FetchChildResources(
-			context.Background(), m.k8sClient.Clientset(), m.currentResource, item,
-		)
-		if err != nil || len(children) == 0 {
-			return nil
-		}
-		return drillDownMsg{
-			parentType: m.currentResource,
-			parentName: item.Name,
-			childType:  childType,
-			children:   children,
-		}
+		childType, children, err := k8s.FetchChildResources(context.Background(), clientset, parentType, item)
+		return drillResultMsg(parentType, item.Name, childType, children, err)
 	})
+}
+
+// drillDownFailedMsg: a panel 2 drill fetched nothing to show — an error,
+// or no children at all.
+type drillDownFailedMsg struct {
+	parentType k8s.ResourceType
+	parentName string
+	childType  k8s.ResourceType
+	err        error
+}
+
+// drillResultMsg turns a child fetch into the message the drill handles:
+// the children, or why there are none — a failure must be visible at once
+// (tdp F5), and an empty result shouldn't look like Enter was ignored.
+func drillResultMsg(parentType k8s.ResourceType, parentName string, childType k8s.ResourceType, children []k8s.ResourceItem, err error) tea.Msg {
+	if err != nil || len(children) == 0 {
+		return drillDownFailedMsg{parentType: parentType, parentName: parentName, childType: childType, err: err}
+	}
+	return drillDownMsg{parentType: parentType, parentName: parentName, childType: childType, children: children}
 }
 
 func (m *AppModel) exitDrillDown() tea.Cmd {
