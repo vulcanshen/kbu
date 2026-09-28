@@ -97,34 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 14. 模式裡的 core key：拖曳與 YAML 的 visual —— K11、M1、M3
-
-**現況**：
-
-- 拖曳（panel 1，`sidebar.go` `handleDragKey()`；`app.go` `case tea.KeyMsg` 開頭把 `Ctrl-C` 以外的鍵都送給 sidebar）：`j` / `k`
-  移動、`Enter` / `D` 放下；`Space` 送 `SidebarDragRequestDropMenuMsg`，開一個只有 `Drop` 一列的 `hintPopup`（可以執行的模式
-  按鍵清單）；其餘 —— `Esc`、`Tab`、`1–3`、`q`、`?` —— 一律取消拖曳；`Ctrl-C` 直接 `tea.Quit`（第 13 條）。模式的鍵只揭露在一個
-  置中、不會自己消失的 sticky toast（`SidebarDragEnterMsg`：`Drag mode · j/k move · Enter or D drop · anything else cancels`）與
-  panel 1 標題的 `[D]rop`。
-- YAML popup 的 visual（`yamlpopup.go` `Update()` 的 `v`）：`Esc` 離開 visual 沒問題；但 `Space` 關掉整個 YAML popup，`?`、`q`、
-  `Ctrl-C`、`Tab` 沒有反應。
-
-**規則**：K11（v0.1.10 起）—— 模式裡 `Space` **不開任何 menu、不作用**；`?` 是這個模式的 key reference（唯讀）；`Esc` 離開模式、
-回到進入前的狀態；`q` / `Ctrl-C` 照 K9 進入離開流程；`Tab` 可以暫停，但按了要有回應（說明先 `Esc`）。模式裡沒有任何可以執行的
-按鍵清單；模式自己的鍵直接按，揭露在 `?` 與 footer / 下框 hint；footer 照樣有 `?`（M1）。
-
-**怎麼改**：
-
-- 拖曳：`Space` 不作用（不開 menu，也不取消）；`SidebarDragRequestDropMenuMsg`、`HintActionMsg` 的 `DropPinned` 與它的 `hintPopup`
-  接線整個拿掉（`TestSidebarModel_Drag_SpaceOpensDropMenuNotCancel` 改寫成「Space 不作用、不取消」）。`?` 開拖曳模式的 key reference
-  （`j` / `k`、`Enter` / `D`、`Esc`）；`q` / `Ctrl-C` 走離開流程（離開前照舊取消拖曳、還原順序）；`Tab` 與數字鍵回一個 toast
-  「先 `Esc` 離開拖曳」。其他鍵仍取消拖曳可以保留（mouse 也是）。模式的鍵搬到 footer 或 panel 1 下框 hint（`?` 開頭、不必列
-  `Space`），sticky toast 可以拿掉。
-- YAML visual：`Space` 不作用；`?` 開 visual 模式的 key reference；`q` / `Ctrl-C` 照第 13 條；`Tab` 回 toast。
-- dev-remarks「功能筆記」的拖曳段（Drop 精簡 menu、sticky toast 帶著鍵盤契約）、「分級的 toast 通知」的 sticky 版、YAML popup 段
-  一起改。
-
-
 ## 15. 搜尋列打不出空白 —— K8
 
 **現況**：各搜尋列的 `handleSearchKey()` 只把 `tea.KeyRunes` 當字元（`table.go`、`sidebar.go`、`yamlpopup.go`、`namespace.go`、

@@ -35,7 +35,7 @@ type stackLayer interface {
 // sit on top.
 func (m *AppModel) stackOrder() []stackLayer {
 	return []stackLayer{
-		&m.hintPopup, &m.spaceMenu, &m.globalMenu,
+		&m.spaceMenu, &m.globalMenu,
 		&m.listPicker, &m.sortDirPicker, &m.settingsPopup, &m.namespacePicker, &m.contextPicker, &m.appLog,
 		&m.breadcrumbPopup, &m.yamlPopup, &m.comparePopup,
 		&m.confirm, &m.help,
@@ -61,7 +61,7 @@ func (m *AppModel) topLayer() stackLayer {
 func isMenuLayer(l stackLayer) bool {
 	switch l.(type) {
 	case *MenuPopupModel, *ListPickerModel, *SettingsPopupModel,
-		*HintPopupModel, *BreadcrumbPopupModel,
+		*BreadcrumbPopupModel,
 		*NamespacePickerModel, *ContextPickerModel, *ConfirmModel:
 		return true
 	}
@@ -72,23 +72,6 @@ func isMenuLayer(l stackLayer) bool {
 //
 // Each popup keeps its own value-receiver Update / HandleMouse; these
 // thin pointer-receiver wrappers let the stack drive them in place.
-
-func (m *HintPopupModel) owns() bool          { return m.animator.Owns() }
-func (m *HintPopupModel) ready() bool         { return m.animator.IsInteractive() }
-func (m *HintPopupModel) drawn() bool         { return m.animator.IsActive() }
-func (m *HintPopupModel) resize(w, h int)     { m.SetSize(w, h) }
-func (m *HintPopupModel) render() string      { return m.RenderPopup() }
-func (m *HintPopupModel) closeLayer() tea.Cmd { return m.Close() }
-func (m *HintPopupModel) key(k tea.KeyMsg) tea.Cmd {
-	var c tea.Cmd
-	*m, c = m.Update(k)
-	return c
-}
-func (m *HintPopupModel) click(msg tea.MouseMsg, w, h int) tea.Cmd {
-	var c tea.Cmd
-	*m, c = m.HandleMouse(msg, w, h)
-	return c
-}
 
 func (m *MenuPopupModel) owns() bool          { return m.animator.Owns() }
 func (m *MenuPopupModel) ready() bool         { return m.animator.IsInteractive() }

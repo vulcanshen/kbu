@@ -1011,11 +1011,9 @@ func TestSidebarModel_Drag_EscCancelsAndReverts(t *testing.T) {
 	}
 }
 
-func TestSidebarModel_Drag_SpaceOpensDropMenuNotCancel(t *testing.T) {
-	// Space is one of kbu's core gestures (Tab/Enter/Esc/Space) — in
-	// drag mode it opens the drop-only menu instead of cancelling
-	// like every other non-j/k/D/Enter key. Sidebar emits the
-	// request msg; app.go renders the popup.
+func TestSidebarModel_Drag_SpaceDoesNothing(t *testing.T) {
+	// tdp K11: in a mode Space opens no menu and does nothing — it
+	// neither opens the old drop-only menu nor cancels the drag.
 	m, original := pinnedDragSetup()
 	m.EnterDrag()
 	m, _ = m.Update(keyMsg('j'))
@@ -1031,11 +1029,8 @@ func TestSidebarModel_Drag_SpaceOpensDropMenuNotCancel(t *testing.T) {
 	if pinnedEqual(stillDragging.PinnedKinds(), original) {
 		t.Error("Space mid-drag must NOT revert pinned (no cancel)")
 	}
-	if cmd == nil {
-		t.Fatal("Space must emit SidebarDragRequestDropMenuMsg")
-	}
-	if _, ok := cmd().(SidebarDragRequestDropMenuMsg); !ok {
-		t.Errorf("Space cmd emits %T, want SidebarDragRequestDropMenuMsg", cmd())
+	if cmd != nil {
+		t.Errorf("Space mid-drag must do nothing, got a cmd emitting %T", cmd())
 	}
 }
 

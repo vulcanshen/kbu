@@ -16,8 +16,11 @@ const statusLineRows = 1
 type StatusLineModel struct {
 	activePanel Panel
 	drillDown   bool
-	width       int
-	theme       *theme.Theme
+	// dragMode: the pinned-kind drag is on (a mode, tdp K11) — the
+	// footer lists its keys instead of the panel entry keys.
+	dragMode bool
+	width    int
+	theme    *theme.Theme
 }
 
 func NewStatusLineModel(t *theme.Theme) StatusLineModel {
@@ -33,6 +36,10 @@ func (m *StatusLineModel) SetActivePanel(p Panel) {
 
 func (m *StatusLineModel) SetDrillDown(d bool) {
 	m.drillDown = d
+}
+
+func (m *StatusLineModel) SetDragMode(on bool) {
+	m.dragMode = on
 }
 
 func (m *StatusLineModel) SetWidth(width int) {
@@ -54,6 +61,18 @@ type hint struct {
 // (`[C]ontext:` / `[N]amespace:`) or the per-row Space menus / popups
 // that self-document — duplicating them here was noisy.
 func (m StatusLineModel) hints() []hint {
+	if m.dragMode {
+		// tdp K11, M1: in a mode the footer still shows ?, then the
+		// mode's own keys. Space does nothing in a mode, so it isn't
+		// listed.
+		return []hint{
+			{"?", "keys"},
+			{"j/k", "move"},
+			{"Enter", "drop"},
+			{"Esc", "cancel"},
+			{"drag mode", ""},
+		}
+	}
 	return []hint{
 		{"?", "help"},
 		{"Esc", "back"},

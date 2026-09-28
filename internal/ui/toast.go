@@ -53,19 +53,9 @@ const (
 	toastMinInnerW = 28
 )
 
-// ToastModel renders a transient centered popup that auto-dismisses.
-// It is non-blocking: keys still reach the underlying panels.
-//
-// sticky distinguishes background-reminder toasts (sticky=true, set
-// up BEFORE the user opens any popup — e.g. drag mode's keyboard
-// contract) from transient interrupts (sticky=false, fired AS A
-// RESULT of user action). View() uses this to decide rendering
-// order vs the popup stack: sticky sits BELOW popups (a popup the
-// user just opened should win over a pre-existing background hint);
-// non-sticky sits ABOVE popups (a freshly-fired error or status
-// should interrupt whatever popup is on screen).
+// ToastModel renders a transient popup that auto-dismisses. It is
+// non-blocking: keys still reach the underlying panels.
 type ToastModel struct {
-	sticky      bool
 	level       toastLevel
 	message     string
 	id          int // generation counter, so stale Tick fires are ignored
@@ -105,7 +95,6 @@ func (m *ToastModel) SetLayer(layer int) {
 // the closing-animation window so the popup fades out instead of
 // snapping away when the dismiss timer fires.
 func (m ToastModel) IsActive() bool { return m.animator.IsActive() }
-func (m ToastModel) IsSticky() bool { return m.sticky }
 
 // Owns reports whether the toast is showing and not yet fading out —
 // the only state in which Esc is its to take (tdp F3).
@@ -125,32 +114,15 @@ func (m *ToastModel) ShowWarn(message string) tea.Cmd {
 	return m.show(toastWarn, message)
 }
 
-// ShowSticky displays an info-level toast that does NOT auto-dismiss —
-// caller MUST call Dismiss() to take it down. Used for modal states
-// where the toast is the persistent visual contract (e.g. sidebar
-// drag mode — the keyboard contract stays on screen until commit /
-// cancel). Increments id so any prior in-flight auto-dismiss tick
-// becomes stale and won't take this sticky one down.
-func (m *ToastModel) ShowSticky(message string) tea.Cmd {
-	m.sticky = true
-	m.level = toastInfo
-	m.message = message
-	m.id++
-	m.animator.Color = m.borderColor
-	return m.animator.Open()
-}
-
 // Dismiss begins the close animation. Caller chains the returned cmd
 // into its own tea.Batch — fire-and-forget Dismiss without chaining
 // drops the close-animation tick.
 func (m *ToastModel) Dismiss() tea.Cmd {
-	m.sticky = false
 	m.id++
 	return m.animator.Close()
 }
 
 func (m *ToastModel) show(level toastLevel, message string) tea.Cmd {
-	m.sticky = false
 	m.level = level
 	m.message = message
 	m.id++
@@ -202,14 +174,10 @@ func toastGlyph(level toastLevel) string {
 	return toastInfoGlyph
 }
 
-// toastHint returns the hint-bar text. Sticky toasts include the
-// keyboard escape so the user always knows how to take down a
-// background-mode reminder; transient toasts surface "auto-dismiss"
-// so the absence of a dismiss key reads as design, not omission.
+// toastHint returns the hint-bar text: "auto-dismiss", so the absence
+// of a dismiss key reads as design, not omission (Esc still takes it
+// down at once, tdp F3).
 func (m ToastModel) toastHint() string {
-	if m.sticky {
-		return " Esc: close "
-	}
 	return " auto-dismiss "
 }
 

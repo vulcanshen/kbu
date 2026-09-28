@@ -1300,8 +1300,14 @@ func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicat
 	// visual is active, else the full YAML. hjkl/w/b/e/0/$ move the
 	// cursor. Full hint spells it out; short falls back to letter
 	// tags when the popup is narrow.
-	const hintFull = " v:visual  y:copy  E:edit  /:search  Esc:close "
-	const hintShort = " v  y  E  /  Esc "
+	hintFull := " v:visual  y:copy  E:edit  /:search  Esc:close "
+	hintShort := " v  y  E  /  Esc "
+	if m.visualMode {
+		// tdp K11: in the selection mode the hint lists the mode's
+		// keys, starting with ? for the full list.
+		hintFull = " selecting  ?:keys  y:copy  v/Esc:leave "
+		hintShort = " ?  y  v  Esc "
+	}
 	hint = hintFull
 
 	total := len(m.contentLines)
