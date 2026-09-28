@@ -111,7 +111,7 @@
 - **source 預設留在底下，只由使用者對 source 的動作關掉**（tdp F4）。popup A 開出 B 時，A 不因「開 B」而關閉；`Esc` 關 B 回到 A。反模式是在 caller 裡先 `Close()` source 再開 target。
 - **完成動作清掉整疊**（tdp T1）：取消回到 source（F4），完成的動作讓底下的 popup 失去對象時整疊關掉。完成點：Delete 與 Rollback 的 confirm 接受（`ShowCompleting` → `clearStackMsg`）、context 選定（`ContextChangedMsg`）、breadcrumb 跳轉（`SwitchToResourceMsg`）、Mark / Unmark anchor 與其他只改狀態的 menu 列（menu 自己關）。刻意留著的：sort（回到選欄位疊下一個 tier）、namespace 勾選（可以連勾）、Settings（可以連切）、Helm 文件（可以連看）。
 - **context-shift target 清掉 source**（tdp T1）。`txPty`（kubectl edit / exec，分鐘級的 subprocess）、`shellPty`（Alterm）、`enterDrillDown`（panel 2 換欄位與列）不是 inline 動作：從它們回來時，浮在已換掉的畫面上的舊 source 是 stale 的。規則：context-shift target 的 **entry handler** 在最前面呼叫 `AppModel.closeAllBlockingPopups()`（關掉所有 blocking popup，排除 PTY 自己與 toast；沒有東西開著時回 `nil`），由 target 關、不由 caller 關，每個叫出它的地方自動拿到正確行為。目前的 entry point：`app.go` 的 `startEditMsg`、`startShellExecMsg`、`Alt+t` handler、`enterDrillDown()`。新增 context-shift target（例如日後的 port-forward viewer）時一併補上。
-- **Logs 失焦不變暗**（tdp T2）。panel 3 失焦時，Events / Conditions / Relatives / History 暗到 overlay1，Logs 不暗、保留 pod / container 的顏色。業界前例：Lens、k9s 的串流 log 都不變暗。
+- **Logs 失焦不變暗**（tdp T2）。panel 3 失焦時，Events / Conditions / Relatives / History 暗到 overlay1，Logs 不暗、保留 pod / container 的顏色。Events 也是串流（有 live / paused 追尾），但照樣變暗 —— 這是刻意的偏離，見「偏離 tdp」。業界前例：Lens、k9s 的串流 log 都不變暗。
 
 ### PTY 裡的鍵
 
@@ -137,6 +137,11 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - **尚未符合 tdp 的地方**：逐條列在 [`kbu-terminu-fix.md`](kbu-terminu-fix.md)。
 
 ## 偏離 tdp
+
+- **Events tab 失焦照樣變暗（T2）。** T2 要求讓失焦 panel 變暗的 app，串流內容失焦不變暗；panel 3 的 Events tab 有跟 Logs 一樣的
+  live ▶ / paused ⏸ 追尾（`followEventsTail`），算串流內容，但 panel 3 失焦時它照樣暗成 `TableDimRowStyle()`（`detail.go`），只有
+  Logs 不暗。理由（使用者 2026-09-28 裁定）：不在 focus 的都應該變暗；Events 一陣一陣來、不是逐行流過，餘光看更新的需求沒有 Logs
+  強。
 
 原本這裡的兩條 K10（PTY 裡攔下捲動鍵、Alterm 多一個出口 `Ctrl-t`）在 tdp v0.1.4 起不再是偏離：K10 改成「至少一個出口鍵，
 其餘組合鍵由 app 決定」，兩條移到「設計決定」的「PTY 裡的鍵」。剩下的只有 `Ctrl-t` 不揭露這一點。

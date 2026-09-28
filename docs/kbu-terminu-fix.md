@@ -199,19 +199,6 @@ namespace `kube-system` + 兩個 chip + `! 3 errors` 就折成 2 列；EKS ARN �
 對到 D3，照內容（層色）應是 D2。dev-remarks 的「四類」改成六類，各 popup 的歸類照上方「popup 盤點」與修完後的樣子。
 
 
-## 28. Events tab 失焦變暗 —— T2（已定案：寫成偏離）
-
-**現況**：panel 3 失焦時 Events 暗成 `TableDimRowStyle()`（`detail.go`），Logs 不暗。Events 有跟 Logs 一樣的 live ▶ / paused ⏸
-追尾（`followEventsTail`），照 T2 的定義算串流內容。`detail.go` Logs 那段的註解說 Events「內容是靜態的」，跟 `followEventsTail`
-的註解（「長時間觀察的人預設要看到最新的」）互相矛盾。
-
-**規則**：T2 —— app 讓失焦的 panel 變暗時，串流內容失焦不變暗。
-
-**已定案**（user，2026-09-28）：行為不改，Events 失焦照樣變暗。這是 kbu 的偏離，由 kbu 自己寫進 dev-remarks「偏離 tdp」（哪一條：
-T2；在哪裡：panel 3 的 Events tab；為什麼：user 的理由是不在 focus 的都應該變暗）。`detail.go` 那段「Events 是靜態內容」的註解
-改成指向這條偏離；dev-remarks「設計決定」的「Logs 失焦不變暗」一起對齊。
-
-
 ## 已經符合、不用修的（對照 v0.1.13）
 
 - **K1（letter hotkey 不佔 core key）**：`q` 只用在離開，`Space`、`?`、`Tab`、`Enter`、`Esc` 沒有被字母熱鍵借用；confirm 的 `y` / `n`、
