@@ -82,7 +82,8 @@
 - **一個 popup 一個檔、一個 `PopupAnimator`**，animator 的 `Target` 對應檔名（階層用 `_` 分隔，例如 `comparepopup_menu`、`ptyview_shell`）。top-level popup 在 `app.go View()` 裡 composite；popup 裡的子 popup（`comparepopup` → `comparemenu`）也有自己的檔與 animator，由 parent 在 `Open()` 時 reset、轉送 tick 與按鍵。`app.go View()` 以外出現裸的 `overlay.Composite` 是警訊。緣由：v1.7.4 發現 compare 裡的 menu 同時漏掉動畫與上下留白 —— 它是唯一住在別人檔案裡的 popup，以檔名做的盤點看不到它。
 - **四類，各有固定版面**（tdp F1）：**menu**（`j/k` + `Enter` 從清單挑；上下留白一列）、**message**（短文 + 動作，例：applog、help、confirm、toast；上下留白一列）、**viewport**（長內容、垂直最大化、無留白，例：yamlpopup、comparepopup）、**pty**（框由 kbu 畫、內容由 subprocess 畫，例：Alterm、kubectl edit / exec）。標題一律 glyph + 文字；toast 的文字固定是 `kbu`，等級靠 glyph（`󰵅` info、`󰀦` warn）與邊框色區分。
 - **動畫**（tdp F2）：開 / 關約 160ms，原地換內容約 120ms。
-- **`Esc`**（tdp F3）：blocking popup 在自己的 `Update` 攔 `Esc`；toast 不是 blocking（按鍵穿透到底下的 panel），由 app 層的 `Esc` handler 先 dismiss 它。
+- **疊層只有一份順序**（tdp D3、F4、X2）：`stack.go` 的 `stackOrder()` 由下往上列出每個 popup。`View()` 照它畫；`Update()` 把按鍵與滑鼠交給最後一個 `owns()` 的那一層（`topLayer()`）；`popupDepth()` 照它數層、`closeAllBlockingPopups()` 照它關。順序依「誰開誰」：Space menu 在最底，從它開出的 picker、viewer、confirm 在上，key reference 在它們之上，PTY 最上（context-shift 會先清掉底下，見「設計決定」）。滾輪看的也是最上層：menu 類吞掉、viewer 轉成 `u` / `d`、PTY 不理。新 popup 只在 `stackOrder()` 插一次，路由、繪製、層數、滑鼠自動一致。
+- **`Esc` 與關閉中的 popup**（tdp F3）：判斷一層「還在不在」用 `owns()`（開啟中或已開），不用含關閉中的 `IsActive()`；`IsActive()` 只決定還要不要畫。正在跑關閉動畫的 popup 不再接鍵，下一鍵交給底下那一層。blocking popup 在自己的 `Update` 攔 `Esc`；toast 不是 blocking（按鍵穿透到底下的 panel），由 app 層的 `Esc` handler 在它 `Owns()` 時 dismiss，淡出中的 toast 不再吃 `Esc`。
 - **邊框色依層數**：`theme.PopupLayerColor(layer)` 是唯一來源，不寫死 hex。每個 popup 有 `layer` 與 `borderColor`，`SetLayer` 同時更新 animator 的顏色；開啟前以 `popupDepth() + 1` 蓋章，子 popup 用 `parent.layer + 1`；原地換內容的 picker 保留原 layer（已開著時不再蓋章，否則會重複計算自己）。
 - 完整的 popup 規格（盤點清單、`padRow` 寫法、新 popup 的分類決策樹）在本機的 `.claude/rules/popup-convention.md`（不進版控）。
 

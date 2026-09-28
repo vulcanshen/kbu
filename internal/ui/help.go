@@ -50,7 +50,7 @@ func (m HelpModel) IsInteractive() bool {
 
 // Toggle switches the help overlay on or off, returning the animation tick cmd.
 func (m *HelpModel) Toggle() tea.Cmd {
-	if m.animator.IsActive() {
+	if m.animator.Owns() {
 		return m.animator.Close()
 	}
 	m.scrollOffset = 0

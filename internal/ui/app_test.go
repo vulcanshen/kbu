@@ -357,6 +357,18 @@ func appWithItems(items []k8s.ResourceItem, cursor int) AppModel {
 		txPty:           NewPtyView("ptyview_tx"),
 		toast:           NewToastModel(th),
 		breadcrumbPopup: NewBreadcrumbPopupModel(th),
+		panel2Menu:      NewPanel2MenuPopupModel(th),
+		hintPopup:       NewHintPopupModel(th),
+		helmDocMenu:     NewHelmDocMenuPopupModel(th),
+		listPicker:      NewListPickerModel(th),
+		settingsPopup:   NewSettingsPopupModel(th),
+		namespacePicker: NewNamespacePickerModel(th),
+		contextPicker:   NewContextPickerModel(th),
+		appLog:          NewAppLogModel(th),
+		yamlPopup:       NewYamlPopupModel(th),
+		comparePopup:    NewCompareYamlPopupModel(th),
+		confirm:         NewConfirmModel(th),
+		help:            NewHelpModel(th),
 	}
 }
 
