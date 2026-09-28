@@ -200,7 +200,7 @@ The terminal fills the screen, less one column and one row on each side; other p
 
 ## Editing Resources
 
-Pressing `E` on a resource (or picking `Edit` from the `Space` menu) runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.
+Pressing `E` on a resource or in its YAML viewer (or picking `Edit` from the `Space` menu) asks first, then runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.
 
 The editor is resolved by kubectl itself in this priority order:
 

@@ -134,7 +134,7 @@ func TestStack_ClickOnYamlDoesNotRunMenuRowBeneath(t *testing.T) {
 	openTestSpaceMenu(&m)
 	m.yamlPopup.SetSize(m.width, m.height)
 	_ = m.yamlPopup.Open("kind: Pod\nmetadata:\n  name: nginx\n", k8s.ResourcePods,
-		k8s.ResourceItem{Name: "nginx"}, "")
+		k8s.ResourceItem{Name: "nginx"})
 	m.yamlPopup.animator.Finalize()
 
 	x, y := menuRowUnder(t, m, m.yamlPopup.renderFullPopup())

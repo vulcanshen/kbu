@@ -41,7 +41,7 @@ func TestK9_QAndCtrlCLeaveFromEverySurface(t *testing.T) {
 			m.confirm.animator.Finalize()
 		}},
 		{"yaml", func(m *AppModel) {
-			_ = m.yamlPopup.Open("a: 1\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"}, "")
+			_ = m.yamlPopup.Open("a: 1\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
 			m.yamlPopup.animator.Finalize()
 		}},
 		{"namespace picker list", func(m *AppModel) {
@@ -80,7 +80,7 @@ func TestK9_WhileTypingQTypesCtrlCLeaves(t *testing.T) {
 			m.namespacePicker, _ = m.namespacePicker.Update(key("/"))
 		}, func(m AppModel) string { return m.namespacePicker.searchQuery }},
 		{"yaml search", func(m *AppModel) {
-			_ = m.yamlPopup.Open("a: 1\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"}, "")
+			_ = m.yamlPopup.Open("a: 1\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
 			m.yamlPopup.animator.Finalize()
 			m.yamlPopup, _ = m.yamlPopup.Update(key("/"))
 		}, func(m AppModel) string { return m.yamlPopup.SearchQuery() }},

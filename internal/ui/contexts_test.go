@@ -45,7 +45,7 @@ func TestContextsAreReadOnly(t *testing.T) {
 func TestYamlPopup_EditGatedForContexts(t *testing.T) {
 	m := newTestYamlPopup()
 	item := k8s.ResourceItem{Name: "ctx-a"}
-	m.Open("# context ctx-a\ncluster:\n  server: https://a\n", k8s.ResourceContexts, item, "test-ctx")
+	m.Open("# context ctx-a\ncluster:\n  server: https://a\n", k8s.ResourceContexts, item)
 	m.animator.Finalize()
 	if _, cmd := m.Update(keyMsg('E')); cmd != nil {
 		t.Error("E in the YAML popup must be a no-op for read-only Contexts")

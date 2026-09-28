@@ -1920,7 +1920,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.yamlPopup.SetSize(m.width, m.height)
 		m.yamlPopup.SetLayer(m.popupDepth() + 1)
-		return m, m.yamlPopup.Open(msg.yaml, msg.ref.Type, msg.item, m.k8sClient.ContextName())
+		return m, m.yamlPopup.Open(msg.yaml, msg.ref.Type, msg.item)
 
 	case aggregateLogsReadyMsg:
 		// Stale result guard: user may have navigated to a different row
@@ -2086,6 +2086,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		cmds = append(cmds, discoverCRDs(newClient))
 		return m, tea.Batch(cmds...)
+
+	case yamlEditRequestMsg:
+		// E in the YAML viewer: the panel's Edit, confirm and all.
+		return m, m.confirmEdit(msg.resource, msg.item)
 
 	case clearStackMsg:
 		// An accepted Delete / Rollback finished the flow: the Space
@@ -2316,7 +2320,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		item := k8s.ResourceItem{Name: msg.ReleaseName, Namespace: msg.Namespace}
 		m.yamlPopup.SetSize(m.width, m.height)
 		m.yamlPopup.SetLayer(m.popupDepth() + 1)
-		return m, m.yamlPopup.Open(msg.Content, k8s.ResourceReleases, item, m.k8sClient.ContextName())
+		return m, m.yamlPopup.Open(msg.Content, k8s.ResourceReleases, item)
 
 	case RollbackResultMsg:
 		if msg.Err != nil {
@@ -2624,7 +2628,7 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		m.yamlPopup.SetSize(m.width, m.height)
 		m.yamlPopup.SetLayer(m.popupDepth() + 1)
-		return m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
+		return m.yamlPopup.Open(yaml, resource, item)
 	case " ":
 		// tdp K5, M2, M7: Space on any panel and any tab opens the
 		// Space menu of what can be done here — always, even when only
@@ -3377,7 +3381,7 @@ func (m *AppModel) openYamlFor(rt k8s.ResourceType, item k8s.ResourceItem) tea.C
 	}
 	m.yamlPopup.SetSize(m.width, m.height)
 	m.yamlPopup.SetLayer(m.popupDepth() + 1)
-	return m.yamlPopup.Open(yaml, rt, item, m.k8sClient.ContextName())
+	return m.yamlPopup.Open(yaml, rt, item)
 }
 
 // confirmRollback asks before rolling the Helm release back to the

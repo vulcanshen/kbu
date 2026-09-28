@@ -30,7 +30,7 @@ func TestK8_SpaceTypesInEverySearchLine(t *testing.T) {
 	}
 
 	m := stackTestApp(t)
-	_ = m.yamlPopup.Open("image: nginx\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"}, "")
+	_ = m.yamlPopup.Open("image: nginx\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
 	m.yamlPopup.animator.Finalize()
 	for _, k := range []string{"/", "e", ":", " ", "n"} {
 		m.yamlPopup, _ = m.yamlPopup.Update(key(k))

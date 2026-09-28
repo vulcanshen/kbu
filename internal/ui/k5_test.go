@@ -27,7 +27,7 @@ func TestK5_SpaceDoesNotClosePopupsThatAreNotTheSpaceMenu(t *testing.T) {
 			m.confirm.animator.Finalize()
 		}, func(m *AppModel) bool { return m.confirm.owns() }},
 		{"yaml", func(m *AppModel) {
-			_ = m.yamlPopup.Open("kind: Pod\n", k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, "")
+			_ = m.yamlPopup.Open("kind: Pod\n", k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"})
 			m.yamlPopup.animator.Finalize()
 		}, func(m *AppModel) bool { return m.yamlPopup.owns() }},
 		{"breadcrumb", func(m *AppModel) {
