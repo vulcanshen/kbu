@@ -550,8 +550,10 @@ func (p *PtyView) SetSize(hostW, hostH int) {
 // and asymmetric: horizontal margin is wider than vertical because terminals
 // are typically much wider than tall.
 func (p *PtyView) ptyDims() (cols, rows int) {
+	// tdp F7: a terminal fills the screen less a column / row each side
+	// (W − 2 × H − 2), not held to the 120-column popup width.
 	const (
-		popupMarginX = 2
+		popupMarginX = 1
 		popupMarginY = 1
 	)
 	popupW := p.hostW - 2*popupMarginX

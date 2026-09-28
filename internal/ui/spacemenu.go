@@ -302,35 +302,19 @@ func (m MenuPopupModel) renderFullPopup() string {
 	dimCursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Background(lipgloss.Color("#45475a"))
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
-	title := menuTitleGlyph + " " + m.title
+	title := m.title // the builder already put the glyph in (menuTitle)
 	hint := " j/k: move  Enter: run  Esc: close "
 
-	// Width: widest of title / bottom hint / rows; clamp to 85% screen.
-	maxInnerW := 60
-	if m.screenW > 0 {
-		maxInnerW = m.screenW * 85 / 100
-		if maxInnerW < 40 {
-			maxInnerW = 40
-		}
-	}
-	innerW := lipgloss.Width(title) + 4
-	if w := lipgloss.Width(hint) + 4; w > innerW {
-		innerW = w
-	}
-	// The hints line up in one column, two cells past the widest name.
+	// tdp F7: one width for every popup, whatever it shows.
+	innerW := popupInnerWidth(m.screenW)
+	// The hints line up in one column, two cells past the widest name;
+	// a hint too long for the width is cut (tdp D4), never widening
+	// the popup.
 	labelCol := 0
 	for _, it := range m.items {
 		if it.selectable() {
 			labelCol = max(labelCol, lipgloss.Width(bracketHotkey(it.label, it.key)))
 		}
-	}
-	for _, it := range m.items {
-		if w := 1 + 2 + labelCol + 2 + lipgloss.Width(it.hint) + 1; it.selectable() && w > innerW {
-			innerW = w
-		}
-	}
-	if innerW > maxInnerW {
-		innerW = maxInnerW
 	}
 
 	const gutter = "  "

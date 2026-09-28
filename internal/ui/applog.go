@@ -56,6 +56,10 @@ type AppLogModel struct {
 	lastSuccess    string
 	layer          int
 	borderColor    lipgloss.Color
+	// openHeight is the popup's height, set when it opens from the log
+	// it had then (tdp F7): entries arriving while it is open scroll in
+	// the box instead of growing it.
+	openHeight int
 }
 
 func NewAppLogModel(t *theme.Theme) AppLogModel {
@@ -118,6 +122,7 @@ func (m *AppLogModel) Toggle() tea.Cmd {
 		return m.animator.Close()
 	}
 	m.scrollOffset = 0
+	m.openHeight = m.contentFitHeight()
 	m.seenErrorCount = m.errorCount
 	m.seenWarnCount = m.warnCount
 	m.lastError = ""
@@ -239,24 +244,27 @@ func (m AppLogModel) PlainText() string {
 	return b.String()
 }
 
+// popupHeight is fixed at open (openHeight); before the first open it
+// falls back to what the log would need now.
 func (m AppLogModel) popupHeight() int {
-	h := m.height * 60 / 100
-	if h < 10 {
-		h = 10
+	if m.openHeight > 0 {
+		return m.openHeight
 	}
-	return h
+	return m.contentFitHeight()
 }
 
-func (m AppLogModel) popupWidth() int {
-	w := m.width * 70 / 100
-	if w < 40 {
-		w = 40
+// contentFitHeight is the height the log's lines need — two borders, two
+// padding rows and the lines — capped by the screen less a row above and
+// below (then it scrolls), and at least a few rows tall.
+func (m AppLogModel) contentFitHeight() int {
+	limit := m.height - 2*popupVMargin
+	if limit < 6 {
+		limit = 6
 	}
-	if w > m.width-4 {
-		w = m.width - 4
-	}
-	return w
+	return min(max(len(m.renderAllLines())+4, 6), limit)
 }
+
+func (m AppLogModel) popupWidth() int { return popupOuterWidth(m.width) } // tdp F7
 
 // renderAllLines renders every entry into display lines (newest first).
 // scrollOffset is now line-based so this method is the single source of truth.

@@ -303,34 +303,8 @@ func (m ListPickerModel) renderFullPopup() string {
 	title := " " + m.title + " "
 	bottomHint := " j/k: move  Enter: pick  Esc: cancel "
 
-	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.
-	maxInnerW := 60
-	if m.screenW > 0 {
-		maxInnerW = m.screenW * 85 / 100
-		if maxInnerW < 40 {
-			maxInnerW = 40
-		}
-	}
-	innerW := lipgloss.Width(title) + 4
-	if w := lipgloss.Width(bottomHint) + 4; w > innerW {
-		innerW = w
-	}
-	for _, it := range m.items {
-		w := 1 + 2 + lipgloss.Width(it.Label)
-		if it.Badge != "" {
-			w += 1 + lipgloss.Width(it.Badge)
-		}
-		if it.Hint != "" {
-			w += 4 + lipgloss.Width(it.Hint)
-		}
-		w += 1
-		if w > innerW {
-			innerW = w
-		}
-	}
-	if innerW > maxInnerW {
-		innerW = maxInnerW
-	}
+	// tdp F7: one width for every popup, whatever it shows.
+	innerW := popupInnerWidth(m.screenW)
 
 	const gutter = "  "
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

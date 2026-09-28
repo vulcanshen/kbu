@@ -301,8 +301,7 @@ func TestHandleMousePress_SettingsEscapeHatchWhenMouseDisabled(t *testing.T) {
 	lines := strings.Split(popup, "\n")
 	w := lipgloss.Width(lines[0])
 	h := len(lines)
-	px := (120 - w) / 2
-	py := (40 - h) / 2
+	px, py := popupOrigin(w, h, 120, 40)
 
 	clickMsg := tea.MouseMsg{
 		X:      px + 5,

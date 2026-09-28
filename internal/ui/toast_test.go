@@ -46,60 +46,17 @@ func TestToastModel_MatchingDismissDeactivates(t *testing.T) {
 	}
 }
 
-func TestToastModel_ShortMessagePadsToMinWidth(t *testing.T) {
-	// v1.7.10 UX polish: short auto-dismiss messages ("Copied!" and
-	// friends) used to size the popup down to the hint-bar floor and
-	// looked cramped. toastMinInnerW gives every toast a consistent
-	// visual weight regardless of payload length. Assert the render
-	// has at least that many cells in the body row so a short message
-	// doesn't collapse into the chrome.
-	th := theme.DefaultTheme()
-	m := NewToastModel(th)
-	m.Show("Copied!") // 7-cell payload
+// tdp F7, D4: a message longer than the popup width is cut, not let
+// through to widen the toast past every other popup.
+func TestToastModel_LongMessageCutAtPopupWidth(t *testing.T) {
+	m := NewToastModel(theme.DefaultTheme())
+	m.SetSize(80)
+	m.Show(strings.Repeat("x", 200))
 	m.animator.Finalize()
-
-	view := m.RenderPopup()
-	lines := strings.Split(view, "\n")
-	if len(lines) < 3 {
-		t.Fatalf("expected at least 3 lines in toast render, got %d", len(lines))
-	}
-	// Body row is the middle line (top border + pad + body + pad + bottom).
-	// Pick the widest to be safe against future format tweaks; all rows
-	// should be innerW wide (+ 2 border chars).
-	widest := 0
-	for _, l := range lines {
-		if w := lipgloss.Width(l); w > widest {
-			widest = w
+	for i, l := range strings.Split(m.RenderPopup(), "\n") {
+		if w := lipgloss.Width(l); w != 78 {
+			t.Errorf("row %d is %d wide, want 78 (min(80 − 2, 120))", i, w)
 		}
-	}
-	// innerW >= toastMinInnerW → whole popup width >= toastMinInnerW + 2.
-	minPopupW := toastMinInnerW + 2
-	if widest < minPopupW {
-		t.Errorf("expected toast width >= %d for short message, got %d\n%s",
-			minPopupW, widest, view)
-	}
-}
-
-func TestToastModel_LongMessageStillGrowsPastMinWidth(t *testing.T) {
-	// Regression: the min-width floor must not clamp long messages.
-	th := theme.DefaultTheme()
-	m := NewToastModel(th)
-	long := strings.Repeat("x", 60)
-	m.Show(long)
-	m.animator.Finalize()
-
-	view := m.RenderPopup()
-	if !strings.Contains(view, long) {
-		t.Errorf("long message must survive into render, got:\n%s", view)
-	}
-	widest := 0
-	for _, l := range strings.Split(view, "\n") {
-		if w := lipgloss.Width(l); w > widest {
-			widest = w
-		}
-	}
-	if widest < 62 { // 60 payload + 2 padding
-		t.Errorf("long message should grow toast past min floor; got width %d", widest)
 	}
 }
 

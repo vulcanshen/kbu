@@ -19,7 +19,11 @@ type ContextPickerModel struct {
 	searchQuery string
 	layer       int
 	borderColor lipgloss.Color
+	screenW     int
 }
+
+// SetSize records the screen width the popup's width derives from.
+func (m *ContextPickerModel) SetSize(w, _ int) { m.screenW = w }
 
 // NewContextPickerModel creates a new context picker.
 func NewContextPickerModel(t *theme.Theme) ContextPickerModel {
@@ -244,8 +248,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	normalStyle := m.theme.SidebarStyle()
 
-	boxWidth := 54
-	innerW := boxWidth - 2
+	innerW := popupInnerWidth(m.screenW) // tdp F7
 
 	items := m.filtered()
 

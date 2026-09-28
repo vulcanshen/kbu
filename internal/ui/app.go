@@ -1555,6 +1555,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		top := m.topLayer()
 		if m.cfg != nil && !m.cfg.IsMouseEnabled() {
 			if top == &m.settingsPopup {
+				top.resize(m.width, m.height)
 				return m, top.click(msg, m.width, m.height)
 			}
 			return m, nil
@@ -1592,6 +1593,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// left-click is a no-op wherever a stray click could fire a
 		// destructive action (confirm especially).
 		if top != nil {
+			// Hit-test at the size the popup is drawn at (View resizes
+			// before it composites).
+			top.resize(m.width, m.height)
 			return m, top.click(msg, m.width, m.height)
 		}
 		cmd := m.handleMousePress(msg)
@@ -2844,7 +2848,9 @@ func (m AppModel) View() string {
 	// (error, save-failed status) shows over whatever popup is on
 	// screen. It is not a layer: it never takes keys (tdp F1, F8).
 	if m.toast.IsActive() {
-		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+		// tdp F7: the toast sits at the bottom, just above the footer.
+		m.toast.SetSize(m.width)
+		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Bottom, 0, -1)
 	}
 
 	return mainView
