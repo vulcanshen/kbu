@@ -154,7 +154,7 @@ func TestStack_EnterOnHelpOverConfirmDoesNotConfirm(t *testing.T) {
 		func() tea.Msg { return confirmedMsg{} })
 	m.confirm.animator.Finalize()
 	m.help.SetSize(m.width, m.height)
-	_ = m.help.Toggle()
+	_ = m.openKeyRef()
 	m.help.animator.Finalize()
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -176,11 +176,11 @@ func TestStack_HelpIsDrawnOverConfirm(t *testing.T) {
 	_ = m.confirm.Show(ConfirmDelete, "⚠ Delete resource?", "kubectl delete pods nginx", nil)
 	m.confirm.animator.Finalize()
 	m.help.SetSize(m.width, m.height)
-	_ = m.help.Toggle()
+	_ = m.openKeyRef()
 	m.help.animator.Finalize()
 
 	view := ansi.Strip(m.View())
-	if !strings.Contains(view, "Keybindings") {
+	if !strings.Contains(view, "Confirm keys") {
 		t.Fatal("the key reference must be on screen")
 	}
 	if strings.Contains(view, "Delete resource?") {

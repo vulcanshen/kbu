@@ -157,7 +157,7 @@ Everything below is also in the `Space` menu -- these are just faster.
 | `Alt+t` | Toggle Alterm (spawn / show / hide; shell stays alive across hide) |
 | `y` | Copy focused element to clipboard (OSC 52) -- cursor row when the focus has one, whole content otherwise |
 | `!` | App log |
-| `?` | Help |
+| `?` | The keys of whatever is in front — the focused panel, or the menu, popup or mode on top. `?` again or `Esc` closes it |
 | `q` | Quit kbu (saves session state on the way out) -- from any panel, menu or popup; while you type in a search it is just a letter |
 | `Ctrl+C` | Same as `q`, and it also works while you type |
 

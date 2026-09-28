@@ -157,7 +157,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | `Alt+t` | 切換 Alterm（啟動 / 顯示 / 隱藏；隱藏時 shell 保持存活）|
 | `y` | 複製到剪貼簿（OSC 52）— 有 cursor 時複製那一列，否則複製整個內容 |
 | `!` | App log |
-| `?` | Help |
+| `?` | 最前面那個東西能按的鍵 —— focus 的 panel，或最上層的 menu、popup、模式。再按一次 `?` 或 `Esc` 關閉 |
 | `q` | 結束 kbu（離開時會保存 session 狀態）— 在任何 panel、menu、popup 上都有效；在搜尋欄打字時只是一個字母 |
 | `Ctrl+C` | 跟 `q` 一樣，打字時也有效 |
 

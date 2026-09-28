@@ -29,7 +29,7 @@ var globalOpRow = menuItem{label: "Global operation", action: globalOpAction, hi
 var globalActions = []menuItem{
 	{label: "Namespace", key: "N", hint: "pick which namespaces to show", opens: true},
 	{label: "Context", key: "C", hint: "switch the kubeconfig context", opens: true},
-	{label: "[Alt-t]erm", key: "alt+t", hint: "show the embedded shell (Alterm)", opens: true},
+	{label: "[Alt-t]erm", name: "Alterm", key: "alt+t", hint: "show the embedded shell (Alterm)", opens: true},
 	{label: "Settings", key: ">", hint: "mouse and scroll direction", opens: true},
 	{label: "App log", key: "!", hint: "what kbu has done and what failed", opens: true},
 	{label: "Quit", key: "q", hint: "leave kbu"},
@@ -161,10 +161,10 @@ func (m *AppModel) tableMenu() (string, []menuItem, k8s.ResourceType, k8s.Resour
 func (m *AppModel) tablePanelOps() []menuItem {
 	var ops []menuItem
 	if m.inCompareMode() {
-		ops = append(ops, menuItem{label: "[Esc] Exit compare mode", key: "esc", action: "exit-compare", hint: "drop the compare anchor"})
+		ops = append(ops, menuItem{label: "[Esc] Exit compare mode", name: "Exit compare mode", key: "esc", action: "exit-compare", hint: "drop the compare anchor"})
 	}
 	if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
-		back := menuItem{label: "[Esc] Back", key: "esc", action: "back", hint: "to the " + m.drillParentLabel() + " list"}
+		back := menuItem{label: "[Esc] Back", name: "Back", key: "esc", action: "back", hint: "to the " + m.drillParentLabel() + " list"}
 		if m.inCompareMode() {
 			// Esc exits compare mode first (one layer per press, tdp
 			// K4); this row still backs out in one step.
@@ -174,7 +174,7 @@ func (m *AppModel) tablePanelOps() []menuItem {
 	}
 	if m.drillDownPod == nil {
 		if def := sortRegistry().Get(m.currentResource); def != nil && len(def.Columns) > 0 {
-			ops = append(ops, menuItem{label: "[Alt-S]ort panel 2 list", key: "alt+S", hint: "order the rows by a column", opens: true})
+			ops = append(ops, menuItem{label: "[Alt-S]ort panel 2 list", name: "Sort panel 2 list", key: "alt+S", hint: "order the rows by a column", opens: true})
 		}
 	}
 	ops = append(ops, menuItem{label: "Search", key: "/", hint: "filter the rows by name"})
@@ -213,7 +213,7 @@ func (m *AppModel) detailMenu() (string, []menuItem) {
 	case "Relatives":
 		if m.detail.SelectedRelativeRef() != nil {
 			itemOps = []menuItem{
-				{label: "[Enter] Drill in", key: "enter", action: "rel-drill", hint: "show its relatives here"},
+				{label: "[Enter] Drill in", name: "Drill in", key: "enter", action: "rel-drill", hint: "show its relatives here"},
 				{label: "YAML", key: "Y", hint: "this entry's manifest", opens: true},
 				{label: "Copy", key: "y", hint: "this row"},
 			}
@@ -222,7 +222,7 @@ func (m *AppModel) detailMenu() (string, []menuItem) {
 		}
 		if m.detail.Depth() > 1 {
 			panelOps = append(panelOps,
-				menuItem{label: "[Esc] Back", key: "esc", action: "rel-back", hint: "up one level of the chain"},
+				menuItem{label: "[Esc] Back", name: "Back", key: "esc", action: "rel-back", hint: "up one level of the chain"},
 				menuItem{label: "Jump to an ancestor", action: "breadcrumb", hint: "switch panels 1 and 2 to a resource up the chain", opens: true})
 		}
 		if m.detail.SelectedRelativeRef() == nil {

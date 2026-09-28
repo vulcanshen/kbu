@@ -51,7 +51,7 @@
 - **長值折行，永不截斷**：適用於 YAML、Events 與 Logs；panel 改變大小時重新折行
 - **Panel 放大**：`z` 讓 focus 所在的 Table 或 Detail panel 全螢幕；再按 `z` 回到三 panel 版面
 - **主題系統**：在設定目錄放一份 `theme.yaml` 覆寫顏色
-- **Help 與 App Log overlay**：`?` / `!` 疊在主畫面上的 popup
+- **key reference（`?`）與 App Log（`!`）**：`?` 在任何 surface 都打開**最前端那個 surface** 的 key reference（tdp K6、M4，`keyref.go`）：panel 上是這個 panel 的 Space menu 列（只收按得出來的鍵，跟 menu 同一份來源）加上移動、panel 切換、core key 與全域熱鍵；popup / menu 上只列那個 popup 自己的鍵（confirm 的 `y` / `n` 也在，F6）；模式裡是模式的鍵（K11）。它是 note：唯讀、可捲動、沒有游標，疊在最上面，`?` 或 `Esc` 關掉回到底下那一層。輸入態裡 `?` 是字元（K8）。`!` 是 App Log popup
 - **錯誤通知**：statusbar badge + status line 訊息
 - **Crash log**：panic 寫進 kbu 的 log 目錄
 - **Audit log**：每次 `kubectl edit` 與 `kubectl delete` 記進 `audit-*.log`

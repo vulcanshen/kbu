@@ -51,6 +51,9 @@ type menuItem struct {
 	// place (bracketHotkey); rows whose key is longer write the
 	// bracket into the label themselves ("[Alt-S]ort …", "[Enter] …").
 	label string
+	// name is the label without that written-in bracket, for the key
+	// reference; empty when the label has none.
+	name string
 	// key is the hotkey that runs the row. "" = none; "enter" / "esc"
 	// are core keys named in the label (tdp D4) — in the menu they run
 	// the row only from the cursor, since Enter runs the cursor row and
@@ -80,6 +83,14 @@ func (it menuItem) actionName() string {
 }
 
 func (it menuItem) selectable() bool { return !it.separator && !it.header }
+
+// plainName is the row's name without a written-in key bracket.
+func (it menuItem) plainName() string {
+	if it.name != "" {
+		return it.name
+	}
+	return it.label
+}
 
 // MenuActionMsg is emitted when the user runs a row (cursor + Enter, the
 // row's hotkey, or a left click).
@@ -442,7 +453,7 @@ func panel2ItemOps(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool,
 		if target := panel2DrillLabel(rt, item); target != "" {
 			hint = "into its " + target
 		}
-		items = append(items, menuItem{label: "[Enter] Drill in", key: "enter", action: "drill", hint: hint})
+		items = append(items, menuItem{label: "[Enter] Drill in", name: "Drill in", key: "enter", action: "drill", hint: hint})
 	}
 	items = append(items, menuItem{label: "Copy", key: "y", hint: "this row, tab-separated"})
 	return items

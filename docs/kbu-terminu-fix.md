@@ -97,41 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 11. `?` 的 key reference 是全 app 共用一份，不是最前端 surface 的 —— K6、M4
-
-**現況**：`app.go` `case "?"` 切換 `help.go` 的 `HelpModel`（標題 `󰘳 Keybindings`），內容是 `helpContent()` 的 Core / Navigation /
-Global / Alterm 四段。它已經唯讀、可以捲動，但：
-
-- 不論 focus 在哪個 panel、哪個 tab，都是同一份；註解寫明「Per-context trigger letters (Y/E/S/D) aren't listed」，panel 自己的鍵
-  （`Y` / `E` / `S` / `D` / `C`、`P`、`Alt+Shift+S`、`.`、`G`……）一個都不在上面。
-- `Core` 段只有 `Tab` / `Enter` / `Esc` / `Space`，`?` 與 `q` 放在 `Global`；`Space` 的說明是 `Open menu / close popup`（第 4 條）。
-- footer（`statusline.go` `hints()`）寫 `Esc exit`，讀起來像「離開 app」；`Esc` 永遠不離開 app（K4）。
-
-**規則**：K6、M4 —— `?` 打開**最前端那個 surface 的 key reference**：唯讀、可以捲動，沒有游標、不能執行。focus 在 panel 上時至少
-列出這個 panel 能按的鍵與 core key；其餘列不列由 app 決定。popup 上見第 12 條。
-
-**怎麼改**：key reference 依 focus 的 panel（panel 3 依 tab）組：先列這個 panel 的鍵 —— 從它的 Space menu 列產生（只收按得出來的鍵：
-單一字元、`Enter`、label 裡寫出的 `[/]`；sshu、webu 的 `keyReference(items)`），加上第 5 條從小抄搬來的導覽鍵 —— 再接 core key
-（`Tab`、`Enter`、`Esc`、`Space`、`?`、`q`；panel 自己寫了 `Enter` 時不重複通用的那一列）。全域熱鍵與 Alterm 的 scrollback 鍵要不要
-留一段由 kbu 決定。寬度照 F7（第 18 條）。footer 的 `Esc exit` 換一個不會讀成離開的字（例 `Esc back`）。README 兩份「全域」表的
-`?` 說明一起改。
-
-
-## 12. `?` 在 popup 上沒有回應 —— K6、F6
-
-**現況**：只有 `help.go` 處理 `?`（關掉自己）；其他 popup（Space menu、confirm、YAML、Compare、namespace / context picker、sort
-picker、Settings、breadcrumb、helm 文件 menu、App log）按 `?` 都被 popup 吃掉、沒有反應。
-
-**規則**：K6 —— `?` 在任何 surface 都有回應；focus 在 popup 上時（Space menu、global operation popup 也是 popup），打開**只有這個
-popup** 能按的鍵的 key reference：唯讀、可以捲動。再按 `?` 或 `Esc` 關掉。F6 —— confirm 自己的熱鍵（`y` / `n`）要列在 confirm 的
-`?` 裡。
-
-**怎麼改**：每個 popup 給一份自己的鍵（menu：`j/k`、`g/G`、`Enter`、各列熱鍵、`Esc`，Space menu 另有 `Space`；confirm：
-`Enter <動詞>`、`y`、`n`、`Esc`；YAML：移動鍵、`v`、`y`、`/` `n` `N`、`E`，visual 模式另一份（第 14 條）；Compare：捲動鍵、第 3 條的
-版面熱鍵；picker：`Enter`、`/`、`Tab`、`Esc`；App log：`y`、`D`……），疊在最上層顯示。key reference 在第 1 條的清單裡永遠在最上面
-（路由、繪製、亮暗、滑鼠都是）。
-
-
 ## 14. 模式裡的 core key：拖曳與 YAML 的 visual —— K11、M1、M3
 
 **現況**：

@@ -1478,6 +1478,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.typing() {
 				return m, quitCmd
 			}
+		case "?":
+			// tdp K6: ? answers on every surface — a panel, a menu, a
+			// popup, a mode — with the key reference of whatever is
+			// frontmost, stacked on top of it. On the key reference
+			// itself it closes it; while typing it is a character (K8).
+			if !m.typing() && !m.help.owns() {
+				return m, m.openKeyRef()
+			}
 		}
 		if top != nil {
 			if !top.ready() {
@@ -2369,12 +2377,6 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 		// while a Alterm shell is visible will hide the shell instead
 		// of forwarding to zsh's transpose-chars binding.
 		return m.toggleAlterm()
-	case "?":
-		m.help.SetSize(m.width, m.height)
-		if !m.help.owns() {
-			m.help.SetLayer(m.popupDepth() + 1)
-		}
-		return m.help.Toggle()
 	case "!":
 		return m.openAppLog()
 	case "1":
