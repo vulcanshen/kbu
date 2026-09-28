@@ -89,6 +89,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   applied); `Esc` on the question goes back to the terminal. The key is shown in
   the terminal's bottom border, in the editor too. Before, only the subprocess
   exiting could close them.
+- **Any key closes the splash.** It used to answer only `Esc`, `Enter` and
+  `Space` and ignore the rest; now any key closes it, and only closes it.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

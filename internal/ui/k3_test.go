@@ -139,3 +139,23 @@ func TestK3_Panel3EnterOnHistoryConfirmsRollback(t *testing.T) {
 		t.Error("Enter on an older revision must open the rollback confirm")
 	}
 }
+
+// tdp S3: while the splash is up, any key only closes it — q and Ctrl+C
+// don't quit, ? opens nothing, a letter does nothing else.
+func TestS3_AnyKeyOnlyClosesTheSplash(t *testing.T) {
+	for _, k := range []tea.KeyMsg{key("q"), ctrlC, key("?"), key("x"), key(" ")} {
+		m := stackTestApp(t)
+		_ = m.splash.Show()
+		updated, cmd := m.Update(k)
+		got := updated.(AppModel)
+		if got.splash.IsActive() {
+			t.Errorf("%q must close the splash", k.String())
+		}
+		if quits(cmd) {
+			t.Errorf("%q on the splash must not quit", k.String())
+		}
+		if got.topLayer() != nil {
+			t.Errorf("%q on the splash must not open anything", k.String())
+		}
+	}
+}
