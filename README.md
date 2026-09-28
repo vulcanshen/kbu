@@ -126,7 +126,7 @@ Connects to your current kubeconfig context. Press `Enter` to drill, `Space` for
 | **`Space`** | *What can I do here?* — the menu of everything this panel or tab can do, ending with **Global operation** (namespace, context, Alterm, settings, app log, quit) |
 | **`Esc`** | Back out — pop one drill level / close any popup |
 
-When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt+Shift+S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also a row of the `Space` menu (the app-wide ones under its **Global operation** row), so nothing's required to memorize unless you want it. A row that can't run right now is shown dimmed rather than hidden.
+When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt+Shift+S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also a row of the `Space` menu (the app-wide ones under its **Global operation** row), so nothing's required to memorize unless you want it. A row that can't run right now is shown dimmed rather than hidden. When a popup opens over another, only the one you're in is bright; everything beneath it dims.
 
 **Mouse works too**: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `>` to open the Settings popup if you want to flip mouse off and stay keyboard-only.
 
