@@ -177,7 +177,7 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
   只有 YAML 有「移 cursor 左右」這個角色。方向鍵在每個有 `j` / `k` 的 surface 都有效。
 - **K10**：`PgUp` / `PgDn` / `Home` / `End` 只在非 alt-screen 時攔下並揭露在下框 hint；出口 `Alt-t` 常駐在下框 hint。
 - **M1**：footer（`statusline.go`）固定一列、永遠列出 `? help` 與 `Space menu`；拖曳模式裡換成 `? keys` 與模式的鍵（K11）。
-- **M5**：每一列都有名稱與一句說明；README 的散文裡寫 `Alt+t`，那是文件不是畫面，不在 M5 的範圍。
+- **M5**：每一列都有名稱與一句說明；README 也照畫面的寫法（`Alt-t`、`Alt-S`、`Ctrl-C`，2026-09-28 user 要求一致）。
 - **M9**：`C` 在 panel 2 是 Compare、其他 panel 是 context；statusbar 的 `[C]ontext` 與 `[C]ompare` chip 依 focus 一亮一暗
   （`ViewFull()`）。panel 邊框 hint 只寫該 panel 自己的鍵。
 - **L1**：80 × 40 下 menu、key reference、picker 都放得下（`l4_test.go` 量整個畫面）。panel 2 的欄位在 80 欄時擠到三四格

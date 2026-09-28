@@ -51,7 +51,7 @@
 - **編輯（`E`）** — 在 kbu 內的 terminal popup 執行真正的 `kubectl edit`，使用你的 `$KUBE_EDITOR` / `$EDITOR`。
 - **Shell（`S`）** — `kubectl exec` 進 container，同樣在 kbu 內。
 - **刪除（`D`）** — 一定會先確認；刪 namespace 會多一道警告。
-- **Alterm（`Alt+t`）** — kbu 內的常駐 shell。同一個鍵隱藏、再按一次叫回來，目錄、history、執行中的 job 都還在。kbu 沒做的事，交給你平常用的工具在這裡做。
+- **Alterm（`Alt-t`）** — kbu 內的常駐 shell。同一個鍵隱藏、再按一次叫回來，目錄、history、執行中的 job 都還在。kbu 沒做的事，交給你平常用的工具在這裡做。
 - **複製（`y`）** — 透過 OSC 52 把目前這一列或整個畫面複製到剪貼簿，走 SSH 或 tmux 也能用。
 - **Audit log** — 從 kbu 做的每次編輯與刪除都會留下紀錄。
 
@@ -126,7 +126,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | **`Space`** | *這裡能幹嘛？* — 列出這個 panel 或 tab 能做的每一件事，最後一列 **Global operation** 是全域動作（namespace、context、Alterm、settings、app log、離開）|
 | **`Esc`** | 退回 — 回上一層 / 關閉 popup |
 
-不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt+Shift+S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都是 `Space` menu 裡的一列（全域的在它的 **Global operation** 那一列裡）— 想記再記，不想記也沒關係。暫時不能執行的列會變暗，而不是藏起來。popup 疊上來時只有你正在操作的那一個是亮的，底下的一切都變暗。
+不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt-S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都是 `Space` menu 裡的一列（全域的在它的 **Global operation** 那一列裡）— 想記再記，不想記也沒關係。暫時不能執行的列會變暗，而不是藏起來。popup 疊上來時只有你正在操作的那一個是亮的，底下的一切都變暗。
 
 **滑鼠也能用**：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `>` 開 Settings popup 可以關掉滑鼠改成純鍵盤。
 
@@ -142,10 +142,10 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
  cursor    j k         u d         gg G        / (在當前 panel 內搜尋)
  trigger   Y YAML      E edit      N namespace
  panel 1   P pin       S sort      D drag-and-drop pinned (modal)    C context
- panel 2   S shell     Alt+Shift+S sort    D delete    C compare anchor
+ panel 2   S shell     Alt-S sort          D delete    C compare anchor
  expand    z           z 切換當前 panel 全螢幕
  helm      .           . 切換 panel 2 中 helm-managed 物件顯示
- settings  >           > (shift+.) 開啟全域 Settings popup
+ settings  >           > (Shift-.) 開啟全域 Settings popup
 ```
 
 `S`、`C`、`D` 依焦點所在的 panel 做不同的事。快速鍵一律大寫，在搜尋欄打字時才不會誤觸。
@@ -155,14 +155,14 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | 鍵 | 動作 |
 |---|---|
 | `>` | 開啟全域 Settings popup（mouse on/off、scroll direction）|
-| `Alt+t` | 切換 Alterm（啟動 / 顯示 / 隱藏；隱藏時 shell 保持存活）|
+| `Alt-t` | 切換 Alterm（啟動 / 顯示 / 隱藏；隱藏時 shell 保持存活）|
 | `y` | 複製到剪貼簿（OSC 52）— 有 cursor 時複製那一列，否則複製整個內容 |
 | `!` | App log |
 | `?` | 最前面那個東西能按的鍵 —— focus 的 panel，或最上層的 menu、popup、模式。再按一次 `?` 或 `Esc` 關閉 |
 | `q` | 結束 kbu（離開時會保存 session 狀態）— 在任何 panel、menu、popup 上都有效；在搜尋欄打字時只是一個字母 |
-| `Ctrl+C` | 跟 `q` 一樣，打字時也有效 |
+| `Ctrl-C` | 跟 `q` 一樣，打字時也有效 |
 
-`N`、`C`、`Alt+t`、`>`、`!`、`q` 也都是 global operation popup 裡的列：每個 `Space` menu 的最後一列打開它。
+`N`、`C`、`Alt-t`、`>`、`!`、`q` 也都是 global operation popup 裡的列：每個 `Space` menu 的最後一列打開它。
 
 ### 滑鼠
 
@@ -189,7 +189,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 | 鍵 | 動作 |
 |---|---|
-| `Alt+t` | 離開：Alterm 隱藏（shell 繼續跑）；`kubectl edit` / `exec` 先問，再結束那個 session（還沒存的編輯會丟掉）|
+| `Alt-t` | 離開：Alterm 隱藏（shell 繼續跑）；`kubectl edit` / `exec` 先問，再結束那個 session（還沒存的編輯會丟掉）|
 | `PgUp` / `PgDn` | 歷史以一頁為單位捲動 |
 | `Home` / `End` | 跳到歷史頂端 / 回到 live |
 | 其他任何鍵 | 跳回 live、按鍵轉發給 subprocess |
