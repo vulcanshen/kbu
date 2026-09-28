@@ -27,7 +27,7 @@
 
 ### 到處走走
 
-- **Relatives** — 每個 resource 都會列出它連到哪些東西：它的 owner、Service 選到的 Pods、HPA 在 scale 的 workload、掛載某個 PVC 的 Pods、用到某個 ConfigMap 或 Secret 的 Pods。`Enter` 順著連結走、`Esc` 退回一步、`Space` 可以直接跳回走過的鏈上任何一點。
+- **Relatives** — 每個 resource 都會列出它連到哪些東西：它的 owner、Service 選到的 Pods、HPA 在 scale 的 workload、掛載某個 PVC 的 Pods、用到某個 ConfigMap 或 Secret 的 Pods。`Enter` 順著連結走、`Esc` 退回一步，`Space` menu 的 **Jump to an ancestor** 可以直接跳回走過的鏈上任何一點。
 - **鑽入** — Deployment / StatefulSet / DaemonSet / Job → Pods → Containers，CronJob → Jobs，HPA → 目標 workload，Helm release → chart 部署出來的每個物件。
 - **內建 28 種 resource，外加你的 CRD** — Custom Resource 啟動時自動探索，所有列表透過 Kubernetes Watch API 即時更新。
 - **多 namespace 檢視** — 在 `N` picker 勾選任意幾個 namespace，或選「All Namespaces」。kbu 會記住你的選擇。
@@ -122,10 +122,10 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 |---|---|
 | **`Tab`** | 切換 panel 焦點（也可以直接按 `1` / `2` / `3` 跳轉）|
 | **`Enter`** | 鑽入 / 確認選擇 |
-| **`Space`** | *這裡能幹嘛？* — 在每個 panel、每個 tab 上開啟對應的 menu 或 cheatsheet |
+| **`Space`** | *這裡能幹嘛？* — 列出這個 panel 或 tab 能做的每一件事，最後一列 **Global operation** 是全域動作（namespace、context、Alterm、settings、app log、離開）|
 | **`Esc`** | 退回 — 回上一層 / 關閉 popup |
 
-不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt+Shift+S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都能透過 `Space` menu 抵達 — 想記再記，不想記也沒關係。
+不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt+Shift+S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都是 `Space` menu 裡的一列（全域的在它的 **Global operation** 那一列裡）— 想記再記，不想記也沒關係。暫時不能執行的列會變暗，而不是藏起來。
 
 **滑鼠也能用**：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `>` 開 Settings popup 可以關掉滑鼠改成純鍵盤。
 
@@ -161,13 +161,15 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | `q` | 結束 kbu（離開時會保存 session 狀態）|
 | `Ctrl+C` | 結束 kbu — 在 panel 搜尋中也能用 |
 
+`N`、`C`、`Alt+t`、`>`、`!`、`q` 也都是 global operation popup 裡的列：每個 `Space` menu 的最後一列打開它。
+
 ### 滑鼠
 
 | 操作 | 行為 |
 |---|---|
 | **左鍵** 點 panel row | 切焦點到該 panel + cursor 移到該列 |
 | **雙擊** | 等同 `Enter`（鑽入 cursor 那列）|
-| **右鍵** 點 row | 等同 `Space`（開該列的 context menu / cheatsheet）|
+| **右鍵** 點 row | 等同 `Space`（開那一列的 `Space` menu）|
 | **滾輪** 上 / 下 | 等同 `u` / `d`（半頁移動）。方向可在 Settings popup 切換 `scroll_direction: natural | reverse` |
 | **左鍵** 點 list popup 的列 | 選定該列（等同 cursor + `Enter`）|
 | **右鍵** 點任何 popup | 關閉它（等同 `Esc`）|
@@ -178,8 +180,8 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 | 鍵 | 位置 | 動作 |
 |---|---|---|
-| `Space` | Panel 2、Release row | 開啟文件 menu — 選 `Manifest` / `Notes` / `User Values` / `Merged Values` / `Hooks` |
-| `Space` | Panel 3、History tab、非當前 row | rollback 到該版本（確認 popup 會顯示確切的 `helm rollback` 命令）|
+| `Space` | Panel 2、Release row | `Space` menu 在 `YAML` 旁邊列出 release 的文件 — `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks`；每一份都開在 menu 上面，可以連看幾份 |
+| `Space` | Panel 3、History tab | `Space` menu 的 **Roll back to this revision**（目前部署的版本上變暗）；確認 popup 會顯示確切的 `helm rollback` 命令 |
 | `.` | 任何非 Releases 的 panel 2 list | 切換 helm-managed 物件的可見性 |
 
 ### PTY popups（Alterm、edit、shell exec）

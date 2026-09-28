@@ -148,6 +148,9 @@ func (c *Client) GetNamespace() string {
 // Selection returns the current namespace selection (All or an explicit
 // set). This is the source of truth the watcher fetches against.
 func (c *Client) Selection() NamespaceSelection {
+	if c == nil { // no client (UI model tests): the default, all namespaces
+		return AllNamespaces()
+	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.selection
@@ -183,5 +186,8 @@ func (c *Client) Registry() *Registry {
 
 // ContextName returns the name of the active kubeconfig context.
 func (c *Client) ContextName() string {
+	if c == nil { // no client (UI model tests)
+		return ""
+	}
 	return c.contextName
 }

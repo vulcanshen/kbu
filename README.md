@@ -27,7 +27,7 @@
 
 ### Find your way around
 
-- **Relatives** -- every resource lists what it is connected to: its owner, the Pods a Service selects, the workload an HPA scales, the Pods mounting a PVC, the Pods using a ConfigMap or Secret. `Enter` follows a link, `Esc` steps back, and `Space` jumps to any point in the chain you walked.
+- **Relatives** -- every resource lists what it is connected to: its owner, the Pods a Service selects, the workload an HPA scales, the Pods mounting a PVC, the Pods using a ConfigMap or Secret. `Enter` follows a link, `Esc` steps back, and the `Space` menu's **Jump to an ancestor** takes you to any point in the chain you walked.
 - **Drill-down** -- Deployment / StatefulSet / DaemonSet / Job → Pods → Containers, CronJob → Jobs, HPA → its target, Helm release → every object the chart deployed.
 - **28 built-in resource types plus your CRDs** -- Custom Resources are discovered at startup, and every list updates live through the Kubernetes Watch API.
 - **Multi-namespace view** -- check any set of namespaces in the `N` picker, or pick "All Namespaces". kbu remembers the selection.
@@ -122,10 +122,10 @@ Connects to your current kubeconfig context. Press `Enter` to drill, `Space` for
 |---|---|
 | **`Tab`** | Switch panel focus (or `1` / `2` / `3` directly) |
 | **`Enter`** | Drill in / commit a choice |
-| **`Space`** | *What can I do here?* — opens a contextual menu or cheatsheet on every panel and every tab |
+| **`Space`** | *What can I do here?* — the menu of everything this panel or tab can do, ending with **Global operation** (namespace, context, Alterm, settings, app log, quit) |
 | **`Esc`** | Back out — pop one drill level / close any popup |
 
-When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt+Shift+S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also reachable through the `Space` menu, so nothing's required to memorize unless you want it.
+When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt+Shift+S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also a row of the `Space` menu (the app-wide ones under its **Global operation** row), so nothing's required to memorize unless you want it. A row that can't run right now is shown dimmed rather than hidden.
 
 **Mouse works too**: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `>` to open the Settings popup if you want to flip mouse off and stay keyboard-only.
 
@@ -161,13 +161,15 @@ Everything below is also in the `Space` menu -- these are just faster.
 | `q` | Quit kbu (saves session state on the way out) |
 | `Ctrl+C` | Quit kbu -- also works while a panel search is active |
 
+`N`, `C`, `Alt+t`, `>`, `!` and `q` are also rows of the global operation popup: the last row of every `Space` menu.
+
 ### Mouse
 
 | Gesture | Behavior |
 |---|---|
 | **Left-click** on a panel row | Focus that panel + move the cursor to the clicked row |
 | **Double-click** | Synthesizes `Enter` (drill into the cursor row) |
-| **Right-click** on a row | Synthesizes `Space` (opens the row's context menu / cheatsheet) |
+| **Right-click** on a row | Synthesizes `Space` (opens the `Space` menu for that row) |
 | **Wheel up / down** | Synthesizes `u` / `d` (half-page move). Direction can be flipped via Settings popup (`scroll_direction: natural | reverse`) |
 | **Left-click** inside a list popup | Commits that row (same as cursor + `Enter`) |
 | **Right-click** inside any popup | Closes it (same as `Esc`) |
@@ -178,8 +180,8 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 
 | Key | Where | Action |
 |---|---|---|
-| `Space` | Panel 2, Release row | Open the doc menu — pick `Manifest` / `Notes` / `User Values` / `Merged Values` / `Hooks` |
-| `Space` | Panel 3, History tab, non-current row | Roll back to that revision (confirm popup shows the exact `helm rollback` command) |
+| `Space` | Panel 2, Release row | The `Space` menu lists the release's documents next to `YAML` — `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks`; each opens over the menu, so you can read several in a row |
+| `Space` | Panel 3, History tab | The `Space` menu's **Roll back to this revision** (dimmed on the deployed revision); the confirm shows the exact `helm rollback` command |
 | `.` | Any non-Releases panel 2 list | Toggle visibility of helm-managed objects |
 
 ### PTY popups (Alterm, edit, shell exec)

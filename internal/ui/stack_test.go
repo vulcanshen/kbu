@@ -22,10 +22,9 @@ func stackTestApp(t *testing.T) AppModel {
 
 // openTestSpaceMenu opens the panel 2 Space menu on a Pod row, fully open.
 func openTestSpaceMenu(m *AppModel) {
-	m.panel2Menu.SetSize(m.width, m.height)
-	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx", Namespace: "default"},
-		false, panel2CompareCtx{canLock: true})
-	m.panel2Menu.animator.Finalize()
+	m.spaceMenu.SetSize(m.width, m.height)
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx", Namespace: "default"},
+		panel2CompareCtx{canLock: true})
 }
 
 // centeredRect is where a centered popup string lands on a w×h screen —
@@ -42,13 +41,13 @@ func centeredRect(popup string, w, h int) (x, y, pw, ph int) {
 // commit the menu row hidden underneath.
 func menuRowUnder(t *testing.T, m AppModel, above string) (int, int) {
 	t.Helper()
-	_, my, _, _ := centeredRect(m.panel2Menu.renderFullPopup(), m.width, m.height)
+	_, my, _, _ := centeredRect(m.spaceMenu.renderFullPopup(), m.width, m.height)
 	ax, ay, aw, ah := centeredRect(above, m.width, m.height)
 	x := m.width / 2
 	if x < ax || x >= ax+aw {
 		t.Fatalf("screen centre %d is outside the popup above (%d..%d)", x, ax, ax+aw)
 	}
-	for i, it := range m.panel2Menu.items {
+	for i, it := range m.spaceMenu.items {
 		if it.header || it.separator {
 			continue
 		}
@@ -68,7 +67,7 @@ func leftClick(x, y int) tea.MouseMsg {
 // Space-menu commit.
 func firedMenuAction(cmd tea.Cmd) bool {
 	for _, msg := range drainCmd(cmd) {
-		if _, ok := msg.(Panel2MenuActionMsg); ok {
+		if _, ok := msg.(MenuActionMsg); ok {
 			return true
 		}
 	}
@@ -206,12 +205,12 @@ func TestStack_ClosingPopupHandsEscToTheLayerBeneath(t *testing.T) {
 		t.Fatalf("setup: the first Esc must start closing the confirm (owns=%v drawn=%v)",
 			got.confirm.owns(), got.confirm.drawn())
 	}
-	if !got.panel2Menu.owns() {
+	if !got.spaceMenu.owns() {
 		t.Fatal("setup: the first Esc must leave the Space menu open")
 	}
 
 	updated, _ = got.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if got = updated.(AppModel); got.panel2Menu.owns() {
+	if got = updated.(AppModel); got.spaceMenu.owns() {
 		t.Error("Esc during the confirm's close animation must close the Space menu beneath it")
 	}
 }

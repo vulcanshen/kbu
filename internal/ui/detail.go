@@ -1684,6 +1684,23 @@ func (m DetailModel) handleHistoryKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cm
 	return m, false, nil
 }
 
+// HistoryCursor returns the revision under the History cursor and whether
+// it is the one currently deployed, or nil when the cursor is off the
+// table (or the History tab isn't showing).
+func (m DetailModel) HistoryCursor() (*k8s.ReleaseRevision, bool) {
+	if m.ActiveTabName() != "History" {
+		return nil, false
+	}
+	if m.historyCursor < 0 || m.historyCursor >= len(m.detail.ReleaseHistory) {
+		return nil, false
+	}
+	r := m.detail.ReleaseHistory[m.historyCursor]
+	return &r, r.Status == "deployed"
+}
+
+// TabCount is how many tabs panel 3 has for the current kind.
+func (m DetailModel) TabCount() int { return len(m.tabs) }
+
 // SelectedHistoryRevision returns the ReleaseRevision under the History
 // cursor, or nil when the cursor is off the table / on the current
 // (deployed) row. AppModel uses this to decide whether Space triggers a

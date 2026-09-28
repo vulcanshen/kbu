@@ -30,9 +30,9 @@ func appWithSizeAndCfg(t *testing.T, w, h int, cfg *config.Config) AppModel {
 		appLog:          NewAppLogModel(th),
 		listPicker:      NewListPickerModel(th),
 		settingsPopup:   NewSettingsPopupModel(th),
-		panel2Menu:      NewPanel2MenuPopupModel(th),
+		spaceMenu:       NewSpaceMenuModel(th),
+		globalMenu:      NewGlobalMenuModel(th),
 		hintPopup:       NewHintPopupModel(th),
-		helmDocMenu:     NewHelmDocMenuPopupModel(th),
 		namespacePicker: NewNamespacePickerModel(th),
 		contextPicker:   NewContextPickerModel(th),
 		yamlPopup:       NewYamlPopupModel(th),
@@ -271,7 +271,7 @@ func TestWheel_MenuOnTopSwallowsViewerOnTopScrolls(t *testing.T) {
 		t.Fatalf("no popup: wheel down = %q, want d", got)
 	}
 
-	m.panel2Menu.animator.State = PopupOpen
+	m.spaceMenu.animator.State = PopupOpen
 	if got := wheelKey(t, m); got != "" {
 		t.Errorf("Space menu on top: wheel must be swallowed, got %q", got)
 	}

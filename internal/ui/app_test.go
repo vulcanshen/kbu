@@ -357,9 +357,9 @@ func appWithItems(items []k8s.ResourceItem, cursor int) AppModel {
 		txPty:           NewPtyView("ptyview_tx"),
 		toast:           NewToastModel(th),
 		breadcrumbPopup: NewBreadcrumbPopupModel(th),
-		panel2Menu:      NewPanel2MenuPopupModel(th),
+		spaceMenu:       NewSpaceMenuModel(th),
+		globalMenu:      NewGlobalMenuModel(th),
 		hintPopup:       NewHintPopupModel(th),
-		helmDocMenu:     NewHelmDocMenuPopupModel(th),
 		listPicker:      NewListPickerModel(th),
 		settingsPopup:   NewSettingsPopupModel(th),
 		namespacePicker: NewNamespacePickerModel(th),
@@ -784,18 +784,16 @@ func TestAppModel_DualSlot_TxAlive_BlocksAnotherExec(t *testing.T) {
 func TestStartEditMsg_PtyAlwaysLayer1(t *testing.T) {
 	m := appWithItems(nil, 0)
 	th := theme.DefaultTheme()
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
 	m.confirm = NewConfirmModel(th)
 	m.appLog = NewAppLogModel(th)
 
-	// Mock the panel2Menu → confirm → Edit launch chain: both popups
+	// Mock the Space menu → confirm → Edit launch chain: both popups
 	// fully open and alive when the handler fires.
-	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
-	m.panel2Menu.animator.Finalize()
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, panel2CompareCtx{})
 	_ = m.confirm.Show(ConfirmEdit, "Edit?", "kubectl edit pod/nginx", nil)
 	m.confirm.animator.Finalize()
 	if m.popupDepth() < 2 {
-		t.Fatalf("setup: popupDepth must be ≥ 2 with panel2Menu + confirm open, got %d", m.popupDepth())
+		t.Fatalf("setup: popupDepth must be ≥ 2 with the Space menu + confirm open, got %d", m.popupDepth())
 	}
 
 	updated, _ := m.Update(startEditMsg{
@@ -816,12 +814,10 @@ func TestStartEditMsg_PtyAlwaysLayer1(t *testing.T) {
 func TestStartShellExecMsg_PtyAlwaysLayer1(t *testing.T) {
 	m := appWithItems(nil, 0)
 	th := theme.DefaultTheme()
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
 	m.confirm = NewConfirmModel(th)
 	m.appLog = NewAppLogModel(th)
 
-	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
-	m.panel2Menu.animator.Finalize()
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, panel2CompareCtx{})
 	_ = m.confirm.Show(ConfirmShellExec, "Shell?", "kubectl exec", nil)
 	m.confirm.animator.Finalize()
 
@@ -1126,121 +1122,83 @@ func TestAppModel_CompareHotkeyDispatch_TogglesOnAnchorRow(t *testing.T) {
 	}
 }
 
-// TestPanel2MenuC_MarkAnchor_ClosesMenu pins the panel-2 menu close
-// behavior on "Mark as Compare anchor". The action is a pure state
-// mutation (no target popup), so the menu must close so the user can
-// see the resulting lavender anchor-row highlight on panel 2.
-// Anti-regression for: "啟動 mark anchor 後 space menu 應該直接關閉".
-func TestPanel2MenuC_MarkAnchor_ClosesMenu(t *testing.T) {
+// pressInMenu presses k in the Space menu and returns the app after the
+// row it ran has been handled.
+func pressInMenu(t *testing.T, m AppModel, k string) AppModel {
+	t.Helper()
+	var cmd tea.Cmd
+	m.spaceMenu, cmd = m.spaceMenu.Update(key(k))
+	if cmd == nil {
+		t.Fatalf("%q ran no row in the Space menu", k)
+	}
+	action, ok := cmd().(MenuActionMsg)
+	if !ok {
+		t.Fatalf("%q in the Space menu must emit MenuActionMsg", k)
+	}
+	updated, _ := m.Update(action)
+	return updated.(AppModel)
+}
+
+// Mark as Compare anchor only changes state, so the Space menu closes
+// and the user sees the lavender anchor row it was covering (tdp T1).
+func TestSpaceMenuC_MarkAnchor_ClosesMenu(t *testing.T) {
 	items := []k8s.ResourceItem{
 		{Name: "a", UID: "uid-a", Row: []string{"a"}},
 		{Name: "b", UID: "uid-b", Row: []string{"b"}},
 	}
 	m := appWithItems(items, 0)
 	m.currentResource = k8s.ResourcePods
-	th := theme.DefaultTheme()
-	m.appLog = NewAppLogModel(th)
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
-	m.comparePopup = NewCompareYamlPopupModel(th)
+	m.activePanel = TablePanel
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, items[0], m.compareCtxForMenu(items[0]))
 
-	// Open the menu for row 0 — Mark-anchor branch.
-	_ = m.panel2Menu.Open(k8s.ResourcePods, items[0], false, panel2CompareCtx{canLock: true})
-	m.panel2Menu.animator.Finalize()
-	if !m.panel2Menu.IsActive() {
-		t.Fatal("setup: panel2Menu must be active before commit")
-	}
-
-	// Commit "C" via Panel2MenuActionMsg — same path the menu uses
-	// when the user picks Enter on the Mark entry.
-	updated, cmd := m.Update(Panel2MenuActionMsg{Action: "C", Resource: k8s.ResourcePods, Item: items[0]})
-	app := updated.(AppModel)
-
+	app := pressInMenu(t, m, "C")
 	if !app.inCompareMode() {
-		t.Error("mark anchor must set compare mode")
+		t.Error("Mark as Compare anchor must set compare mode")
 	}
-	if cmd == nil {
-		t.Fatal("Mark anchor commit must return a Cmd (the menu close)")
-	}
-	// Drain the close animation so we can assert the steady state.
-	app.panel2Menu.animator.Finalize()
-	if app.panel2Menu.IsActive() {
-		t.Error("Mark anchor must close panel2 menu — state mutation surface, not §1.8 target launch")
+	if app.spaceMenu.owns() {
+		t.Error("Mark as Compare anchor must close the Space menu")
 	}
 }
 
-// TestPanel2MenuC_UnmarkAnchor_ClosesMenu pins the same close behavior
-// for the unmark branch. Same shape — state mutation, no target popup,
-// menu must close so the user sees the cleared lock immediately.
-func TestPanel2MenuC_UnmarkAnchor_ClosesMenu(t *testing.T) {
+func TestSpaceMenuC_UnmarkAnchor_ClosesMenu(t *testing.T) {
 	items := []k8s.ResourceItem{
 		{Name: "a", UID: "uid-a", Row: []string{"a"}},
+		{Name: "b", UID: "uid-b", Row: []string{"b"}},
 	}
 	m := appWithItems(items, 0)
 	m.currentResource = k8s.ResourcePods
-	th := theme.DefaultTheme()
-	m.appLog = NewAppLogModel(th)
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
-	m.comparePopup = NewCompareYamlPopupModel(th)
-
-	// Pre-mark so the dispatch hits the unmark branch.
+	m.activePanel = TablePanel
 	m.setCompareLock(items[0], k8s.ResourcePods)
-	if !m.inCompareMode() {
-		t.Fatal("setup: anchor must be set")
-	}
-	_ = m.panel2Menu.Open(k8s.ResourcePods, items[0], false, panel2CompareCtx{locked: true, cursorOnAnchor: true})
-	m.panel2Menu.animator.Finalize()
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, items[0], m.compareCtxForMenu(items[0]))
 
-	updated, cmd := m.Update(Panel2MenuActionMsg{Action: "C", Resource: k8s.ResourcePods, Item: items[0]})
-	app := updated.(AppModel)
-
+	app := pressInMenu(t, m, "C")
 	if app.inCompareMode() {
-		t.Error("unmark anchor must exit compare mode")
+		t.Error("Unmark Compare anchor must exit compare mode")
 	}
-	if cmd == nil {
-		t.Fatal("Unmark anchor commit must return a Cmd (the menu close)")
-	}
-	app.panel2Menu.animator.Finalize()
-	if app.panel2Menu.IsActive() {
-		t.Error("Unmark anchor must close panel2 menu")
+	if app.spaceMenu.owns() {
+		t.Error("Unmark Compare anchor must close the Space menu")
 	}
 }
 
-// TestPanel2MenuC_OpenDiff_KeepsMenuOpen pins the §1.8 contract for
-// the OTHER C branch — Compare-to-anchor opens the diff popup, which
-// is a target launch. Menu must STAY underneath so Esc on the diff
-// returns the user to the menu.
-func TestPanel2MenuC_OpenDiff_KeepsMenuOpen(t *testing.T) {
+// Compare to anchor opens the diff popup over the Space menu; the menu
+// stays underneath so Esc on the diff returns to it (tdp F4).
+func TestSpaceMenuC_CompareToAnchor_KeepsMenuBeneathTheDiff(t *testing.T) {
 	items := []k8s.ResourceItem{
 		{Name: "a", UID: "uid-a", Namespace: "ns", Row: []string{"a"}},
 		{Name: "b", UID: "uid-b", Namespace: "ns", Row: []string{"b"}},
 	}
-	// Both items need raw objects so MarshalItemYAMLForCompare doesn't
-	// blow up — but for the close-or-not assertion we don't need real
-	// YAML output, just that the dispatch path completes without
-	// closing the menu.
-	for i := range items {
-		items[i].Raw = nil // dispatch path tolerates nil Raw → marshal returns empty string
-	}
 	m := appWithItems(items, 1)
 	m.currentResource = k8s.ResourcePods
-	th := theme.DefaultTheme()
-	m.appLog = NewAppLogModel(th)
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
-	m.comparePopup = NewCompareYamlPopupModel(th)
-
-	// Pre-mark row 0 as anchor; cursor C-press will be on row 1 (a
-	// different row of the same kind → open-diff branch).
+	m.activePanel = TablePanel
 	m.setCompareLock(items[0], k8s.ResourcePods)
-	_ = m.panel2Menu.Open(k8s.ResourcePods, items[1], false, panel2CompareCtx{
-		locked: true, cursorComparable: true,
-	})
-	m.panel2Menu.animator.Finalize()
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, items[1], m.compareCtxForMenu(items[1]))
 
-	updated, _ := m.Update(Panel2MenuActionMsg{Action: "C", Resource: k8s.ResourcePods, Item: items[1]})
-	app := updated.(AppModel)
-
-	if !app.panel2Menu.IsActive() {
-		t.Error("§1.8: Compare-to-anchor opens comparePopup as target; menu must STAY open underneath")
+	app := pressInMenu(t, m, "C")
+	if !app.comparePopup.owns() {
+		t.Fatal("Compare to anchor must open the diff popup")
+	}
+	if !app.spaceMenu.owns() {
+		t.Error("the Space menu must stay open beneath the diff popup")
 	}
 }
 
@@ -1255,7 +1213,8 @@ func TestAppModel_CloseAllBlockingPopups_NilWhenIdle(t *testing.T) {
 	th := theme.DefaultTheme()
 	m := AppModel{
 		theme:           th,
-		panel2Menu:      NewPanel2MenuPopupModel(th),
+		spaceMenu:       NewSpaceMenuModel(th),
+		globalMenu:      NewGlobalMenuModel(th),
 		confirm:         NewConfirmModel(th),
 		help:            NewHelpModel(th),
 		appLog:          NewAppLogModel(th),
@@ -1267,7 +1226,6 @@ func TestAppModel_CloseAllBlockingPopups_NilWhenIdle(t *testing.T) {
 		breadcrumbPopup: NewBreadcrumbPopupModel(th),
 		contextPicker:   NewContextPickerModel(th),
 		namespacePicker: NewNamespacePickerModel(th),
-		helmDocMenu:     NewHelmDocMenuPopupModel(th),
 	}
 	if cmd := m.closeAllBlockingPopups(); cmd != nil {
 		t.Errorf("closeAllBlockingPopups must return nil when nothing is open, got %T", cmd)
@@ -1283,7 +1241,8 @@ func TestAppModel_CloseAllBlockingPopups_ClosesActiveOnes(t *testing.T) {
 	th := theme.DefaultTheme()
 	m := AppModel{
 		theme:           th,
-		panel2Menu:      NewPanel2MenuPopupModel(th),
+		spaceMenu:       NewSpaceMenuModel(th),
+		globalMenu:      NewGlobalMenuModel(th),
 		confirm:         NewConfirmModel(th),
 		help:            NewHelpModel(th),
 		appLog:          NewAppLogModel(th),
@@ -1295,16 +1254,14 @@ func TestAppModel_CloseAllBlockingPopups_ClosesActiveOnes(t *testing.T) {
 		breadcrumbPopup: NewBreadcrumbPopupModel(th),
 		contextPicker:   NewContextPickerModel(th),
 		namespacePicker: NewNamespacePickerModel(th),
-		helmDocMenu:     NewHelmDocMenuPopupModel(th),
 	}
-	// Open panel2Menu + confirm; drain animations to fully open.
-	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
-	m.panel2Menu.animator.Finalize()
+	// Open the Space menu + confirm; drain animations to fully open.
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, panel2CompareCtx{})
 	_ = m.confirm.Show(ConfirmEdit, "Edit?", "kubectl edit pod/nginx", nil)
 	m.confirm.animator.Finalize()
-	if !m.panel2Menu.IsActive() || !m.confirm.IsActive() {
-		t.Fatalf("setup: both popups must be active, got panel2Menu=%v confirm=%v",
-			m.panel2Menu.IsActive(), m.confirm.IsActive())
+	if !m.spaceMenu.IsActive() || !m.confirm.IsActive() {
+		t.Fatalf("setup: both popups must be active, got spaceMenu=%v confirm=%v",
+			m.spaceMenu.IsActive(), m.confirm.IsActive())
 	}
 
 	cmd := m.closeAllBlockingPopups()
@@ -1313,10 +1270,10 @@ func TestAppModel_CloseAllBlockingPopups_ClosesActiveOnes(t *testing.T) {
 	}
 	// Helper triggers the close animation; finalize fast-forwards
 	// past it so we can assert the post-animation steady state.
-	m.panel2Menu.animator.Finalize()
+	m.spaceMenu.animator.Finalize()
 	m.confirm.animator.Finalize()
-	if m.panel2Menu.IsActive() {
-		t.Error("§1.10: panel2Menu must be closed after helper + finalize")
+	if m.spaceMenu.IsActive() {
+		t.Error("§1.10: the Space menu must be closed after helper + finalize")
 	}
 	if m.confirm.IsActive() {
 		t.Error("§1.10: confirm must be closed after helper + finalize")

@@ -35,7 +35,7 @@ type stackLayer interface {
 // sit on top.
 func (m *AppModel) stackOrder() []stackLayer {
 	return []stackLayer{
-		&m.hintPopup, &m.panel2Menu, &m.helmDocMenu,
+		&m.hintPopup, &m.spaceMenu, &m.globalMenu,
 		&m.listPicker, &m.settingsPopup, &m.namespacePicker, &m.contextPicker, &m.appLog,
 		&m.breadcrumbPopup, &m.yamlPopup, &m.comparePopup,
 		&m.confirm, &m.help,
@@ -60,8 +60,8 @@ func (m *AppModel) topLayer() stackLayer {
 // handful of rows, and a synthesized u / d would reach nothing.
 func isMenuLayer(l stackLayer) bool {
 	switch l.(type) {
-	case *Panel2MenuPopupModel, *ListPickerModel, *SettingsPopupModel,
-		*HintPopupModel, *BreadcrumbPopupModel, *HelmDocMenuPopupModel,
+	case *MenuPopupModel, *ListPickerModel, *SettingsPopupModel,
+		*HintPopupModel, *BreadcrumbPopupModel,
 		*NamespacePickerModel, *ContextPickerModel, *ConfirmModel:
 		return true
 	}
@@ -90,35 +90,18 @@ func (m *HintPopupModel) click(msg tea.MouseMsg, w, h int) tea.Cmd {
 	return c
 }
 
-func (m *Panel2MenuPopupModel) owns() bool          { return m.animator.Owns() }
-func (m *Panel2MenuPopupModel) ready() bool         { return m.animator.IsInteractive() }
-func (m *Panel2MenuPopupModel) drawn() bool         { return m.animator.IsActive() }
-func (m *Panel2MenuPopupModel) resize(w, h int)     { m.SetSize(w, h) }
-func (m *Panel2MenuPopupModel) render() string      { return m.RenderPopup() }
-func (m *Panel2MenuPopupModel) closeLayer() tea.Cmd { return m.Close() }
-func (m *Panel2MenuPopupModel) key(k tea.KeyMsg) tea.Cmd {
+func (m *MenuPopupModel) owns() bool          { return m.animator.Owns() }
+func (m *MenuPopupModel) ready() bool         { return m.animator.IsInteractive() }
+func (m *MenuPopupModel) drawn() bool         { return m.animator.IsActive() }
+func (m *MenuPopupModel) resize(w, h int)     { m.SetSize(w, h) }
+func (m *MenuPopupModel) render() string      { return m.RenderPopup() }
+func (m *MenuPopupModel) closeLayer() tea.Cmd { return m.Close() }
+func (m *MenuPopupModel) key(k tea.KeyMsg) tea.Cmd {
 	var c tea.Cmd
 	*m, c = m.Update(k)
 	return c
 }
-func (m *Panel2MenuPopupModel) click(msg tea.MouseMsg, w, h int) tea.Cmd {
-	var c tea.Cmd
-	*m, c = m.HandleMouse(msg, w, h)
-	return c
-}
-
-func (m *HelmDocMenuPopupModel) owns() bool          { return m.animator.Owns() }
-func (m *HelmDocMenuPopupModel) ready() bool         { return m.animator.IsInteractive() }
-func (m *HelmDocMenuPopupModel) drawn() bool         { return m.animator.IsActive() }
-func (m *HelmDocMenuPopupModel) resize(w, h int)     { m.SetSize(w, h) }
-func (m *HelmDocMenuPopupModel) render() string      { return m.RenderPopup() }
-func (m *HelmDocMenuPopupModel) closeLayer() tea.Cmd { return m.Close() }
-func (m *HelmDocMenuPopupModel) key(k tea.KeyMsg) tea.Cmd {
-	var c tea.Cmd
-	*m, c = m.Update(k)
-	return c
-}
-func (m *HelmDocMenuPopupModel) click(msg tea.MouseMsg, w, h int) tea.Cmd {
+func (m *MenuPopupModel) click(msg tea.MouseMsg, w, h int) tea.Cmd {
 	var c tea.Cmd
 	*m, c = m.HandleMouse(msg, w, h)
 	return c
