@@ -158,8 +158,8 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | `y` | 複製到剪貼簿（OSC 52）— 有 cursor 時複製那一列，否則複製整個內容 |
 | `!` | App log |
 | `?` | Help |
-| `q` | 結束 kbu（離開時會保存 session 狀態）|
-| `Ctrl+C` | 結束 kbu — 在 panel 搜尋中也能用 |
+| `q` | 結束 kbu（離開時會保存 session 狀態）— 在任何 panel、menu、popup 上都有效；在搜尋欄打字時只是一個字母 |
+| `Ctrl+C` | 跟 `q` 一樣，打字時也有效 |
 
 `N`、`C`、`Alt+t`、`>`、`!`、`q` 也都是 global operation popup 裡的列：每個 `Space` menu 的最後一列打開它。
 

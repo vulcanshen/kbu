@@ -57,6 +57,11 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **The key that opened a popup no longer closes it.** `N` on the namespace
   picker, `C` on the context picker, `!` on the App log and `>` on Settings
   used to work as a second `Esc` there, and nowhere else. `Esc` closes them.
+- **`q` and `Ctrl+C` quit from anywhere, the same way.** `q` used to do
+  nothing while a menu or popup was open; now it quits from any panel, menu,
+  popup or the drag mode (while you type in a search it is still a letter).
+  `Ctrl+C` now goes through the same exit as `q`: it saves the session state
+  and stops a running Alterm / edit / exec, which it used to skip.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

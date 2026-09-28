@@ -132,26 +132,6 @@ popup** 能按的鍵的 key reference：唯讀、可以捲動。再按 `?` 或 `
 （路由、繪製、亮暗、滑鼠都是）。
 
 
-## 13. `q` 與 `Ctrl-C` 行為不同，在 popup 與輸入態上沒有作用 —— K9、K1、K8
-
-**現況**：
-
-- `app.go` 主 switch 的 `case "ctrl+c"` 直接 `tea.Quit`（只停 watcher 與 log 串流）；`case "q"` 走 `quitMsg`（停 PTY、寫
-  `state.yaml`）。所以 `Ctrl-C` 離開不存 session 狀態，也不停 Alterm 的子程序。panel 搜尋打字中（`searching` 分支）的 `Ctrl-C`
-  同樣直接 `tea.Quit`。
-- popup 開著時，按鍵在 `Update()` 前段就被該 popup 吃掉，`q` 與 `Ctrl-C` 都沒有作用（PTY 依 K10 例外）；namespace / context picker、
-  YAML 的搜尋打字中也一樣。拖曳模式裡 `q` 是取消拖曳（第 14 條）。
-- 離開不在任何可執行的清單裡（第 6 條）。
-
-**規則**：K9 —— `q` 與 `Ctrl-C` 做同一件事：進入離開流程；`q` 在每個非輸入態的 surface 都有效，`Ctrl-C` 連輸入態都有效；離開流程
-進行中再按一次 `Ctrl-C` 立刻離開；離開列在 global operation popup 裡。離開流程由 app 決定。
-
-**怎麼改**：`Ctrl-C` 改成走跟 `q` 同一個 `quitMsg`；兩者的處理提到 popup 路由之前、splash 之後（輸入態的 `q` 是字元；PTY 裡照 K10
-屬於子程序）。global operation popup 的 `[q]uit` 也走 `quitMsg`。kbu 已定「`q` 直接離開、不確認」（`48e540b`），`Ctrl-C` 跟著。
-日後若要加確認（例如 Alterm 還活著），用**自己的** quit confirm popup 疊在整疊最上面，它的 `?` 也是自己的（D3；locku、sshu、webu 的
-`quitAsk` + `quitHelp`），確認開著時的 `Ctrl-C` 直接離開。README 兩份「全域」表的 `Ctrl+C` 說明一起改。
-
-
 ## 14. 模式裡的 core key：拖曳與 YAML 的 visual —— K11、M1、M3
 
 **現況**：

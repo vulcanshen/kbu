@@ -158,8 +158,8 @@ Everything below is also in the `Space` menu -- these are just faster.
 | `y` | Copy focused element to clipboard (OSC 52) -- cursor row when the focus has one, whole content otherwise |
 | `!` | App log |
 | `?` | Help |
-| `q` | Quit kbu (saves session state on the way out) |
-| `Ctrl+C` | Quit kbu -- also works while a panel search is active |
+| `q` | Quit kbu (saves session state on the way out) -- from any panel, menu or popup; while you type in a search it is just a letter |
+| `Ctrl+C` | Same as `q`, and it also works while you type |
 
 `N`, `C`, `Alt+t`, `>`, `!` and `q` are also rows of the global operation popup: the last row of every `Space` menu.
 
