@@ -36,7 +36,7 @@ func TestPtyView_PtyDims_ClampsToMinimum(t *testing.T) {
 		useExactAssert bool
 	}{
 		{"tiny host clamps to minimum", 10, 5, 20, 5, 0, 0, false},
-		{"normal host = host - 2*margin - border", 100, 50, 0, 0, 94, 45, true},
+		{"normal host = host - 2*margin - border", 100, 50, 0, 0, 96, 45, true}, // tdp F7: W−2 frame
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

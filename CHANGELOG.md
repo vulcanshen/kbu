@@ -103,6 +103,17 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   (say a Deployment's Pods) with a compare anchor set, one `Esc` used to both
   drop the anchor and leave the drill; now the first `Esc` drops the anchor and
   the next one leaves the drill.
+- **Every popup is the same width.** Popups used to size themselves — a
+  fixed 44 or 54 columns, 70 or 85 percent of the screen, or the whole screen
+  — so the menu, the picker and the confirm on top of it all had different
+  edges. Every popup is now the terminal width less two columns, at most 120;
+  a long line is cut. The YAML, Compare, key reference and App log popups are
+  as tall as what they show, up to the screen, and the App log no longer grows
+  while it is open. Toasts show at the bottom, just above the footer, not in
+  the middle of the screen. Alterm and `kubectl edit` / `exec` get one more
+  column on each side.
+- **A click hits the row you see.** On some terminal sizes a click on a
+  popup row selected the row next to it.
 - **The top bar stays one row.** A long context name (an EKS ARN, say) made
   the status bar wrap onto two or three rows and push the whole screen down.
   The context and namespace now have fixed-width fields — a long name is cut in

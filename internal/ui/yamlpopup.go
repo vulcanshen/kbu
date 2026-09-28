@@ -932,26 +932,18 @@ const (
 	popupVMargin = 1
 )
 
-func (m YamlPopupModel) popupWidth() int {
-	if m.width <= 0 {
-		return 60
-	}
-	w := m.width - 2*popupHMargin
-	if w < 40 {
-		w = 40
-	}
-	return w
-}
+func (m YamlPopupModel) popupWidth() int { return popupOuterWidth(m.width) } // tdp F7
 
+// popupHeight follows the YAML's length (tdp F7): as tall as its lines
+// need, capped by the screen less a row above and below (then it
+// scrolls), at least 10 rows so a search line still leaves room. The
+// YAML doesn't change while the popup is open, so neither does this.
 func (m YamlPopupModel) popupHeight() int {
 	if m.height <= 0 {
 		return 20
 	}
-	h := m.height - 2*popupVMargin
-	if h < 10 {
-		h = 10
-	}
-	return h
+	limit := max(m.height-2*popupVMargin, 3)
+	return min(max(len(m.contentLines)+2, 10), limit)
 }
 
 // contentHeight is how many YAML lines fit in the body, accounting for the

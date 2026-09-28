@@ -33,7 +33,8 @@ func centeredRect(popup string, w, h int) (x, y, pw, ph int) {
 	lines := strings.Split(popup, "\n")
 	ph = len(lines)
 	pw = lipgloss.Width(lines[0])
-	return (w - pw) / 2, (h - ph) / 2, pw, ph
+	x, y = popupOrigin(pw, ph, w, h)
+	return x, y, pw, ph
 }
 
 // menuRowUnder returns a screen point on a selectable Space-menu row that

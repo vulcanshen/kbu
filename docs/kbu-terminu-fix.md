@@ -97,38 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 18. popup 的尺寸與位置 —— F7（D3）
-
-**現況**：見上方「popup 盤點」。每個 popup 各自算寬（依內容夾在 85% / 70% / 75% W、固定 44 / 54、W − 2 沒有上限）；YAML、Compare
-固定 H − 2、key reference 內容區固定 H − 8、App log 固定 60% H，都跟內容無關；toast 置中（`View()` 的 `overlay.Center`），寬度依訊息、
-沒有上限，長訊息會超出畫面；Alterm 與 `kubectl edit` / `exec` 的外框是 W − 4 × H − 3（`ptyDims()`）。sort picker 換步驟時高度會變
-（第 9 條）。namespace picker 是唯一開著時 loading 的 popup：標題後面有 braille 轉圈（`namespaceSpinnerFrames`，十格、約 80ms、
-計數驅動）。
-
-**規則**：F7 ——
-
-- 寬度 `min(W − 2, 120)`，水平置中；terminal 類例外，寬高用滿可用範圍（W − 2 × H − 2），不受 120 上限。
-- 高度依內容，打開時定好，上限是畫面扣上下留白，超過就在框裡捲動；只有 loading 期間與使用者自己的操作可以改變高度。
-- loading 時標題後面**一定**放一個輪轉的 loading icon（規格見 D3）。
-- 位置垂直置中；toast 固定在畫面下方，寬度照同一條規則。
-- 送出可能失敗的 input 預留一列錯誤列 —— kbu 沒有 input popup，不適用。
-
-**怎麼改**：
-
-- 一個共用的寬度 helper，每個 popup 的 render 只用它；說明太長時在框裡換行或截尾，不為它加寬（D4）。原本依內容算寬的程式刪掉
-  （webu：固定寬度讓「依內容」的保護變成沒用的程式）。
-- 高度依內容、開框時定：YAML、Compare、key reference、App log 改成依內容、上限畫面扣留白（filu `[2]` viewport 的修法）；App log 開著時
-  新進來的 entry 不改高度。
-- toast 固定在畫面下方（filu、webu、locku 都是 `overlay.Bottom` 再上移、不蓋 footer），寬度照同一條規則。
-- terminal 類：外框用滿 W − 2 × H − 2（sshu 的做法），或內容區 W − 2 × H − 2、外框貼滿畫面（filu 的裁定），兩種都算符合。
-- loading icon：namespace picker 已經符合 F7（標題後面、只在 loading 時轉）。D3 的規格（Nerd Font circle slice U+F0A9E–U+F0AA5、
-  一格 90ms、時鐘取格、一格寬，braille 不用）是家族預設，不換不算違反；要跟家族一致就照 webu `internal/ui/theme.go` 的
-  `spinnerFrames` 與 filu `internal/ui/loading.go` 的 `loadingIcon()`。
-- 測試：寬度在 W = 80 與 200 各量一次（200 才看得到 120 上限）；預期值寫死成條文算出來的數字；量寬度用短內容。popup 上框用顯示寬度
-  量標題（filu 第三輪：CJK icon 字型上 glyph 佔兩格時上框會多一格）。
-- dev-remarks「依層數決定的 popup 邊框」與「Popup 的分類與結構」提到尺寸的地方一起改。
-
-
 ## 19. 最上層以外沒有 dim —— F8、D2
 
 **現況**：`app.go` `View()` 把 popup 一層層 `overlay.Composite` 疊上去，底下的 panel、串流中的 log、下層 popup 都照原色畫；整個

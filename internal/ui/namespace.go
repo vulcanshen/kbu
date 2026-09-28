@@ -47,7 +47,11 @@ type NamespacePickerModel struct {
 
 	layer       int
 	borderColor lipgloss.Color
+	screenW     int
 }
+
+// SetSize records the screen width the popup's width derives from.
+func (m *NamespacePickerModel) SetSize(w, _ int) { m.screenW = w }
 
 // namespaceSpinnerTickMsg drives the braille-spinner cycle in the
 // title slot while loading. Independent of PopupAnimator's
@@ -401,8 +405,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	normalStyle := m.theme.SidebarStyle()
 
-	boxWidth := 44
-	innerW := boxWidth - 2
+	innerW := popupInnerWidth(m.screenW) // tdp F7
 
 	items := m.filtered()
 

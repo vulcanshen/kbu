@@ -196,6 +196,8 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 當 full-screen app（vim、less、htop）透過 alt-screen 接管 PTY 時，scrollback 會停用 — 那些按鍵會轉發給 app，讓 app 自己處理翻頁。
 
+terminal 用滿整個畫面，四邊各留一格；其他 popup 最寬 120 欄。
+
 ## 編輯 Resource
 
 在 resource 上按 `E`（或從 `Space` menu 選 `Edit`）會在 embedded PTY popup 中執行 **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`**。行為與在 terminal 中跑同樣的指令完全一致：strategic merge patch、`resourceVersion` 衝突偵測、沒有 `last-applied-configuration` annotation 的副作用。

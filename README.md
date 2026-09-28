@@ -196,6 +196,8 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 
 Scrollback is disabled when a full-screen app (vim, less, htop) takes over the PTY via alt-screen; those keys forward to the app instead so it keeps its own paging.
 
+The terminal fills the screen, less one column and one row on each side; other popups are at most 120 columns wide.
+
 ## Editing Resources
 
 Pressing `E` on a resource (or picking `Edit` from the `Space` menu) runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.

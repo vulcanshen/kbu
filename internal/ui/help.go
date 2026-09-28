@@ -158,10 +158,7 @@ func (m HelpModel) RenderPopup() string {
 }
 
 func (m HelpModel) renderFullPopup() string {
-	innerW := m.width - 2*popupHMargin - 2
-	if innerW < 40 {
-		innerW = 40
-	}
+	innerW := popupInnerWidth(m.width) // tdp F7
 	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)

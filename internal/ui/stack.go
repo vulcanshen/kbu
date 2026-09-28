@@ -128,7 +128,7 @@ func (m *SettingsPopupModel) click(msg tea.MouseMsg, w, h int) tea.Cmd {
 func (m *NamespacePickerModel) owns() bool          { return m.animator.Owns() }
 func (m *NamespacePickerModel) ready() bool         { return m.animator.IsInteractive() }
 func (m *NamespacePickerModel) drawn() bool         { return m.animator.IsActive() }
-func (m *NamespacePickerModel) resize(int, int)     {}
+func (m *NamespacePickerModel) resize(w, h int)     { m.SetSize(w, h) }
 func (m *NamespacePickerModel) render() string      { return m.RenderPopup() }
 func (m *NamespacePickerModel) closeLayer() tea.Cmd { return m.Close() }
 func (m *NamespacePickerModel) key(k tea.KeyMsg) tea.Cmd {
@@ -145,7 +145,7 @@ func (m *NamespacePickerModel) click(msg tea.MouseMsg, w, h int) tea.Cmd {
 func (m *ContextPickerModel) owns() bool          { return m.animator.Owns() }
 func (m *ContextPickerModel) ready() bool         { return m.animator.IsInteractive() }
 func (m *ContextPickerModel) drawn() bool         { return m.animator.IsActive() }
-func (m *ContextPickerModel) resize(int, int)     {}
+func (m *ContextPickerModel) resize(w, h int)     { m.SetSize(w, h) }
 func (m *ContextPickerModel) render() string      { return m.RenderPopup() }
 func (m *ContextPickerModel) closeLayer() tea.Cmd { return m.Close() }
 func (m *ContextPickerModel) key(k tea.KeyMsg) tea.Cmd {

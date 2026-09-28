@@ -180,31 +180,8 @@ func (m ConfirmModel) renderFullPopup() string {
 	title := "󰦕 Confirm"
 	hint := " Enter " + confirmVerb(m.action) + " · Esc cancel "
 
-	// Cap inner width at 70% of screen (or 80 chars if no screen size).
-	maxInnerW := 80
-	if m.screenW > 0 {
-		maxInnerW = m.screenW * 70 / 100
-		if maxInnerW < 40 {
-			maxInnerW = 40
-		}
-	}
-
-	// Start from content; reserve 2 chars for left/right inner padding.
-	innerW := 40
-	for _, s := range []string{m.message, m.detail} {
-		if w := lipgloss.Width(s) + 2; w > innerW {
-			innerW = w
-		}
-	}
-	if w := lipgloss.Width(title) + 4; w > innerW {
-		innerW = w
-	}
-	if w := len(hint) + 4; w > innerW {
-		innerW = w
-	}
-	if innerW > maxInnerW {
-		innerW = maxInnerW
-	}
+	// tdp F7: one width for every popup, whatever it shows.
+	innerW := popupInnerWidth(m.screenW)
 
 	contentW := innerW - 2 // leading + trailing padding
 	var lines []string

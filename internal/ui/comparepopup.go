@@ -272,26 +272,17 @@ func (m CompareYamlPopupModel) bodyWidth() int {
 	return w
 }
 
-func (m CompareYamlPopupModel) popupWidth() int {
-	if m.width <= 0 {
-		return 80
-	}
-	w := m.width - 2*popupHMargin
-	if w < 40 {
-		w = 40
-	}
-	return w
-}
+func (m CompareYamlPopupModel) popupWidth() int { return popupOuterWidth(m.width) } // tdp F7
 
+// popupHeight follows the diff's length (tdp F7), capped by the screen
+// less a row above and below; switching the layout (the user's own
+// action) may change it.
 func (m CompareYamlPopupModel) popupHeight() int {
 	if m.height <= 0 {
 		return 20
 	}
-	h := m.height - 2*popupVMargin
-	if h < 10 {
-		h = 10
-	}
-	return h
+	limit := max(m.height-2*popupVMargin, 3)
+	return min(max(len(m.contentLines)+2, 10), limit)
 }
 
 func (m CompareYamlPopupModel) contentHeight() int {
