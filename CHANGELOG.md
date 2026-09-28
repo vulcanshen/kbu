@@ -99,6 +99,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   a Delete (or a Helm rollback), the `Space` menu behind the confirm no longer
   stays on screen pointing at what was just deleted. Cancelling still returns
   to the menu.
+- **`Esc` in compare mode backs out one step at a time.** Inside a drill
+  (say a Deployment's Pods) with a compare anchor set, one `Esc` used to both
+  drop the anchor and leave the drill; now the first `Esc` drops the anchor and
+  the next one leaves the drill.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

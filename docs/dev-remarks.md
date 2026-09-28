@@ -71,7 +71,7 @@
 
 **global operation popup（tdp M4）。** Space menu 最後一列 `Enter` 打開，疊在 Space menu 上：`[N]amespace`、`[C]ontext`、`[Alt-t]erm`、`[>] Settings`、`[!] App log`、`[q]uit`，清單只有 `globalActions` 一份。從它開的 picker、Settings、App log 疊在它上面，`Esc` 一層層退回；選定 context 後整疊關掉（T1），Alterm 是 context-shift 照樣清掉整疊。`Space` 在它上面不作用（它不是 Space menu，K5）。
 
-**Compare 模式。** anchor 設著時，panel 2 下框左側顯示 `esc: exit compare` hint。鎖定的列以 lavender（Mocha）粗體反白底色繪製，跟 Pinned 項目與 Settings 的 ON 開關同一個強調色 ——「這一列上有使用者設定的狀態」。statusbar 上固定寬度的 `<icon> Compare` chip 確認模式開著，不為資源名稱佔可變寬度的格子（真的比對時 popup 本身顯示 `left vs right`）。focus 離開 panel 2、或 anchor 列從 watcher 串流消失（被刪 / 被 namespace 過濾掉）時，compare 鎖自動解除。
+**Compare 模式。** anchor 設著時，panel 2 下框左側顯示 `esc: exit compare` hint。鎖定的列以 lavender（Mocha）粗體反白底色繪製，跟 Pinned 項目與 Settings 的 ON 開關同一個強調色 ——「這一列上有使用者設定的狀態」。statusbar 上固定寬度的 `<icon> Compare` chip 確認模式開著，不為資源名稱佔可變寬度的格子（真的比對時 popup 本身顯示 `left vs right`）。focus 離開 panel 2、或 anchor 列從 watcher 串流消失（被刪 / 被 namespace 過濾掉）時，compare 鎖自動解除。compare 鎖是 panel 的狀態（跟篩選同一類），不是 tdp K11 的模式：鎖著時按鍵照原意、Space menu 照常開；`Esc` 一次一層（K4），先解鎖、再按才退 drill（2026-09-28 與 user 定案）。
 
 ### Nerd Font 的渲染
 

@@ -2447,14 +2447,15 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 		if filterActive {
 			// Let panel handle Esc to clear filter
 		} else {
-			// Panel 2 Esc with compare mode active: peel the
-			// lock off first and KEEP going — same keypress
-			// also pops one drill level if applicable. The
-			// alternative (two-press: one for lock, one for
-			// drill-back) made Esc feel inconsistent — every
-			// other Esc in kbu does its work in one press.
+			// Panel 2 Esc with compare mode active: one layer
+			// per press (tdp K4) — this Esc only drops the
+			// compare lock; the next one backs out of the drill.
+			// The lock is a panel state like the search filter
+			// (ruled 2026-09-28), and the filter is peeled the
+			// same way.
 			if m.activePanel == TablePanel && m.inCompareMode() {
 				m.clearCompareLock()
+				return nil
 			}
 			if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
 				return m.exitDrillDown()
