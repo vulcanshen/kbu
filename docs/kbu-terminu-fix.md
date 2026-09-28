@@ -97,20 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 17. `kubectl edit` / `kubectl exec` 的 PTY 沒有出口鍵 —— K10
-
-**現況**：`ptyview.go` `Update()` 只有 `PtyKindShell`（Alterm）攔出口鍵 `Alt-t`；edit / exec 的 PTY 把所有鍵送給子程序，只能等
-子程序結束才離開。下框 hint（`renderBottomBorder()`）對 edit / exec 只寫 `PgUp/Home:scroll`，alt-screen 時（`kubectl edit` 的 editor
-正是這種）什麼都不寫。
-
-**規則**：K10 —— app **至少**要有一個讓 focus 離開 PTY 的出口鍵，並在 focus 位於 PTY 時常駐揭露它；出口鍵以外保留的 app 組合鍵
-（kbu 的 `PgUp` / `PgDn` / `Home` / `End` scrollback）由 app 決定、同樣常駐揭露；按了出口鍵之後 focus 落在哪裡由 app 決定。
-
-**怎麼改**：edit / exec 也接出口鍵（`Alt-t` 或另一個）：exec 可以像 Alterm 一樣隱藏、之後再叫回來；edit 至少要能離開（例：先 confirm
-「放棄這次編輯？」再結束子程序）。出口後 focus 回到 panel 2 原本那一列即可。下框 hint 在任何狀態（含 alt-screen）都寫出口鍵。README
-兩份「PTY popups」表一起改。
-
-
 ## 18. popup 的尺寸與位置 —— F7（D3）
 
 **現況**：見上方「popup 盤點」。每個 popup 各自算寬（依內容夾在 85% / 70% / 75% W、固定 44 / 54、W − 2 沒有上限）；YAML、Compare

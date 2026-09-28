@@ -188,6 +188,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 | 鍵 | 動作 |
 |---|---|
+| `Alt+t` | 離開：Alterm 隱藏（shell 繼續跑）；`kubectl edit` / `exec` 先問，再結束那個 session（還沒存的編輯會丟掉）|
 | `PgUp` / `PgDn` | 歷史以一頁為單位捲動 |
 | `Home` / `End` | 跳到歷史頂端 / 回到 live |
 | 其他任何鍵 | 跳回 live、按鍵轉發給 subprocess |

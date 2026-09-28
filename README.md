@@ -188,6 +188,7 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 
 | Key | Action |
 |---|---|
+| `Alt+t` | Leave: Alterm hides (the shell keeps running); `kubectl edit` / `exec` asks, then ends the session (an unsaved edit is dropped) |
 | `PgUp` / `PgDn` | Scroll history by one page |
 | `Home` / `End` | Jump to top of history / back to live |
 | Any other key | Snap back to live, key forwards to subprocess |

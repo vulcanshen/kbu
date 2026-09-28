@@ -117,6 +117,7 @@
 tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由 app 決定、跟出口鍵一樣常駐揭露（v0.1.2 的 K10 只准出口鍵，
 下面兩條那時列在「偏離 tdp」）。
 
+- **每個 PTY 的出口鍵都是 `Alt-t`（tdp K10）。** Alterm 按了隱藏（shell 留著）；`kubectl edit` / `exec` 沒辦法留在背景，按了先跳 confirm（「Leave kubectl edit?」/「End the shell session?」，疊在 PTY 上，`Esc` 回到 PTY），接受才結束子程序（`PtyView.Kill()`，之後走一般的結束路徑），focus 回到 panel 2。所以 confirm 與 key reference 在 `stackOrder()` 裡排在 PTY 之上。出口鍵在下框 hint 常駐，alt-screen（editor）裡也在。
 - **PTY 裡攔下捲動鍵（tdp K10）。** Alterm、`kubectl edit`、`kubectl exec` 的 PTY 不在 alt-screen 時，`PgUp` / `PgDn` / `Home` / `End` 由 kbu 攔下做 10k 行 scrollback（`ptyview.go`），不送給子程序：純 shell 輸出沒有自己的翻頁，少了 scrollback 就看不到捲出畫面的輸出。子程序一進 alt-screen（vim、less、htop、kubectl edit 的 editor）這四個鍵就照常轉送，讓它們保有自己的翻頁。揭露：不在 alt-screen 時下框 hint 寫 `PgUp/Home:scroll`。
 - **Alterm 的出口多一個 `Ctrl-t`（tdp K10）。** Alterm 除了 `Alt-t` 也攔 `Ctrl-t`（`app.go`、`ptyview.go`；panel 上的 `Ctrl-t` 同樣叫出 Alterm），因為錄 demo 用的 VHS 0.11 在 Chrome 與 PTY 之間會丟掉 Alt modifier，demo tape 只能送 `Ctrl-t`。代價：Alterm 裡 zsh 的 transpose-chars（`Ctrl-t`）用不到。這個別名不出現在任何 help 或 hint —— 這一點仍是偏離，見「偏離 tdp」。
 

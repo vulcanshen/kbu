@@ -17,6 +17,8 @@ const (
 	ConfirmSwitch
 	ConfirmRollback
 	ConfirmContextSwitch
+	ConfirmLeaveEdit
+	ConfirmEndShell
 )
 
 type ConfirmModel struct {
@@ -131,6 +133,10 @@ func confirmVerb(a ConfirmAction) string {
 		return "switch"
 	case ConfirmRollback:
 		return "rollback"
+	case ConfirmLeaveEdit:
+		return "leave"
+	case ConfirmEndShell:
+		return "end"
 	}
 	return "confirm"
 }
