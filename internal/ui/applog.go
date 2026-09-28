@@ -170,7 +170,7 @@ func (m AppLogModel) Update(msg tea.Msg) (AppLogModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc", "!":
+		case "esc": // the ! that opened it does not close it (tdp K7)
 			return m, m.animator.Close()
 		case "j", "down":
 			if m.scrollOffset < m.maxScrollOffset() {
@@ -351,7 +351,7 @@ func (m AppLogModel) maxScrollOffset() int {
 }
 
 // HandleMouse routes a click against the app log viewer. Right-
-// click inside the popup closes it (mirror of Esc / !).
+// click inside the popup closes it (mirror of Esc).
 // Left-click is no-op — log lines aren't selectable. Wheel scroll
 // is handled at the AppModel layer (synthesizes u/d).
 func (m AppLogModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (AppLogModel, tea.Cmd) {

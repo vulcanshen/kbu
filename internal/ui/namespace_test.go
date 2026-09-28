@@ -321,25 +321,23 @@ func TestNamespacePickerModel_CloseOnEsc(t *testing.T) {
 	}
 }
 
-func TestNamespacePickerModel_CloseOnN(t *testing.T) {
-	m := newTestNamespacePicker()
-	openNamespacePicker(&m)
-
-	m, _ = m.Update(keyMsg('n'))
-	m.animator.Finalize()
-	if m.IsActive() {
-		t.Error("n must close the namespace picker")
-	}
-}
-
-func TestNamespacePickerModel_CloseOnUppercaseN(t *testing.T) {
-	m := newTestNamespacePicker()
-	openNamespacePicker(&m)
-
-	m, _ = m.Update(keyMsg('N'))
-	m.animator.Finalize()
-	if m.IsActive() {
-		t.Error("N must also close the namespace picker (alias)")
+// tdp K7: the N that opened the picker is not a second Esc — an alias
+// that only works on one popup is one more rule to learn. n / N do
+// nothing on the picker, loaded or loading.
+func TestNamespacePickerModel_NDoesNotClose(t *testing.T) {
+	for _, loading := range []bool{false, true} {
+		for _, r := range []rune{'n', 'N'} {
+			m := newTestNamespacePicker()
+			m.OpenLoading()
+			if !loading {
+				m.SetNamespaces(testNamespaces)
+			}
+			m.animator.Finalize()
+			m, _ = m.Update(keyMsg(r))
+			if !m.animator.Owns() {
+				t.Errorf("%c (loading=%v) must not close the namespace picker", r, loading)
+			}
+		}
 	}
 }
 

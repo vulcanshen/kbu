@@ -138,7 +138,7 @@ func (m SettingsPopupModel) Update(msg tea.Msg) (SettingsPopupModel, tea.Cmd) {
 		}
 		key := m.items[m.cursor].Key
 		return m, func() tea.Msg { return SettingsToggleMsg{Key: key} }
-	case "esc", ">":
+	case "esc": // the > that opened it does not close it (tdp K7)
 		return m, m.animator.Close()
 	}
 	return m, nil

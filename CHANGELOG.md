@@ -54,6 +54,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   namespace, or switches to the context) instead of only leaving the typing
   line; `Tab` moves between the typing line and the list; `Esc` closes the
   picker from either (it used to clear the filter first).
+- **The key that opened a popup no longer closes it.** `N` on the namespace
+  picker, `C` on the context picker, `!` on the App log and `>` on Settings
+  used to work as a second `Esc` there, and nowhere else. `Esc` closes them.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.
