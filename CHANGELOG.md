@@ -49,6 +49,11 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   contents; `Esc` there goes back to the columns (it used to end the whole
   sort flow). Reset is always listed, dimmed while there is nothing to reset,
   so the column picker no longer grows a row while it is open.
+- **Filtering the namespace or context picker works like a finder.** While
+  typing, `Enter` acts on the highlighted row right away (checks the
+  namespace, or switches to the context) instead of only leaving the typing
+  line; `Tab` moves between the typing line and the list; `Esc` closes the
+  picker from either (it used to clear the filter first).
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.
