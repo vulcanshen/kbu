@@ -2107,6 +2107,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// E in the YAML viewer: the panel's Edit, confirm and all.
 		return m, m.confirmEdit(msg.resource, msg.item)
 
+	case CompareLayoutChangedMsg:
+		// L in the Compare popup: the layout it switched to becomes
+		// compare.layout in config.yaml, so the next start opens with it.
+		if m.cfg == nil {
+			return m, nil
+		}
+		m.cfg.Compare.Layout = msg.Layout.String()
+		if err := m.cfg.Save(); err != nil {
+			m.appLog.Error("compare layout save failed: " + err.Error())
+			return m, m.toast.Show("compare layout save failed")
+		}
+		return m, nil
+
 	case clearStackMsg:
 		// An accepted Delete / Rollback finished the flow: the Space
 		// menu and anything else under the confirm pointed at the

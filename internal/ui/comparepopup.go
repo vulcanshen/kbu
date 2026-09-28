@@ -83,11 +83,6 @@ type CompareYamlPopupModel struct {
 
 	pendingG bool
 
-	// onLayoutChange is invoked when the user toggles split ↔ unified.
-	// AppModel uses it to persist the new layout into the config file
-	// so the choice survives a restart. nil = no persistence.
-	onLayoutChange func(CompareLayout)
-
 	layer       int
 	borderColor lipgloss.Color
 }
@@ -122,12 +117,10 @@ func (m *CompareYamlPopupModel) SetDefaultLayout(l CompareLayout) {
 	m.layout = l
 }
 
-// SetOnLayoutChange registers a callback invoked when the user toggles
-// the layout with L. AppModel uses this to persist the
-// choice into the user config file.
-func (m *CompareYamlPopupModel) SetOnLayoutChange(fn func(CompareLayout)) {
-	m.onLayoutChange = fn
-}
+// CompareLayoutChangedMsg reports the layout L switched to. AppModel
+// writes it to config.yaml (compare.layout) so the choice survives a
+// restart; a failed save is reported like any other settings save.
+type CompareLayoutChangedMsg struct{ Layout CompareLayout }
 
 // Open populates the popup with both YAML payloads + the per-instance
 // labels rendered in the column / line headers, then begins the open
@@ -186,9 +179,6 @@ func (m *CompareYamlPopupModel) toggleLayout() {
 	} else {
 		m.layout = CompareLayoutSplit
 	}
-	if m.onLayoutChange != nil {
-		m.onLayoutChange(m.layout)
-	}
 	m.scrollOffset = 0
 	m.rebuildContent()
 }
@@ -201,6 +191,8 @@ func (m CompareYamlPopupModel) handlePopupKey(keyMsg tea.KeyMsg) (CompareYamlPop
 	case "L":
 		m.pendingG = false
 		m.toggleLayout()
+		layout := m.layout
+		return m, func() tea.Msg { return CompareLayoutChangedMsg{Layout: layout} }
 	case "j", "down":
 		if m.scrollOffset < m.maxScrollOffset() {
 			m.scrollOffset++

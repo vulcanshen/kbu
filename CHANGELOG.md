@@ -16,6 +16,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   answers. The mouse wheel also scrolls a YAML viewer opened over a menu, and
   no longer types `u` / `d` into a visible Alterm or `kubectl edit` / `exec`
   terminal.
+- **Compare remembers its layout.** The layout `L` switches to is written back
+  to `compare.layout` in `config.yaml`, so the next start opens the diff the
+  way you left it.
 - **Compare switches layout with `L`.** The diff popup's own `Space` menu
   (Switch view / Close) is gone: `L` flips between unified and side by side,
   `Esc` closes, and the bottom hint says so. `Space` no longer opens a menu on
