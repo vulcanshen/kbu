@@ -163,16 +163,6 @@ namespace `kube-system` + 兩個 chip + `! 3 errors` 就折成 2 列；EKS ARN �
 剛好等於終端機寬，含 popup 疊上去與長 context 名稱）—— 舊清單待確認的 L4 那題併進這裡，statusbar 正是這種測試會抓到的例子。
 
 
-## 24. README 的需求沒寫 truecolor —— D6
-
-**現況**：兩份 README 的需求段（`README.md`「Requirements」、`README-zh_TW.md`「需求」）只寫 Nerd Font。
-
-**規則**：D6 —— 家族要求 truecolor terminal（24-bit 色）：catppuccin 的淡色與 D2 的層色漸變在 256 色下分不出來，dim 也一律輸出
-24-bit（第 19 條）；README 的需求段跟 Nerd Font 並列寫明。
-
-**怎麼改**：兩份 README 的需求段並列一行（filu、locku、sshu、webu 都已加）。這是文件，建議跟第 19 條同一輪做。
-
-
 ## 25. 註解與 dev-remarks 仍引用舊的 popup convention 與舊分類 —— 文件對齊
 
 **現況**：
