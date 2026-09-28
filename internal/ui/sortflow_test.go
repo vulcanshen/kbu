@@ -38,6 +38,9 @@ func appWithCfg(items []k8s.ResourceItem, cfg *config.Config) AppModel {
 		breadcrumbPopup: NewBreadcrumbPopupModel(th),
 		appLog:          NewAppLogModel(th),
 		listPicker:      NewListPickerModel(th),
+		spaceMenu:       NewSpaceMenuModel(th),
+		globalMenu:      NewGlobalMenuModel(th),
+		sidebar:         NewSidebarModel(th),
 		currentResource: k8s.ResourcePods,
 		cfg:             cfg,
 	}
@@ -147,21 +150,25 @@ func TestApplySortToItems_RestartsDescending_UsesIntComparator(t *testing.T) {
 	}
 }
 
-func TestOpenSortColumnPicker_EmptyChainSkipsRegionHeaders(t *testing.T) {
-	// No chain → single-region picker (just the column list). The
-	// "fields" / "all" headers are visual noise without a second
-	// region, so they get suppressed.
+// tdp M6 + F7: with no sort yet, Reset is still listed — dimmed — so the
+// picker opens at the height it keeps once the first tier lands (it used
+// to grow a Reset row while open).
+func TestOpenSortColumnPicker_EmptyChainListsResetDimmed(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
 	_ = m.openSortColumnPicker(k8s.ResourcePods)
 
-	for _, it := range m.listPicker.items {
-		if it.Header {
-			t.Errorf("empty chain must not emit Header items, got %+v", it)
+	var reset *ListPickerItem
+	for i, it := range m.listPicker.items {
+		if it.Key == sortResetKey {
+			reset = &m.listPicker.items[i]
 		}
-		if it.Separator {
-			t.Errorf("empty chain must not emit Separator items, got %+v", it)
-		}
+	}
+	if reset == nil {
+		t.Fatal("Reset must be listed even with no sort")
+	}
+	if !reset.Disabled {
+		t.Error("Reset must be dimmed while there is nothing to reset")
 	}
 }
 
@@ -207,8 +214,8 @@ func TestOpenSortDirectionPicker_TitleHasSortIcon(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
 	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
-	if !strings.HasPrefix(m.listPicker.title, sortPopupIcon) {
-		t.Errorf("direction picker title should start with sortPopupIcon, got %q", m.listPicker.title)
+	if !strings.HasPrefix(m.sortDirPicker.title, sortPopupIcon) {
+		t.Errorf("direction picker title should start with sortPopupIcon, got %q", m.sortDirPicker.title)
 	}
 }
 
@@ -287,9 +294,9 @@ func TestOpenSortDirectionPicker_OmitsUnsetForNewColumn(t *testing.T) {
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
 	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
 
-	for _, it := range m.listPicker.items {
+	for _, it := range m.sortDirPicker.items {
 		if it.Key == "unset" {
-			t.Errorf("Unset must be hidden for a column not in chain; items=%v", m.listPicker.items)
+			t.Errorf("Unset must be hidden for a column not in chain; items=%v", m.sortDirPicker.items)
 		}
 	}
 }
@@ -304,14 +311,14 @@ func TestOpenSortDirectionPicker_ShowsUnsetForInChainColumn(t *testing.T) {
 	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
 
 	found := false
-	for _, it := range m.listPicker.items {
+	for _, it := range m.sortDirPicker.items {
 		if it.Key == "unset" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("Unset must surface when column is in chain; items=%v", m.listPicker.items)
+		t.Errorf("Unset must surface when column is in chain; items=%v", m.sortDirPicker.items)
 	}
 }
 
@@ -377,19 +384,76 @@ func TestCommitSortFlow_PersistsAndApplies(t *testing.T) {
 	}
 }
 
-func TestCommitSortFlow_LoopsBackToColumnPicker(t *testing.T) {
-	// Direction commit re-opens the column picker (in place — Open
-	// swaps content) instead of closing. Lets the user stack tiers
-	// without re-pressing O between each.
+// tdp F1, F4, F7: the direction is its own popup stacked on the column
+// picker. Picking a direction closes that step and refreshes the column
+// picker's badges in place; the column picker keeps the height it opened
+// with.
+func TestSortFlow_DirectionStepStacksAndReturnsToColumns(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
-	m.sortFlowKind = k8s.ResourcePods
-	m.sortFlowColumn = "Name"
-	_ = m.commitSortFlow(config.SortDirectionAscending)
+	_ = m.openSortColumnPicker(k8s.ResourcePods)
+	m.listPicker.animator.Finalize()
+	openHeight := len(m.listPicker.items)
 
-	if m.listPicker.pickerID != "sort:column" {
-		t.Errorf("commit must loop back to sort:column picker, got pickerID=%q", m.listPicker.pickerID)
+	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
+	m.sortDirPicker.animator.Finalize()
+	if !m.listPicker.owns() || !m.sortDirPicker.owns() {
+		t.Fatal("the direction step must open over the column picker, which stays")
+	}
+
+	_ = m.commitSortFlow(config.SortDirectionAscending)
+	if m.sortDirPicker.owns() {
+		t.Error("committing a direction must close the direction step")
+	}
+	if !m.listPicker.owns() || m.listPicker.pickerID != "sort:column" {
+		t.Error("the column picker must stay open for the next tier")
+	}
+	if got := len(m.listPicker.items); got != openHeight {
+		t.Errorf("column picker rows = %d after a tier landed, opened with %d (height fixed at open)", got, openHeight)
+	}
+	var badged bool
+	for _, it := range m.listPicker.items {
+		if it.Key == "Name" && it.Badge != "" {
+			badged = true
+		}
+		if it.Key == sortResetKey && it.Disabled {
+			t.Error("Reset must light up once a tier exists")
+		}
+	}
+	if !badged {
+		t.Error("the Name column must be badged after the tier landed")
+	}
+}
+
+// tdp F4: Esc on the direction step goes back to the column step; the
+// flow is still on (the chosen column is dropped, the kind is kept).
+func TestSortFlow_EscOnDirectionReturnsToColumns(t *testing.T) {
+	cfg := config.DefaultConfig()
+	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
+	_ = m.openSortColumnPicker(k8s.ResourcePods)
+	m.listPicker.animator.Finalize()
+	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
+	m.sortDirPicker.animator.Finalize()
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app := updated.(AppModel)
+	expectMsg(t, cmd, func(msg tea.Msg) bool {
+		if cancel, ok := msg.(ListPickerCancelMsg); ok {
+			next, _ := app.Update(cancel)
+			app = next.(AppModel)
+			return true
+		}
+		return false
+	})
+	if app.sortDirPicker.owns() {
+		t.Fatal("Esc must close the direction step")
+	}
+	if !app.listPicker.owns() {
+		t.Error("Esc on the direction step must leave the column picker open")
+	}
+	if app.sortFlowKind != k8s.ResourcePods || app.sortFlowColumn != "" {
+		t.Errorf("after Esc on direction: kind=%q column=%q, want kind kept, column dropped", app.sortFlowKind, app.sortFlowColumn)
 	}
 }
 
@@ -466,12 +530,11 @@ func TestCommitSortFlow_UnsetImmediatelyRevertsToNameAsc(t *testing.T) {
 	}
 }
 
-func TestResetSortFlow_ClearsChainAndLoopsBack(t *testing.T) {
-	// Reset shortcut: drop the chain, re-apply the Name asc fallback
-	// to live items immediately, then LOOP BACK to the column picker
-	// so the user can start a fresh chain without re-invoking Sort.
-	// sortFlowKind stays set across the loop; only Esc on the
-	// re-opened picker clears it (via ListPickerCancelMsg).
+func TestResetSortFlow_ClearsChainAndStaysOnColumns(t *testing.T) {
+	// Reset: drop the chain and re-apply the Name asc fallback to
+	// live items immediately; the column picker stays open for a
+	// fresh chain. sortFlowKind stays set; only Esc on the column
+	// picker clears it (via ListPickerCancelMsg).
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	items := []k8s.ResourceItem{makePod("zzz", 9), makePod("aaa", 1), makePod("mmm", 5)}
@@ -502,28 +565,26 @@ func TestResetSortFlow_ClearsChainAndLoopsBack(t *testing.T) {
 	if m.sortFlowColumn != "" {
 		t.Errorf("sortFlowColumn must clear after Reset, got %q", m.sortFlowColumn)
 	}
-	// Picker should have looped back to the column step.
-	if m.listPicker.pickerID != "sort:column" {
-		t.Errorf("Reset must loop back to sort:column picker, got pickerID=%q", m.listPicker.pickerID)
-	}
 }
 
-func TestResetSortFlow_NoSortSet_LoopsBack(t *testing.T) {
-	// Defensive guard: resetSortFlow on a kind with no sort entry
-	// must not blow up and must not persist a save. Still refreshes
-	// the picker so the user lands on a sane cursor.
+// tdp M6: with no sort, Reset is dimmed — Enter on it does nothing and
+// saves nothing.
+func TestResetSortFlow_DimmedWithNoSort(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, config.DefaultConfig())
-	m.sortFlowKind = k8s.ResourcePods
-
-	_ = m.resetSortFlow()
-
-	if got := m.cfg.GetSort("pod"); len(got) != 0 {
-		t.Errorf("no-op path must not introduce a sort entry, got %+v", got)
+	_ = m.openSortColumnPicker(k8s.ResourcePods)
+	m.listPicker.animator.Finalize()
+	for i := 0; i < len(m.listPicker.items) && m.listPicker.items[m.listPicker.cursor].Key != sortResetKey; i++ {
+		m.listPicker, _ = m.listPicker.Update(key("j"))
 	}
-	if m.listPicker.pickerID != "sort:column" {
-		t.Errorf("Reset must refresh sort:column picker even on no-op, got pickerID=%q", m.listPicker.pickerID)
+	if m.listPicker.items[m.listPicker.cursor].Key != sortResetKey {
+		t.Fatal("the Reset row must be listed")
+	}
+	if _, cmd := m.listPicker.Update(key("enter")); cmd != nil {
+		t.Error("Enter on the dimmed Reset must do nothing")
+	}
+	if got := m.cfg.GetSort("pod"); len(got) != 0 {
+		t.Errorf("no sort entry may appear, got %+v", got)
 	}
 }
 
@@ -574,28 +635,23 @@ func TestTableModel_columnTitles_MultiSort_RendersPriorityBadges(t *testing.T) {
 	}
 }
 
-// TestUpdateRouting_ListPickerWinsOverPanel2Menu pins §1.8: when the
-// panel-2 menu spawns the sort listPicker (via [Alt][S]ort commit),
-// keys go to the picker on top, not the menu underneath. Routing
-// order in app.go places listPicker BEFORE panel2Menu so j/k drives
-// the picker's cursor, not the still-open source menu.
-func TestUpdateRouting_ListPickerWinsOverPanel2Menu(t *testing.T) {
+// TestUpdateRouting_ListPickerWinsOverSpaceMenu pins tdp F4 + D3: when
+// the Space menu spawns the sort listPicker (via [Alt-S]ort), keys go to
+// the picker on top, not the menu underneath.
+func TestUpdateRouting_ListPickerWinsOverSpaceMenu(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
-	th := theme.DefaultTheme()
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
 
 	// Source menu open at layer 1.
-	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
-	m.panel2Menu.animator.Finalize()
-	panel2CursorBefore := m.panel2Menu.cursor
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, panel2CompareCtx{})
+	panel2CursorBefore := m.spaceMenu.cursor
 
 	// Sort picker opens on top at layer 2.
 	_ = m.openSortColumnPicker(k8s.ResourcePods)
 	m.listPicker.animator.Finalize()
-	if !m.panel2Menu.IsActive() || !m.listPicker.IsActive() {
-		t.Fatalf("setup: both popups must be active, got panel2Menu=%v listPicker=%v",
-			m.panel2Menu.IsActive(), m.listPicker.IsActive())
+	if !m.spaceMenu.IsActive() || !m.listPicker.IsActive() {
+		t.Fatalf("setup: both popups must be active, got spaceMenu=%v listPicker=%v",
+			m.spaceMenu.IsActive(), m.listPicker.IsActive())
 	}
 	listCursorBefore := m.listPicker.cursor
 
@@ -604,111 +660,69 @@ func TestUpdateRouting_ListPickerWinsOverPanel2Menu(t *testing.T) {
 	app := updated.(AppModel)
 
 	if app.listPicker.cursor == listCursorBefore {
-		t.Error("j must move listPicker cursor when stacked on panel2Menu")
+		t.Error("j must move listPicker cursor when stacked on the Space menu")
 	}
-	if app.panel2Menu.cursor != panel2CursorBefore {
-		t.Errorf("j must NOT move panel2Menu cursor; was %d, now %d",
-			panel2CursorBefore, app.panel2Menu.cursor)
+	if app.spaceMenu.cursor != panel2CursorBefore {
+		t.Errorf("j must NOT move the Space menu cursor; was %d, now %d",
+			panel2CursorBefore, app.spaceMenu.cursor)
 	}
 }
 
-// TestUpdateRouting_ListPickerWinsOverHintPopup pins the same §1.8
-// invariant for the other stacking path: sidebar Space → SortKind
-// spawns the sort picker on top of the sidebar's hintPopup. j/k must
-// drive the picker, not the menu underneath.
-func TestUpdateRouting_ListPickerWinsOverHintPopup(t *testing.T) {
+// TestUpdateRouting_SortFromPanel1SpaceMenuStacksOverIt pins tdp F4 for
+// panel 1: the Space menu's [S]ort row opens the sort picker OVER the
+// menu (it no longer closes itself first), and j/k then drive the picker
+// while the menu waits underneath.
+func TestUpdateRouting_SortFromPanel1SpaceMenuStacksOverIt(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
-	th := theme.DefaultTheme()
-	m.hintPopup = NewHintPopupModel(th)
+	m.activePanel = SidebarPanel
+	m.sidebar.SnapCursorToKind(k8s.ResourcePods)
+	_ = m.openSpaceMenu()
+	m.spaceMenu.animator.Finalize()
+	menuCursorBefore := m.spaceMenu.cursor
 
-	// hintPopup open at layer 1 (one-row stub is enough — we only
-	// care about input routing, not menu content).
-	_ = m.hintPopup.OpenWithActions(" test ", []hintAction{
-		{label: "a", key: "A"},
-		{label: "b", key: "B"},
-	}, nil)
-	m.hintPopup.animator.Finalize()
-	hintCursorBefore := m.hintPopup.cursor
-
-	// Sort picker opens on top.
-	_ = m.openSortColumnPicker(k8s.ResourcePods)
-	m.listPicker.animator.Finalize()
-	if !m.hintPopup.IsActive() || !m.listPicker.IsActive() {
-		t.Fatalf("setup: both popups must be active, got hintPopup=%v listPicker=%v",
-			m.hintPopup.IsActive(), m.listPicker.IsActive())
+	app := pressInMenu(t, m, "S")
+	if !app.spaceMenu.owns() {
+		t.Fatal("the panel 1 Space menu must stay open under the sort picker")
 	}
-	listCursorBefore := m.listPicker.cursor
+	if !app.listPicker.owns() {
+		t.Fatal("[S]ort must open the sort picker")
+	}
+	app.listPicker.animator.Finalize()
+	listCursorBefore := app.listPicker.cursor
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	app := updated.(AppModel)
-
+	updated, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	app = updated.(AppModel)
 	if app.listPicker.cursor == listCursorBefore {
-		t.Error("j must move listPicker cursor when stacked on hintPopup")
+		t.Error("j must move the sort picker cursor")
 	}
-	if app.hintPopup.cursor != hintCursorBefore {
-		t.Errorf("j must NOT move hintPopup cursor; was %d, now %d",
-			hintCursorBefore, app.hintPopup.cursor)
-	}
-}
-
-// TestOpenSortDirectionPicker_PreservesLayerOnSwap pins the layer
-// invariant: column → direction is an in-place SWAP on the SAME
-// listPicker instance, so its border layer color must NOT change.
-// popupDepth() counts the active listPicker itself; without the
-// IsActive guard at the call site, the swap re-stamps layer = depth+1
-// which double-counts and bumps the color one tier deeper than the
-// actual nesting depth.
-func TestOpenSortDirectionPicker_PreservesLayerOnSwap(t *testing.T) {
-	cfg := config.DefaultConfig()
-	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
-
-	// Direct Alt+Shift+S path — no parent popup, so listPicker should
-	// open at layer 1.
-	_ = m.openSortColumnPicker(k8s.ResourcePods)
-	m.listPicker.animator.Finalize()
-	if got := m.listPicker.layer; got != 1 {
-		t.Fatalf("setup: listPicker must open at layer 1 standalone, got %d", got)
-	}
-
-	// Step 2: column commits, direction picker swaps in. Same instance,
-	// same nesting depth — layer must STILL be 1.
-	m.sortFlowKind = k8s.ResourcePods
-	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
-	if got := m.listPicker.layer; got != 1 {
-		t.Errorf("layer must stay 1 across column→direction swap, got %d", got)
+	if app.spaceMenu.cursor != menuCursorBefore {
+		t.Error("j must not move the Space menu cursor under the picker")
 	}
 }
 
-// TestOpenSortColumnPicker_PreservesLayerOnLoopBack pins the same
-// invariant for the loop-back path: direction commit re-opens the
-// column picker (in-place swap). Layer must persist across the full
-// column → direction → column loop, not bump on each step.
-func TestOpenSortColumnPicker_PreservesLayerOnLoopBack(t *testing.T) {
+// tdp D2: each step takes its own layer — the direction step sits one
+// layer above the column picker it stacks on, and the column picker keeps
+// its layer while tiers land.
+func TestSortFlow_StepsTakeTheirOwnLayers(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
-	th := theme.DefaultTheme()
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
 
-	// Source menu underneath → sort picker on top at layer 2.
-	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
-	m.panel2Menu.animator.Finalize()
+	// Source menu underneath → column picker at 2, direction at 3.
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, panel2CompareCtx{})
 	_ = m.openSortColumnPicker(k8s.ResourcePods)
 	m.listPicker.animator.Finalize()
 	if got := m.listPicker.layer; got != 2 {
-		t.Fatalf("setup: listPicker must open at layer 2 on top of panel2Menu, got %d", got)
+		t.Fatalf("column picker over the Space menu: layer %d, want 2", got)
 	}
-
-	// Step 2: column → direction swap, still layer 2.
-	m.sortFlowKind = k8s.ResourcePods
 	_ = m.openSortDirectionPicker(k8s.ResourcePods, "Name")
-	if got := m.listPicker.layer; got != 2 {
-		t.Errorf("layer must stay 2 across column→direction swap, got %d", got)
+	m.sortDirPicker.animator.Finalize()
+	if got := m.sortDirPicker.layer; got != 3 {
+		t.Errorf("direction step over the column picker: layer %d, want 3", got)
 	}
-
-	// Step 3: direction → column loop-back, still layer 2.
-	_ = m.openSortColumnPicker(k8s.ResourcePods)
+	_ = m.commitSortFlow(config.SortDirectionAscending)
 	if got := m.listPicker.layer; got != 2 {
-		t.Errorf("layer must stay 2 across direction→column loop-back, got %d", got)
+		t.Errorf("the column picker must keep layer 2 after a tier, got %d", got)
 	}
 }

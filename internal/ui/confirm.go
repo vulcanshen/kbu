@@ -16,16 +16,23 @@ const (
 	ConfirmEdit
 	ConfirmSwitch
 	ConfirmRollback
+	ConfirmContextSwitch
+	ConfirmLeaveEdit
+	ConfirmEndShell
 )
 
 type ConfirmModel struct {
-	animator    PopupAnimator
-	action      ConfirmAction
-	message     string
-	detail      string
-	screenW     int
-	theme       *theme.Theme
-	onConfirm   tea.Cmd
+	animator  PopupAnimator
+	action    ConfirmAction
+	message   string
+	detail    string
+	screenW   int
+	theme     *theme.Theme
+	onConfirm tea.Cmd
+	// completes: accepting finishes the flow that led here, so the
+	// whole popup stack closes (tdp T1) — e.g. the Space menu under a
+	// Delete confirm points at the object just deleted.
+	completes   bool
 	layer       int
 	borderColor lipgloss.Color
 }
@@ -52,12 +59,25 @@ func (m *ConfirmModel) SetLayer(layer int) {
 }
 
 func (m *ConfirmModel) Show(action ConfirmAction, message, detail string, onConfirm tea.Cmd) tea.Cmd {
+	m.completes = false
 	m.action = action
 	m.message = message
 	m.detail = detail
 	m.onConfirm = onConfirm
 	return m.animator.Open()
 }
+
+// ShowCompleting is Show for a confirm whose acceptance finishes the whole
+// flow: accepting also closes every popup beneath (clearStackMsg). Esc
+// still returns to the popup that opened it (tdp F4, T1).
+func (m *ConfirmModel) ShowCompleting(action ConfirmAction, message, detail string, onConfirm tea.Cmd) tea.Cmd {
+	cmd := m.Show(action, message, detail, onConfirm)
+	m.completes = true
+	return cmd
+}
+
+// clearStackMsg asks the app to close every popup in the stack.
+type clearStackMsg struct{}
 
 func (m *ConfirmModel) Close() tea.Cmd {
 	m.onConfirm = nil
@@ -85,11 +105,14 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 			cmd := m.onConfirm
 			m.onConfirm = nil
 			closeCmd := m.animator.Close()
+			if m.completes {
+				clear := func() tea.Msg { return clearStackMsg{} }
+				return m, tea.Batch(cmd, closeCmd, clear)
+			}
 			return m, tea.Batch(cmd, closeCmd)
-		case "esc", "n", " ":
-			// Space cancels too — the same key that opens the confirm
-			// (Relatives-tab space-jump) re-pressed by reflex should
-			// dismiss rather than re-trigger.
+		case "esc", "n":
+			// Space does NOT cancel: that would make it a second Esc
+			// (tdp K5, F6). Only the Space menu closes on Space.
 			m.onConfirm = nil
 			return m, m.animator.Close()
 		}
@@ -98,7 +121,7 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 }
 
 // HandleMouse routes a click against the confirm dialog.
-// Right-click inside the popup cancels (mirror of Esc / n / Space).
+// Right-click inside the popup cancels (mirror of Esc / n).
 // Left-click intentionally does NOT confirm — accidental click
 // could fire a destructive delete / edit / rollback, so the user
 // must commit deliberately via keyboard Enter / y. Outside-popup
@@ -117,6 +140,28 @@ func (m ConfirmModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (Confi
 	return m, nil
 }
 
+// confirmVerb is what Enter does, named in the hint so the user reads the
+// consequence before accepting (tdp F6, D3).
+func confirmVerb(a ConfirmAction) string {
+	switch a {
+	case ConfirmShellExec:
+		return "exec"
+	case ConfirmDelete:
+		return "delete"
+	case ConfirmEdit:
+		return "edit"
+	case ConfirmSwitch, ConfirmContextSwitch:
+		return "switch"
+	case ConfirmRollback:
+		return "rollback"
+	case ConfirmLeaveEdit:
+		return "leave"
+	case ConfirmEndShell:
+		return "end"
+	}
+	return "confirm"
+}
+
 func (m ConfirmModel) View() string {
 	return ""
 }
@@ -133,33 +178,10 @@ func (m ConfirmModel) renderFullPopup() string {
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
 
 	title := "󰦕 Confirm"
-	hint := " Enter/y: confirm  Space: cancel "
+	hint := " Enter " + confirmVerb(m.action) + " · Esc cancel "
 
-	// Cap inner width at 70% of screen (or 80 chars if no screen size).
-	maxInnerW := 80
-	if m.screenW > 0 {
-		maxInnerW = m.screenW * 70 / 100
-		if maxInnerW < 40 {
-			maxInnerW = 40
-		}
-	}
-
-	// Start from content; reserve 2 chars for left/right inner padding.
-	innerW := 40
-	for _, s := range []string{m.message, m.detail} {
-		if w := lipgloss.Width(s) + 2; w > innerW {
-			innerW = w
-		}
-	}
-	if w := lipgloss.Width(title) + 4; w > innerW {
-		innerW = w
-	}
-	if w := len(hint) + 4; w > innerW {
-		innerW = w
-	}
-	if innerW > maxInnerW {
-		innerW = maxInnerW
-	}
+	// tdp F7: one width for every popup, whatever it shows.
+	innerW := popupInnerWidth(m.screenW)
 
 	contentW := innerW - 2 // leading + trailing padding
 	var lines []string
@@ -196,7 +218,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	bottomDashes := innerW - len(hint) - 1
+	bottomDashes := innerW - lipgloss.Width(hint) - 1 // display cells: "·" is 2 bytes
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}

@@ -30,6 +30,15 @@ func appWithSizeAndCfg(t *testing.T, w, h int, cfg *config.Config) AppModel {
 		appLog:          NewAppLogModel(th),
 		listPicker:      NewListPickerModel(th),
 		settingsPopup:   NewSettingsPopupModel(th),
+		spaceMenu:       NewSpaceMenuModel(th),
+		globalMenu:      NewGlobalMenuModel(th),
+		sortDirPicker:   NewSortDirPickerModel(th),
+		namespacePicker: NewNamespacePickerModel(th),
+		contextPicker:   NewContextPickerModel(th),
+		yamlPopup:       NewYamlPopupModel(th),
+		comparePopup:    NewCompareYamlPopupModel(th),
+		confirm:         NewConfirmModel(th),
+		help:            NewHelpModel(th),
 		statusLine:      NewStatusLineModel(th),
 		statusBar:       NewStatusBarModel(th, k8s.ClusterInfo{}),
 		cfg:             cfg,
@@ -238,28 +247,38 @@ func TestSidebarModel_SetCursorAtScreenY_AccountsForSearchBox(t *testing.T) {
 	}
 }
 
-func TestIsMenuPopupActive_GatesWheelSynth(t *testing.T) {
-	// AppModel.isMenuPopupActive backs the "ignore wheel when a
-	// menu popup is open" gate. Verify each menu popup flips it on,
-	// and that the viewer popups (yamlPopup, comparePopup, appLog,
-	// help) do NOT — they keep wheel scroll.
+// wheelKey sends a wheel-down event through the dispatcher and returns
+// the key it was translated into ("" when the wheel was swallowed).
+func wheelKey(t *testing.T, m AppModel) string {
+	t.Helper()
+	_, cmd := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+	if cmd == nil {
+		return ""
+	}
+	if k, ok := cmd().(tea.KeyMsg); ok {
+		return k.String()
+	}
+	return ""
+}
+
+func TestWheel_MenuOnTopSwallowsViewerOnTopScrolls(t *testing.T) {
+	// A short menu on top ignores the wheel; a viewer on top turns it
+	// into half-page scrolling. What counts is the popup on TOP: a YAML
+	// viewer stacked over a Space menu still scrolls (the old gate asked
+	// "is any menu open?" and swallowed the wheel for the viewer too).
 	m := appWithSizeAndCfg(t, 120, 40, config.DefaultConfig())
-	if m.isMenuPopupActive() {
-		t.Fatal("no popup open → isMenuPopupActive should be false")
+	if got := wheelKey(t, m); got != "d" {
+		t.Fatalf("no popup: wheel down = %q, want d", got)
 	}
 
-	// Manually flip a menu popup's animator to PopupOpen so IsActive
-	// reports true without driving the open animation.
-	m.panel2Menu.animator.State = PopupOpen
-	if !m.isMenuPopupActive() {
-		t.Error("panel2Menu open → isMenuPopupActive should be true")
+	m.spaceMenu.animator.State = PopupOpen
+	if got := wheelKey(t, m); got != "" {
+		t.Errorf("Space menu on top: wheel must be swallowed, got %q", got)
 	}
-	m.panel2Menu.animator.State = PopupClosed
 
-	// Viewer popups must NOT count as menu popups.
 	m.yamlPopup.animator.State = PopupOpen
-	if m.isMenuPopupActive() {
-		t.Error("yamlPopup (viewer) must not count as menu popup — wheel should still work")
+	if got := wheelKey(t, m); got != "d" {
+		t.Errorf("YAML over the Space menu: wheel down = %q, want d", got)
 	}
 }
 
@@ -282,8 +301,7 @@ func TestHandleMousePress_SettingsEscapeHatchWhenMouseDisabled(t *testing.T) {
 	lines := strings.Split(popup, "\n")
 	w := lipgloss.Width(lines[0])
 	h := len(lines)
-	px := (120 - w) / 2
-	py := (40 - h) / 2
+	px, py := popupOrigin(w, h, 120, 40)
 
 	clickMsg := tea.MouseMsg{
 		X:      px + 5,

@@ -42,8 +42,7 @@ func popupContains(popup string, msg tea.MouseMsg, screenW, screenH int) bool {
 		return false
 	}
 	w := lipgloss.Width(lines[0])
-	px := (screenW - w) / 2
-	py := (screenH - h) / 2
+	px, py := popupOrigin(w, h, screenW, screenH)
 	return msg.X >= px && msg.X < px+w && msg.Y >= py && msg.Y < py+h
 }
 
@@ -57,10 +56,7 @@ func popupRowAt(popup string, msg tea.MouseMsg, screenW, screenH, itemsStartLine
 		return -1
 	}
 	w := lipgloss.Width(lines[0])
-	// Centered overlay positioning (mirrors overlay.Composite with
-	// Center/Center anchors).
-	px := (screenW - w) / 2
-	py := (screenH - h) / 2
+	px, py := popupOrigin(w, h, screenW, screenH)
 	if msg.X < px || msg.X >= px+w || msg.Y < py || msg.Y >= py+h {
 		return -1
 	}
@@ -70,3 +66,29 @@ func popupRowAt(popup string, msg tea.MouseMsg, screenW, screenH, itemsStartLine
 	}
 	return contentY
 }
+
+// popupOrigin is where a w×h popup's top-left corner lands on a screenW ×
+// screenH screen when composited centered — the same arithmetic
+// overlay.Composite uses (half the screen minus half the popup, each
+// halved on its own), so a click hits the row that is drawn there. The
+// shorter (screen − popup) / 2 is off by one when the two sizes differ in
+// parity.
+func popupOrigin(w, h, screenW, screenH int) (x, y int) {
+	x = screenW/2 - w/2
+	y = screenH/2 - h/2
+	return max(x, 0), max(y, 0)
+}
+
+// popupOuterWidth is every popup's width, borders included (tdp F7): the
+// terminal width less a column each side, at most 120 — the same for
+// every popup, so a popup's size never depends on what it shows. The
+// PTY terminals are the one exception (they fill the screen).
+func popupOuterWidth(screenW int) int {
+	if screenW <= 0 {
+		screenW = 80
+	}
+	return max(min(screenW-2, 120), 24)
+}
+
+// popupInnerWidth is the width inside a popup's two side borders.
+func popupInnerWidth(screenW int) int { return popupOuterWidth(screenW) - 2 }

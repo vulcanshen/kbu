@@ -47,7 +47,11 @@ type NamespacePickerModel struct {
 
 	layer       int
 	borderColor lipgloss.Color
+	screenW     int
 }
+
+// SetSize records the screen width the popup's width derives from.
+func (m *NamespacePickerModel) SetSize(w, _ int) { m.screenW = w }
 
 // namespaceSpinnerTickMsg drives the braille-spinner cycle in the
 // title slot while loading. Independent of PopupAnimator's
@@ -187,8 +191,7 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		// an empty placeholder would either no-op or fire bogus
 		// selections, so we just ignore them until the real list
 		// lands.
-		switch keyMsg.String() {
-		case "esc", "n", "N", " ":
+		if keyMsg.String() == "esc" {
 			return m, m.animator.Close()
 		}
 		return m, nil
@@ -206,6 +209,11 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		m.searching = true
 		m.searchQuery = ""
 		m.cursor = 0
+		return m, nil
+	case "tab":
+		// tdp F1: Tab moves focus between the list and the typing
+		// line; the filter stays as it is.
+		m.searching = true
 		return m, nil
 	case "j", "down":
 		if len(items) > 0 {
@@ -241,27 +249,28 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		}
 	case "enter":
 		return m.toggleCurrent(items)
-	case "esc", "n", "N", " ":
-		if m.searchQuery != "" {
-			m.searchQuery = ""
-			m.cursor = 0
-			return m, nil
-		}
+	case "esc":
+		// tdp F1, K4: filtering is a phase of the picker, not a
+		// layer — Esc closes the whole picker, filter and all. The
+		// N that opened it does not close it: an alias that works on
+		// one popup only is a rule to learn (tdp K7).
 		return m, m.animator.Close()
 	}
 	return m, nil
 }
 
+// handleSearchKey is the typing phase: an input with a candidate list
+// (tdp F1). Printable keys are characters, the arrows move between
+// candidates, Enter toggles the highlighted one — the same as Enter on
+// the list — and typing continues; Tab moves focus to the list; Esc
+// closes the whole picker.
 func (m NamespacePickerModel) handleSearchKey(msg tea.KeyMsg) (NamespacePickerModel, tea.Cmd) {
 	switch {
 	case msg.Type == tea.KeyEscape:
-		m.searching = false
-		m.searchQuery = ""
-		m.cursor = 0
-		return m, nil
+		return m, m.animator.Close()
 	case msg.Type == tea.KeyEnter:
-		// Release search focus, keep filter. j/k navigation becomes available;
-		// a second Enter then selects.
+		return m.toggleCurrent(m.filtered())
+	case msg.Type == tea.KeyTab:
 		m.searching = false
 		return m, nil
 	case msg.Type == tea.KeyBackspace:
@@ -282,8 +291,8 @@ func (m NamespacePickerModel) handleSearchKey(msg tea.KeyMsg) (NamespacePickerMo
 			m.cursor = (m.cursor - 1 + len(items)) % len(items)
 		}
 		return m, nil
-	case msg.Type == tea.KeyRunes:
-		for _, r := range msg.Runes {
+	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		for _, r := range typedRunes(msg) {
 			m.searchQuery += string(r)
 		}
 		m.cursor = 0
@@ -396,8 +405,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	normalStyle := m.theme.SidebarStyle()
 
-	boxWidth := 44
-	innerW := boxWidth - 2
+	innerW := popupInnerWidth(m.screenW) // tdp F7
 
 	items := m.filtered()
 
@@ -484,7 +492,10 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := " Enter: toggle  /: search  Esc: close "
+	hint := " Enter:toggle  /,Tab:search  Esc:close "
+	if m.searching {
+		hint = " ↑↓ Enter:toggle  Tab:list  Esc:close "
+	}
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0

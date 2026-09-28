@@ -19,7 +19,11 @@ type ContextPickerModel struct {
 	searchQuery string
 	layer       int
 	borderColor lipgloss.Color
+	screenW     int
 }
+
+// SetSize records the screen width the popup's width derives from.
+func (m *ContextPickerModel) SetSize(w, _ int) { m.screenW = w }
 
 // NewContextPickerModel creates a new context picker.
 func NewContextPickerModel(t *theme.Theme) ContextPickerModel {
@@ -105,6 +109,11 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 		m.searchQuery = ""
 		m.cursor = 0
 		return m, nil
+	case "tab":
+		// tdp F1: Tab moves focus between the list and the typing
+		// line; the filter stays as it is.
+		m.searching = true
+		return m, nil
 	case "j", "down":
 		if len(items) > 0 {
 			m.cursor = (m.cursor + 1) % len(items)
@@ -115,27 +124,26 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 		}
 	case "enter":
 		return m.selectCurrent(items)
-	case "esc", "c", "C", " ":
-		if m.searchQuery != "" {
-			m.searchQuery = ""
-			m.cursor = 0
-			return m, nil
-		}
+	case "esc":
+		// tdp F1, K4: filtering is a phase of the picker, not a
+		// layer — Esc closes the whole picker, filter and all. The
+		// C that opened it does not close it (tdp K7).
 		return m, m.animator.Close()
 	}
 	return m, nil
 }
 
+// handleSearchKey is the typing phase: an input with a candidate list
+// (tdp F1). Printable keys are characters, the arrows move between
+// candidates, Enter switches to the highlighted context (the same as
+// Enter on the list), Tab moves focus to the list, Esc closes the picker.
 func (m ContextPickerModel) handleSearchKey(msg tea.KeyMsg) (ContextPickerModel, tea.Cmd) {
 	switch {
 	case msg.Type == tea.KeyEscape:
-		m.searching = false
-		m.searchQuery = ""
-		m.cursor = 0
-		return m, nil
+		return m, m.animator.Close()
 	case msg.Type == tea.KeyEnter:
-		// Release search focus, keep filter. j/k navigation becomes available;
-		// a second Enter then selects.
+		return m.selectCurrent(m.filtered())
+	case msg.Type == tea.KeyTab:
 		m.searching = false
 		return m, nil
 	case msg.Type == tea.KeyBackspace:
@@ -156,8 +164,8 @@ func (m ContextPickerModel) handleSearchKey(msg tea.KeyMsg) (ContextPickerModel,
 			m.cursor = (m.cursor - 1 + len(items)) % len(items)
 		}
 		return m, nil
-	case msg.Type == tea.KeyRunes:
-		for _, r := range msg.Runes {
+	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		for _, r := range typedRunes(msg) {
 			m.searchQuery += string(r)
 		}
 		m.cursor = 0
@@ -240,8 +248,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 	selectedStyle := m.theme.SidebarSelectedStyle()
 	normalStyle := m.theme.SidebarStyle()
 
-	boxWidth := 54
-	innerW := boxWidth - 2
+	innerW := popupInnerWidth(m.screenW) // tdp F7
 
 	items := m.filtered()
 
@@ -304,7 +311,10 @@ func (m ContextPickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := " Enter: select  /: search  Space: cancel "
+	hint := " Enter:select  /,Tab:search  Esc:close "
+	if m.searching {
+		hint = " ↑↓ Enter:select  Tab:list  Esc:close "
+	}
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0

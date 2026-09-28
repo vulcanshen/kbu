@@ -333,6 +333,19 @@ func (p *PtyView) commitScrollbackLine() {
 	p.pendingLine.Reset()
 }
 
+// ptyLeaveRequestMsg: the user pressed the exit key in a kubectl edit /
+// exec PTY. The app asks before ending the session.
+type ptyLeaveRequestMsg struct{ kind PtyKind }
+
+// Kill ends the subprocess; the regular exit path (readLoop sees EOF →
+// the next tick closes the popup and sends PtyExitMsg) does the rest.
+func (p *PtyView) Kill() {
+	if p == nil || !p.active || p.cmd == nil || p.cmd.Process == nil {
+		return
+	}
+	_ = p.cmd.Process.Kill()
+}
+
 // Stop force-terminates the PTY subprocess (if still running). Idempotent.
 // Safe to call concurrently with readLoop — readLoop holds local pointer
 // copies of cmd / ptmx, so clearing p.cmd / p.ptmx here cannot nil-deref it.
@@ -396,11 +409,19 @@ func (p *PtyView) Update(msg tea.Msg) (*PtyView, tea.Cmd) {
 		return p, p.tick()
 
 	case tea.KeyMsg:
-		// Alt+T hides Alterm popup without killing the shell — persistent PTY.
-		// Always intercepted for PtyKindShell regardless of alt-screen mode;
-		// users running vim *inside* Alterm still need an escape hatch to
-		// peek at kbu panels without losing their shell session.
-		// Edit/Exec popups pass it through (transient — no hide concept).
+		// Alt+t is the PTY's exit key (tdp K10), intercepted in every
+		// PTY regardless of alt-screen mode — users running vim inside
+		// still need a way out. Alterm hides without killing the shell
+		// (persistent PTY); a kubectl edit / exec session can't be kept
+		// in the background, so there Alt+t asks to end it
+		// (ptyLeaveRequestMsg → a confirm stacked over the PTY).
+		if p.kind != PtyKindShell {
+			switch msg.String() {
+			case "alt+t", "alt+T":
+				kind := p.kind
+				return p, func() tea.Msg { return ptyLeaveRequestMsg{kind: kind} }
+			}
+		}
 		if p.kind == PtyKindShell {
 			switch msg.String() {
 			case "alt+t", "alt+T", "ctrl+t":
@@ -529,8 +550,10 @@ func (p *PtyView) SetSize(hostW, hostH int) {
 // and asymmetric: horizontal margin is wider than vertical because terminals
 // are typically much wider than tall.
 func (p *PtyView) ptyDims() (cols, rows int) {
+	// tdp F7: a terminal fills the screen less a column / row each side
+	// (W − 2 × H − 2), not held to the 120-column popup width.
 	const (
-		popupMarginX = 2
+		popupMarginX = 1
 		popupMarginY = 1
 	)
 	popupW := p.hostW - 2*popupMarginX
@@ -680,13 +703,15 @@ func (p *PtyView) RenderPopup() string {
 func (p *PtyView) renderBottomBorder(cols int, borderStyle, hintStyle lipgloss.Style) string {
 	hint := ""
 	altScreen := p.term != nil && p.term.Mode()&vt10x.ModeAltScreen != 0
-	switch {
-	case p.kind == PtyKindShell && !altScreen:
-		hint = " Alt+t:hide  PgUp/Home:scroll "
-	case p.kind == PtyKindShell && altScreen:
-		hint = " Alt+t:hide "
-	case !altScreen:
-		hint = " PgUp/Home:scroll "
+	// The exit key is always shown, alt-screen or not (tdp K10); the
+	// scroll keys only while kbu takes them (not in alt-screen).
+	exit := " Alt-t:leave "
+	if p.kind == PtyKindShell {
+		exit = " Alt-t:hide "
+	}
+	hint = exit
+	if !altScreen {
+		hint = exit + " PgUp/Home:scroll "
 	}
 	if hint == "" || lipgloss.Width(hint)+4 > cols {
 		return borderStyle.Render("╰" + strings.Repeat("─", cols) + "╯")

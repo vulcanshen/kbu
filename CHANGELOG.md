@@ -4,6 +4,144 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle) (tdp v0.1.13).
+
+- **A click lands on the popup you see on top.** A confirm, sort picker or
+  YAML viewer opened from a `Space` menu sits centred over the menu; a click
+  on it used to reach the menu first and run whichever menu row happened to
+  lie underneath. Keys, clicks, the drawing order and the popup depth now all
+  follow one bottom-to-top stack, so the popup drawn on top is the one that
+  answers. The mouse wheel also scrolls a YAML viewer opened over a menu, and
+  no longer types `u` / `d` into a visible Alterm or `kubectl edit` / `exec`
+  terminal.
+- **Compare switches layout with `L`.** The diff popup's own `Space` menu
+  (Switch view / Close) is gone: `L` flips between unified and side by side,
+  `Esc` closes, and the bottom hint says so. `Space` no longer opens a menu on
+  top of a popup.
+- **`Space` only opens and closes the `Space` menu.** On a confirm, picker,
+  YAML or Compare viewer, the App Log, Settings or the key reference it no
+  longer closes the popup — `Esc` does. A confirm in particular can no longer
+  be cancelled by a stray `Space`; its hint now names what `Enter` will do
+  (`Enter delete · Esc cancel`).
+- **`Space` opens the same kind of menu on every panel and every tab.** It
+  lists everything that can be done there — first what the cursor's item can
+  do, then what the panel or tab can do — and always ends with **Global
+  operation**, which opens the app-wide actions: namespace, context, Alterm,
+  settings, app log and quit. The read-only cheatsheets (panel 1's lower half,
+  Logs / Events / Conditions, the empty list, Relatives), the separate Helm
+  document menu and the History tab's `Space` rollback are gone: the Helm
+  documents are rows next to `YAML`, and rollback and "jump to an ancestor"
+  are rows of their tab's menu. Actions that were hotkey-only are rows now too
+  — search, copy, zoom, go live, switch tab, show/hide helm-managed rows, exit
+  compare mode.
+- **An action that can't run right now is dimmed, not hidden.** Edit and
+  Delete on a helm-managed object, Mark as Compare anchor on a one-row list,
+  Drag with a single pinned kind, and rollback on the deployed revision are
+  listed dimmed; pressing their hotkey does nothing. `E` / `D` on a
+  helm-managed row no longer pop a "Helm-managed (read-only)" toast.
+- **Opening a picker from a menu keeps the menu.** Sort from panel 1's
+  `Space` menu now stacks over the menu (`Esc` returns to it), like every
+  other popup a menu opens.
+- **Sorting asks for the direction in its own popup.** Picking a column opens
+  the direction step over the column picker instead of swapping the picker's
+  contents; `Esc` there goes back to the columns (it used to end the whole
+  sort flow). Reset is always listed, dimmed while there is nothing to reset,
+  so the column picker no longer grows a row while it is open.
+- **Filtering the namespace or context picker works like a finder.** While
+  typing, `Enter` acts on the highlighted row right away (checks the
+  namespace, or switches to the context) instead of only leaving the typing
+  line; `Tab` moves between the typing line and the list; `Esc` closes the
+  picker from either (it used to clear the filter first).
+- **The key that opened a popup no longer closes it.** `N` on the namespace
+  picker, `C` on the context picker, `!` on the App log and `>` on Settings
+  used to work as a second `Esc` there, and nowhere else. `Esc` closes them.
+- **`q` and `Ctrl+C` quit from anywhere, the same way.** `q` used to do
+  nothing while a menu or popup was open; now it quits from any panel, menu,
+  popup or the drag mode (while you type in a search it is still a letter).
+  `Ctrl+C` now goes through the same exit as `q`: it saves the session state
+  and stops a running Alterm / edit / exec, which it used to skip.
+- **`?` shows the keys of whatever is in front.** On a panel it lists that
+  panel's own keys (every row of its `Space` menu), plus moving, panels and
+  the core keys; over a menu, popup or confirm it lists only that popup's
+  keys, stacked on top (`Esc` returns to the popup). It used to be one fixed
+  cheatsheet that left out the panel keys and did nothing over a popup. The
+  footer's `Esc exit` now reads `Esc back` — `Esc` never leaves kbu.
+- **Modes answer the core keys the same way.** In the pinned-kind drag and the
+  YAML viewer's selection, `Space` does nothing (the drag used to open a
+  one-row "Drop" menu), `?` lists the mode's keys, and `Tab` stays put with a
+  toast saying `Esc` leaves the mode first. The drag's keys now sit in the
+  footer while it lasts, replacing the toast that stayed on screen; the
+  selection's keys sit in the viewer's bottom hint.
+- **Search lines take spaces.** The sidebar, panel 2, the YAML viewer and the
+  namespace / context filters dropped the space bar, so a YAML search like
+  `image: nginx` couldn't be typed.
+- **`Enter` does the obvious thing everywhere.** On panel 1 it shows the kind in
+  panel 2; on a panel 2 kind that doesn't drill it opens the YAML; on a
+  KubeConfig context it switches kbu to it (after a confirm); on a container
+  it opens a shell; on a Helm History revision it rolls back (after a
+  confirm); on a Logs / Events / Conditions tab it full-screens the panel. It
+  used to do nothing in all of these places. A double-click on panel 1 now only
+  selects.
+- **`kubectl edit` and `kubectl exec` have a way out.** `Alt+t` in their
+  terminal asks, then ends the session (an unsaved edit is dropped; nothing is
+  applied); `Esc` on the question goes back to the terminal. The key is shown in
+  the terminal's bottom border, in the editor too. Before, only the subprocess
+  exiting could close them.
+- **Any key closes the splash.** It used to answer only `Esc`, `Enter` and
+  `Space` and ignore the rest; now any key closes it, and only closes it.
+- **A drill that fails says so.** `Enter` on a panel 2 row whose children
+  couldn't be fetched (RBAC, API error) did nothing at all; it now shows a
+  warning toast and writes the reason to the App log. A row with nothing under
+  it (a CronJob with no Jobs kept) says so in a toast.
+- **Deleting or rolling back closes the menu that led there.** After you accept
+  a Delete (or a Helm rollback), the `Space` menu behind the confirm no longer
+  stays on screen pointing at what was just deleted. Cancelling still returns
+  to the menu.
+- **`Esc` in compare mode backs out one step at a time.** Inside a drill
+  (say a Deployment's Pods) with a compare anchor set, one `Esc` used to both
+  drop the anchor and leave the drill; now the first `Esc` drops the anchor and
+  the next one leaves the drill.
+- **Every popup is the same width.** Popups used to size themselves — a
+  fixed 44 or 54 columns, 70 or 85 percent of the screen, or the whole screen
+  — so the menu, the picker and the confirm on top of it all had different
+  edges. Every popup is now the terminal width less two columns, at most 120;
+  a long line is cut. The YAML, Compare, key reference and App log popups are
+  as tall as what they show, up to the screen, and the App log no longer grows
+  while it is open. Toasts show at the bottom, just above the footer, not in
+  the middle of the screen. Alterm and `kubectl edit` / `exec` get one more
+  column on each side.
+- **Only the popup you're in is bright.** With a popup open, everything
+  beneath it — the panels, streaming logs, the popups under it — is drawn in
+  a faded version of its own colours, so you can see at a glance which popup
+  answers your keys. Toasts don't dim anything.
+- **`E` in the YAML viewer asks first, like `E` everywhere else.** It used to
+  start `kubectl edit` straight away — even on a helm-managed object, whose
+  Edit is otherwise off. It now shows the same confirm (`Esc` goes back to the
+  YAML), does nothing where Edit is unavailable, and the viewer's hint and `?`
+  only list `E` where it works.
+- **`Esc` takes a toast down first.** With a toast showing over a popup, a
+  search you're typing or the pin drag, `Esc` used to close what was under the
+  toast and leave the toast to time out. It now closes the toast, one layer at
+  a time like everywhere else; the next `Esc` goes to what's beneath.
+- **Keys are written one way everywhere.** The menus and the status bar said
+  `Alt-t` and `Alt-S`; the key reference and the terminal's bottom hint said
+  `Alt+t`, `Alt+Shift+S` and `Ctrl+C`. They all say `Alt-t`, `Alt-S`, `Ctrl-C`,
+  `Shift-Tab` now.
+- **The confirm's bottom border lines up again.** Its right corner sat one
+  cell short since the hint gained a `·`.
+- **A click hits the row you see.** On some terminal sizes a click on a
+  popup row selected the row next to it.
+- **The top bar stays one row.** A long context name (an EKS ARN, say) made
+  the status bar wrap onto two or three rows and push the whole screen down.
+  The context and namespace now have fixed-width fields — a long name is cut in
+  the middle — so the bar is always one row and switching namespace no longer
+  shifts the chips after it.
+- **A popup on its way out hands the next key to the one beneath.** Pressing
+  `Esc` twice quickly closes two layers instead of losing the second press to
+  a popup (or a toast) already running its close animation.
+
 ## [v2.2.2] - 2026-09-04
 
 Quit without the extra keystroke; the splash credits its developer.

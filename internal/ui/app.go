@@ -103,11 +103,15 @@ type AppModel struct {
 	yamlPopup       YamlPopupModel
 	comparePopup    CompareYamlPopupModel
 	breadcrumbPopup BreadcrumbPopupModel
-	helmDocMenu     HelmDocMenuPopupModel
-	panel2Menu      Panel2MenuPopupModel
-	hintPopup       HintPopupModel
-	listPicker      ListPickerModel
-	settingsPopup   SettingsPopupModel
+	// spaceMenu is every panel's Space menu (tdp M2); globalMenu is the
+	// global operation popup its last row opens (M4).
+	spaceMenu  MenuPopupModel
+	globalMenu MenuPopupModel
+	// listPicker is the sort flow's column step; sortDirPicker is its
+	// direction step, stacked on it (tdp F1: one popup per step).
+	listPicker    ListPickerModel
+	sortDirPicker ListPickerModel
+	settingsPopup SettingsPopupModel
 
 	activePanel     Panel
 	width           int
@@ -165,13 +169,13 @@ type AppModel struct {
 	// from the watcher stream. Nil = not in compare mode.
 	compareLock *compareLockedRef
 
-	// Sort flow in-flight state. The Sort menu is a 3-popup chain
-	// (sidebar hint → column picker → direction picker); these fields
+	// Sort flow in-flight state. The flow is two stacked popups — the
+	// column picker, then the direction picker over it; these fields
 	// carry the user's column choice across the column → direction
 	// step so the direction commit knows which column to persist.
-	// Cleared on direction commit, on cancel at either step, and on
-	// any path that closes the listPicker. Empty kind/column = no
-	// flow in progress.
+	// sortFlowColumn clears when the direction step ends (commit or
+	// Esc); sortFlowKind when the column picker closes. Empty
+	// kind/column = no flow in progress.
 	sortFlowKind   k8s.ResourceType
 	sortFlowColumn string
 
@@ -240,118 +244,43 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 	return ctx
 }
 
-// popupDepth returns the count of currently-rendered popups so a
+// popupDepth counts the popups that hold a place in the stack, so a
 // newly-opening popup can stamp itself layer = depth + 1 via SetLayer
-// before its Open/Show/Toggle call. Lavender→sapphire layer scale
-// derives the border color from this count — see
-// .claude/rules/popup-convention.md §1.6.
+// before its Open/Show/Toggle call; the layer picks the border colour
+// on the lavender → sapphire scale (tdp D2). Same stackOrder and the
+// same owns() test the key routing uses: a popup closing on its way
+// out no longer counts (tdp F3).
 func (m AppModel) popupDepth() int {
 	n := 0
-	if m.help.IsActive() {
-		n++
-	}
-	if m.appLog.IsActive() {
-		n++
-	}
-	if m.confirm.IsActive() {
-		n++
-	}
-	if m.contextPicker.IsActive() {
-		n++
-	}
-	if m.namespacePicker.IsActive() {
-		n++
-	}
-	if m.helmDocMenu.IsActive() {
-		n++
-	}
-	if m.panel2Menu.IsActive() {
-		n++
-	}
-	if m.hintPopup.IsActive() {
-		n++
-	}
-	if m.listPicker.IsActive() {
-		n++
-	}
-	if m.settingsPopup.IsActive() {
-		n++
-	}
-	if m.yamlPopup.IsActive() {
-		n++
-	}
-	if m.comparePopup.IsActive() {
-		n++
-	}
-	if m.breadcrumbPopup.IsActive() {
-		n++
-	}
-	if m.shellPty.IsActive() {
-		n++
-	}
-	if m.txPty.IsActive() {
-		n++
+	for _, l := range m.stackOrder() {
+		if l.owns() {
+			n++
+		}
 	}
 	return n
 }
 
-// closeAllBlockingPopups batches the close cmds for every active
-// blocking popup. Used by context-shift target entry handlers (PTY
-// shell / kubectl edit / kubectl exec / drill-down) per popup-
-// convention §1.10 — the source popup that launched the action
-// should not still be sitting underneath when the user returns from
-// a minute-long subprocess session or a swapped-out panel 2 view.
-// Returns nil when nothing is open so callers can unconditionally
-// tea.Batch the result.
+// closeAllBlockingPopups batches the close cmds for every popup in the
+// stack. Used by context-shift target entry handlers (PTY shell /
+// kubectl edit / kubectl exec / drill-down, tdp T1) — the source popup
+// that launched the action should not still be sitting underneath when
+// the user returns from a minute-long subprocess session or a
+// swapped-out panel 2 view. Returns nil when nothing is open so callers
+// can unconditionally tea.Batch the result.
 //
-// Toast is intentionally excluded (§1.10): it is non-blocking and
-// auto-dismisses on its own timer; the close animation of a PTY
-// covers the whole popup region anyway, so any in-flight transient
-// toast vanishes visually with no special handling.
-//
-// PTY slots (shellPty / txPty) are also excluded — they have their
-// own mutual-exclusion logic (toast warn "Close current edit/exec
+// Toast is not in the stack: it is non-blocking and auto-dismisses on
+// its own timer. PTY slots (shellPty / txPty) are skipped — they have
+// their own mutual-exclusion logic (toast warn "Close current edit/exec
 // PTY first") and shouldn't cascade-close each other.
 func (m *AppModel) closeAllBlockingPopups() tea.Cmd {
 	var cmds []tea.Cmd
-	if m.help.IsActive() {
-		cmds = append(cmds, m.help.Close())
-	}
-	if m.appLog.IsActive() {
-		cmds = append(cmds, m.appLog.Close())
-	}
-	if m.confirm.IsActive() {
-		cmds = append(cmds, m.confirm.Close())
-	}
-	if m.contextPicker.IsActive() {
-		cmds = append(cmds, m.contextPicker.Close())
-	}
-	if m.namespacePicker.IsActive() {
-		cmds = append(cmds, m.namespacePicker.Close())
-	}
-	if m.helmDocMenu.IsActive() {
-		cmds = append(cmds, m.helmDocMenu.Close())
-	}
-	if m.panel2Menu.IsActive() {
-		cmds = append(cmds, m.panel2Menu.Close())
-	}
-	if m.hintPopup.IsActive() {
-		cmds = append(cmds, m.hintPopup.Close())
-	}
-	if m.listPicker.IsActive() {
-		cmds = append(cmds, m.listPicker.Close())
-	}
-	if m.settingsPopup.IsActive() {
-		cmds = append(cmds, m.settingsPopup.Close())
-	}
-	if m.yamlPopup.IsActive() {
-		cmds = append(cmds, m.yamlPopup.Close())
-	}
-	if m.comparePopup.IsActive() {
-		cmds = append(cmds, m.comparePopup.Close())
-	}
-	if m.breadcrumbPopup.IsActive() {
-		cmds = append(cmds, m.breadcrumbPopup.Close())
+	for _, l := range m.stackOrder() {
+		if _, isPty := l.(*PtyView); isPty {
+			continue
+		}
+		if l.owns() {
+			cmds = append(cmds, l.closeLayer())
+		}
 	}
 	if len(cmds) == 0 {
 		return nil
@@ -450,29 +379,38 @@ func (m *AppModel) togglePinnedKind(rt k8s.ResourceType) tea.Cmd {
 	return nil
 }
 
-// openSortColumnPicker opens the listPicker as the first step of the
-// Sort flow. Items are the kind's column titles; the column currently
-// in use (if any) is badged with its direction arrow so the user
-// sees where they are now. Caches kind in sortFlowKind so the
-// direction step knows what kind it's committing for even if the
-// sidebar cursor drifts mid-flow.
+// openSortColumnPicker opens the column picker, the first step of the
+// Sort flow. Items are the kind's column titles; a column already in the
+// sort chain is badged with its priority and direction. Caches kind in
+// sortFlowKind so the direction step knows what kind it's committing for
+// even if the sidebar cursor drifts mid-flow.
 func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
-	def := sortRegistry().Get(rt)
-	if def == nil || len(def.Columns) == 0 {
+	items := sortColumnItems(rt, m.cfg)
+	if items == nil {
 		return nil
 	}
+	def := sortRegistry().Get(rt)
 	m.sortFlowKind = rt
 	m.sortFlowColumn = ""
-	chain := m.cfg.GetSort(def.KubectlName)
-	// When a chain exists, render TWO operation regions (fields +
-	// reset) with section headers; flat single-region picker drops
-	// the headers to stay visually quiet. Matches the popup-design
-	// mindset: only annotate regions when there is more than one.
-	multiRegion := len(chain) > 0
-	items := make([]ListPickerItem, 0, len(def.Columns)+4)
-	if multiRegion {
-		items = append(items, ListPickerItem{Header: true, Label: "fields"})
+	title := sortPopupIcon + " Sort " + def.DisplayName + " by…"
+	m.listPicker.SetSize(m.width, m.height)
+	m.listPicker.SetLayer(m.popupDepth() + 1)
+	return m.listPicker.Open("sort:column", title, items)
+}
+
+// sortColumnItems builds the column picker's rows: the columns under
+// "fields" (the cursor's group, tdp M8), then Reset under "all". Reset is
+// always listed — dimmed while there is no sort to reset (tdp M6) — so
+// the picker's height is fixed from the moment it opens and doesn't grow
+// a row when the first tier lands (F7).
+func sortColumnItems(rt k8s.ResourceType, cfg *config.Config) []ListPickerItem {
+	def := sortRegistry().Get(rt)
+	if def == nil || len(def.Columns) == 0 || cfg == nil {
+		return nil
 	}
+	chain := cfg.GetSort(def.KubectlName)
+	items := make([]ListPickerItem, 0, len(def.Columns)+4)
+	items = append(items, ListPickerItem{Header: true, Label: "fields"})
 	for _, c := range def.Columns {
 		it := ListPickerItem{Key: c.Title, Label: c.Title}
 		// Columns in the chain get a priority+direction badge —
@@ -483,21 +421,18 @@ func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
 		}
 		items = append(items, it)
 	}
-	if multiRegion {
-		items = append(items, ListPickerItem{Separator: true})
-		items = append(items, ListPickerItem{Header: true, Label: "all"})
-		items = append(items, ListPickerItem{Key: sortResetKey, Label: "Reset " + resetIcon})
+	items = append(items, ListPickerItem{Separator: true})
+	items = append(items, ListPickerItem{Header: true, Label: "all"})
+	items = append(items, ListPickerItem{Key: sortResetKey, Label: "Reset " + resetIcon, Disabled: len(chain) == 0})
+	return items
+}
+
+// refreshSortColumnPicker redraws the open column picker's badges (and
+// Reset's dimming) in place after a tier lands or the chain resets.
+func (m *AppModel) refreshSortColumnPicker(rt k8s.ResourceType) {
+	if items := sortColumnItems(rt, m.cfg); items != nil && m.listPicker.owns() {
+		m.listPicker.SetItems(items)
 	}
-	title := sortPopupIcon + " Sort " + def.DisplayName + " by…"
-	m.listPicker.SetSize(m.width, m.height)
-	// SetLayer stamps the layer color; popupDepth() counts the picker
-	// itself when it's already active, which would double-bump the layer
-	// on a swap (column → direction, or direction → loop-back column).
-	// Only stamp on first open — the swap path keeps its original layer.
-	if !m.listPicker.IsActive() {
-		m.listPicker.SetLayer(m.popupDepth() + 1)
-	}
-	return m.listPicker.Open("sort:column", title, items)
 }
 
 // sortTierBadge formats the priority + direction marker used in the
@@ -514,14 +449,12 @@ func sortTierBadge(idx int, direction string, chainLen int) string {
 	return fmt.Sprintf("(%d) %s", idx+1, arrow)
 }
 
-// openSortDirectionPicker is the second step. Always offers
-// Ascending / Descending; offers Unset ONLY when the column is
-// already in the chain (otherwise Unset would be a guaranteed no-op
-// and surfacing it just clutters the picker — same logic the column
-// step uses to hide Reset when there's nothing to reset).
-//
-// When the column IS in the chain, its current direction gets
-// badged "current" so the user sees their existing pick.
+// openSortDirectionPicker opens the second step over the column picker
+// (tdp F1, F4): Esc on it returns to the column picker. Always offers
+// Ascending / Descending; offers Unset ONLY when the column is already in
+// the chain — for a column that isn't sorted there is no tier to unset.
+// When the column IS in the chain, its current direction gets badged
+// "current" so the user sees their existing pick.
 func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) tea.Cmd {
 	def := sortRegistry().Get(rt)
 	if def == nil {
@@ -542,58 +475,44 @@ func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) t
 		items = append(items, ListPickerItem{Key: "unset", Label: "Unset"})
 	}
 	title := sortPopupIcon + " Sort " + def.DisplayName + " by " + column + "…"
-	m.listPicker.SetSize(m.width, m.height)
-	// Swap path: listPicker is already active from the column step, so
-	// skip the layer re-stamp — same instance, same layer (see the same
-	// guard in openSortColumnPicker for the rationale).
-	if !m.listPicker.IsActive() {
-		m.listPicker.SetLayer(m.popupDepth() + 1)
-	}
-	return m.listPicker.Open("sort:direction", title, items)
+	m.sortDirPicker.SetSize(m.width, m.height)
+	m.sortDirPicker.SetLayer(m.popupDepth() + 1)
+	return m.sortDirPicker.Open("sort:direction", title, items)
 }
 
-// commitSortFlow finalises one tier — column + direction. Persists
-// the upsert (or removes the tier on "unset"), re-applies the sort
-// to live items, then LOOPS BACK to the column picker so the user
-// can stack additional tiers without re-invoking O each time.
-// Esc on the looped column picker is the canonical "I'm done"
-// gesture (ListPickerCancelMsg path), preserving the Esc=close
-// contract.
-//
-// One-tier users pay a single extra Esc compared to the old
-// auto-close model; multi-tier users save an O-press per tier and
-// keep their cognitive context inside the same popup.
+// commitSortFlow finalises one tier — column + direction. Persists the
+// upsert (or removes the tier on "unset"), re-applies the sort to live
+// items, closes the direction step and refreshes the column picker's
+// badges in place, so the user can stack another tier or Esc out. The
+// column picker stays open until the user closes it.
 func (m *AppModel) commitSortFlow(direction string) tea.Cmd {
 	rt := m.sortFlowKind
 	column := m.sortFlowColumn
-	// Only sortFlowColumn is consumed by the direction step;
-	// sortFlowKind stays set across the loop.
 	m.sortFlowColumn = ""
-	// Defensive: same "popup stays open" rule as resetSortFlow —
-	// inconsistent state (missing kind / column / cfg / registry
-	// entry) is treated as a silent no-op so the user keeps the
-	// picker they invoked and can Esc out on their own terms.
+	closeDir := m.sortDirPicker.Close()
+	// Defensive: inconsistent state (missing kind / column / cfg /
+	// registry entry) only ends the direction step.
 	if rt == "" || column == "" || m.cfg == nil {
-		return nil
+		return closeDir
 	}
 	def := sortRegistry().Get(rt)
 	if def == nil {
-		return nil
+		return closeDir
 	}
 	chain := m.cfg.GetSort(def.KubectlName)
 	switch direction {
 	case "unset":
-		// Unset removes just THIS tier from the chain. UI hides
-		// Unset for not-in-chain columns, but the guard stays as
-		// belt-and-suspenders against stale picker state.
+		// Unset removes just THIS tier from the chain. The direction
+		// step only offers Unset for in-chain columns; the guard stays
+		// against stale picker state.
 		if chain.IndexOf(column) < 0 {
-			return m.openSortColumnPicker(rt)
+			return closeDir
 		}
 		m.cfg.UnsetSortColumn(def.KubectlName, column)
 	case config.SortDirectionAscending, config.SortDirectionDescending:
 		m.cfg.SetSort(def.KubectlName, column, direction)
 	default:
-		return m.openSortColumnPicker(rt)
+		return closeDir
 	}
 	var saveErrCmd tea.Cmd
 	if err := m.cfg.Save(); err != nil {
@@ -611,44 +530,23 @@ func (m *AppModel) commitSortFlow(direction string) tea.Cmd {
 		rows := augmentRowsWithHelm(m.items, m.currentResource)
 		m.table.SetRows(rows)
 	}
-	// Loop back to column picker — Open swaps content in place
-	// (listPicker stays open), the updated chain badges show the
-	// just-committed tier with its "(N)" priority + arrow.
-	reopenCmd := m.openSortColumnPicker(rt)
-	return tea.Batch(reopenCmd, saveErrCmd)
+	m.refreshSortColumnPicker(rt)
+	return tea.Batch(closeDir, saveErrCmd)
 }
 
-// resetSortFlow is the "Reset" shortcut wired to the column picker:
-// drop the entire chain for this kind, re-apply the fallback sort
-// to live items, then LOOP BACK to the column picker so the user
-// can keep building a fresh chain without re-invoking the flow.
-// Only reachable when the chain has at least one tier (the column
-// picker omits the row otherwise), so we don't need the
-// "reset-against-nothing is a no-op" guard that commitSortFlow has.
-//
-// Mirrors commitSortFlow's loop pattern: sortFlowKind stays set
-// across the swap; Esc on the re-opened picker is the canonical
-// "I'm done" exit.
+// resetSortFlow is the column picker's Reset row: drop the entire chain
+// for this kind, re-apply the fallback sort to live items, and refresh
+// the column picker in place (Reset dims again). With nothing to reset
+// the row is dimmed and never reaches here; the guard stays defensive.
 func (m *AppModel) resetSortFlow() tea.Cmd {
 	rt := m.sortFlowKind
-	// sortFlowColumn was already consumed by the column step that
-	// fired Reset; sortFlowKind stays set across the loop.
 	m.sortFlowColumn = ""
-	// Defensive: in inconsistent state (kind unset, config absent,
-	// registry no longer knows the kind) we can't refresh the
-	// picker — but Reset must never close the popup unilaterally,
-	// so just no-op and let the user Esc out on their own terms.
 	if rt == "" || m.cfg == nil {
 		return nil
 	}
 	def := sortRegistry().Get(rt)
-	if def == nil {
+	if def == nil || len(m.cfg.GetSort(def.KubectlName)) == 0 {
 		return nil
-	}
-	if len(m.cfg.GetSort(def.KubectlName)) == 0 {
-		// Defensive: nothing to reset. Refresh the picker (still
-		// in flat single-region state) so cursor lands sanely.
-		return m.openSortColumnPicker(rt)
 	}
 	m.cfg.ResetSort(def.KubectlName)
 	var saveErrCmd tea.Cmd
@@ -662,11 +560,8 @@ func (m *AppModel) resetSortFlow() tea.Cmd {
 		rows := augmentRowsWithHelm(m.items, m.currentResource)
 		m.table.SetRows(rows)
 	}
-	// Loop back: the column picker re-renders without the chain
-	// badges, the Reset row, and the region headers (chain is now
-	// empty so multiRegion is false).
-	reopenCmd := m.openSortColumnPicker(rt)
-	return tea.Batch(reopenCmd, saveErrCmd)
+	m.refreshSortColumnPicker(rt)
+	return saveErrCmd
 }
 
 // applySortToItems re-orders m.items per the current kind's saved
@@ -791,28 +686,6 @@ func (m *AppModel) commitSettingsToggle(key string) tea.Cmd {
 // counts as a double-click. Standard desktop default.
 const doubleClickWindow = 500 * time.Millisecond
 
-// isMenuPopupActive reports whether a short menu-style popup is
-// currently up. These popups (panel2 menu, listpicker, settings,
-// hint actions, breadcrumb, helm-doc menu, namespace / context
-// pickers, confirm dialog) all run on tight item lists where
-// half-page wheel scrolling doesn't make sense — the dispatcher
-// swallows the wheel rather than synthesise an unbound u/d that
-// the popup would silently drop. Viewer popups (yamlpopup,
-// comparepopup, appLog, help) are intentionally NOT in this set:
-// they bind u/d for half-page scroll, so wheel through them is
-// genuinely useful.
-func (m AppModel) isMenuPopupActive() bool {
-	return m.panel2Menu.IsActive() ||
-		m.listPicker.IsActive() ||
-		m.settingsPopup.IsActive() ||
-		m.hintPopup.IsActive() ||
-		m.breadcrumbPopup.IsActive() ||
-		m.helmDocMenu.IsActive() ||
-		m.namespacePicker.IsActive() ||
-		m.contextPicker.IsActive() ||
-		m.confirm.IsActive()
-}
-
 // handleMousePress is the main mouse dispatcher. Runs only on
 // MouseActionPress events (release / motion are no-ops in phase 1).
 // Single left-click → focus the hit panel + move cursor to the
@@ -852,7 +725,11 @@ func (m *AppModel) handleMousePress(msg tea.MouseMsg) tea.Cmd {
 		// when this turns out to also be the first half of a double.
 		m.setPanel(panel)
 		selCmd := m.cursorToScreenY(panel, msg.Y)
-		if isDouble {
+		// A double-click is Enter on panels 2 and 3. On panel 1 it only
+		// selects: Enter there moves focus to panel 2, and a click on
+		// panel 1 shouldn't send focus away from where the user
+		// pointed (tdp X2 leaves the mapping to the app).
+		if isDouble && panel != SidebarPanel {
 			// Reset so a third press isn't read as another double.
 			m.lastLeftPressAt = time.Time{}
 			enterCmd := func() tea.Msg { return tea.KeyMsg{Type: tea.KeyEnter} }
@@ -1379,10 +1256,10 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 		yamlPopup:          NewYamlPopupModel(t),
 		comparePopup:       newCompareModel,
 		breadcrumbPopup:    NewBreadcrumbPopupModel(t),
-		helmDocMenu:        NewHelmDocMenuPopupModel(t),
-		panel2Menu:         NewPanel2MenuPopupModel(t),
-		hintPopup:          NewHintPopupModel(t),
+		spaceMenu:          NewSpaceMenuModel(t),
+		globalMenu:         NewGlobalMenuModel(t),
 		listPicker:         NewListPickerModel(t),
+		sortDirPicker:      NewSortDirPickerModel(t),
 		settingsPopup:      NewSettingsPopupModel(t),
 		activePanel:        initialPanel,
 		theme:              t,
@@ -1454,6 +1331,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	// The exit key in a kubectl edit / exec PTY (tdp K10): ask before
+	// ending the session — an edit in progress would be lost. The
+	// confirm stacks over the PTY; Esc returns to it.
+	if req, ok := msg.(ptyLeaveRequestMsg); ok {
+		action, question, detail := ConfirmEndShell, "End the shell session?", "the kubectl exec session is closed"
+		if req.kind == PtyKindEdit {
+			action, question, detail = ConfirmLeaveEdit, "Leave kubectl edit?", "the edit is cancelled; nothing is applied"
+		}
+		onConfirm := func() tea.Msg { return ptyKillMsg{} }
+		m.confirm.SetSize(m.width, m.height)
+		m.confirm.SetLayer(m.popupDepth() + 1)
+		return m, m.confirm.Show(action, question, detail, onConfirm)
+	}
+	if _, ok := msg.(ptyKillMsg); ok {
+		m.txPty.Kill()
+		return m, nil
+	}
+
 	// PtyExitMsg arrives AFTER ptyView has already Stop()ed itself, so this
 	// handler lives outside the IsActive() guard — it cleans up app-level
 	// state when the subprocess finishes.
@@ -1503,16 +1398,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.breadcrumbPopup.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
-		if c := m.helmDocMenu.HandleTick(tickMsg); c != nil {
+		if c := m.spaceMenu.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
-		if c := m.panel2Menu.HandleTick(tickMsg); c != nil {
-			animCmds = append(animCmds, c)
-		}
-		if c := m.hintPopup.HandleTick(tickMsg); c != nil {
+		if c := m.globalMenu.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.listPicker.HandleTick(tickMsg); c != nil {
+			animCmds = append(animCmds, c)
+		}
+		if c := m.sortDirPicker.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
 		if c := m.settingsPopup.HandleTick(tickMsg); c != nil {
@@ -1575,179 +1470,58 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, c
 			}
 			return m, nil
-		case tea.KeyMsg:
-			if m.txPty.IsActive() {
-				var cmd tea.Cmd
-				m.txPty, cmd = m.txPty.Update(msg)
-				return m, cmd
-			}
-			if m.shellPty.IsActive() {
-				var cmd tea.Cmd
-				m.shellPty, cmd = m.shellPty.Update(msg)
-				return m, cmd
-			}
-			// All hidden: fall through (Alt+T re-shows Alterm, etc.)
 		}
 	}
 
-	if m.confirm.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.confirm, cmd = m.confirm.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
+	// Keys go to the popup on top of the stack — the last layer in
+	// stackOrder that owns its place. A popup running its close
+	// animation no longer owns it, so the key falls through to the
+	// layer beneath instead of being swallowed (tdp F3, D3).
+	if k, ok := msg.(tea.KeyMsg); ok {
+		top := m.topLayer()
+		// A PTY on top gets every key, q and Ctrl+C included (tdp
+		// K10); with Alterm hidden, keys fall through to the panels
+		// (Alt+t shows it again).
+		if _, isPty := top.(*PtyView); isPty {
+			return m, top.key(k)
 		}
-	}
-
-	if m.appLog.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.appLog, cmd = m.appLog.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
+		// tdp K9: q and Ctrl+C are one leave flow, on every surface
+		// — a popup, a menu, a mode. Ctrl+C works even while typing;
+		// q is a character there (K8).
+		switch k.String() {
+		case "ctrl+c":
+			return m, quitCmd
+		case "q":
+			if !m.typing() {
+				return m, quitCmd
 			}
-			return m, tea.Batch(cmds...)
+		case "?":
+			// tdp K6: ? answers on every surface — a panel, a menu, a
+			// popup, a mode — with the key reference of whatever is
+			// frontmost, stacked on top of it. On the key reference
+			// itself it closes it; while typing it is a character (K8).
+			if !m.typing() && !m.help.owns() {
+				return m, m.openKeyRef()
+			}
 		}
-	}
-
-	if m.help.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.help, cmd = m.help.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
+		// tdp K4, F3: Esc closes the top popup first, and a toast
+		// counts — it is drawn over everything, so it goes before any
+		// popup, mode or search beneath it. Toasts never take keys
+		// otherwise (F1). One already fading no longer owns Esc: the
+		// press goes on to what is under it.
+		if k.String() == "esc" && m.toast.Owns() {
+			return m, m.toast.Dismiss()
 		}
-	}
-
-	if m.contextPicker.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.contextPicker, cmd = m.contextPicker.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
+		// tdp K11: in the YAML viewer's selection mode Tab is
+		// suspended, but answers.
+		if top == &m.yamlPopup && m.yamlPopup.visualMode && k.String() == "tab" {
+			return m, m.toast.Show("Esc leaves the selection first")
 		}
-	}
-
-	if m.namespacePicker.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.namespacePicker, cmd = m.namespacePicker.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
+		if top != nil {
+			if !top.ready() {
+				return m, nil
 			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.yamlPopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.yamlPopup, cmd = m.yamlPopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.comparePopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.comparePopup, cmd = m.comparePopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.breadcrumbPopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.breadcrumbPopup, cmd = m.breadcrumbPopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.helmDocMenu.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.helmDocMenu, cmd = m.helmDocMenu.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	// listPicker is checked BEFORE hintPopup / panel2Menu because the Sort
-	// flow stacks the listPicker on top of either source (sidebar Space
-	// menu's SortKind, panel-2 menu's [Alt][S]ort) per §1.8 — the source
-	// stays underneath, the picker owns input. Hard-routing in source-
-	// first order would send j/k to the menu cursor below the picker.
-	if m.listPicker.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.listPicker, cmd = m.listPicker.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.hintPopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.hintPopup, cmd = m.hintPopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.panel2Menu.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.panel2Menu, cmd = m.panel2Menu.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.settingsPopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.settingsPopup, cmd = m.settingsPopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
+			return m, top.key(k)
 		}
 	}
 
@@ -1764,43 +1538,41 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// is "anything else," which cancels the drag and reverts.
 		// Consume the event — don't propagate to focus shift / row
 		// selection / popup hit-test, mirroring the same intent as
-		// the keyboard cancel path.
-		//
-		// EXCEPT when the drop-only hint popup is up (Space mid-drag
-		// surfaced it): popup owns the click so the user can commit
-		// Drop via mouse or right-click to close back into bare drag.
-		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && !m.hintPopup.IsActive() {
+		// the keyboard cancel path. (A popup over the drag — the
+		// key reference — takes its own clicks.)
+		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && m.topLayer() == nil {
 			cmd := m.sidebar.CancelDrag()
 			return m, cmd
 		}
-		// Mouse routing. Layered:
+		// Mouse routing, top of the stack first — the same topLayer()
+		// the keys go to, so a click lands on the popup the user can
+		// see on top, never on a menu row hidden beneath it (tdp X2):
 		//   1. MouseEnabled gate — short-circuit when off, EXCEPT
 		//      for the Settings popup itself. Users who toggle Mouse
 		//      OFF would otherwise be locked out of the surface that
 		//      toggles it back on; the popup is its own escape hatch.
 		//   2. Wheel → synthesize u/d (half-page) for main panels +
 		//      viewer popups (yaml / compare / appLog / help) that
-		//      bind u/d natively. Menu-style popups (short lists)
-		//      explicitly swallow wheel: u/d is unbound there so the
-		//      synth would no-op anyway, and ignoring it keeps the
-		//      wheel from drifting the underlying panel's cursor
-		//      through the popup overlay.
-		//   3. Settings popup owns its own click (toggle on row).
-		//   4. Other popups route through their HandleMouse.
-		//   5. Otherwise, handleMousePress for the main 3 panels.
+		//      bind u/d natively. With a menu-style popup on top
+		//      (short lists) the wheel is swallowed: u/d is unbound
+		//      there, and ignoring it keeps the wheel from drifting
+		//      the cursor of whatever sits beneath. A PTY on top
+		//      takes no mouse action at all.
+		//   3. A click goes to the top popup's HandleMouse.
+		//   4. Otherwise, handleMousePress for the main 3 panels.
+		top := m.topLayer()
 		if m.cfg != nil && !m.cfg.IsMouseEnabled() {
-			if m.settingsPopup.IsActive() {
-				var cmd tea.Cmd
-				m.settingsPopup, cmd = m.settingsPopup.HandleMouse(msg, m.width, m.height)
-				return m, cmd
+			if top == &m.settingsPopup {
+				top.resize(m.width, m.height)
+				return m, top.click(msg, m.width, m.height)
 			}
 			return m, nil
 		}
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			// Menu popups ignore wheel entirely — their content is
-			// short and u/d half-page semantics don't fit a
-			// 3-7-item picker.
-			if m.isMenuPopupActive() {
+			if top != nil && (isMenuLayer(top) || !top.ready()) {
+				return m, nil
+			}
+			if _, isPty := top.(*PtyView); isPty {
 				return m, nil
 			}
 			// Wheel translates to half-page move (u / d). u/d are
@@ -1822,667 +1594,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
 		}
-		// Forward to whichever interactive popup is on top. Each
-		// popup's HandleMouse owns its own hit-test (popup rect,
-		// row offsets) and decides what a click commits.
-		if m.settingsPopup.IsActive() {
-			var cmd tea.Cmd
-			m.settingsPopup, cmd = m.settingsPopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.panel2Menu.IsActive() {
-			var cmd tea.Cmd
-			m.panel2Menu, cmd = m.panel2Menu.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.listPicker.IsActive() {
-			var cmd tea.Cmd
-			m.listPicker, cmd = m.listPicker.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.namespacePicker.IsActive() {
-			var cmd tea.Cmd
-			m.namespacePicker, cmd = m.namespacePicker.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.hintPopup.IsActive() {
-			var cmd tea.Cmd
-			m.hintPopup, cmd = m.hintPopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		// Remaining popups all have HandleMouse now. List-style
-		// popups commit on left-click; scroll-only / dialog popups
-		// close on right-click; left-click is no-op everywhere a
-		// stray click could fire a destructive or surprising
-		// action (confirm dialogs especially).
-		if m.confirm.IsActive() {
-			var cmd tea.Cmd
-			m.confirm, cmd = m.confirm.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.help.IsActive() {
-			var cmd tea.Cmd
-			m.help, cmd = m.help.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.appLog.IsActive() {
-			var cmd tea.Cmd
-			m.appLog, cmd = m.appLog.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.contextPicker.IsActive() {
-			var cmd tea.Cmd
-			m.contextPicker, cmd = m.contextPicker.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.yamlPopup.IsActive() {
-			var cmd tea.Cmd
-			m.yamlPopup, cmd = m.yamlPopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.comparePopup.IsActive() {
-			var cmd tea.Cmd
-			m.comparePopup, cmd = m.comparePopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.breadcrumbPopup.IsActive() {
-			var cmd tea.Cmd
-			m.breadcrumbPopup, cmd = m.breadcrumbPopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.helmDocMenu.IsActive() {
-			var cmd tea.Cmd
-			m.helmDocMenu, cmd = m.helmDocMenu.HandleMouse(msg, m.width, m.height)
-			return m, cmd
+		// A click goes to the popup on top. Each popup's HandleMouse
+		// owns its own hit-test (popup rect, row offsets) and decides
+		// what a click commits: list popups commit on left-click,
+		// scroll-only and dialog popups close on right-click, and
+		// left-click is a no-op wherever a stray click could fire a
+		// destructive action (confirm especially).
+		if top != nil {
+			// Hit-test at the size the popup is drawn at (View resizes
+			// before it composites).
+			top.resize(m.width, m.height)
+			return m, top.click(msg, m.width, m.height)
 		}
 		cmd := m.handleMousePress(msg)
 		return m, cmd
 
 	case tea.KeyMsg:
-		// Sidebar drag-and-drop mode is modal: only j/k (swap),
-		// D (commit), and "anything else" (cancel) make sense. Route
-		// ALL keypresses to the sidebar first so global hotkeys like
-		// Tab / 1 / 2 / 3 / q can't slip past — pressing them mid-
-		// drag should cancel, not switch focus or quit. ctrl+c stays
-		// special: it still kills kbu (the sidebar's cancel will
-		// fire on the way out, harmless).
-		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && msg.String() != "ctrl+c" {
-			sidebar, cmd := m.sidebar.Update(msg)
-			m.sidebar = sidebar
-			return m, cmd
-		}
-		// When any panel is in search mode, only ctrl+c passes through.
-		searching := (m.activePanel == TablePanel && m.table.IsSearching()) ||
-			(m.activePanel == SidebarPanel && m.sidebar.IsSearching()) ||
-			(m.activePanel == DetailPanel && m.detail.IsSearching())
-		if searching {
-			switch msg.String() {
-			case "ctrl+c":
-				m.watcher.Stop()
-				m.logStreamer.Stop()
-				return m, tea.Quit
-			}
-			break
-		}
-		switch msg.String() {
-		case "ctrl+c":
-			m.watcher.Stop()
-			m.logStreamer.Stop()
-			return m, tea.Quit
-		case "q":
-			// `q` quits straight away — no confirm step. Routed
-			// through quitMsg so the teardown (streams, PTYs,
-			// session-state save) stays in one place.
-			return m, func() tea.Msg {
-				return quitMsg{}
-			}
-		case "V":
-			return m, m.splash.Show()
-		case ">":
-			// Global Settings popup. Opens from any panel; popups
-			// already-open intercept keys earlier so `>` while inside
-			// another popup is naturally a no-op. Items rebuilt
-			// from current config every Open so the badge reflects
-			// state on each re-entry. `>` (shift+.) picked because it
-			// doesn't collide with any letter trigger; mnemonic "open
-			// app preferences from here forward".
-			m.settingsPopup.SetSize(m.width, m.height)
-			m.settingsPopup.SetLayer(m.popupDepth() + 1)
-			return m, m.settingsPopup.Open(m.buildSettingsItems())
-		case "alt+t", "alt+T", "ctrl+t":
-			// Alt+T is the single Alterm toggle:
-			//   - no shell alive   → spawn Alterm
-			//   - alive, hidden    → reattach (show)
-			//   - alive, visible   → handled inside PtyView.Update (hides)
-			// The "visible" branch never reaches here because PtyView
-			// intercepts keys when IsActive() is true. Edit/Exec PTYs alive:
-			// refuse, same as table-level edit/shell guard.
-			//
-			// Ctrl+T is a hidden alias for the demo recorder only: vhs 0.11
-			// drops the Alt modifier between Chrome and the PTY (logged
-			// keypress = `t` or `ctrl+t`, never `alt+t`), so demo tapes
-			// emit Ctrl+T instead. Humans never see this alias in help/UI
-			// hints — the cost of accepting it is that pressing Ctrl+T
-			// while a Alterm shell is visible will hide the shell instead
-			// of forwarding to zsh's transpose-chars binding.
-			// Dual-slot: Alterm lives in shellPty only. txPty (edit/exec)
-			// being alive does NOT block Alterm — they can coexist; tx
-			// visibility takes precedence so we just hide tx? No — tx is
-			// transient and the user explicitly launched it; better to
-			// surface Alterm under it. Currently: if tx visible, Alterm
-			// hide/show is harmless (render still picks tx on top).
-			// §1.10 — Alterm is a context-shift target. In practice no
-			// blocking popup is active when Alt+T fires (popups
-			// intercept keys above this handler), so closeAll is
-			// usually nil; the call is here for rule symmetry with
-			// the kubectl edit / exec entry points.
-			closeAll := m.closeAllBlockingPopups()
-			// PTY is a §1.10 context-shift target — it REPLACES the popup
-			// tree rather than stacking on it (closeAll above tears down
-			// every blocking popup). UX-wise the user sees a single layer
-			// when the PTY is visible, regardless of which popup chain
-			// launched it. Pin layer 1 so Alterm + kubectl edit/exec share
-			// one border color. (popupDepth() here is misleading anyway:
-			// closeAll is a staged tea.Cmd, so the popups it will close
-			// are still counted as active.)
-			m.shellPty.SetLayer(1)
-			if m.shellPty.IsAlive() {
-				return m, tea.Batch(closeAll, m.shellPty.Show(m.width, m.height))
-			}
-			cmd := buildShellTerminalCmd(m.cfg.AltermShell, m.cfg.AltermLoginShell)
-			return m, tea.Batch(closeAll, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell))
-		case "?":
-			m.help.SetSize(m.width, m.height)
-			if !m.help.IsActive() {
-				m.help.SetLayer(m.popupDepth() + 1)
-			}
-			return m, m.help.Toggle()
-		case "!":
-			m.appLog.SetSize(m.width, m.height)
-			if !m.appLog.IsActive() {
-				m.appLog.SetLayer(m.popupDepth() + 1)
-			}
-			return m, m.appLog.Toggle()
-		case "1":
-			m.detailExpanded = false
-			m.setPanel(SidebarPanel)
-			return m, nil
-		case "2":
-			m.detailExpanded = false
-			m.setPanel(TablePanel)
-			return m, nil
-		case "3":
-			m.detailExpanded = false
-			m.setPanel(DetailPanel)
-			return m, nil
-		case "tab":
-			m.cyclePanel()
-			return m, nil
-		case "shift+tab":
-			m.cyclePanelReverse()
-			return m, nil
-		case "h":
-			// v1.5.x: h/l switch the panel 3 detail tab ONLY when panel 3
-			// is the active panel. Panel 1/2 = no-op (panel 2 was the
-			// previous owner — moved to panel 3 so tab nav and list nav
-			// live on different panels). `l` is no longer a drill key
-			// either; Enter is the sole drill key (focus-shift fallback
-			// removed when mouse double-click → Enter synthesis landed).
-			if m.activePanel == DetailPanel {
-				m.detail = m.detail.PrevTab()
-				return m, nil
-			}
-		case "l":
-			if m.activePanel == DetailPanel {
-				m.detail = m.detail.NextTab()
-				return m, nil
-			}
-		case "enter":
-			if m.activePanel == TablePanel && m.drillDownPod == nil {
-				return m, m.enterDrillDown()
-			}
-		case "esc":
-			// §1.9 — auto-dismiss toast still has to accept Esc. Toast
-			// is non-blocking (keys pass through to panels), so it
-			// can't intercept Esc itself; the app-level Esc handler
-			// dismisses it first. Higher-priority blocking popups
-			// already short-circuited above this switch, so reaching
-			// here means no popup is claiming Esc and the toast wins
-			// over filter clear / drill exit. Subsequent Esc presses
-			// then walk the panel chain normally.
-			if m.toast.IsActive() {
-				return m, m.toast.Dismiss()
-			}
-			filterActive := (m.activePanel == SidebarPanel && m.sidebar.HasActiveFilter()) ||
-				(m.activePanel == TablePanel && m.table.HasActiveFilter()) ||
-				(m.activePanel == DetailPanel && m.detail.HasActiveFilter())
-			if filterActive {
-				// Let panel handle Esc to clear filter
-			} else {
-				// Panel 2 Esc with compare mode active: peel the
-				// lock off first and KEEP going — same keypress
-				// also pops one drill level if applicable. The
-				// alternative (two-press: one for lock, one for
-				// drill-back) made Esc feel inconsistent — every
-				// other Esc in kbu does its work in one press.
-				if m.activePanel == TablePanel && m.inCompareMode() {
-					m.clearCompareLock()
-				}
-				if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
-					return m, m.exitDrillDown()
-				}
-			}
-		case "N":
-			// Open the picker immediately in its loading state so the
-			// user gets zero-lag visual feedback, then fire the
-			// LIST namespaces API in parallel. NamespaceListMsg swaps
-			// in the real list when it arrives — no flicker because
-			// the animator stays in open state across SetNamespaces.
-			m.namespacePicker.SetLayer(m.popupDepth() + 1)
-			m.namespacePicker.SetSelection(m.k8sClient.Selection())
-			openCmd := m.namespacePicker.OpenLoading()
-			return m, tea.Batch(openCmd, fetchNamespaces(m.k8sClient))
-		case "C":
-			// Panel 2 cursor-on-row: C is the contextual Compare
-			// hotkey (same path as the panel-2 Space menu's "C"
-			// entry). Same trade-off the P pin hotkey makes on
-			// panel 1 — panel-context-specific override of a
-			// global letter. Everywhere ELSE C still opens the
-			// context picker.
-			if m.activePanel == TablePanel && !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
-				idx := m.table.SelectedRow()
-				if idx >= 0 && idx < len(m.items) {
-					return m, m.compareHotkeyDispatch(m.currentResource, m.items[idx])
-				}
-			}
-			return m, fetchContexts(m.k8sClient)
-		case "P":
-			// Panel-1 only: toggle pinned status for the cursor's
-			// resource kind. Acts on the sidebar's selected row even
-			// without opening Space menu first — same UX as N/C which
-			// surface globally. No-op when active panel isn't the
-			// sidebar or when the cursor is on a category header.
-			if m.activePanel != SidebarPanel {
-				return m, nil
-			}
-			rt := m.sidebar.CursorResourceType()
-			if rt == "" {
-				return m, nil
-			}
-			return m, m.togglePinnedKind(rt)
-		case "E":
-			if !m.editing && m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
-				idx := m.table.SelectedRow()
-				if idx < 0 || idx >= len(m.items) {
-					return m, nil
-				}
-				item := m.items[idx]
-				// Rule A: any helm-managed resource — Release itself OR a
-				// K8s object Helm rendered (label
-				// app.kubernetes.io/managed-by=Helm or annotation
-				// meta.helm.sh/release-name) — is read-only. kubectl edit
-				// changes get overwritten on the next helm upgrade /
-				// rollback anyway. Use helm upgrade for those.
-				if m.currentResource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
-					m.appLog.Info("Helm-managed (read-only) — use helm upgrade / rollback")
-					return m, m.toast.Show("Helm-managed (read-only)")
-				}
-				// Kind-level gate (mirrors panel 2 menu): Events have no
-				// editable surface, so E is a silent no-op + toast.
-				if !resourceAllowsEdit(m.currentResource) {
-					return m, m.toast.Show("Edit not supported on " + m.currentResource.KubectlName())
-				}
-				detail := fmt.Sprintf("kubectl edit %s/%s", m.currentResource.KubectlName(), item.Name)
-				if item.Namespace != "" {
-					detail += " -n " + item.Namespace
-				}
-				startCmd := func() tea.Msg {
-					return startEditMsg{resource: m.currentResource, item: item, contextName: m.k8sClient.ContextName()}
-				}
-				m.confirm.SetLayer(m.popupDepth() + 1)
-				return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
-			}
-		case ".":
-			// Toggle visibility of helm-managed items on any panel 2
-			// resource list. Helm Releases themselves are excluded (the
-			// category IS helm) — there `.` is a no-op. Re-start the
-			// watcher to re-emit the cached items so the new filter
-			// shows / hides them right away.
-			if m.activePanel != TablePanel || m.currentResource == k8s.ResourceReleases {
-				return m, nil
-			}
-			k8s.ToggleHelmHideManaged()
-			m.watcher.Start(m.currentResource, m.k8sClient.Selection())
-			return m, waitForWatchUpdate(m.watcher, m.currentResource)
-		case "S":
-			// Panel-1: open the sort column picker on the cursor's
-			// kind. Restores the v1.6 muscle memory — sort lives on S
-			// in panel 1 (no conflict with anything panel-1 specific).
-			// Panel-2 keeps S as Shell; panel-2 sort moves through O
-			// (see case "O" below).
-			if m.activePanel == SidebarPanel {
-				rt := m.sidebar.CursorResourceType()
-				if rt == "" {
-					return m, nil
-				}
-				return m, m.openSortColumnPicker(rt)
-			}
-			if m.activePanel == TablePanel {
-				return m, m.execShell()
-			}
-		case "alt+S":
-			// Panel-2 only sort entry on Alt+Shift+S — bare S is
-			// already Shell on panel 2 and reverting wholesale (no
-			// sort hotkey here) would force the user back to panel 1
-			// just to reorder rows. The modifier carves out a panel-
-			// 2 sort gesture without colliding with Shell. Panel 1
-			// still uses plain S (v1.6 muscle memory).
-			if m.activePanel == TablePanel {
-				// Container drill view (panel 2 showing containers of a
-				// drilled pod): no-op. Matches E/D/C gating — row-level
-				// operations are blocked during drill so the picker
-				// title "Sort Pods by…" can't appear while the user is
-				// looking at containers.
-				if m.drillDownPod != nil {
-					return m, nil
-				}
-				if m.currentResource == "" {
-					return m, nil
-				}
-				return m, m.openSortColumnPicker(m.currentResource)
-			}
-			return m, nil
-		case "D":
-			// Panel-1: enter drag-and-drop reorder mode for the
-			// cursor's pinned kind. Mirrors the panel-meaning split
-			// used by S (panel 2 only: shell) and C (panel 2 only).
-			// Guards in EnterDrag — silent no-op when cursor isn't
-			// on a pinned row or there's <2 pins.
-			if m.activePanel == SidebarPanel {
-				_, cmd := m.sidebar.EnterDrag()
-				return m, cmd
-			}
-			if m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
-				idx := m.table.SelectedRow()
-				if idx >= 0 && idx < len(m.items) {
-					item := m.items[idx]
-					// Rule A: Helm-managed resources are read-only — delete
-					// here would be overwritten on next helm upgrade anyway.
-					// Mirrors the `E` edit guard above.
-					if m.currentResource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
-						m.appLog.Info("Helm-managed (read-only) — use helm uninstall")
-						return m, m.toast.Show("Helm-managed (read-only)")
-					}
-					// Kind-level gate (mirrors panel 2 menu): Events / Nodes /
-					// Namespaces are blocked from delete here too — too far
-					// from kbu's scout-tool scope to gate via "asks for
-					// confirmation" alone.
-					if !resourceAllowsDelete(m.currentResource) {
-						return m, m.toast.Show("Delete not supported on " + m.currentResource.KubectlName())
-					}
-					message, detail := deleteConfirmSurface(m.currentResource, item)
-					m.confirm.SetLayer(m.popupDepth() + 1)
-					return m, m.confirm.Show(ConfirmDelete, message, detail,
-						deleteResource(m.currentResource, item.Name, item.Namespace, m.k8sClient.ContextName()))
-				}
-			}
-		case "z":
-			// Toggle expand on the focused panel. If anything is expanded
-			// already, restore. Otherwise expand whichever panel (Table or
-			// Detail) currently has focus. Single-key toggle replaces the
-			// old `=`/`-` pair.
-			if m.detailExpanded || m.tableExpanded {
-				m.detailExpanded = false
-				m.tableExpanded = false
-				return m, nil
-			}
-			if m.activePanel == DetailPanel {
-				m.detailExpanded = true
-				return m, nil
-			}
-			if m.activePanel == TablePanel {
-				m.tableExpanded = true
-				return m, nil
-			}
-		case "y":
-			return m, copyToClipboardCmd(m.focusedPanelContent())
-		case "Y":
-			// Y is a panel-2 / panel-3 affordance — opens the YAML of
-			// the resource currently selected (panel 2) or drilled into
-			// (panel 3). Pressing Y from panel 1 with focus elsewhere
-			// would silently open the LAST panel-2 selection's YAML,
-			// which feels like an out-of-context jump — gate it.
-			if m.activePanel == SidebarPanel {
-				return m, nil
-			}
-			// Cursor-aware on the Relatives tab: if the cursor sits on a
-			// drillable entry, fetch + popup THAT entry's YAML (via
-			// RelativeDrillMsg). If no drillable cursor (empty / non-link
-			// row), fall through to the current level's own YAML — at
-			// depth 1 that's the table-selected resource's YAML
-			// (existing behavior), at deeper levels it's the resource
-			// the user has drilled into.
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Relatives" {
-				if ref := m.detail.SelectedRelativeRef(); ref != nil {
-					target := *ref
-					return m, func() tea.Msg { return RelativeDrillMsg{Ref: target} }
-				}
-			}
-			yaml := m.detail.CurrentLevelYAML()
-			if yaml == "" {
-				return m, nil
-			}
-			var resource k8s.ResourceType
-			var item k8s.ResourceItem
-			if m.detail.Depth() > 1 {
-				resource = m.detail.currentLevelKind()
-				item = m.detail.CurrentLevelItem()
-			} else if !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
-				idx := m.table.SelectedRow()
-				if idx >= 0 && idx < len(m.items) {
-					resource = m.currentResource
-					item = m.items[idx]
-				}
-			}
-			m.yamlPopup.SetSize(m.width, m.height)
-			m.yamlPopup.SetLayer(m.popupDepth() + 1)
-			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
-		case " ":
-			// Sidebar (panel 1): rows are nav targets, not action targets.
-			// Open a read-only cheatsheet popup explaining what the user
-			// can do here (j/k move, 1/2/3 switch focus, / search, etc.). Mirrors
-			// the panel 2/3 "Space surfaces what's possible" affordance —
-			// but informational rather than committable.
-			if m.activePanel == SidebarPanel && !m.sidebar.IsSearching() {
-				m.hintPopup.SetSize(m.width, m.height)
-				title, rows := sidebarHintContent()
-				// Contextual Pin / Unpin toggle. Surfaces on any
-				// resource row (category headers excluded — they have
-				// no kind to act on). Pin vs Unpin is decided purely
-				// by IsPinned(rt) so the SAME kind shown in both the
-				// Pinned section AND its original category gives the
-				// same action — pin status is per-kind, not per-row.
-				// Hotkey "P" toggles either direction.
-				var actions []hintAction
-				if rt := m.sidebar.CursorResourceType(); rt != "" {
-					label := string(rt)
-					if def := m.k8sClient.Registry().Get(rt); def != nil {
-						label = def.DisplayName
-					}
-					// Build the two operation groups first so we can
-					// decide whether to emit region headers (only when
-					// the menu actually has BOTH groups — Drag is the
-					// only panel-level entry today, so its presence is
-					// the multi-region signal).
-					var itemOps, panelOps []hintAction
-					if m.sidebar.IsPinned(rt) {
-						itemOps = append(itemOps, hintAction{
-							label: "Unpin " + label, key: "P", action: "UnpinKind",
-						})
-					} else {
-						itemOps = append(itemOps, hintAction{
-							label: "Pin " + label, key: "P", action: "PinKind",
-						})
-					}
-					// Sort entry — surfaces for every kind that has at
-					// least one column (every registered kind in
-					// practice). Commit routes through HintActionMsg
-					// → SortKind handler, which opens the column
-					// picker. Hotkey stays on S (matches v1.6 panel-1
-					// muscle memory); label makes the cross-panel
-					// effect explicit so the user understands pressing
-					// S here reshapes panel 2's display.
-					if def := m.k8sClient.Registry().Get(rt); def != nil && len(def.Columns) > 0 {
-						itemOps = append(itemOps, hintAction{
-							label:  "Sort panel 2 list",
-							key:    "S",
-							action: "SortKind",
-						})
-					}
-					// Drag-and-drop reorder — only meaningful when the
-					// cursor is on a pinned row AND there's at least
-					// one other pinned kind to swap with (matches the
-					// EnterDrag guard, so the menu entry can't lead to
-					// a no-op).
-					if m.sidebar.CursorPinned() && len(m.sidebar.PinnedKinds()) >= 2 {
-						panelOps = append(panelOps, hintAction{
-							label:  "Drag to reorder pinned item",
-							key:    "D",
-							action: "DragPinned",
-						})
-					}
-					if len(panelOps) > 0 {
-						// Two-region layout: label each group with a
-						// dim-grey header and split with a separator.
-						// Matches the sort picker and panel-2 menu.
-						actions = append(actions, hintAction{header: true, label: "item operation"})
-						actions = append(actions, itemOps...)
-						actions = append(actions, hintAction{separator: true})
-						actions = append(actions, hintAction{header: true, label: "panel operation"})
-						actions = append(actions, panelOps...)
-					} else {
-						// Single-region (no panel ops) — stay flat,
-						// no header chrome.
-						actions = itemOps
-					}
-				}
-				m.hintPopup.SetLayer(m.popupDepth() + 1)
-				return m, m.hintPopup.OpenWithActions(title, actions, rows)
-			}
-			// Container drill view: panel 2 is showing the containers of
-			// the pod we drilled into. Space opens a minimal menu carrying
-			// only Shell — containers aren't standalone API objects so
-			// YAML/Edit/Delete don't apply. execShell() (driven by the "S"
-			// commit) already reads drillDownContainers[cursor], so the
-			// menu just needs to surface the action.
-			if m.activePanel == TablePanel && m.drillDownPod != nil && len(m.drillDownContainers) > 0 {
-				idx := m.table.SelectedRow()
-				if idx >= 0 && idx < len(m.drillDownContainers) {
-					c := m.drillDownContainers[idx]
-					m.panel2Menu.SetSize(m.width, m.height)
-					m.panel2Menu.SetLayer(m.popupDepth() + 1)
-					return m, m.panel2Menu.OpenForContainer(m.drillDownPod.Name, m.drillDownPod.Namespace, c.Name)
-				}
-				return m, nil
-			}
-			// Panel 2 on a Helm Release row: Space opens the Helm doc
-			// menu popup (manifest / notes / values). Branched before
-			// the Relatives-tab logic because the activePanel guard
-			// below would otherwise reject it.
-			if m.activePanel == TablePanel && m.currentResource == k8s.ResourceReleases && !m.editing && m.drillDownPod == nil {
-				idx := m.table.SelectedRow()
-				if idx >= 0 && idx < len(m.items) {
-					item := m.items[idx]
-					m.helmDocMenu.SetSize(m.width, m.height)
-					m.helmDocMenu.SetLayer(m.popupDepth() + 1)
-					return m, m.helmDocMenu.Open(item.Name, item.Namespace)
-				}
-				return m, nil
-			}
-			// Panel 2 on a regular (non-Helm-Release) row: Space opens
-			// the per-row context menu — YAML/Edit/Shell/Delete items
-			// shaped by the resource kind and helm-managed status. The
-			// menu surfaces what trigger letters do on this row instead
-			// of relying on the user to remember Y/E/S/D in context.
-			if m.activePanel == TablePanel && !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
-				idx := m.table.SelectedRow()
-				if idx >= 0 && idx < len(m.items) {
-					item := m.items[idx]
-					m.panel2Menu.SetSize(m.width, m.height)
-					m.panel2Menu.SetLayer(m.popupDepth() + 1)
-					return m, m.panel2Menu.Open(m.currentResource, item, len(m.drillDownStack) > 0, m.compareCtxForMenu(item))
-				}
-				return m, nil
-			}
-			// Panel 2 empty list: surface an explainer popup ("no items —
-			// try N to switch ns, / clears filter, . toggles helm hide").
-			// Without this Space was a silent no-op when the table happened
-			// to be empty, breaking the "Space surfaces what's possible"
-			// promise.
-			if m.activePanel == TablePanel && !m.editing && m.drillDownPod == nil && len(m.items) == 0 {
-				m.hintPopup.SetSize(m.width, m.height)
-				title, rows := panel2EmptyHintContent()
-				m.hintPopup.SetLayer(m.popupDepth() + 1)
-				return m, m.hintPopup.Open(title, rows)
-			}
-			// Panel 3 History tab on a Helm Release: Space picks the
-			// cursor row as the rollback target and pops the confirm
-			// popup. Current (deployed) row returns nil via
-			// SelectedHistoryRevision — silent no-op, no surprise prompt.
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "History" {
-				if rev := m.detail.SelectedHistoryRevision(); rev != nil {
-					root := m.detail.RootRef()
-					msg := fmt.Sprintf("Rollback %s to revision %d?", root.Name, rev.Revision)
-					cmdStr := k8s.RollbackCommandString(root.Name, root.Namespace, rev.Revision)
-					rollback := rollbackReleaseCmd(root.Name, root.Namespace, rev.Revision)
-					m.confirm.SetLayer(m.popupDepth() + 1)
-					return m, m.confirm.Show(ConfirmRollback, msg, cmdStr, rollback)
-				}
-				return m, nil
-			}
-			// Panel 3 Logs tab: read-only cheatsheet (j/k/u/d/G/y/z).
-			// No per-row menu — Logs is a scrollable text buffer, not a
-			// list of action targets.
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Logs" {
-				m.hintPopup.SetSize(m.width, m.height)
-				title, rows := logsHintContent()
-				m.hintPopup.SetLayer(m.popupDepth() + 1)
-				return m, m.hintPopup.Open(title, rows)
-			}
-			// Panel 3 Events tab: same idea — read-only cheatsheet for the
-			// scrollable event list.
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Events" {
-				m.hintPopup.SetSize(m.width, m.height)
-				title, rows := eventsHintContent()
-				m.hintPopup.SetLayer(m.popupDepth() + 1)
-				return m, m.hintPopup.Open(title, rows)
-			}
-			// Panel 3 Conditions tab: scrollable table like Events, same nav
-			// hint set — Space pops the read-only cheatsheet so user knows
-			// j/k/u/d/gg/G/y/z apply here too.
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Conditions" {
-				m.hintPopup.SetSize(m.width, m.height)
-				title, rows := conditionsHintContent()
-				m.hintPopup.SetLayer(m.popupDepth() + 1)
-				return m, m.hintPopup.Open(title, rows)
-			}
-			// v1.5.x: Relatives tab Space splits by drill depth.
-			//   depth>1 → open breadcrumb popup (chain navigator).
-			//   depth=1 → no chain to walk, show the drill cheatsheet
-			//             instead (Enter to drill, Y for YAML, etc.).
-			if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Relatives" {
-				if m.detail.Depth() <= 1 {
-					m.hintPopup.SetSize(m.width, m.height)
-					title, rows := relativesDrillHintContent()
-					m.hintPopup.SetLayer(m.popupDepth() + 1)
-					return m, m.hintPopup.Open(title, rows)
-				}
-				m.breadcrumbPopup.SetSize(m.width, m.height)
-				m.breadcrumbPopup.SetLayer(m.popupDepth() + 1)
-				return m, m.breadcrumbPopup.Open(m.detail.DrillChain())
-			}
-			return m, nil
-		}
+		return m, m.panelKey(msg)
 
 	case RequestSwitchToResourceMsg:
 		// Single confirm-gate for both Relatives space and breadcrumb
@@ -2521,14 +1649,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ref := msg.Ref
 		m.pendingTableSelect = &ref
 		batch := []tea.Cmd{func() tea.Msg { return ResourceSelectedMsg{Type: ref.Type} }}
-		// If the switch was launched from the breadcrumb popup, the
-		// popup's chain is now stale (post-switch the drill chain
-		// resets, so listed levels won't reach the same resources
-		// anymore). Tear it down.
-		if m.breadcrumbPopup.IsActive() {
-			if c := m.breadcrumbPopup.Close(); c != nil {
-				batch = append(batch, c)
-			}
+		// The switch finishes the flow that led here (Space menu →
+		// breadcrumb → confirm): the chain those popups showed is gone
+		// once the drill chain resets, so the whole stack closes
+		// (tdp T1).
+		if c := m.closeAllBlockingPopups(); c != nil {
+			batch = append(batch, c)
 		}
 		return m, tea.Batch(batch...)
 
@@ -2802,7 +1928,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.yamlPopup.SetSize(m.width, m.height)
 		m.yamlPopup.SetLayer(m.popupDepth() + 1)
-		return m, m.yamlPopup.Open(msg.yaml, msg.ref.Type, msg.item, m.k8sClient.ContextName())
+		return m, m.yamlPopup.Open(msg.yaml, msg.ref.Type, msg.item)
 
 	case aggregateLogsReadyMsg:
 		// Stale result guard: user may have navigated to a different row
@@ -2939,6 +2065,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.appLog.Info("context switched to " + msg.Context)
+		// Picking a context finishes the flow that opened the picker
+		// (Space menu → global operation popup → picker): every popup
+		// still up described the old cluster (tdp T1).
+		if c := m.closeAllBlockingPopups(); c != nil {
+			cmds = append(cmds, c)
+		}
 		m.watcher.Stop()
 		m.logStreamer.Stop()
 		m.logsActive = false
@@ -2962,6 +2094,27 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, waitForWatchUpdate(m.watcher, m.currentResource))
 		cmds = append(cmds, discoverCRDs(newClient))
 		return m, tea.Batch(cmds...)
+
+	case yamlEditRequestMsg:
+		// E in the YAML viewer: the panel's Edit, confirm and all.
+		return m, m.confirmEdit(msg.resource, msg.item)
+
+	case clearStackMsg:
+		// An accepted Delete / Rollback finished the flow: the Space
+		// menu and anything else under the confirm pointed at the
+		// thing just deleted or rolled back (tdp T1).
+		return m, m.closeAllBlockingPopups()
+
+	case drillDownFailedMsg:
+		if msg.err != nil {
+			m.appLog.Warn(fmt.Sprintf("drill %s/%s: %s", msg.parentType.KubectlName(), msg.parentName, msg.err.Error()))
+			return m, m.toast.ShowWarn("drill failed: " + msg.err.Error())
+		}
+		what := "children"
+		if msg.childType != "" {
+			what = msg.childType.String()
+		}
+		return m, m.toast.Show("no " + what + " under " + msg.parentName)
 
 	case drillDownMsg:
 		if msg.children == nil {
@@ -3022,13 +2175,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appLog.Warn("close active edit/exec PTY before opening shell")
 			return m, m.toast.Show("Close current edit/exec PTY first")
 		}
-		// §1.10 — PTY is a context-shift target; entry handler closes
+		// tdp T1 — PTY is a context-shift target; entry handler closes
 		// every blocking popup that launched this action so the user
 		// returns to a clean base view, not a stale source popup.
 		closeAll := m.closeAllBlockingPopups()
 		cmd := buildKubectlExecCmd(msg.podName, msg.namespace, msg.container, msg.contextName)
 		title := fmt.Sprintf("Shell: pod/%s → %s", msg.podName, msg.container)
-		// §1.10 context-shift target — always layer 1; see Alt+T handler
+		// tdp T1 context-shift target — always layer 1; see toggleAlterm
 		// for the rationale.
 		m.txPty.SetLayer(1)
 		return m, tea.Batch(closeAll, m.txPty.Start(cmd, title, m.width, m.height, PtyKindExec))
@@ -3038,7 +2191,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appLog.Warn("close active edit/exec PTY before editing")
 			return m, m.toast.Show("Close current edit/exec PTY first")
 		}
-		// §1.10 — see startShellExecMsg above.
+		// tdp T1 — see startShellExecMsg above.
 		closeAll := m.closeAllBlockingPopups()
 		m.editing = true
 		title := fmt.Sprintf("Edit: %s/%s", msg.resource.KubectlName(), msg.item.Name)
@@ -3048,7 +2201,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := buildKubectlEditCmd(msg.resource, msg.item, msg.contextName, m.cfgEditor)
 		config.WriteAuditEntry("edit", msg.resource.KubectlName()+"/"+msg.item.Name, msg.item.Namespace, "started") //nolint
 		m.appLog.Info("edit: " + msg.resource.KubectlName() + "/" + msg.item.Name)
-		// §1.10 context-shift target — always layer 1; see Alt+T handler
+		// tdp T1 context-shift target — always layer 1; see toggleAlterm
 		// for the rationale.
 		m.txPty.SetLayer(1)
 		return m, tea.Batch(closeAll, m.txPty.Start(cmd, title, m.width, m.height, PtyKindEdit))
@@ -3101,123 +2254,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case Panel2MenuActionMsg:
-		// Panel 2 context menu committed an item (cursor + Enter or
-		// direct hotkey). Each action mirrors the corresponding direct
-		// keypress on the panel 2 row — kept inline so the trigger-key
-		// correspondence stays visible. Rule A guards (helm-managed
-		// read-only) match the E/D case statements above.
-		resource := msg.Resource
-		item := msg.Item
-		switch msg.Action {
-		case "Enter":
-			// Same code path as pressing Enter on the row directly — the
-			// menu entry is purely a discoverability surface. The menu
-			// closes itself via §1.10 (enterDrillDown is a context-
-			// shift target whose entry calls closeAllBlockingPopups),
-			// not here — keeps the rule centralised on the target so
-			// every caller (this menu, table Enter, future surfaces)
-			// gets the same behaviour.
-			return m, m.enterDrillDown()
-		case "Y":
-			yaml := m.detail.CurrentLevelYAML()
-			if yaml == "" {
-				return m, nil
-			}
-			m.yamlPopup.SetSize(m.width, m.height)
-			m.yamlPopup.SetLayer(m.popupDepth() + 1)
-			return m, m.yamlPopup.Open(yaml, resource, item, m.k8sClient.ContextName())
-		case "E":
-			if resource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
-				m.appLog.Info("Helm-managed (read-only) — use helm upgrade / rollback")
-				return m, m.toast.Show("Helm-managed (read-only)")
-			}
-			detail := fmt.Sprintf("kubectl edit %s/%s", resource.KubectlName(), item.Name)
-			if item.Namespace != "" {
-				detail += " -n " + item.Namespace
-			}
-			startCmd := func() tea.Msg {
-				return startEditMsg{resource: resource, item: item, contextName: m.k8sClient.ContextName()}
-			}
-			m.confirm.SetLayer(m.popupDepth() + 1)
-			return m, m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
-		case "S":
-			return m, m.execShell()
-		case "D":
-			if resource == k8s.ResourceReleases || k8s.IsHelmManaged(item) {
-				m.appLog.Info("Helm-managed (read-only) — use helm uninstall")
-				return m, m.toast.Show("Helm-managed (read-only)")
-			}
-			message, detail := deleteConfirmSurface(resource, item)
-			m.confirm.SetLayer(m.popupDepth() + 1)
-			return m, m.confirm.Show(ConfirmDelete, message, detail,
-				deleteResource(resource, item.Name, item.Namespace, m.k8sClient.ContextName()))
-		case "C":
-			// Contextual compare action — three branches:
-			//   - no anchor set                       → MARK this row as anchor (state mutation, no popup)
-			//   - anchor set, cursor on anchor row    → UNMARK anchor (state mutation, no popup)
-			//   - anchor set, cursor on different row → open the diff popup
-			// (Menu gating hides "C" for the kind-mismatch / single-item
-			// no-ops, so we only have to think about these three.)
-			//
-			// State mutations close the menu so the user immediately sees
-			// the resulting anchor highlight (or cleared state) — keeping
-			// the menu up would hide the panel-2 lavender lock row that
-			// just appeared. Diff-popup launch keeps the menu underneath
-			// per §1.8 (Esc on the diff returns to the menu).
-			willOpenDiff := m.inCompareMode() &&
-				m.compareLock.uid != item.UID &&
-				m.compareLock.resourceType == resource
-			dispatch := m.compareHotkeyDispatch(resource, item)
-			if willOpenDiff {
-				return m, dispatch
-			}
-			return m, tea.Batch(m.panel2Menu.Close(), dispatch)
-		case "alt+S":
-			// Open the sort column picker for the resource type
-			// whose menu was invoked — same picker the direct
-			// Alt+Shift+S hotkey + the panel-1 Space menu's Sort
-			// entry use.
-			return m, m.openSortColumnPicker(resource)
-		}
-		return m, nil
-
-	case HintActionMsg:
-		// Sidebar Space-menu actions. Pin / Unpin share
-		// togglePinnedKind so the menu + direct `P` hotkey can't
-		// drift; SortKind kicks off the listPicker chain (column →
-		// direction → persist).
-		switch msg.Action {
-		case "PinKind", "UnpinKind":
-			rt := m.sidebar.CursorResourceType()
-			if rt == "" {
-				return m, nil
-			}
-			return m, m.togglePinnedKind(rt)
-		case "SortKind":
-			rt := m.sidebar.CursorResourceType()
-			if rt == "" {
-				return m, nil
-			}
-			return m, m.openSortColumnPicker(rt)
-		case "DragPinned":
-			// Out-of-drag entry: cursor was on a pinned row when the
-			// Space menu opened; EnterDrag re-checks the guards in
-			// case state shifted between popup-open and commit.
-			_, cmd := m.sidebar.EnterDrag()
-			return m, cmd
-		case "DropPinned":
-			// In-drag entry: user opened the drop-only menu via Space
-			// and committed Drop. Same path as keyboard D / Enter.
-			return m, m.sidebar.CommitDrag()
-		}
-		return m, nil
+	case MenuActionMsg:
+		// A row of the Space menu or the global operation popup ran
+		// (cursor + Enter, its hotkey, or a click).
+		return m, m.runMenuAction(msg)
 
 	case ListPickerActionMsg:
 		// Sort flow commits routed by PickerID. Column step picks a
-		// column → opens the direction step (in-place swap on the
-		// same listPicker). Direction step persists the choice and
-		// closes the picker.
+		// column → opens the direction step over it. Direction step
+		// persists the choice and closes itself, back to the column
+		// step.
 		switch msg.PickerID {
 		case "sort:column":
 			if msg.Key == sortResetKey {
@@ -3237,63 +2283,39 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.commitSettingsToggle(msg.Key)
 
 	case SidebarDragEnterMsg:
-		// Sticky toast so the keyboard contract stays on screen for
-		// the whole drag — paired with Dismiss() in the commit /
-		// cancel handlers below. Persistent reminder also covers
-		// users who don't catch the entry flash.
-		return m, m.toast.ShowSticky("Drag mode · j/k move · Enter or D drop · anything else cancels")
+		// Drag is a mode (tdp K11): its keys go in the footer for as
+		// long as it lasts, with ? for the full list.
+		m.statusLine.SetDragMode(true)
+		return m, nil
 
 	case SidebarDragCommitMsg:
-		// Take the sticky toast down first, THEN persist. Order
-		// doesn't matter for correctness but it reads as "drag
-		// finished → contract goes away → save happens." Failure
-		// surfaces via appLog + a fresh transient warn toast (which
-		// will outlive Dismiss because Show schedules its own tick).
-		dismissCmd := m.toast.Dismiss()
+		m.statusLine.SetDragMode(false)
 		if err := m.persistPinnedKinds(); err != nil {
 			m.appLog.Error("pin order save failed: " + err.Error())
-			return m, tea.Batch(dismissCmd, m.toast.Show("pin order save failed"))
+			return m, m.toast.Show("pin order save failed")
 		}
-		return m, dismissCmd
+		return m, nil
 
 	case SidebarDragCancelMsg:
 		// Sidebar already reverted its pinned slice from the
-		// snapshot. Just dismiss the sticky toast — no cancellation
-		// toast (cancelling shouldn't nag the user about something
-		// they decided not to do).
-		return m, m.toast.Dismiss()
-
-	case SidebarDragRequestDropMenuMsg:
-		// Space mid-drag → drop-only menu. Single action surfaces the
-		// drop affordance for users who don't recall the D / Enter
-		// keyboard contract. Drag mode stays active across the
-		// popup: closing via Esc returns to bare drag (sticky toast
-		// + header indicator still visible); committing Drop fires
-		// HintActionMsg → CommitDrag.
-		m.hintPopup.SetSize(m.width, m.height)
-		title := " " + titleIcon + " Drag mode — confirm new order?"
-		actions := []hintAction{
-			{label: "Drop to confirm new order", key: "D", action: "DropPinned"},
-		}
-		m.hintPopup.SetLayer(m.popupDepth() + 1)
-		return m, m.hintPopup.OpenWithActions(title, actions, nil)
+		// snapshot. No cancellation toast — cancelling shouldn't nag
+		// the user about something they decided not to do.
+		m.statusLine.SetDragMode(false)
+		return m, nil
 
 	case ListPickerCancelMsg:
-		// Esc at any sort step: drop in-flight kind/column so a
-		// later sort flow starts fresh. The picker's own close
-		// animation is already queued by the Cancel msg.
+		// Esc on the direction step returns to the column step (tdp
+		// F4): only the chosen column is dropped. Esc on the column
+		// step ends the flow. The picker's own close animation is
+		// already queued by the Cancel msg.
 		switch msg.PickerID {
-		case "sort:column", "sort:direction":
+		case "sort:direction":
+			m.sortFlowColumn = ""
+		case "sort:column":
 			m.sortFlowKind = ""
 			m.sortFlowColumn = ""
 		}
 		return m, nil
-
-	case HelmDocRequestMsg:
-		// Menu picked a doc kind. Fire the helm CLI fetch asynchronously
-		// so a slow `helm get manifest` on a big chart doesn't freeze the
-		// UI; the result comes back as HelmDocReadyMsg.
-		return m, fetchHelmDocCmd(msg.DocKind, msg.ReleaseName, msg.Namespace)
 
 	case HelmDocReadyMsg:
 		if msg.Err != nil {
@@ -3306,7 +2328,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		item := k8s.ResourceItem{Name: msg.ReleaseName, Namespace: msg.Namespace}
 		m.yamlPopup.SetSize(m.width, m.height)
 		m.yamlPopup.SetLayer(m.popupDepth() + 1)
-		return m, m.yamlPopup.Open(msg.Content, k8s.ResourceReleases, item, m.k8sClient.ContextName())
+		return m, m.yamlPopup.Open(msg.Content, k8s.ResourceReleases, item)
 
 	case RollbackResultMsg:
 		if msg.Err != nil {
@@ -3342,6 +2364,400 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// panelKey handles a key that no popup took: the app-wide hotkeys and
+// then the focused panel. The Space menu runs its rows through here too
+// — a menu row is a shell over the hotkey it names (tdp M3), so the two
+// can never do different things.
+func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
+	// Sidebar drag-and-drop mode is modal: only j/k (swap),
+	// D (commit), and "anything else" (cancel) make sense. Route
+	// every key that reaches the panel to the sidebar first so hotkeys
+	// like Tab / 1 / 2 / 3 can't slip past — pressing them mid-drag
+	// should cancel, not switch focus. (q and Ctrl+C never get here:
+	// the leave flow runs before any surface sees the key.)
+	if m.activePanel == SidebarPanel && m.sidebar.IsDragging() {
+		// tdp K11: Tab and the panel keys are suspended in the mode but
+		// answer — the drag stays, the toast says how to leave it.
+		switch msg.String() {
+		case "tab", "shift+tab", "1", "2", "3":
+			return m.toast.Show("Esc leaves drag mode first")
+		}
+		sidebar, cmd := m.sidebar.Update(msg)
+		m.sidebar = sidebar
+		return cmd
+	}
+	// While a panel search is typing, every key is the search's.
+	if m.panelTyping() {
+		return m.dispatchToPanel(msg)
+	}
+	switch msg.String() {
+	case "V":
+		return m.splash.Show()
+	case ">":
+		return m.openSettings()
+	case "alt+t", "alt+T", "ctrl+t":
+		// Ctrl+T is a hidden alias for the demo recorder only: vhs 0.11
+		// drops the Alt modifier between Chrome and the PTY (logged
+		// keypress = `t` or `ctrl+t`, never `alt+t`), so demo tapes
+		// emit Ctrl+T instead. Humans never see this alias in help/UI
+		// hints — the cost of accepting it is that pressing Ctrl+T
+		// while a Alterm shell is visible will hide the shell instead
+		// of forwarding to zsh's transpose-chars binding.
+		return m.toggleAlterm()
+	case "!":
+		return m.openAppLog()
+	case "1":
+		m.detailExpanded = false
+		m.setPanel(SidebarPanel)
+		return nil
+	case "2":
+		m.detailExpanded = false
+		m.setPanel(TablePanel)
+		return nil
+	case "3":
+		m.detailExpanded = false
+		m.setPanel(DetailPanel)
+		return nil
+	case "tab":
+		m.cyclePanel()
+		return nil
+	case "shift+tab":
+		m.cyclePanelReverse()
+		return nil
+	case "h":
+		// v1.5.x: h/l switch the panel 3 detail tab ONLY when panel 3
+		// is the active panel. Panel 1/2 = no-op (panel 2 was the
+		// previous owner — moved to panel 3 so tab nav and list nav
+		// live on different panels). `l` is no longer a drill key
+		// either; Enter is the sole drill key (focus-shift fallback
+		// removed when mouse double-click → Enter synthesis landed).
+		if m.activePanel == DetailPanel {
+			m.detail = m.detail.PrevTab()
+			return nil
+		}
+	case "l":
+		if m.activePanel == DetailPanel {
+			m.detail = m.detail.NextTab()
+			return nil
+		}
+	case "enter":
+		return m.enterKey()
+	case "esc":
+		filterActive := (m.activePanel == SidebarPanel && m.sidebar.HasActiveFilter()) ||
+			(m.activePanel == TablePanel && m.table.HasActiveFilter()) ||
+			(m.activePanel == DetailPanel && m.detail.HasActiveFilter())
+		if filterActive {
+			// Let panel handle Esc to clear filter
+		} else {
+			// Panel 2 Esc with compare mode active: one layer
+			// per press (tdp K4) — this Esc only drops the
+			// compare lock; the next one backs out of the drill.
+			// The lock is a panel state like the search filter
+			// (ruled 2026-09-28), and the filter is peeled the
+			// same way.
+			if m.activePanel == TablePanel && m.inCompareMode() {
+				m.clearCompareLock()
+				return nil
+			}
+			if m.drillDownPod != nil || len(m.drillDownStack) > 0 {
+				return m.exitDrillDown()
+			}
+		}
+	case "N":
+		return m.openNamespacePicker()
+	case "C":
+		// Panel 2 cursor-on-row: C is the contextual Compare
+		// hotkey (same path as the panel-2 Space menu's "C"
+		// entry). Same trade-off the P pin hotkey makes on
+		// panel 1 — panel-context-specific override of a
+		// global letter. Everywhere ELSE C still opens the
+		// context picker.
+		if m.activePanel == TablePanel && !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
+			idx := m.table.SelectedRow()
+			if idx >= 0 && idx < len(m.items) {
+				return m.compareHotkeyDispatch(m.currentResource, m.items[idx])
+			}
+		}
+		return fetchContexts(m.k8sClient)
+	case "P":
+		// Panel-1 only: toggle pinned status for the cursor's
+		// resource kind. Acts on the sidebar's selected row even
+		// without opening Space menu first — same UX as N/C which
+		// surface globally. No-op when active panel isn't the
+		// sidebar or when the cursor is on a category header.
+		if m.activePanel != SidebarPanel {
+			return nil
+		}
+		rt := m.sidebar.CursorResourceType()
+		if rt == "" {
+			return nil
+		}
+		return m.togglePinnedKind(rt)
+	case "E":
+		if !m.editing && m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
+			idx := m.table.SelectedRow()
+			if idx < 0 || idx >= len(m.items) {
+				return nil
+			}
+			// Kind-level gate (mirrors panel 2 menu): kinds with no
+			// editable surface (Events, Contexts, Releases) answer
+			// with a toast.
+			if !resourceAllowsEdit(m.currentResource) {
+				return m.toast.Show("Edit not supported on " + m.currentResource.KubectlName())
+			}
+			return m.confirmEdit(m.currentResource, m.items[idx])
+		}
+	case ".":
+		// Toggle visibility of helm-managed items on any panel 2
+		// resource list. Helm Releases themselves are excluded (the
+		// category IS helm) — there `.` is a no-op. Re-start the
+		// watcher to re-emit the cached items so the new filter
+		// shows / hides them right away.
+		if m.activePanel != TablePanel || m.currentResource == k8s.ResourceReleases {
+			return nil
+		}
+		k8s.ToggleHelmHideManaged()
+		m.watcher.Start(m.currentResource, m.k8sClient.Selection())
+		return waitForWatchUpdate(m.watcher, m.currentResource)
+	case "S":
+		// Panel-1: open the sort column picker on the cursor's
+		// kind. Restores the v1.6 muscle memory — sort lives on S
+		// in panel 1 (no conflict with anything panel-1 specific).
+		// Panel-2 keeps S as Shell; panel-2 sort moves through O
+		// (see case "O" below).
+		if m.activePanel == SidebarPanel {
+			rt := m.sidebar.CursorResourceType()
+			if rt == "" {
+				return nil
+			}
+			return m.openSortColumnPicker(rt)
+		}
+		if m.activePanel == TablePanel {
+			return m.execShell()
+		}
+	case "alt+S":
+		// Panel-2 only sort entry on Alt+Shift+S — bare S is
+		// already Shell on panel 2 and reverting wholesale (no
+		// sort hotkey here) would force the user back to panel 1
+		// just to reorder rows. The modifier carves out a panel-
+		// 2 sort gesture without colliding with Shell. Panel 1
+		// still uses plain S (v1.6 muscle memory).
+		if m.activePanel == TablePanel {
+			// Container drill view (panel 2 showing containers of a
+			// drilled pod): no-op. Matches E/D/C gating — row-level
+			// operations are blocked during drill so the picker
+			// title "Sort Pods by…" can't appear while the user is
+			// looking at containers.
+			if m.drillDownPod != nil {
+				return nil
+			}
+			if m.currentResource == "" {
+				return nil
+			}
+			return m.openSortColumnPicker(m.currentResource)
+		}
+		return nil
+	case "D":
+		// Panel-1: enter drag-and-drop reorder mode for the
+		// cursor's pinned kind. Mirrors the panel-meaning split
+		// used by S (panel 2 only: shell) and C (panel 2 only).
+		// Guards in EnterDrag — silent no-op when cursor isn't
+		// on a pinned row or there's <2 pins.
+		if m.activePanel == SidebarPanel {
+			_, cmd := m.sidebar.EnterDrag()
+			return cmd
+		}
+		if m.activePanel == TablePanel && m.drillDownPod == nil && len(m.items) > 0 {
+			idx := m.table.SelectedRow()
+			if idx >= 0 && idx < len(m.items) {
+				// Kind-level gate (mirrors panel 2 menu): Events / Nodes /
+				// Contexts / Releases are never deleted from kbu.
+				if !resourceAllowsDelete(m.currentResource) {
+					return m.toast.Show("Delete not supported on " + m.currentResource.KubectlName())
+				}
+				return m.confirmDelete(m.currentResource, m.items[idx])
+			}
+		}
+	case "z":
+		return m.toggleZoom()
+	case "y":
+		return copyToClipboardCmd(m.focusedPanelContent())
+	case "Y":
+		// Y is a panel-2 / panel-3 affordance — opens the YAML of
+		// the resource currently selected (panel 2) or drilled into
+		// (panel 3). Pressing Y from panel 1 with focus elsewhere
+		// would silently open the LAST panel-2 selection's YAML,
+		// which feels like an out-of-context jump — gate it.
+		if m.activePanel == SidebarPanel {
+			return nil
+		}
+		// Cursor-aware on the Relatives tab: if the cursor sits on a
+		// drillable entry, fetch + popup THAT entry's YAML (via
+		// RelativeDrillMsg). If no drillable cursor (empty / non-link
+		// row), fall through to the current level's own YAML — at
+		// depth 1 that's the table-selected resource's YAML
+		// (existing behavior), at deeper levels it's the resource
+		// the user has drilled into.
+		if m.activePanel == DetailPanel && m.detail.ActiveTabName() == "Relatives" {
+			if ref := m.detail.SelectedRelativeRef(); ref != nil {
+				target := *ref
+				return func() tea.Msg { return RelativeDrillMsg{Ref: target} }
+			}
+		}
+		yaml := m.detail.CurrentLevelYAML()
+		if yaml == "" {
+			return nil
+		}
+		var resource k8s.ResourceType
+		var item k8s.ResourceItem
+		if m.detail.Depth() > 1 {
+			resource = m.detail.currentLevelKind()
+			item = m.detail.CurrentLevelItem()
+		} else if !m.editing && m.drillDownPod == nil && len(m.items) > 0 {
+			idx := m.table.SelectedRow()
+			if idx >= 0 && idx < len(m.items) {
+				resource = m.currentResource
+				item = m.items[idx]
+			}
+		}
+		m.yamlPopup.SetSize(m.width, m.height)
+		m.yamlPopup.SetLayer(m.popupDepth() + 1)
+		return m.yamlPopup.Open(yaml, resource, item)
+	case " ":
+		// tdp K5, M2, M7: Space on any panel and any tab opens the
+		// Space menu of what can be done here — always, even when only
+		// the Global operation row is left.
+		return m.openSpaceMenu()
+	}
+	return m.dispatchToPanel(msg)
+}
+
+// enterKey is Enter on a panel (tdp K3): the most obvious action for the
+// focused item, the same one for the same kind of item everywhere.
+//   - panel 1, a kind: show it in panel 2 (focus moves there)
+//   - panel 2: drill in where the kind drills (Pods → containers,
+//     workloads → pods, …); a KubeConfig context: switch to it (after a
+//     confirm); a container: shell into it; any other kind: its YAML
+//   - panel 3: Relatives drills into the entry; History rolls back to the
+//     revision (after a confirm); a content tab (Logs, Events,
+//     Conditions, Info) — no item to act on — full-screens the panel,
+//     the same as z
+func (m *AppModel) enterKey() tea.Cmd {
+	enter := tea.KeyMsg{Type: tea.KeyEnter}
+	switch m.activePanel {
+	case SidebarPanel:
+		if m.sidebar.CursorResourceType() == "" {
+			return m.dispatchToPanel(enter)
+		}
+		m.setPanel(TablePanel)
+		return nil
+	case TablePanel:
+		if m.drillDownPod != nil {
+			return m.execShell()
+		}
+		idx := m.table.SelectedRow()
+		if idx < 0 || idx >= len(m.items) {
+			return nil
+		}
+		item := m.items[idx]
+		switch {
+		case m.currentResource == k8s.ResourceContexts:
+			return m.confirmContextSwitch(item.Name)
+		case m.currentResource.SupportsDrillDown():
+			return m.enterDrillDown()
+		}
+		return m.openYamlFor(m.currentResource, item)
+	case DetailPanel:
+		switch m.detail.ActiveTabName() {
+		case "Relatives":
+			return m.dispatchToPanel(enter)
+		case "History":
+			return m.confirmRollback()
+		}
+		return m.toggleZoom()
+	}
+	return nil
+}
+
+// toggleZoom is z: full-screen the focused panel 2 or 3, or restore.
+func (m *AppModel) toggleZoom() tea.Cmd {
+	if m.detailExpanded || m.tableExpanded {
+		m.detailExpanded = false
+		m.tableExpanded = false
+		return nil
+	}
+	switch m.activePanel {
+	case DetailPanel:
+		m.detailExpanded = true
+	case TablePanel:
+		m.tableExpanded = true
+	}
+	return nil
+}
+
+// confirmContextSwitch asks before switching kbu to another kubeconfig
+// context (Enter on a KubeConfig Contexts row); accepting takes the same
+// path as picking it in the context picker. The context kbu is already
+// on is not a switch: nothing happens.
+func (m *AppModel) confirmContextSwitch(name string) tea.Cmd {
+	if name == "" || name == m.k8sClient.ContextName() {
+		return nil
+	}
+	onConfirm := func() tea.Msg { return ContextChangedMsg{Context: name} }
+	m.confirm.SetSize(m.width, m.height)
+	m.confirm.SetLayer(m.popupDepth() + 1)
+	return m.confirm.Show(ConfirmContextSwitch, "Switch kbu to context "+name+"?",
+		"~/.kube/config is not changed", onConfirm)
+}
+
+// ptyKillMsg: the user confirmed leaving a kubectl edit / exec session.
+type ptyKillMsg struct{}
+
+// quitCmd starts the leave flow (tdp K9). kbu leaves straight away — no
+// confirm step; the quitMsg handler does the teardown (streams, PTYs,
+// session-state save) in one place.
+func quitCmd() tea.Msg { return quitMsg{} }
+
+// panelTyping reports whether the focused panel's search line is taking
+// keystrokes.
+func (m *AppModel) panelTyping() bool {
+	return (m.activePanel == TablePanel && m.table.IsSearching()) ||
+		(m.activePanel == SidebarPanel && m.sidebar.IsSearching()) ||
+		(m.activePanel == DetailPanel && m.detail.IsSearching())
+}
+
+// typing reports whether the frontmost surface is an input taking
+// keystrokes (tdp K8): a panel's search line, a picker's filter line, the
+// YAML viewer's search line. There, printable keys — q and ? included —
+// are characters.
+func (m *AppModel) typing() bool {
+	switch top := m.topLayer(); top {
+	case nil:
+		return m.panelTyping()
+	case &m.namespacePicker:
+		return m.namespacePicker.searching
+	case &m.contextPicker:
+		return m.contextPicker.searching
+	case &m.yamlPopup:
+		return m.yamlPopup.IsSearching()
+	}
+	return false
+}
+
+// dispatchToPanel hands a message to the focused panel's own Update.
+func (m *AppModel) dispatchToPanel(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	switch m.activePanel {
+	case SidebarPanel:
+		m.sidebar, cmd = m.sidebar.Update(msg)
+	case TablePanel:
+		m.table, cmd = m.table.Update(msg)
+	case DetailPanel:
+		m.detail, cmd = m.detail.Update(msg)
+	}
+	return cmd
 }
 
 func (m AppModel) View() string {
@@ -3417,104 +2833,34 @@ func (m AppModel) View() string {
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	}
 
-	// Sticky toasts composite BEFORE the popup stack so a popup the
-	// user opens AFTERWARDS sits on top. Mirrors the "displayed
-	// later wins" rule — a sticky toast goes up first (it's the
-	// background reminder of the current mode), so popups opened
-	// later must overlay it. Drag mode's keyboard-contract toast is
-	// the canonical case.
-	if m.toast.IsActive() && m.toast.IsSticky() {
-		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	// The popup stack, bottom first — the same stackOrder the keys and
+	// clicks are routed by, so the popup drawn on top is the one that
+	// answers them. A popup still running its close animation is drawn
+	// in its slot until the animation ends.
+	//
+	// Only the top popup is bright (tdp F8): just before it is drawn,
+	// everything already on screen — the panels, streaming logs, the
+	// popups beneath — is redrawn dimmed. A popup that has started to
+	// close no longer owns the top, so the one beneath lights up again
+	// at once.
+	top := m.topLayer()
+	for _, l := range m.stackOrder() {
+		if l.drawn() {
+			if l == top {
+				mainView = dimANSI(mainView)
+			}
+			l.resize(m.width, m.height)
+			mainView = overlay.Composite(l.render(), mainView, overlay.Center, overlay.Center, 0, 0)
+		}
 	}
 
-	if m.appLog.IsActive() {
-		m.appLog.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.appLog.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.help.IsActive() {
-		m.help.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.help.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.contextPicker.IsActive() {
-		mainView = overlay.Composite(m.contextPicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.namespacePicker.IsActive() {
-		mainView = overlay.Composite(m.namespacePicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	// helmDocMenu renders BEFORE yamlPopup so when the menu spawns a YAML
-	// view the YAML overlays the menu (matching the input-routing order:
-	// yamlPopup catches keys first while it's open, menu sits idle
-	// underneath, then takes input back when YAML closes).
-	if m.helmDocMenu.IsActive() {
-		m.helmDocMenu.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.helmDocMenu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.panel2Menu.IsActive() {
-		m.panel2Menu.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.panel2Menu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.hintPopup.IsActive() {
-		m.hintPopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.hintPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.listPicker.IsActive() {
-		m.listPicker.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.listPicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.settingsPopup.IsActive() {
-		m.settingsPopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.settingsPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.yamlPopup.IsActive() {
-		m.yamlPopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.yamlPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.comparePopup.IsActive() {
-		m.comparePopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.comparePopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.breadcrumbPopup.IsActive() {
-		m.breadcrumbPopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.breadcrumbPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	// Confirm renders LAST among modal popups so it sits on top of any
-	// other open popup (breadcrumb especially — space on a breadcrumb
-	// row triggers confirm while breadcrumb stays visible underneath).
-	// Input routing checks confirm before breadcrumb (top of Update), so
-	// the topmost visual popup is also the one receiving keys.
-	if m.confirm.IsActive() {
-		m.confirm.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.confirm.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	// Non-sticky toasts composite AFTER the popup stack so a fresh
-	// transient message (error, save-failed status) interrupts
-	// whatever popup is on screen — the toast is the "later
-	// displayed" element. Sticky toasts were already rendered before
-	// the popups above.
-	if m.toast.IsActive() && !m.toast.IsSticky() {
-		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	// Composite shellPty under txPty: Alterm renders first so a visible
-	// edit/exec popup overlays it. Hidden shellPty contributes nothing.
-	if m.shellPty.IsRendered() {
-		mainView = overlay.Composite(m.shellPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-	if m.txPty.IsRendered() {
-		mainView = overlay.Composite(m.txPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	// The toast composites AFTER the popup stack so a fresh message
+	// (error, save-failed status) shows over whatever popup is on
+	// screen. It is not a layer: it never takes keys (tdp F1, F8).
+	if m.toast.IsActive() {
+		// tdp F7: the toast sits at the bottom, just above the footer.
+		m.toast.SetSize(m.width)
+		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Bottom, 0, -1)
 	}
 
 	return mainView
@@ -3624,7 +2970,7 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 
 	// Pod → Container drill-down (special case)
 	if m.currentResource == k8s.ResourcePods {
-		// §1.10 — drill-down is a context-shift target; entry handler
+		// tdp T1 — drill-down is a context-shift target; entry handler
 		// closes every blocking popup that launched it so the user
 		// returns to a clean drilled-in view without a stale source
 		// popup (e.g. panel 2 menu) floating over swapped columns.
@@ -3656,22 +3002,33 @@ func (m *AppModel) enterDrillDown() tea.Cmd {
 		return nil
 	}
 
-	// §1.10 — see Pod branch above.
+	// tdp T1 — see Pod branch above.
 	closeAll := m.closeAllBlockingPopups()
+	parentType := m.currentResource
+	clientset := m.k8sClient.Clientset()
 	return tea.Batch(closeAll, func() tea.Msg {
-		childType, children, err := k8s.FetchChildResources(
-			context.Background(), m.k8sClient.Clientset(), m.currentResource, item,
-		)
-		if err != nil || len(children) == 0 {
-			return nil
-		}
-		return drillDownMsg{
-			parentType: m.currentResource,
-			parentName: item.Name,
-			childType:  childType,
-			children:   children,
-		}
+		childType, children, err := k8s.FetchChildResources(context.Background(), clientset, parentType, item)
+		return drillResultMsg(parentType, item.Name, childType, children, err)
 	})
+}
+
+// drillDownFailedMsg: a panel 2 drill fetched nothing to show — an error,
+// or no children at all.
+type drillDownFailedMsg struct {
+	parentType k8s.ResourceType
+	parentName string
+	childType  k8s.ResourceType
+	err        error
+}
+
+// drillResultMsg turns a child fetch into the message the drill handles:
+// the children, or why there are none — a failure must be visible at once
+// (tdp F5), and an empty result shouldn't look like Enter was ignored.
+func drillResultMsg(parentType k8s.ResourceType, parentName string, childType k8s.ResourceType, children []k8s.ResourceItem, err error) tea.Msg {
+	if err != nil || len(children) == 0 {
+		return drillDownFailedMsg{parentType: parentType, parentName: parentName, childType: childType, err: err}
+	}
+	return drillDownMsg{parentType: parentType, parentName: parentName, childType: childType, children: children}
 }
 
 func (m *AppModel) exitDrillDown() tea.Cmd {
@@ -3920,6 +3277,123 @@ func (m *AppModel) execShell() tea.Cmd {
 		shellExec(podName, namespace, container, m.k8sClient.ContextName()))
 	m.appLog.Info("exec shell: " + detail)
 	return showCmd
+}
+
+// openSettings opens the Settings popup (`>`, or the global operation
+// popup). Items are rebuilt from the config on every open so the badges
+// reflect the current state.
+func (m *AppModel) openSettings() tea.Cmd {
+	m.settingsPopup.SetSize(m.width, m.height)
+	m.settingsPopup.SetLayer(m.popupDepth() + 1)
+	return m.settingsPopup.Open(m.buildSettingsItems())
+}
+
+// openAppLog opens the App Log popup (`!`, or the global operation popup).
+func (m *AppModel) openAppLog() tea.Cmd {
+	if m.appLog.owns() {
+		return nil
+	}
+	m.appLog.SetSize(m.width, m.height)
+	m.appLog.SetLayer(m.popupDepth() + 1)
+	return m.appLog.Toggle()
+}
+
+// openNamespacePicker opens the picker immediately in its loading state
+// so the user gets zero-lag visual feedback, then fires the LIST
+// namespaces API in parallel. NamespaceListMsg swaps in the real list
+// when it arrives — no flicker because the animator stays open across
+// SetNamespaces.
+func (m *AppModel) openNamespacePicker() tea.Cmd {
+	m.namespacePicker.SetLayer(m.popupDepth() + 1)
+	m.namespacePicker.SetSelection(m.k8sClient.Selection())
+	openCmd := m.namespacePicker.OpenLoading()
+	return tea.Batch(openCmd, fetchNamespaces(m.k8sClient))
+}
+
+// toggleAlterm is the single Alterm entry (Alt+t, or the global
+// operation popup):
+//   - no shell alive → spawn Alterm
+//   - alive, hidden  → reattach (show)
+//   - alive, visible → handled inside PtyView.Update (hides)
+//
+// Alterm is a context-shift target (tdp T1): it replaces the popup stack
+// rather than stacking on it, so every popup is closed first — from the
+// global operation popup that means the Space menu under it too. A PTY
+// always takes layer 1 so Alterm and kubectl edit / exec share one
+// border color. Alterm and an edit / exec PTY coexist (dual slot); the
+// transient one draws on top.
+func (m *AppModel) toggleAlterm() tea.Cmd {
+	closeAll := m.closeAllBlockingPopups()
+	m.shellPty.SetLayer(1)
+	if m.shellPty.IsAlive() {
+		return tea.Batch(closeAll, m.shellPty.Show(m.width, m.height))
+	}
+	cmd := buildShellTerminalCmd(m.cfg.AltermShell, m.cfg.AltermLoginShell)
+	return tea.Batch(closeAll, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell))
+}
+
+// confirmEdit asks before running kubectl edit on item. Rule A: a
+// helm-managed object is read-only in kbu (an edit would be overwritten
+// by the next helm upgrade / rollback) — the Space menu dims its Edit
+// row, and the E hotkey, the row's shortcut, does nothing either (tdp
+// M6).
+func (m *AppModel) confirmEdit(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+	if !resourceAllowsEdit(rt) || k8s.IsHelmManaged(item) {
+		return nil
+	}
+	detail := fmt.Sprintf("kubectl edit %s/%s", rt.KubectlName(), item.Name)
+	if item.Namespace != "" {
+		detail += " -n " + item.Namespace
+	}
+	contextName := m.k8sClient.ContextName()
+	startCmd := func() tea.Msg {
+		return startEditMsg{resource: rt, item: item, contextName: contextName}
+	}
+	m.confirm.SetSize(m.width, m.height)
+	m.confirm.SetLayer(m.popupDepth() + 1)
+	return m.confirm.Show(ConfirmEdit, "Edit resource?", detail, startCmd)
+}
+
+// confirmDelete asks before running kubectl delete on item. Same Rule A
+// as confirmEdit: helm-managed objects are removed with helm uninstall.
+func (m *AppModel) confirmDelete(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+	if !resourceAllowsDelete(rt) || k8s.IsHelmManaged(item) {
+		return nil
+	}
+	message, detail := deleteConfirmSurface(rt, item)
+	m.confirm.SetSize(m.width, m.height)
+	m.confirm.SetLayer(m.popupDepth() + 1)
+	return m.confirm.ShowCompleting(ConfirmDelete, message, detail,
+		deleteResource(rt, item.Name, item.Namespace, m.k8sClient.ContextName()))
+}
+
+// openYamlFor opens the YAML viewer on the detail panel's current level,
+// tagged with the resource it belongs to (so E inside it knows what to
+// edit).
+func (m *AppModel) openYamlFor(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+	yaml := m.detail.CurrentLevelYAML()
+	if yaml == "" {
+		return nil
+	}
+	m.yamlPopup.SetSize(m.width, m.height)
+	m.yamlPopup.SetLayer(m.popupDepth() + 1)
+	return m.yamlPopup.Open(yaml, rt, item)
+}
+
+// confirmRollback asks before rolling the Helm release back to the
+// revision under the History cursor. The deployed revision can't be a
+// rollback target: nothing happens there (its menu row is dimmed).
+func (m *AppModel) confirmRollback() tea.Cmd {
+	rev, current := m.detail.HistoryCursor()
+	if rev == nil || current {
+		return nil
+	}
+	root := m.detail.RootRef()
+	msg := fmt.Sprintf("Rollback %s to revision %d?", root.Name, rev.Revision)
+	cmdStr := k8s.RollbackCommandString(root.Name, root.Namespace, rev.Revision)
+	m.confirm.SetSize(m.width, m.height)
+	m.confirm.SetLayer(m.popupDepth() + 1)
+	return m.confirm.ShowCompleting(ConfirmRollback, msg, cmdStr, rollbackReleaseCmd(root.Name, root.Namespace, rev.Revision))
 }
 
 // shellExec returns a Cmd that asks AppModel to launch a PTY for kubectl exec.

@@ -52,17 +52,11 @@ func (l CompareLayout) String() string {
 //	u/d              scroll half-page
 //	g g              jump to top
 //	G                jump to bottom
-//	Space            open the in-popup action menu
+//	L                switch layout (split ↔ unified)
 //	Esc              close the popup
 //
-// Action menu (in-popup, Space-triggered):
-//
-//	Toggle layout    flip split ↔ unified (persisted via callback)
-//	Close            close the popup
-//
-// The user explicitly asked for compare actions to be discoverable via
-// menu rather than hotkey — same rationale as the panel-2 Lock /
-// Compare-to / Exit entries — so there's no direct `s`/`u`/`t` toggle.
+// The popup's own actions are hotkeys shown in its bottom hint and its
+// `?` key reference; no menu is stacked on the popup (tdp K5).
 type CompareYamlPopupModel struct {
 	leftYAML   string
 	rightYAML  string
@@ -75,12 +69,6 @@ type CompareYamlPopupModel struct {
 	// layout or popup width changes. scrollOffset indexes into this slice.
 	contentLines []string
 	scrollOffset int
-
-	// menu is the Space-triggered diff-options sub-popup (Switch view /
-	// Close). Lives in its own file (comparemenu.go) with its own
-	// PopupAnimator so it falls under the regular popup-audit pattern
-	// — see .claude/rules/popup-convention.md.
-	menu CompareMenuPopupModel
 
 	width    int
 	height   int
@@ -114,7 +102,6 @@ func NewCompareYamlPopupModel(t *theme.Theme) CompareYamlPopupModel {
 	return CompareYamlPopupModel{
 		theme:       t,
 		animator:    NewPopupAnimator("comparepopup", bc),
-		menu:        NewCompareMenuPopupModel(t),
 		layout:      CompareLayoutUnified,
 		borderColor: bc,
 		layer:       1,
@@ -136,7 +123,7 @@ func (m *CompareYamlPopupModel) SetDefaultLayout(l CompareLayout) {
 }
 
 // SetOnLayoutChange registers a callback invoked when the user toggles
-// the layout via the in-popup menu. AppModel uses this to persist the
+// the layout with L. AppModel uses this to persist the
 // choice into the user config file.
 func (m *CompareYamlPopupModel) SetOnLayoutChange(fn func(CompareLayout)) {
 	m.onLayoutChange = fn
@@ -152,7 +139,6 @@ func (m *CompareYamlPopupModel) Open(left, right, leftLabel, rightLabel string) 
 	m.leftLabel = leftLabel
 	m.rightLabel = rightLabel
 	m.scrollOffset = 0
-	m.menu.Reset()
 	m.pendingG = false
 	m.rebuildContent()
 	return m.animator.Open()
@@ -163,13 +149,12 @@ func (m CompareYamlPopupModel) IsActive() bool        { return m.animator.IsActi
 func (m CompareYamlPopupModel) IsInteractive() bool   { return m.animator.IsInteractive() }
 func (m CompareYamlPopupModel) ScrollOffset() int     { return m.scrollOffset }
 func (m CompareYamlPopupModel) Layout() CompareLayout { return m.layout }
-func (m CompareYamlPopupModel) MenuOpen() bool        { return m.menu.IsActive() }
 
 func (m *CompareYamlPopupModel) HandleTick(msg AnimTickMsg) tea.Cmd {
-	if msg.Target == m.animator.Target {
-		return m.animator.Tick()
+	if msg.Target != m.animator.Target {
+		return nil
 	}
-	return m.menu.HandleTick(msg)
+	return m.animator.Tick()
 }
 
 func (m *CompareYamlPopupModel) SetSize(w, h int) {
@@ -191,30 +176,21 @@ func (m CompareYamlPopupModel) Update(msg tea.Msg) (CompareYamlPopupModel, tea.C
 	if !ok {
 		return m, nil
 	}
-	if m.menu.IsActive() {
-		newMenu, result, cmd := m.menu.Update(keyMsg)
-		m.menu = newMenu
-		if result == CompareMenuActionCommit {
-			switch m.menu.Cursor() {
-			case 0:
-				if m.layout == CompareLayoutSplit {
-					m.layout = CompareLayoutUnified
-				} else {
-					m.layout = CompareLayoutSplit
-				}
-				if m.onLayoutChange != nil {
-					m.onLayoutChange(m.layout)
-				}
-				m.scrollOffset = 0
-				m.rebuildContent()
-				return m, cmd
-			case 1:
-				return m, tea.Batch(cmd, m.animator.Close())
-			}
-		}
-		return m, cmd
-	}
 	return m.handlePopupKey(keyMsg)
+}
+
+// toggleLayout flips split ↔ unified and rebuilds the diff from the top.
+func (m *CompareYamlPopupModel) toggleLayout() {
+	if m.layout == CompareLayoutSplit {
+		m.layout = CompareLayoutUnified
+	} else {
+		m.layout = CompareLayoutSplit
+	}
+	if m.onLayoutChange != nil {
+		m.onLayoutChange(m.layout)
+	}
+	m.scrollOffset = 0
+	m.rebuildContent()
 }
 
 func (m CompareYamlPopupModel) handlePopupKey(keyMsg tea.KeyMsg) (CompareYamlPopupModel, tea.Cmd) {
@@ -222,13 +198,9 @@ func (m CompareYamlPopupModel) handlePopupKey(keyMsg tea.KeyMsg) (CompareYamlPop
 	case "esc":
 		m.pendingG = false
 		return m, m.animator.Close()
-	case " ":
+	case "L":
 		m.pendingG = false
-		// Sub-popup layer = parent layer + 1. Compare popup is
-		// typically layer 1, so the menu opens at layer 2
-		// (lavenphire50) — visibly deeper than the parent.
-		m.menu.SetLayer(m.layer + 1)
-		return m, m.menu.Open(m.menuItems())
+		m.toggleLayout()
 	case "j", "down":
 		if m.scrollOffset < m.maxScrollOffset() {
 			m.scrollOffset++
@@ -275,20 +247,6 @@ func (m CompareYamlPopupModel) handlePopupKey(keyMsg tea.KeyMsg) (CompareYamlPop
 	return m, nil
 }
 
-// menuItems builds the in-popup Space menu. Returned as labels because
-// the menu is two items — a slice indexed by menuCursor is the simplest
-// possible structure.
-func (m CompareYamlPopupModel) menuItems() []string {
-	other := CompareLayoutSplit
-	if m.layout == CompareLayoutSplit {
-		other = CompareLayoutUnified
-	}
-	return []string{
-		fmt.Sprintf("Switch to %s view", other.String()),
-		"Close",
-	}
-}
-
 // rebuildContent recomputes contentLines for the current layout +
 // popup body width. Called whenever Open / SetSize-width-changed /
 // layout toggle happens.
@@ -314,26 +272,17 @@ func (m CompareYamlPopupModel) bodyWidth() int {
 	return w
 }
 
-func (m CompareYamlPopupModel) popupWidth() int {
-	if m.width <= 0 {
-		return 80
-	}
-	w := m.width - 2*popupHMargin
-	if w < 40 {
-		w = 40
-	}
-	return w
-}
+func (m CompareYamlPopupModel) popupWidth() int { return popupOuterWidth(m.width) } // tdp F7
 
+// popupHeight follows the diff's length (tdp F7), capped by the screen
+// less a row above and below; switching the layout (the user's own
+// action) may change it.
 func (m CompareYamlPopupModel) popupHeight() int {
 	if m.height <= 0 {
 		return 20
 	}
-	h := m.height - 2*popupVMargin
-	if h < 10 {
-		h = 10
-	}
-	return h
+	limit := max(m.height-2*popupVMargin, 3)
+	return min(max(len(m.contentLines)+2, 10), limit)
 }
 
 func (m CompareYamlPopupModel) contentHeight() int {
@@ -692,10 +641,8 @@ func centerNoDiff(width int, t *theme.Theme) string {
 // HandleMouse routes a click against the compare popup. Wheel
 // scroll already gets translated to u/d at the AppModel layer, so
 // this only needs to cover the discrete button gestures.
-// Right-click inside the popup closes it (mirror of Esc). The
-// in-popup Space menu stays keyboard-only — left-click is no-op
-// on both the diff body and the menu overlay to avoid accidental
-// layout toggles.
+// Right-click inside the popup closes it (mirror of Esc). Left-click
+// is a no-op so a stray click never toggles the layout.
 func (m CompareYamlPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (CompareYamlPopupModel, tea.Cmd) {
 	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
 		return m, nil
@@ -770,7 +717,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 		bodyRows[i] = vbar + row + vbar
 	}
 
-	hint := " Space: menu  j/k: scroll  Esc: close "
+	hint := " L: layout  j/k: scroll  Esc: close "
 	hintW := lipgloss.Width(hint)
 	// Bottom border target width = innerW + 2 (matches top: ╭ + innerW
 	// dashes-or-title + ╮). The earlier "╰─" lead consumed 2 chars but
@@ -788,11 +735,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	parts := []string{top}
 	parts = append(parts, bodyRows...)
 	parts = append(parts, bot)
-	frame := strings.Join(parts, "\n")
-	if m.menu.IsActive() {
-		frame = m.menu.Render(frame)
-	}
-	return frame
+	return strings.Join(parts, "\n")
 }
 
 func (m CompareYamlPopupModel) renderBody(width, height int) string {

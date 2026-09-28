@@ -9,7 +9,10 @@ import (
 	"github.com/vulcanshen/kbu/internal/theme"
 )
 
-// HelpModel is the Bubble Tea model for the help overlay.
+// HelpModel is the key reference `?` opens (tdp K6, M4): the keys of the
+// frontmost surface — the popup on top, the mode the user is in, or the
+// focused panel. It is a note (F1): read-only and scrollable, no cursor,
+// nothing to run. `?` again or Esc closes it.
 type HelpModel struct {
 	animator     PopupAnimator
 	width        int
@@ -18,7 +21,21 @@ type HelpModel struct {
 	scrollOffset int
 	layer        int
 	borderColor  lipgloss.Color
+
+	title string
+	rows  []helpRow
 }
+
+// helpRow is one line of a key reference: a key and what it does, or a
+// section header.
+type helpRow struct {
+	header bool
+	key    string
+	desc   string
+}
+
+// helpTitleGlyph marks the key reference's title (tdp D3: glyph + text).
+const helpTitleGlyph = "󰘳"
 
 // NewHelpModel creates a new help model.
 func NewHelpModel(t *theme.Theme) HelpModel {
@@ -48,11 +65,10 @@ func (m HelpModel) IsInteractive() bool {
 	return m.animator.IsInteractive()
 }
 
-// Toggle switches the help overlay on or off, returning the animation tick cmd.
-func (m *HelpModel) Toggle() tea.Cmd {
-	if m.animator.IsActive() {
-		return m.animator.Close()
-	}
+// Open shows the key reference with the given title and rows.
+func (m *HelpModel) Open(title string, rows []helpRow) tea.Cmd {
+	m.title = title
+	m.rows = rows
 	m.scrollOffset = 0
 	return m.animator.Open()
 }
@@ -76,50 +92,53 @@ func (m *HelpModel) SetSize(width, height int) {
 	m.height = height
 }
 
-// Update handles key events for the help overlay.
+// Update scrolls the reference; `?` and Esc close it. Nothing else does
+// anything: there is no cursor and nothing to run.
 func (m HelpModel) Update(msg tea.Msg) (HelpModel, tea.Cmd) {
 	if !m.animator.IsInteractive() {
 		return m, nil
 	}
-
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc", "?", " ":
-			return m, m.animator.Close()
-		case "j", "down":
-			content := m.helpContent()
-			maxOffset := len(content) - m.contentHeight()
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
-			if m.scrollOffset < maxOffset {
-				m.scrollOffset++
-			}
-		case "k", "up":
-			if m.scrollOffset > 0 {
-				m.scrollOffset--
-			}
-		}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
 	}
-
+	switch keyMsg.String() {
+	case "esc", "?":
+		return m, m.animator.Close()
+	case "j", "down":
+		m.scrollOffset = min(m.scrollOffset+1, m.maxScroll())
+	case "k", "up":
+		m.scrollOffset = max(m.scrollOffset-1, 0)
+	case "d":
+		m.scrollOffset = min(m.scrollOffset+m.bodyHeight()/2, m.maxScroll())
+	case "u":
+		m.scrollOffset = max(m.scrollOffset-m.bodyHeight()/2, 0)
+	case "G":
+		m.scrollOffset = m.maxScroll()
+	case "g":
+		m.scrollOffset = 0
+	}
 	return m, nil
 }
 
-// contentHeight returns how many lines of content can be shown.
-func (m HelpModel) contentHeight() int {
-	// Subtract space for border, padding, and hint line
-	h := m.height - 8
-	if h < 5 {
-		h = 5
+// bodyHeight is how many rows fit: the reference is as tall as its
+// content, capped by the screen minus the frame and a row of margin
+// above and below (then it scrolls).
+func (m HelpModel) bodyHeight() int {
+	limit := m.height - 2*popupVMargin - 4 // borders + padding rows
+	if limit < 3 {
+		limit = 3
 	}
-	return h
+	return min(len(m.rows), limit)
 }
 
-// HandleMouse routes a click against the help cheatsheet. Right-
-// click inside the popup closes it (mirror of Esc / ?). Left-
-// click is no-op — the cheatsheet is read-only. Wheel scrolls via
-// the AppModel-layer u/d synthesis.
+func (m HelpModel) maxScroll() int {
+	return max(len(m.rows)-m.bodyHeight(), 0)
+}
+
+// HandleMouse: right-click inside the reference closes it (mirror of
+// Esc). Left-click does nothing — the reference is read-only. Wheel
+// scrolls via the AppModel-layer u/d synthesis.
 func (m HelpModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (HelpModel, tea.Cmd) {
 	if !m.animator.IsInteractive() || msg.Action != tea.MouseActionPress {
 		return m, nil
@@ -133,232 +152,57 @@ func (m HelpModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (HelpMode
 	return m, nil
 }
 
-// View renders the help overlay as a full-screen placement (legacy).
-func (m HelpModel) View() string {
-	if !m.animator.IsActive() {
-		return ""
-	}
-	popup := m.RenderPopup()
-	return lipgloss.Place(m.width, m.height,
-		lipgloss.Center, lipgloss.Center,
-		popup)
-}
-
-// RenderPopup returns the help box (animated based on current animator state).
+// RenderPopup returns the reference box (animated per the animator state).
 func (m HelpModel) RenderPopup() string {
 	return m.animator.RenderFrame(m.renderFullPopup())
 }
 
-// renderFullPopup builds the complete popup. Two-column layout — sections
-// are packed left-to-right to keep total height short on modern keybinding
-// lists (~30 entries) without making the popup tall enough to need scroll.
-// Long descriptions wrap onto continuation lines indented under the desc
-// column so the popup fits a standard 80-col terminal.
 func (m HelpModel) renderFullPopup() string {
-	// Popup layout — all absolute math, no percentage scaling:
-	//   margin │ border │ leftCol │ gutter │ rightCol │ border │ margin
-	//      1       1        N         G         N         1        1
-	// total = m.width  →  N = (m.width - 4 - G) / 2 (G + leftover absorbed)
-	//
-	// popupHMargin (1) sits between popup outer border and the terminal
-	// edge, so the popup's borders are inset 1 cell from each side of the
-	// screen.
-	popupOuterW := m.width - 2*popupHMargin
-	if popupOuterW < 60 {
-		popupOuterW = 60
-	}
-	innerW := popupOuterW - 2 // two vertical borders
-	// Split innerW into left col + gutter + right col. Odd-width terminals
-	// leave a remainder after integer division; absorb it into the gutter
-	// so the popup hits its full outer width exactly (otherwise a 1-col
-	// gap shows up on one side).
-	leftColW := (innerW - 4) / 2
-	rightColW := leftColW
-	gutterW := innerW - leftColW - rightColW
-	if leftColW < 30 {
-		leftColW = 30
-		rightColW = 30
-		gutterW = innerW - leftColW - rightColW
-		if gutterW < 2 {
-			gutterW = 2
-		}
-	}
-	colW := leftColW // tests + section sizing use the smaller side
-
+	innerW := popupInnerWidth(m.width) // tdp F7
 	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
+	headerStyle := lipgloss.NewStyle().Bold(true)
+	keyStyle := m.theme.DetailLabelStyle()
+	descStyle := m.theme.DetailValueStyle()
 
-	groups := m.groupedContent()
-	descW := colW - 2 /*indent*/ - 14 /*key*/ - 1 /*space*/
-	if descW < 8 {
-		descW = 8
+	keyW := 0
+	for _, r := range m.rows {
+		if !r.header {
+			keyW = max(keyW, lipgloss.Width(r.key))
+		}
 	}
-	leftGroups, rightGroups := splitGroupsForColumns(groups, descW)
+	keyW = min(keyW, 18)
 
-	// Render each section to its own line slice first so we know the natural
-	// height of every column. Padding to a common target height is then
-	// distributed as gaps BETWEEN sections (not piled at the bottom) so both
-	// columns end at the same row AND section breaks feel naturally spaced.
-	leftSections := m.renderSections(leftGroups, colW, descW)
-	rightSections := m.renderSections(rightGroups, colW, descW)
-	leftLines := joinColumnSections(leftSections, columnTarget(leftSections, rightSections))
-	rightLines := joinColumnSections(rightSections, columnTarget(leftSections, rightSections))
-
-	// Defensive length equalisation. splitGroupsForColumns can leave the
-	// right column empty when the section list is small (or when the
-	// balance heuristic strongly prefers left), and joinColumnSections
-	// returning nil for an empty slice would panic the row-zip below on
-	// rightLines[i]. Pad the shorter side to the longer with empty rows
-	// so the two-column layout stays consistent for any (leftLines,
-	// rightLines) pair.
-	for len(rightLines) < len(leftLines) {
-		rightLines = append(rightLines, "")
-	}
-	for len(leftLines) < len(rightLines) {
-		leftLines = append(leftLines, "")
+	var lines []string
+	end := min(m.scrollOffset+m.bodyHeight(), len(m.rows))
+	for _, r := range m.rows[m.scrollOffset:end] {
+		if r.header {
+			lines = append(lines, " "+headerStyle.Render(r.desc))
+			continue
+		}
+		lines = append(lines, "   "+keyStyle.Render(padRight(r.key, keyW))+"  "+descStyle.Render(r.desc))
 	}
 
-	gutter := strings.Repeat(" ", gutterW)
-	var contentLines []string
-	for i := range leftLines {
-		contentLines = append(contentLines, padRight(leftLines[i], leftColW)+gutter+padRight(rightLines[i], rightColW))
-	}
-
-	title := " 󰘳 Keybindings"
-	dashesAfter := innerW - 1 - lipgloss.Width(title)
-	if dashesAfter < 0 {
-		dashesAfter = 0
-	}
-
+	title := " " + helpTitleGlyph + " " + m.title + " "
+	dashesAfter := max(innerW-1-lipgloss.Width(title), 0)
 	var b strings.Builder
-	b.WriteString(bStyle.Render("╭─"))
-	b.WriteString(tStyle.Render(title))
-	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter) + "╮"))
-	b.WriteString("\n")
-
+	b.WriteString(bStyle.Render("╭─") + tStyle.Render(title) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
 	left := bStyle.Render("│")
 	right := bStyle.Render("│")
 	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
-	b.WriteString(padRow) // top padding row
-	for _, line := range contentLines {
-		lw := lipgloss.Width(line)
-		// Safety net: clamp to innerW so a single overlong row never punches
-		// through the right border. wrapPlain breaks at word boundaries and
-		// will leave words longer than width oversized — truncate here.
-		if lw > innerW {
+	b.WriteString(padRow)
+	for _, line := range lines {
+		if lipgloss.Width(line) > innerW {
 			line = ansi.Truncate(line, innerW, "")
-			lw = lipgloss.Width(line)
 		}
-		pad := ""
-		if lw < innerW {
-			pad = strings.Repeat(" ", innerW-lw)
-		}
-		if line == "" {
-			b.WriteString(left + strings.Repeat(" ", innerW) + right)
-		} else {
-			b.WriteString(left + line + pad + right)
-		}
-		b.WriteString("\n")
+		b.WriteString(left + padRight(line, innerW) + right + "\n")
 	}
-	b.WriteString(padRow) // bottom padding row
-	hint := " Esc/?/Space:close j/k:scroll "
-	bottomDashes := innerW - lipgloss.Width(hint) - 1
-	if bottomDashes < 0 {
-		bottomDashes = 0
-	}
+	b.WriteString(padRow)
+	hint := " j/k: scroll  ?/Esc: close "
+	bottomDashes := max(innerW-lipgloss.Width(hint)-1, 0)
 	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
-
 	return b.String()
-}
-
-// helpGroup is one section + its entries — the atomic unit balanced across
-// the two columns. Sections never split across columns; the gutter alone is
-// already a strong-enough visual separator without splitting a coherent
-// section across it.
-type helpGroup struct {
-	title   string
-	entries []helpEntry
-}
-
-func (m HelpModel) groupedContent() []helpGroup {
-	var groups []helpGroup
-	var cur helpGroup
-	flush := func() {
-		if cur.title != "" || len(cur.entries) > 0 {
-			groups = append(groups, cur)
-		}
-	}
-	for _, e := range m.helpContent() {
-		if e.isSection {
-			flush()
-			cur = helpGroup{title: e.text}
-			continue
-		}
-		if e.key == "" {
-			continue
-		}
-		cur.entries = append(cur.entries, e)
-	}
-	flush()
-	return groups
-}
-
-// splitGroupsForColumns chooses the split point that minimises the height
-// difference between the two columns. Counts wrap-continuation lines (long
-// descriptions wrapped to multiple rows) because they contribute to actual
-// column height even though there's only "1 entry".
-//
-// Greedy + look-ahead: for each group, place on the side that brings the
-// (currently-running) totals closer to balance. Preserves group order so
-// sections still flow naturally top-to-bottom.
-func splitGroupsForColumns(groups []helpGroup, descW int) (left, right []helpGroup) {
-	sizes := make([]int, len(groups))
-	total := 0
-	for i, g := range groups {
-		sizes[i] = groupHeight(g, descW)
-		total += sizes[i]
-	}
-	leftSum := 0
-	for i, g := range groups {
-		// Diff if we put g on the left vs leave the running totals as-is.
-		addLeft := abs(leftSum + sizes[i] - (total - leftSum - sizes[i]))
-		stay := abs(leftSum - (total - leftSum))
-		if addLeft < stay && len(left) <= len(right)+1 {
-			left = append(left, g)
-			leftSum += sizes[i]
-		} else if len(right) == 0 || stay <= addLeft {
-			right = append(right, g)
-		} else {
-			left = append(left, g)
-			leftSum += sizes[i]
-		}
-	}
-	if len(left) == 0 && len(right) > 0 {
-		// Edge case: everything ended up on the right (e.g. first group huge).
-		// Move first back to left so the layout is never empty-left.
-		left = append(left, right[0])
-		right = right[1:]
-	}
-	return left, right
-}
-
-// groupHeight counts visible rows for a section: 1 title + per-entry wrap
-// line count (1 if desc fits in descW, more if it wraps).
-func groupHeight(g helpGroup, descW int) int {
-	h := 0
-	if g.title != "" {
-		h++
-	}
-	for _, e := range g.entries {
-		w := wrapPlain(e.desc, descW)
-		if len(w) == 0 {
-			h++
-		} else {
-			h += len(w)
-		}
-	}
-	return h
 }
 
 func abs(x int) int {
@@ -368,104 +212,15 @@ func abs(x int) int {
 	return x
 }
 
-// renderSections returns one rendered line slice per group (no gaps yet —
-// joinColumnSections inserts gaps later, sized so both columns end at the
-// same row).
-func (m HelpModel) renderSections(groups []helpGroup, colW, descW int) [][]string {
-	sectionStyle := lipgloss.NewStyle().Bold(true)
-	keyStyle := m.theme.DetailLabelStyle()
-	descStyle := m.theme.DetailValueStyle()
-
-	const keyW = 14
-	const indent = "  "
-	contIndent := indent + strings.Repeat(" ", keyW+1)
-
-	out := make([][]string, len(groups))
-	for i, g := range groups {
-		var lines []string
-		if g.title != "" {
-			lines = append(lines, sectionStyle.Render(" "+g.title))
-		}
-		for _, e := range g.entries {
-			wrapped := wrapPlain(e.desc, descW)
-			if len(wrapped) == 0 {
-				wrapped = []string{""}
-			}
-			key := keyStyle.Width(keyW).Render(e.key)
-			lines = append(lines, indent+key+" "+descStyle.Render(wrapped[0]))
-			for _, w := range wrapped[1:] {
-				lines = append(lines, contIndent+descStyle.Render(w))
-			}
-		}
-		out[i] = lines
-	}
-	return out
-}
-
-// columnTarget is the row count both columns should match. Pick the taller
-// natural height — the shorter column gets its inter-section gaps inflated
-// to fill the difference.
-func columnTarget(left, right [][]string) int {
-	sum := func(s [][]string) int {
-		t := 0
-		for _, b := range s {
-			t += len(b)
-		}
-		return t + max(0, len(s)-1) // 1 minimum gap between sections
-	}
-	l, r := sum(left), sum(right)
-	if l > r {
-		return l
-	}
-	return r
-}
-
-// joinColumnSections concatenates sections with blank-line gaps, sized so
-// the column ends up exactly `target` rows tall. Extra padding is
-// distributed evenly across the inter-section gaps (instead of dumped at
-// the bottom), so section headers stay vertically balanced across columns.
-func joinColumnSections(sections [][]string, target int) []string {
-	contentRows := 0
-	for _, s := range sections {
-		contentRows += len(s)
-	}
-	gapCount := len(sections) - 1
-	if gapCount < 0 {
-		gapCount = 0
-	}
-	extraRows := target - contentRows
-	if extraRows < gapCount {
-		extraRows = gapCount // at least 1 blank between every two sections
-	}
-
-	gapSize := 1
-	remainder := 0
-	if gapCount > 0 {
-		gapSize = extraRows / gapCount
-		if gapSize < 1 {
-			gapSize = 1
-		}
-		remainder = extraRows - gapSize*gapCount
-	}
-
-	var out []string
-	for i, s := range sections {
-		out = append(out, s...)
-		if i < len(sections)-1 {
-			gap := gapSize
-			if i < remainder {
-				gap++
-			}
-			for j := 0; j < gap; j++ {
-				out = append(out, "")
-			}
-		}
-	}
-	return out
-}
-
 func max(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b
@@ -479,50 +234,4 @@ func padRight(s string, width int) string {
 		return s
 	}
 	return s + strings.Repeat(" ", width-w)
-}
-
-type helpEntry struct {
-	isSection bool
-	text      string
-	key       string
-	desc      string
-}
-
-func (m HelpModel) helpContent() []helpEntry {
-	// Minimal help — design philosophy: Space opens the menu, one look
-	// and you get it. Per-context trigger letters (Y/E/S/D) aren't
-	// listed: hit Space on the cursor row and the popup self-documents
-	// what's available. Same for popup menus — j/k Enter Esc Space are
-	// universal across every popup, no need to repeat per-popup.
-	//
-	// "Core" is the four cross-app gestures the user can rely on
-	// everywhere (Tab / Enter / Esc / Space). "Navigation" gathers
-	// cursor + panel movement keys. "Global" gathers app-level
-	// trigger letters.
-	return []helpEntry{
-		{isSection: true, text: "Core"},
-		{key: "Tab", desc: "Cycle panels"},
-		{key: "Enter", desc: "Drill / commit (no focus shift)"},
-		{key: "Esc", desc: "Back / close"},
-		{key: "Space", desc: "Open menu / close popup"},
-		{isSection: true, text: "Navigation"},
-		{key: "j / k", desc: "Up / down"},
-		{key: "u / d", desc: "Page up / down"},
-		{key: "gg / G", desc: "Top / bottom"},
-		{key: "1 / 2 / 3", desc: "Switch panel"},
-		{key: "h / l", desc: "Switch tab (panel 3)"},
-		{key: "/", desc: "Search (panel 1+2)"},
-		{isSection: true, text: "Global"},
-		{key: "N / C", desc: "Switch namespace / context"},
-		{key: ">", desc: "Open Settings popup (mouse, scroll direction, …)"},
-		{key: "Alt+t", desc: "Toggle Alterm"},
-		{key: "y", desc: "Copy focus: cursor row when it has one, else full content"},
-		{key: "z", desc: "Toggle expand panel"},
-		{key: "!", desc: "App log"},
-		{key: "?", desc: "Toggle help"},
-		{key: "q", desc: "Quit kbu"},
-		{isSection: true, text: "Alterm (embedded shell)"},
-		{key: "PgUp / PgDn", desc: "Scroll history"},
-		{key: "Home / End", desc: "Top / back to live"},
-	}
 }

@@ -116,11 +116,6 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 			}
 			ref := m.chain[m.cursor]
 			return m, func() tea.Msg { return RequestSwitchToResourceMsg{Ref: ref} }
-		case " ":
-			// v1.5.x: Space mirrors the open key — close the popup
-			// without committing. Aligns with the global rule "any menu
-			// popup Space = close".
-			return m, m.animator.Close()
 		case "esc":
 			return m, m.animator.Close()
 		}
@@ -204,36 +199,10 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	currentMarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending)).Bold(true)
 
 	title := "󰍒 Breadcrumb"
-	hint := " j/k: move  Enter: switch  Space: close "
+	hint := " j/k: move  Enter: switch  Esc: close "
 
-	// Widened from 70% to 85% so long resource names (RS-hash suffixes,
-	// generated Job names, ...) get more horizontal room before the
-	// wrap-fallback kicks in.
-	maxInnerW := 80
-	if m.screenW > 0 {
-		maxInnerW = m.screenW * 85 / 100
-		if maxInnerW < 40 {
-			maxInnerW = 40
-		}
-	}
-
-	// First pass: pick innerW from label widths so short chains use a
-	// snug popup; long chains expand up to maxInnerW. Matches the
-	// renderEntry layout: " " + "N. " + marker(2) + label.
-	innerW := lipgloss.Width(title) + 4
-	for i, ref := range m.chain {
-		levelTag := fmt.Sprintf("%d.", i+1)
-		w := 1 + lipgloss.Width(levelTag) + 1 + 2 + lipgloss.Width(refDisplay(ref))
-		if w > innerW {
-			innerW = w
-		}
-	}
-	if w := len(hint) + 4; w > innerW {
-		innerW = w
-	}
-	if innerW > maxInnerW {
-		innerW = maxInnerW
-	}
+	// tdp F7: one width for every popup, whatever it shows.
+	innerW := popupInnerWidth(m.screenW)
 
 	// Second pass: render rows with wrap-fallback for labels that
 	// exceed the chosen innerW (e.g. "Deployment/<60-char-name>...").

@@ -191,7 +191,7 @@ func (m SplashModel) Render(width, height int) string {
 		emailText = dimStyle.Render(authorEmail)
 	}
 	if m.hintVisible {
-		hintText = dimStyle.Render("Press Esc to close")
+		hintText = dimStyle.Render("Press any key to close")
 	}
 	caption := "\n\n" +
 		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, identityText) +
@@ -214,10 +214,12 @@ func (m SplashModel) Update(msg tea.Msg) (SplashModel, tea.Cmd) {
 	if !m.active {
 		return m, nil
 	}
-	switch msg := msg.(type) {
+	switch msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc", "enter", " ":
+		// tdp S3: any key only closes the splash — q, Ctrl+C, Esc,
+		// Space, ? included — and does nothing else (the app routes
+		// every key here first while the splash is up).
+		{
 			m.active = false
 			m.revealedCount = 0
 			m.pixelOrder = nil
