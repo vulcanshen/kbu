@@ -8,65 +8,46 @@ import (
 	"github.com/vulcanshen/kbu/internal/theme"
 )
 
-// TestCompareYamlPopup_MenuAnimator_OpenCloseLifecycle pins the in-popup
-// Space-menu animation wiring. The menu lives in its own file
-// (comparemenu.go) with its own PopupAnimator and shares the
-// Line → Expand / Compress → Line lifecycle every other kbu popup uses.
-func TestCompareYamlPopup_MenuAnimator_OpenCloseLifecycle(t *testing.T) {
+// tdp K5: the Compare popup's own action (switch layout) is a hotkey,
+// not a menu stacked on the popup. Space does nothing here — it only
+// opens and closes a panel's Space menu.
+func TestCompareYamlPopup_SpaceDoesNothing(t *testing.T) {
 	m := NewCompareYamlPopupModel(theme.DefaultTheme())
 	m.SetSize(120, 40)
 	_ = m.Open("a: 1\n", "a: 2\n", "left", "right")
 	m.animator.Finalize()
-	if !m.animator.IsInteractive() {
-		t.Fatalf("popup animator should be Open after Finalize, got state %d", m.animator.State)
-	}
-	if m.menu.IsActive() {
-		t.Fatalf("menu animator should start Closed, got state %d", m.menu.animator.State)
-	}
+	before := m.Layout()
 
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	if cmd == nil {
-		t.Fatalf("Space should return menu.Open() tick cmd, got nil")
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+	if cmd != nil {
+		t.Errorf("Space on the Compare popup must not open anything, got a cmd")
 	}
-	if m.menu.animator.State != PopupOpeningLine {
-		t.Fatalf("after Space, menu state = %d, want PopupOpeningLine (%d)", m.menu.animator.State, PopupOpeningLine)
-	}
-	if !m.menu.IsActive() {
-		t.Fatalf("menu animator should be Active during opening")
-	}
-
-	m.menu.animator.Finalize()
-	if !m.menu.IsInteractive() {
-		t.Fatalf("menu animator should be Interactive after Finalize, got state %d", m.menu.animator.State)
-	}
-
-	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if cmd == nil {
-		t.Fatalf("Esc should return menu.Close() tick cmd, got nil")
-	}
-	if m.menu.animator.State != PopupClosingCompress {
-		t.Fatalf("after Esc, menu state = %d, want PopupClosingCompress (%d)", m.menu.animator.State, PopupClosingCompress)
+	if !m.IsInteractive() || m.Layout() != before {
+		t.Errorf("Space must leave the popup open and the layout alone (open=%v layout=%v)", m.IsInteractive(), m.Layout())
 	}
 }
 
-// TestCompareYamlPopup_MenuAnimator_ResetsOnReopen guards against a
-// stale menu state surviving a popup Open → Close → Open cycle. Open
-// must call m.menu.Reset() since Finalize would otherwise promote a
-// mid-open state to PopupOpen.
-func TestCompareYamlPopup_MenuAnimator_ResetsOnReopen(t *testing.T) {
+// L switches split ↔ unified in place and is named in the bottom hint.
+func TestCompareYamlPopup_LSwitchesLayout(t *testing.T) {
 	m := NewCompareYamlPopupModel(theme.DefaultTheme())
 	m.SetSize(120, 40)
 	_ = m.Open("a: 1\n", "a: 2\n", "left", "right")
 	m.animator.Finalize()
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	m.menu.animator.Finalize()
-	if !m.menu.IsInteractive() {
-		t.Fatalf("setup: menu should be open, got state %d", m.menu.animator.State)
+	if m.Layout() != CompareLayoutUnified {
+		t.Fatalf("setup: default layout = %v, want unified", m.Layout())
 	}
 
-	_ = m.Open("a: 3\n", "a: 4\n", "left2", "right2")
-	if m.menu.IsActive() {
-		t.Fatalf("after reopen, menu animator should be Closed, got state %d", m.menu.animator.State)
+	L := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'L'}}
+	m, _ = m.Update(L)
+	if m.Layout() != CompareLayoutSplit {
+		t.Errorf("L: layout = %v, want split", m.Layout())
+	}
+	m, _ = m.Update(L)
+	if m.Layout() != CompareLayoutUnified {
+		t.Errorf("L again: layout = %v, want unified", m.Layout())
+	}
+	if !strings.Contains(m.renderFrame(), "L: layout") {
+		t.Error("the bottom hint must name L")
 	}
 }
 

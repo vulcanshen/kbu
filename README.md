@@ -41,7 +41,7 @@
 - **Events** -- on a workload, its own events are merged with its Pods' events (a CronJob also includes its Jobs), newest first.
 - **Conditions** -- `.status.conditions` as a table, the same thing `kubectl describe` shows. Useful after events have expired.
 - **YAML viewer (`Y`)** -- a vim-style buffer: move with `hjkl` / `w` / `b`, search with `/`, select with `v`, copy with `y`.
-- **Compare (`C`)** -- diff two resources of the same kind, unified or side by side. Status and server-managed fields are stripped so you only see what was authored.
+- **Compare (`C`)** -- diff two resources of the same kind, unified or side by side (`L` switches). Status and server-managed fields are stripped so you only see what was authored.
 - **Problems stand out** -- status columns color only what needs attention: yellow for pending or degraded, red for failures. Healthy rows stay plain.
 - **Helm releases** -- when `helm` is on your `PATH`, releases get their own view: manifest, values, notes, and hooks; a revision history with one-key rollback. Objects a chart manages are marked, protected from accidental edits, and can be hidden with `.`.
 - **KubeConfig contexts** -- a read-only view of your kubeconfig. Credentials are never shown.
