@@ -125,6 +125,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   search you're typing or the pin drag, `Esc` used to close what was under the
   toast and leave the toast to time out. It now closes the toast, one layer at
   a time like everywhere else; the next `Esc` goes to what's beneath.
+- **Keys are written one way everywhere.** The menus and the status bar said
+  `Alt-t` and `Alt-S`; the key reference and the terminal's bottom hint said
+  `Alt+t`, `Alt+Shift+S` and `Ctrl+C`. They all say `Alt-t`, `Alt-S`, `Ctrl-C`,
+  `Shift-Tab` now.
 - **The confirm's bottom border lines up again.** Its right corner sat one
   cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a

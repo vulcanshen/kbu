@@ -44,7 +44,7 @@ func TestK6_PanelKeyReferenceListsItsMenuKeysAndCoreKeys(t *testing.T) {
 			t.Errorf("the panel 2 key reference is missing its Space menu key %q", it.key)
 		}
 	}
-	for _, core := range []string{"Tab", "Space", "?", "q", "Ctrl+C"} {
+	for _, core := range []string{"Tab", "Space", "?", "q", "Ctrl-C"} {
 		if !contains(keys, core) {
 			t.Errorf("the panel key reference is missing the core key %q", core)
 		}
