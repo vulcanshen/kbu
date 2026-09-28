@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/kbu/internal/theme"
 )
@@ -57,4 +58,15 @@ func renderSearchBoxWithColor(query string, active bool, width int, t *theme.The
 	bot := bStyle.Render("╰" + strings.Repeat("─", innerW) + "╯")
 
 	return top + "\n" + mid + "\n" + bot
+}
+
+// typedRunes is what a key types into a search line (tdp K8: while
+// typing, every printable key is a character). Bubble Tea delivers the
+// space bar as KeySpace rather than as a rune, so it is added here —
+// otherwise "image: nginx" can't be searched for.
+func typedRunes(msg tea.KeyMsg) []rune {
+	if msg.Type == tea.KeySpace {
+		return []rune{' '}
+	}
+	return msg.Runes
 }

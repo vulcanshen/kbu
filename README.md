@@ -21,48 +21,56 @@
 
 ## Demo
 
-### Getting around kbu
-
 ![basics](docs/demo-basics.gif)
 
-### Select multiple namespaces at once
+## Features
 
-![namespace](docs/demo-namespace.gif)
+### Find your way around
 
-### Navigate Kubernetes by relatives
+- **Relatives** -- every resource lists what it is connected to: its owner, the Pods a Service selects, the workload an HPA scales, the Pods mounting a PVC, the Pods using a ConfigMap or Secret. `Enter` follows a link, `Esc` steps back, and the `Space` menu's **Jump to an ancestor** takes you to any point in the chain you walked.
+- **Drill-down** -- Deployment / StatefulSet / DaemonSet / Job → Pods → Containers, CronJob → Jobs, HPA → its target, Helm release → every object the chart deployed.
+- **28 built-in resource types plus your CRDs** -- Custom Resources are discovered at startup, and every list updates live through the Kubernetes Watch API.
+- **Multi-namespace view** -- check any set of namespaces in the `N` picker, or pick "All Namespaces". kbu remembers the selection.
+- **Pin and sort** -- pin the resource kinds you use most to the top of the sidebar and drag them into order; sort any list by one or more columns. Both are saved per kind.
+- **Search** -- `/` filters the sidebar, the resource list, and the namespace / context pickers.
+- **Picks up where you left off** -- quit and relaunch, and you're back on the same context, namespace, resource, row, panel, and tab.
 
-![relatives](docs/demo-relatives.gif)
+### Look closer
 
-### Edit live resources via the Space menu
+- **Logs** -- follows the tail, pauses when you scroll up, `G` to go live again. Select a workload and the logs of **every Pod** it runs stream into one view, each Pod and container in its own color, so during a rollout you can see which one is failing.
+- **Events** -- on a workload, its own events are merged with its Pods' events (a CronJob also includes its Jobs), newest first.
+- **Conditions** -- `.status.conditions` as a table, the same thing `kubectl describe` shows. Useful after events have expired.
+- **YAML viewer (`Y`)** -- a vim-style buffer: move with `hjkl` / `w` / `b`, search with `/`, select with `v`, copy with `y`.
+- **Compare (`C`)** -- diff two resources of the same kind, unified or side by side (`L` switches). Status and server-managed fields are stripped so you only see what was authored.
+- **Problems stand out** -- status columns color only what needs attention: yellow for pending or degraded, red for failures. Healthy rows stay plain.
+- **Helm releases** -- when `helm` is on your `PATH`, releases get their own view: manifest, values, notes, and hooks; a revision history with one-key rollback. Objects a chart manages are marked, protected from accidental edits, and can be hidden with `.`.
+- **KubeConfig contexts** -- a read-only view of your kubeconfig; `Enter` on a context switches kbu to it. Credentials are never shown.
 
-![yaml-edit](docs/demo-yaml-edit.gif)
+### Get things done
 
-### Diff two resources side-by-side
+- **Edit (`E`)** -- runs the real `kubectl edit` in a terminal popup inside kbu, with your `$KUBE_EDITOR` / `$EDITOR`.
+- **Shell (`S`)** -- `kubectl exec` into a container, also inside kbu.
+- **Delete (`D`)** -- always asks first; deleting a namespace carries an extra warning.
+- **Alterm (`Alt+t`)** -- a persistent shell inside kbu. Hide it and bring it back with the same key; directory, history, and running jobs are kept. Anything kbu doesn't do, your usual tools can do here.
+- **Copy (`y`)** -- copies the current row or the whole view to your clipboard via OSC 52, so it works over SSH and tmux too.
+- **Audit log** -- every edit and delete made from kbu is recorded.
 
-![compare](docs/demo-compare.gif)
+### Fits your setup
 
-### Helm as a first-class resource
-
-![helm](docs/demo-helm.gif)
-
-### TUI + persistent shell in one window
-
-![alterm](docs/demo-alterm.gif)
-
-## Four keys to drive kbu
-
-| Key | Behavior |
-|---|---|
-| **`Tab`** | Switch panel focus (or `1` / `2` / `3` directly) |
-| **`Enter`** | Drill in / commit a choice |
-| **`Space`** | *What can I do here?* — opens a contextual menu or cheatsheet on every panel and every tab |
-| **`Esc`** | Back out — pop one drill level / close any popup |
-
-When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt+Shift+S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also reachable through the `Space` menu, so nothing's required to memorize unless you want it.
-
-**Mouse works too**: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `>` to open the Settings popup if you want to flip mouse off and stay keyboard-only.
+- **Session-local context** -- switching context in kbu never touches `~/.kube/config`; `kubectl` in another terminal is unaffected.
+- **Mouse** -- click to focus and select, double-click to drill, right-click for the menu, wheel to scroll. Turn it off in Settings (`>`) if you prefer keyboard only.
+- **Full screen (`z`)** -- expand the list or detail panel, `z` again to restore.
+- **Themes** -- override any color with a `theme.yaml`.
 
 ## Install
+
+### Requirements
+
+- **kubectl** on `$PATH` (for edit, delete, and shell exec)
+- A valid **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`)
+- A running Kubernetes cluster
+- **A Nerd Font**, preferably a Mono variant (e.g. JetBrains Mono Nerd Font Mono) so icons line up with the grid.
+- **A truecolor terminal** (24-bit color). kbu's soft colors and the shading between stacked popups can't be told apart in 256 colors.
 
 ### Quick Install (macOS/Linux)
 
@@ -89,20 +97,7 @@ scoop bucket add vulcanshen https://github.com/vulcanshen/scoop-bucket
 scoop install kbu
 ```
 
-### From source
-
-```bash
-go install github.com/vulcanshen/kbu/cmd@latest
-```
-
-### Build locally
-
-```bash
-git clone https://github.com/vulcanshen/kbu.git
-cd kbu
-go build -o kbu ./cmd/
-./kbu
-```
+Building from source is in [`docs/dev-remarks.md`](docs/dev-remarks.md).
 
 ### Uninstall
 
@@ -122,46 +117,18 @@ kbu
 
 Connects to your current kubeconfig context. Press `Enter` to drill, `Space` for the contextual menu, `Esc` to back out, `Tab` to move between panels.
 
-Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesseduffield/lazygit), [lazydocker](https://github.com/jesseduffield/lazydocker), and [k9s](https://github.com/derailed/k9s). Built with Go and [Bubble Tea](https://github.com/charmbracelet/bubbletea).
+## Four keys to drive kbu
 
-## Features
+| Key | Behavior |
+|---|---|
+| **`Tab`** | Switch panel focus (or `1` / `2` / `3` directly) |
+| **`Enter`** | The obvious action for what's selected: drill in (a workload → its pods), open the YAML of a kind that doesn't drill, switch to a kubeconfig context, shell into a container, roll back to a Helm revision. On panel 1 it shows the kind in panel 2; on a Logs / Events / Conditions tab it full-screens the panel |
+| **`Space`** | *What can I do here?* — the menu of everything this panel or tab can do, ending with **Global operation** (namespace, context, Alterm, settings, app log, quit) |
+| **`Esc`** | Back out — pop one drill level / close any popup |
 
-### Find your way around
+When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt+Shift+S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also a row of the `Space` menu (the app-wide ones under its **Global operation** row), so nothing's required to memorize unless you want it. A row that can't run right now is shown dimmed rather than hidden. When a popup opens over another, only the one you're in is bright; everything beneath it dims.
 
-- **Relatives** -- every resource lists what it is connected to: its owner, the Pods a Service selects, the workload an HPA scales, the Pods mounting a PVC, the Pods using a ConfigMap or Secret. `Enter` follows a link, `Esc` steps back, and `Space` jumps to any point in the chain you walked.
-- **Drill-down** -- Deployment / StatefulSet / DaemonSet / Job → Pods → Containers, CronJob → Jobs, HPA → its target, Helm release → every object the chart deployed.
-- **28 built-in resource types plus your CRDs** -- Custom Resources are discovered at startup, and every list updates live through the Kubernetes Watch API.
-- **Multi-namespace view** -- check any set of namespaces in the `N` picker, or pick "All Namespaces". kbu remembers the selection.
-- **Pin and sort** -- pin the resource kinds you use most to the top of the sidebar and drag them into order; sort any list by one or more columns. Both are saved per kind.
-- **Search** -- `/` filters the sidebar, the resource list, and the namespace / context pickers.
-- **Picks up where you left off** -- quit and relaunch, and you're back on the same context, namespace, resource, row, panel, and tab.
-
-### Look closer
-
-- **Logs** -- follows the tail, pauses when you scroll up, `G` to go live again. Select a workload and the logs of **every Pod** it runs stream into one view, each Pod and container in its own color, so during a rollout you can see which one is failing.
-- **Events** -- on a workload, its own events are merged with its Pods' events (a CronJob also includes its Jobs), newest first.
-- **Conditions** -- `.status.conditions` as a table, the same thing `kubectl describe` shows. Useful after events have expired.
-- **YAML viewer (`Y`)** -- a vim-style buffer: move with `hjkl` / `w` / `b`, search with `/`, select with `v`, copy with `y`.
-- **Compare (`C`)** -- diff two resources of the same kind, unified or side by side. Status and server-managed fields are stripped so you only see what was authored.
-- **Problems stand out** -- status columns color only what needs attention: yellow for pending or degraded, red for failures. Healthy rows stay plain.
-- **Helm releases** -- when `helm` is on your `PATH`, releases get their own view: manifest, values, notes, and hooks; a revision history with one-key rollback. Objects a chart manages are marked, protected from accidental edits, and can be hidden with `.`.
-- **KubeConfig contexts** -- a read-only view of your kubeconfig. Credentials are never shown.
-
-### Get things done
-
-- **Edit (`E`)** -- runs the real `kubectl edit` in a terminal popup inside kbu, with your `$KUBE_EDITOR` / `$EDITOR`.
-- **Shell (`S`)** -- `kubectl exec` into a container, also inside kbu.
-- **Delete (`D`)** -- always asks first; deleting a namespace carries an extra warning.
-- **Alterm (`Alt+t`)** -- a persistent shell inside kbu. Hide it and bring it back with the same key; directory, history, and running jobs are kept. Anything kbu doesn't do, your usual tools can do here.
-- **Copy (`y`)** -- copies the current row or the whole view to your clipboard via OSC 52, so it works over SSH and tmux too.
-- **Audit log** -- every edit and delete made from kbu is recorded.
-
-### Fits your setup
-
-- **Session-local context** -- switching context in kbu never touches `~/.kube/config`; `kubectl` in another terminal is unaffected.
-- **Mouse** -- click to focus and select, double-click to drill, right-click for the menu, wheel to scroll. Turn it off in Settings (`>`) if you prefer keyboard only.
-- **Full screen (`z`)** -- expand the list or detail panel, `z` again to restore.
-- **Themes** -- override any color with a `theme.yaml`.
+**Mouse works too**: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `>` to open the Settings popup if you want to flip mouse off and stay keyboard-only.
 
 ## Key Bindings
 
@@ -191,17 +158,19 @@ Everything below is also in the `Space` menu -- these are just faster.
 | `Alt+t` | Toggle Alterm (spawn / show / hide; shell stays alive across hide) |
 | `y` | Copy focused element to clipboard (OSC 52) -- cursor row when the focus has one, whole content otherwise |
 | `!` | App log |
-| `?` | Help |
-| `q` | Quit kbu (saves session state on the way out) |
-| `Ctrl+C` | Quit kbu -- also works while a panel search is active |
+| `?` | The keys of whatever is in front — the focused panel, or the menu, popup or mode on top. `?` again or `Esc` closes it |
+| `q` | Quit kbu (saves session state on the way out) -- from any panel, menu or popup; while you type in a search it is just a letter |
+| `Ctrl+C` | Same as `q`, and it also works while you type |
+
+`N`, `C`, `Alt+t`, `>`, `!` and `q` are also rows of the global operation popup: the last row of every `Space` menu.
 
 ### Mouse
 
 | Gesture | Behavior |
 |---|---|
 | **Left-click** on a panel row | Focus that panel + move the cursor to the clicked row |
-| **Double-click** | Synthesizes `Enter` (drill into the cursor row) |
-| **Right-click** on a row | Synthesizes `Space` (opens the row's context menu / cheatsheet) |
+| **Double-click** | Synthesizes `Enter` on panels 2 and 3; on panel 1 it only selects |
+| **Right-click** on a row | Synthesizes `Space` (opens the `Space` menu for that row) |
 | **Wheel up / down** | Synthesizes `u` / `d` (half-page move). Direction can be flipped via Settings popup (`scroll_direction: natural | reverse`) |
 | **Left-click** inside a list popup | Commits that row (same as cursor + `Enter`) |
 | **Right-click** inside any popup | Closes it (same as `Esc`) |
@@ -212,23 +181,26 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 
 | Key | Where | Action |
 |---|---|---|
-| `Space` | Panel 2, Release row | Open the doc menu — pick `Manifest` / `Notes` / `User Values` / `Merged Values` / `Hooks` |
-| `Space` | Panel 3, History tab, non-current row | Roll back to that revision (confirm popup shows the exact `helm rollback` command) |
+| `Space` | Panel 2, Release row | The `Space` menu lists the release's documents next to `YAML` — `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks`; each opens over the menu, so you can read several in a row |
+| `Enter` | Panel 3, History tab | Roll back to that revision (also in the `Space` menu; nothing on the deployed revision); the confirm shows the exact `helm rollback` command |
 | `.` | Any non-Releases panel 2 list | Toggle visibility of helm-managed objects |
 
 ### PTY popups (Alterm, edit, shell exec)
 
 | Key | Action |
 |---|---|
+| `Alt+t` | Leave: Alterm hides (the shell keeps running); `kubectl edit` / `exec` asks, then ends the session (an unsaved edit is dropped) |
 | `PgUp` / `PgDn` | Scroll history by one page |
 | `Home` / `End` | Jump to top of history / back to live |
 | Any other key | Snap back to live, key forwards to subprocess |
 
 Scrollback is disabled when a full-screen app (vim, less, htop) takes over the PTY via alt-screen; those keys forward to the app instead so it keeps its own paging.
 
+The terminal fills the screen, less one column and one row on each side; other popups are at most 120 columns wide.
+
 ## Editing Resources
 
-Pressing `E` on a resource (or picking `Edit` from the `Space` menu) runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.
+Pressing `E` on a resource or in its YAML viewer (or picking `Edit` from the `Space` menu) asks first, then runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.
 
 The editor is resolved by kubectl itself in this priority order:
 
@@ -389,18 +361,22 @@ status:
   unknown: "#7f849c"
 ```
 
-## Requirements
+## Limits
 
-- **kubectl** on `$PATH` (for edit, delete, and shell exec)
-- A valid **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`)
-- A running Kubernetes cluster
-- **A Nerd Font**, preferably a Mono variant (e.g. JetBrains Mono Nerd Font Mono) so icons line up with the grid.
+- **Use the Mono variant of your Nerd Font.** With a proportional variant, or a terminal set to East-Asian-Ambiguous=double (some tmux + iTerm2 CJK setups), helm-managed rows and popup top borders may sit 1 cell off the grid. Switch to the Mono variant or set ambiguous-width to single.
+- **Helm needs the `helm` CLI.** The Helm category only appears when `helm` is on your `PATH`, and the release list refreshes every 3 seconds (Helm has no watch API).
+- **Workload logs follow the Pods that exist when you select the row.** After a rollout, select the row again to pick up the new Pods.
+- **Some deletes and edits are blocked.** Events and Nodes can't be deleted from kbu; helm-managed objects can't be edited or deleted — use `helm upgrade` / `rollback` / `uninstall`.
+- **Panel 3 has no `/` search.** Open the YAML with `Y` and search there.
 
-## Further reading
+## Links
 
-- [docs/dev-remarks.md](docs/dev-remarks.md) -- design notes and rationale behind each feature
-- [docs/kbu-implementation.md](docs/kbu-implementation.md) -- how kbu implements its TUI design principles
-- [CHANGELOG.md](CHANGELOG.md) -- what changed in each release
+- [CHANGELOG.md](CHANGELOG.md) — what changed in each release
+- [`docs/dev-remarks.md`](docs/dev-remarks.md) — the developer's notes: how it works, why, building and testing
+
+## terminu family
+
+kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
 
 ## License
 

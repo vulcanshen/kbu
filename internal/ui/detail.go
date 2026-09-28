@@ -1684,6 +1684,23 @@ func (m DetailModel) handleHistoryKey(msg tea.KeyMsg) (DetailModel, bool, tea.Cm
 	return m, false, nil
 }
 
+// HistoryCursor returns the revision under the History cursor and whether
+// it is the one currently deployed, or nil when the cursor is off the
+// table (or the History tab isn't showing).
+func (m DetailModel) HistoryCursor() (*k8s.ReleaseRevision, bool) {
+	if m.ActiveTabName() != "History" {
+		return nil, false
+	}
+	if m.historyCursor < 0 || m.historyCursor >= len(m.detail.ReleaseHistory) {
+		return nil, false
+	}
+	r := m.detail.ReleaseHistory[m.historyCursor]
+	return &r, r.Status == "deployed"
+}
+
+// TabCount is how many tabs panel 3 has for the current kind.
+func (m DetailModel) TabCount() int { return len(m.tabs) }
+
 // SelectedHistoryRevision returns the ReleaseRevision under the History
 // cursor, or nil when the cursor is off the table / on the current
 // (deployed) row. AppModel uses this to decide whether Space triggers a
@@ -1855,14 +1872,13 @@ func (m DetailModel) buildLogLines() []string {
 		return []string{"  " + m.theme.DetailValueStyle().Render("Waiting for logs...")}
 	}
 	var lines []string
-	// Logs is the only panel-3 tab that does NOT dim on unfocus.
-	// Streaming content is information actively arriving; dimming it
-	// would hide updates that the user is glancing for from the corner
-	// of the eye. The other panel-3 tabs (Events / Conditions /
-	// Relatives / History) all dim via TableDimRowStyle because their
-	// content is static — focus-back-and-read works fine for them.
-	// Documented exception to the unfocus-dim convention, matching how
-	// Lens / k9s treat streaming logs.
+	// Logs is the only panel-3 tab that does NOT dim on unfocus
+	// (tdp T2): streaming content is information actively arriving;
+	// dimming it would hide updates the user glances at from the
+	// corner of the eye (Lens / k9s do the same). Conditions /
+	// Relatives / History dim via TableDimRowStyle. Events streams too
+	// (followEventsTail) but still dims — a deliberate deviation from
+	// T2, see docs/dev-remarks.md "偏離 tdp".
 	sepDim := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	for _, ll := range m.logLines {
 		// Build plain + styled prefixes side by side. Plain is for wrap-width

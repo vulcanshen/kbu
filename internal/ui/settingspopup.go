@@ -138,7 +138,7 @@ func (m SettingsPopupModel) Update(msg tea.Msg) (SettingsPopupModel, tea.Cmd) {
 		}
 		key := m.items[m.cursor].Key
 		return m, func() tea.Msg { return SettingsToggleMsg{Key: key} }
-	case "esc", " ", ">":
+	case "esc": // the > that opened it does not close it (tdp K7)
 		return m, m.animator.Close()
 	}
 	return m, nil
@@ -192,29 +192,8 @@ func (m SettingsPopupModel) renderFullPopup() string {
 	title := "  Settings "
 	bottomHint := " j/k: move  Enter: toggle  Esc: close "
 
-	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.
-	maxInnerW := 50
-	if m.screenW > 0 {
-		maxInnerW = m.screenW * 85 / 100
-		if maxInnerW < 36 {
-			maxInnerW = 36
-		}
-	}
-	innerW := lipgloss.Width(title) + 4
-	if w := lipgloss.Width(bottomHint) + 4; w > innerW {
-		innerW = w
-	}
-	for _, it := range m.items {
-		// Row shape: "  Label   ...padding...   ValueText  "
-		// Need at least: 1 + 2 + label + 4 + value + 2 = label+value+9.
-		w := 1 + 2 + lipgloss.Width(it.Label) + 4 + lipgloss.Width(it.ValueText) + 2
-		if w > innerW {
-			innerW = w
-		}
-	}
-	if innerW > maxInnerW {
-		innerW = maxInnerW
-	}
+	// tdp F7: one width for every popup, whatever it shows.
+	innerW := popupInnerWidth(m.screenW)
 
 	// Cursor row collapses ON/OFF color distinction to the same dark
 	// text on the popup-layer accent background — the "ON"/"OFF" word

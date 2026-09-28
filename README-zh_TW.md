@@ -21,48 +21,56 @@
 
 ## Demo
 
-### 認識 kbu
-
 ![basics](docs/demo-basics.gif)
 
-### 一次選多個 namespace
+## Features
 
-![namespace](docs/demo-namespace.gif)
+### 到處走走
 
-### 順著 Relatives 走訪 Kubernetes
+- **Relatives** — 每個 resource 都會列出它連到哪些東西：它的 owner、Service 選到的 Pods、HPA 在 scale 的 workload、掛載某個 PVC 的 Pods、用到某個 ConfigMap 或 Secret 的 Pods。`Enter` 順著連結走、`Esc` 退回一步，`Space` menu 的 **Jump to an ancestor** 可以直接跳回走過的鏈上任何一點。
+- **鑽入** — Deployment / StatefulSet / DaemonSet / Job → Pods → Containers，CronJob → Jobs，HPA → 目標 workload，Helm release → chart 部署出來的每個物件。
+- **內建 28 種 resource，外加你的 CRD** — Custom Resource 啟動時自動探索，所有列表透過 Kubernetes Watch API 即時更新。
+- **多 namespace 檢視** — 在 `N` picker 勾選任意幾個 namespace，或選「All Namespaces」。kbu 會記住你的選擇。
+- **Pin 與排序** — 把最常用的 resource kind 釘到 sidebar 最上面、拖曳排好順序；任何列表都能依一欄或多欄排序。兩者都按 kind 分別保存。
+- **搜尋** — `/` 可以過濾 sidebar、resource 列表，以及 namespace / context picker。
+- **從上次離開的地方繼續** — 關掉再開，會回到同一個 context、namespace、resource、row、panel 和 tab。
 
-![relatives](docs/demo-relatives.gif)
+### 看仔細一點
 
-### 透過 Space menu 編輯叢集中的資源
+- **Logs** — 自動追最新一行，往上捲就暫停，按 `G` 回到 live。選到 workload 時，它底下**每個 Pod** 的 log 會匯流到同一個畫面，每個 Pod 和 container 各有自己的顏色 — rollout 時一眼就看得出是哪個在出錯。
+- **Events** — 在 workload 上，會把它自己的 events 和底下 Pods 的 events 合併（CronJob 連 Jobs 的也一起），最新的排最前面。
+- **Conditions** — 以表格呈現 `.status.conditions`，就是 `kubectl describe` 裡那一段。events 過期之後特別有用。
+- **YAML 檢視（`Y`）** — vim 風格的 buffer：`hjkl` / `w` / `b` 移動、`/` 搜尋、`v` 選取、`y` 複製。
+- **比對（`C`）** — 比對同一種 kind 的兩個 resource，可選 unified 或左右並排（`L` 切換）。status 和伺服器管理的欄位都會先拿掉，你看到的只有真正寫進去的內容。
+- **有問題的一眼就看到** — status 欄只替需要注意的值上色：黃色是 pending 或降級、紅色是失敗。健康的 row 維持原色。
+- **Helm releases** — `helm` 在 `PATH` 上時，release 有專屬的檢視：manifest、values、notes、hooks；revision 歷史，一鍵 rollback。chart 管理的物件會被標記、擋掉誤編輯，也可以按 `.` 隱藏。
+- **KubeConfig contexts** — 唯讀檢視你的 kubeconfig；在 context 上按 `Enter` 把 kbu 切換過去。憑證永遠不會顯示。
 
-![yaml-edit](docs/demo-yaml-edit.gif)
+### 動手做事
 
-### 並排比對兩個 resource
+- **編輯（`E`）** — 在 kbu 內的 terminal popup 執行真正的 `kubectl edit`，使用你的 `$KUBE_EDITOR` / `$EDITOR`。
+- **Shell（`S`）** — `kubectl exec` 進 container，同樣在 kbu 內。
+- **刪除（`D`）** — 一定會先確認；刪 namespace 會多一道警告。
+- **Alterm（`Alt+t`）** — kbu 內的常駐 shell。同一個鍵隱藏、再按一次叫回來，目錄、history、執行中的 job 都還在。kbu 沒做的事，交給你平常用的工具在這裡做。
+- **複製（`y`）** — 透過 OSC 52 把目前這一列或整個畫面複製到剪貼簿，走 SSH 或 tmux 也能用。
+- **Audit log** — 從 kbu 做的每次編輯與刪除都會留下紀錄。
 
-![compare](docs/demo-compare.gif)
+### 配合你的環境
 
-### Helm 是第一級的 resource
-
-![helm](docs/demo-helm.gif)
-
-### TUI + 常駐 shell 都在同一個視窗
-
-![alterm](docs/demo-alterm.gif)
-
-## 四個鍵就能操作 kbu
-
-| 鍵 | 行為 |
-|---|---|
-| **`Tab`** | 切換 panel 焦點（也可以直接按 `1` / `2` / `3` 跳轉）|
-| **`Enter`** | 鑽入 / 確認選擇 |
-| **`Space`** | *這裡能幹嘛？* — 在每個 panel、每個 tab 上開啟對應的 menu 或 cheatsheet |
-| **`Esc`** | 退回 — 回上一層 / 關閉 popup |
-
-不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt+Shift+S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都能透過 `Space` menu 抵達 — 想記再記，不想記也沒關係。
-
-**滑鼠也能用**：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `>` 開 Settings popup 可以關掉滑鼠改成純鍵盤。
+- **Session-local context** — 在 kbu 裡切 context 不會動到 `~/.kube/config`，另一個終端機的 `kubectl` 不受影響。
+- **滑鼠** — 點擊切焦點與選取、雙擊鑽入、右鍵開 menu、滾輪捲動。偏好純鍵盤的話可以在 Settings（`>`）關掉。
+- **全螢幕（`z`）** — 放大列表或 detail panel，再按一次 `z` 還原。
+- **主題** — 用 `theme.yaml` 覆寫任何顏色。
 
 ## 安裝
+
+### 需求
+
+- **kubectl** 在 `$PATH` 上（給 edit、delete、shell exec 用）
+- 有效的 **kubeconfig**（`~/.kube/config` 或 `$KUBECONFIG`）
+- 一個運作中的 Kubernetes cluster
+- **Nerd Font**，建議用 Mono 變體（例：JetBrains Mono Nerd Font Mono），icon 才會對齊格線。
+- **支援 truecolor（24-bit 色）的終端機**。kbu 的淡色與疊起來的 popup 之間的明暗，在 256 色下分不出來。
 
 ### Quick Install（macOS/Linux）
 
@@ -89,20 +97,7 @@ scoop bucket add vulcanshen https://github.com/vulcanshen/scoop-bucket
 scoop install kbu
 ```
 
-### 從原始碼安裝
-
-```bash
-go install github.com/vulcanshen/kbu/cmd@latest
-```
-
-### 本地編譯
-
-```bash
-git clone https://github.com/vulcanshen/kbu.git
-cd kbu
-go build -o kbu ./cmd/
-./kbu
-```
+從原始碼建置寫在 [`docs/dev-remarks.md`](docs/dev-remarks.md)。
 
 ### 解除安裝
 
@@ -122,46 +117,18 @@ kbu
 
 kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出 context menu、`Esc` 退回、`Tab` 切 panel。
 
-靈感來自 [Lens IDE](https://k8slens.dev/)、[lazygit](https://github.com/jesseduffield/lazygit)、[lazydocker](https://github.com/jesseduffield/lazydocker) 與 [k9s](https://github.com/derailed/k9s)。以 Go 與 [Bubble Tea](https://github.com/charmbracelet/bubbletea) 建構。
+## 四個鍵就能操作 kbu
 
-## Features
+| 鍵 | 行為 |
+|---|---|
+| **`Tab`** | 切換 panel 焦點（也可以直接按 `1` / `2` / `3` 跳轉）|
+| **`Enter`** | 對選到的東西做最直觀的事：鑽入（workload → 它的 pods）、打開不能鑽入的種類的 YAML、切換到 kubeconfig context、shell 進 container、rollback 到 Helm 版本。在 panel 1 把那個種類顯示到 panel 2；在 Logs / Events / Conditions tab 把 panel 放到全螢幕 |
+| **`Space`** | *這裡能幹嘛？* — 列出這個 panel 或 tab 能做的每一件事，最後一列 **Global operation** 是全域動作（namespace、context、Alterm、settings、app log、離開）|
+| **`Esc`** | 退回 — 回上一層 / 關閉 popup |
 
-### 到處走走
+不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt+Shift+S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都是 `Space` menu 裡的一列（全域的在它的 **Global operation** 那一列裡）— 想記再記，不想記也沒關係。暫時不能執行的列會變暗，而不是藏起來。popup 疊上來時只有你正在操作的那一個是亮的，底下的一切都變暗。
 
-- **Relatives** — 每個 resource 都會列出它連到哪些東西：它的 owner、Service 選到的 Pods、HPA 在 scale 的 workload、掛載某個 PVC 的 Pods、用到某個 ConfigMap 或 Secret 的 Pods。`Enter` 順著連結走、`Esc` 退回一步、`Space` 可以直接跳回走過的鏈上任何一點。
-- **鑽入** — Deployment / StatefulSet / DaemonSet / Job → Pods → Containers，CronJob → Jobs，HPA → 目標 workload，Helm release → chart 部署出來的每個物件。
-- **內建 28 種 resource，外加你的 CRD** — Custom Resource 啟動時自動探索，所有列表透過 Kubernetes Watch API 即時更新。
-- **多 namespace 檢視** — 在 `N` picker 勾選任意幾個 namespace，或選「All Namespaces」。kbu 會記住你的選擇。
-- **Pin 與排序** — 把最常用的 resource kind 釘到 sidebar 最上面、拖曳排好順序；任何列表都能依一欄或多欄排序。兩者都按 kind 分別保存。
-- **搜尋** — `/` 可以過濾 sidebar、resource 列表，以及 namespace / context picker。
-- **從上次離開的地方繼續** — 關掉再開，會回到同一個 context、namespace、resource、row、panel 和 tab。
-
-### 看仔細一點
-
-- **Logs** — 自動追最新一行，往上捲就暫停，按 `G` 回到 live。選到 workload 時，它底下**每個 Pod** 的 log 會匯流到同一個畫面，每個 Pod 和 container 各有自己的顏色 — rollout 時一眼就看得出是哪個在出錯。
-- **Events** — 在 workload 上，會把它自己的 events 和底下 Pods 的 events 合併（CronJob 連 Jobs 的也一起），最新的排最前面。
-- **Conditions** — 以表格呈現 `.status.conditions`，就是 `kubectl describe` 裡那一段。events 過期之後特別有用。
-- **YAML 檢視（`Y`）** — vim 風格的 buffer：`hjkl` / `w` / `b` 移動、`/` 搜尋、`v` 選取、`y` 複製。
-- **比對（`C`）** — 比對同一種 kind 的兩個 resource，可選 unified 或左右並排。status 和伺服器管理的欄位都會先拿掉，你看到的只有真正寫進去的內容。
-- **有問題的一眼就看到** — status 欄只替需要注意的值上色：黃色是 pending 或降級、紅色是失敗。健康的 row 維持原色。
-- **Helm releases** — `helm` 在 `PATH` 上時，release 有專屬的檢視：manifest、values、notes、hooks；revision 歷史，一鍵 rollback。chart 管理的物件會被標記、擋掉誤編輯，也可以按 `.` 隱藏。
-- **KubeConfig contexts** — 唯讀檢視你的 kubeconfig，憑證永遠不會顯示。
-
-### 動手做事
-
-- **編輯（`E`）** — 在 kbu 內的 terminal popup 執行真正的 `kubectl edit`，使用你的 `$KUBE_EDITOR` / `$EDITOR`。
-- **Shell（`S`）** — `kubectl exec` 進 container，同樣在 kbu 內。
-- **刪除（`D`）** — 一定會先確認；刪 namespace 會多一道警告。
-- **Alterm（`Alt+t`）** — kbu 內的常駐 shell。同一個鍵隱藏、再按一次叫回來，目錄、history、執行中的 job 都還在。kbu 沒做的事，交給你平常用的工具在這裡做。
-- **複製（`y`）** — 透過 OSC 52 把目前這一列或整個畫面複製到剪貼簿，走 SSH 或 tmux 也能用。
-- **Audit log** — 從 kbu 做的每次編輯與刪除都會留下紀錄。
-
-### 配合你的環境
-
-- **Session-local context** — 在 kbu 裡切 context 不會動到 `~/.kube/config`，另一個終端機的 `kubectl` 不受影響。
-- **滑鼠** — 點擊切焦點與選取、雙擊鑽入、右鍵開 menu、滾輪捲動。偏好純鍵盤的話可以在 Settings（`>`）關掉。
-- **全螢幕（`z`）** — 放大列表或 detail panel，再按一次 `z` 還原。
-- **主題** — 用 `theme.yaml` 覆寫任何顏色。
+**滑鼠也能用**：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `>` 開 Settings popup 可以關掉滑鼠改成純鍵盤。
 
 ## Key Bindings
 
@@ -191,17 +158,19 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | `Alt+t` | 切換 Alterm（啟動 / 顯示 / 隱藏；隱藏時 shell 保持存活）|
 | `y` | 複製到剪貼簿（OSC 52）— 有 cursor 時複製那一列，否則複製整個內容 |
 | `!` | App log |
-| `?` | Help |
-| `q` | 結束 kbu（離開時會保存 session 狀態）|
-| `Ctrl+C` | 結束 kbu — 在 panel 搜尋中也能用 |
+| `?` | 最前面那個東西能按的鍵 —— focus 的 panel，或最上層的 menu、popup、模式。再按一次 `?` 或 `Esc` 關閉 |
+| `q` | 結束 kbu（離開時會保存 session 狀態）— 在任何 panel、menu、popup 上都有效；在搜尋欄打字時只是一個字母 |
+| `Ctrl+C` | 跟 `q` 一樣，打字時也有效 |
+
+`N`、`C`、`Alt+t`、`>`、`!`、`q` 也都是 global operation popup 裡的列：每個 `Space` menu 的最後一列打開它。
 
 ### 滑鼠
 
 | 操作 | 行為 |
 |---|---|
 | **左鍵** 點 panel row | 切焦點到該 panel + cursor 移到該列 |
-| **雙擊** | 等同 `Enter`（鑽入 cursor 那列）|
-| **右鍵** 點 row | 等同 `Space`（開該列的 context menu / cheatsheet）|
+| **雙擊** | 在 panel 2、3 等同 `Enter`；在 panel 1 只選列 |
+| **右鍵** 點 row | 等同 `Space`（開那一列的 `Space` menu）|
 | **滾輪** 上 / 下 | 等同 `u` / `d`（半頁移動）。方向可在 Settings popup 切換 `scroll_direction: natural | reverse` |
 | **左鍵** 點 list popup 的列 | 選定該列（等同 cursor + `Enter`）|
 | **右鍵** 點任何 popup | 關閉它（等同 `Esc`）|
@@ -212,23 +181,26 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 | 鍵 | 位置 | 動作 |
 |---|---|---|
-| `Space` | Panel 2、Release row | 開啟文件 menu — 選 `Manifest` / `Notes` / `User Values` / `Merged Values` / `Hooks` |
-| `Space` | Panel 3、History tab、非當前 row | rollback 到該版本（確認 popup 會顯示確切的 `helm rollback` 命令）|
+| `Space` | Panel 2、Release row | `Space` menu 在 `YAML` 旁邊列出 release 的文件 — `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks`；每一份都開在 menu 上面，可以連看幾份 |
+| `Enter` | Panel 3、History tab | rollback 到那個版本（`Space` menu 裡也有；目前部署的版本上不作用）；確認 popup 會顯示確切的 `helm rollback` 命令 |
 | `.` | 任何非 Releases 的 panel 2 list | 切換 helm-managed 物件的可見性 |
 
 ### PTY popups（Alterm、edit、shell exec）
 
 | 鍵 | 動作 |
 |---|---|
+| `Alt+t` | 離開：Alterm 隱藏（shell 繼續跑）；`kubectl edit` / `exec` 先問，再結束那個 session（還沒存的編輯會丟掉）|
 | `PgUp` / `PgDn` | 歷史以一頁為單位捲動 |
 | `Home` / `End` | 跳到歷史頂端 / 回到 live |
 | 其他任何鍵 | 跳回 live、按鍵轉發給 subprocess |
 
 當 full-screen app（vim、less、htop）透過 alt-screen 接管 PTY 時，scrollback 會停用 — 那些按鍵會轉發給 app，讓 app 自己處理翻頁。
 
+terminal 用滿整個畫面，四邊各留一格；其他 popup 最寬 120 欄。
+
 ## 編輯 Resource
 
-在 resource 上按 `E`（或從 `Space` menu 選 `Edit`）會在 embedded PTY popup 中執行 **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`**。行為與在 terminal 中跑同樣的指令完全一致：strategic merge patch、`resourceVersion` 衝突偵測、沒有 `last-applied-configuration` annotation 的副作用。
+在 resource 上或它的 YAML viewer 裡按 `E`（或從 `Space` menu 選 `Edit`），先確認，再在 embedded PTY popup 中執行 **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`**。行為與在 terminal 中跑同樣的指令完全一致：strategic merge patch、`resourceVersion` 衝突偵測、沒有 `last-applied-configuration` annotation 的副作用。
 
 Editor 由 kubectl 自己依以下順序決定：
 
@@ -383,18 +355,22 @@ status:
   unknown: "#7f849c"
 ```
 
-## 需求
+## 限制
 
-- **kubectl** 在 `$PATH` 上（給 edit、delete、shell exec 用）
-- 有效的 **kubeconfig**（`~/.kube/config` 或 `$KUBECONFIG`）
-- 一個運作中的 Kubernetes cluster
-- **Nerd Font**，建議用 Mono 變體（例：JetBrains Mono Nerd Font Mono），icon 才會對齊格線。
+- **Nerd Font 請用 Mono 變體。** 用比例寬度的變體、或終端機設成 East-Asian-Ambiguous=double（部分 tmux + iTerm2 的 CJK 設定）時，helm-managed 的列與 popup 上框可能偏離格線 1 格。換成 Mono 變體，或把 ambiguous-width 設成 single。
+- **Helm 需要 `helm` CLI。** `helm` 在 `PATH` 上時才會出現 Helm 分類，release 列表每 3 秒更新一次（Helm 沒有 watch API）。
+- **workload 的 log 跟的是選到那一列當下存在的 Pod。** rollout 之後，重新選一次那一列才會接上新的 Pod。
+- **有些刪除與編輯被擋下。** Events 與 Nodes 不能從 kbu 刪除；helm-managed 物件不能編輯或刪除 —— 請用 `helm upgrade` / `rollback` / `uninstall`。
+- **panel 3 沒有 `/` 搜尋。** 用 `Y` 打開 YAML，在那裡搜尋。
 
-## 延伸閱讀
+## 相關連結
 
-- [docs/dev-remarks.md](docs/dev-remarks.md) — 各功能背後的設計筆記與理由（英文）
-- [docs/kbu-implementation.md](docs/kbu-implementation.md) — kbu 如何實作它的 TUI 設計原則
 - [CHANGELOG.md](CHANGELOG.md) — 每個版本的變更
+- [`docs/dev-remarks.md`](docs/dev-remarks.md) — 開發者備忘錄：怎麼運作、為什麼、建置與測試
+
+## terminu family
+
+kbu 遵循 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle)：跟家族其他成員一樣的按鍵、一樣的 menu —— [filu](https://github.com/vulcanshen/filu)（檔案）、[sshu](https://github.com/vulcanshen/sshu)（ssh）、[webu](https://github.com/vulcanshen/webu)（網頁）、[locku](https://github.com/vulcanshen/locku)（螢幕鎖）。
 
 ## License
 

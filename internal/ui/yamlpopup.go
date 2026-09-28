@@ -64,9 +64,8 @@ type YamlPopupModel struct {
 	animator       PopupAnimator
 
 	// Edit target captured at Open() time.
-	resource    k8s.ResourceType
-	item        k8s.ResourceItem
-	contextName string
+	resource k8s.ResourceType
+	item     k8s.ResourceItem
 
 	// Search state.
 	searching   bool
@@ -116,11 +115,10 @@ func (m *YamlPopupModel) SetLayer(layer int) {
 
 // Open populates the popup with YAML for a specific resource, captures the
 // edit target, and begins the open animation.
-func (m *YamlPopupModel) Open(yaml string, rt k8s.ResourceType, item k8s.ResourceItem, ctxName string) tea.Cmd {
+func (m *YamlPopupModel) Open(yaml string, rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
 	m.yaml = strings.TrimRight(yaml, "\n")
 	m.resource = rt
 	m.item = item
-	m.contextName = ctxName
 	m.scrollOffset = 0
 	m.searching = false
 	m.searchQuery = ""
@@ -138,6 +136,19 @@ func (m *YamlPopupModel) Open(yaml string, rt k8s.ResourceType, item k8s.Resourc
 
 // Close begins the close animation.
 func (m *YamlPopupModel) Close() tea.Cmd { return m.animator.Close() }
+
+// CanEdit reports whether E edits what this viewer shows — the same test
+// as the panel's Edit row. Only then do the hint and ? list E.
+func (m YamlPopupModel) CanEdit() bool {
+	return m.item.Name != "" && resourceAllowsEdit(m.resource) && !k8s.IsHelmManaged(m.item)
+}
+
+// yamlEditRequestMsg asks the app to confirm and run kubectl edit on the
+// resource the YAML viewer shows.
+type yamlEditRequestMsg struct {
+	resource k8s.ResourceType
+	item     k8s.ResourceItem
+}
 
 // IsActive reports whether the popup is being drawn (including animations).
 func (m YamlPopupModel) IsActive() bool { return m.animator.IsActive() }
@@ -336,12 +347,6 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 		}
 		m.pendingG = false
 		return m, m.animator.Close()
-	case " ":
-		// Space keeps closing the popup — it was the pre-vim-buffer
-		// close-shortcut and users may have muscle memory for it. Not
-		// used in visual mode either (no need for another exit path).
-		m.pendingG = false
-		return m, m.animator.Close()
 	case "h", "left":
 		m = m.moveCursorLeft()
 		m.pendingG = false
@@ -443,22 +448,16 @@ func (m YamlPopupModel) Update(msg tea.Msg) (YamlPopupModel, tea.Cmd) {
 		}
 		m.pendingG = false
 	case "E":
-		// Direct edit dispatch. User already inspected the YAML in this popup
-		// so we skip the confirm step that the table-level `E` uses.
-		if m.item.Name == "" {
+		// Same edit as the panel's E, confirm included (tdp F6: an action
+		// that confirms confirms every time). The confirm stacks on this
+		// viewer (F4): Esc on it comes back here. Nothing happens where
+		// the panel's Edit row is dimmed or absent (Rule A: helm-managed;
+		// kinds kbu doesn't edit; a Helm release document).
+		if !m.CanEdit() {
 			return m, nil
 		}
-		// Honour the same kind-level edit gate as the table `E` — read-only
-		// kinds (Contexts, Events) must not reach kubectl edit even via the
-		// YAML popup.
-		if !resourceAllowsEdit(m.resource) {
-			return m, nil
-		}
-		closeCmd := m.animator.Close()
-		rt, item, ctx := m.resource, m.item, m.contextName
-		return m, tea.Batch(closeCmd, func() tea.Msg {
-			return startEditMsg{resource: rt, item: item, contextName: ctx}
-		})
+		rt, item := m.resource, m.item
+		return m, func() tea.Msg { return yamlEditRequestMsg{resource: rt, item: item} }
 	case "y":
 		// Two modes: visual mode → copy the character-wise selection
 		// between anchor and cursor, then exit visual. Normal mode →
@@ -884,8 +883,8 @@ func (m YamlPopupModel) handleSearchKey(msg tea.KeyMsg) (YamlPopupModel, tea.Cmd
 			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 		}
 		return m, nil
-	case msg.Type == tea.KeyRunes:
-		for _, r := range msg.Runes {
+	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		for _, r := range typedRunes(msg) {
 			m.searchQuery += string(r)
 		}
 		return m, nil
@@ -938,26 +937,18 @@ const (
 	popupVMargin = 1
 )
 
-func (m YamlPopupModel) popupWidth() int {
-	if m.width <= 0 {
-		return 60
-	}
-	w := m.width - 2*popupHMargin
-	if w < 40 {
-		w = 40
-	}
-	return w
-}
+func (m YamlPopupModel) popupWidth() int { return popupOuterWidth(m.width) } // tdp F7
 
+// popupHeight follows the YAML's length (tdp F7): as tall as its lines
+// need, capped by the screen less a row above and below (then it
+// scrolls), at least 10 rows so a search line still leaves room. The
+// YAML doesn't change while the popup is open, so neither does this.
 func (m YamlPopupModel) popupHeight() int {
 	if m.height <= 0 {
 		return 20
 	}
-	h := m.height - 2*popupVMargin
-	if h < 10 {
-		h = 10
-	}
-	return h
+	limit := max(m.height-2*popupVMargin, 3)
+	return min(max(len(m.contentLines)+2, 10), limit)
 }
 
 // contentHeight is how many YAML lines fit in the body, accounting for the
@@ -1306,8 +1297,18 @@ func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicat
 	// visual is active, else the full YAML. hjkl/w/b/e/0/$ move the
 	// cursor. Full hint spells it out; short falls back to letter
 	// tags when the popup is narrow.
-	const hintFull = " v:visual  y:copy  E:edit  /:search  Esc:close "
-	const hintShort = " v  y  E  /  Esc "
+	hintFull := " v:visual  y:copy  E:edit  /:search  Esc:close "
+	hintShort := " v  y  E  /  Esc "
+	if !m.CanEdit() {
+		hintFull = " v:visual  y:copy  /:search  Esc:close "
+		hintShort = " v  y  /  Esc "
+	}
+	if m.visualMode {
+		// tdp K11: in the selection mode the hint lists the mode's
+		// keys, starting with ? for the full list.
+		hintFull = " selecting  ?:keys  y:copy  v/Esc:leave "
+		hintShort = " ?  y  v  Esc "
+	}
 	hint = hintFull
 
 	total := len(m.contentLines)

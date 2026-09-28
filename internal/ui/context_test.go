@@ -175,29 +175,52 @@ func TestContextPickerModel_CloseOnEsc(t *testing.T) {
 	}
 }
 
-func TestContextPickerModel_CloseOnC(t *testing.T) {
-	m := newTestContextPicker()
-	m.Open([]string{"a", "b"}, "a")
-	m.animator.Finalize()
-
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	m.animator.Finalize()
-
-	if m.IsActive() {
-		t.Error("expected picker to be inactive after c")
+// tdp K7: the C that opened the picker does not close it.
+func TestContextPickerModel_CDoesNotClose(t *testing.T) {
+	for _, r := range []rune{'c', 'C'} {
+		m := newTestContextPicker()
+		m.Open([]string{"a", "b"}, "a")
+		m.animator.Finalize()
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		if !m.animator.Owns() {
+			t.Errorf("%c must not close the context picker", r)
+		}
 	}
 }
 
-func TestContextPickerModel_CloseOnUppercaseC(t *testing.T) {
+// tdp F1, K3: while typing, Enter switches to the highlighted context and
+// closes the picker — the same as Enter on the list.
+func TestContextPickerModel_EnterWhileTypingSwitches(t *testing.T) {
 	m := newTestContextPicker()
-	m.Open([]string{"a", "b"}, "a")
+	m.Open([]string{"dev", "staging", "prod"}, "dev")
 	m.animator.Finalize()
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("stag")})
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	msg := runBatchForMsg[ContextChangedMsg](cmd)
+	if msg == nil || msg.Context != "staging" {
+		t.Fatalf("Enter while typing must switch to the highlighted context, got %+v", msg)
+	}
+	if m.animator.Owns() {
+		t.Error("switching must close the picker")
+	}
+}
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+// tdp F1, K4: Esc while typing closes the whole picker; Tab moves to the
+// list and keeps the filter.
+func TestContextPickerModel_TypingPhaseKeys(t *testing.T) {
+	m := newTestContextPicker()
+	m.Open([]string{"dev", "staging"}, "dev")
 	m.animator.Finalize()
-
-	if m.IsActive() {
-		t.Error("expected picker to be inactive after C (alias)")
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("st")})
+	tabbed, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if tabbed.searching || tabbed.searchQuery != "st" {
+		t.Errorf("Tab must move to the list keeping the filter (searching=%v query=%q)", tabbed.searching, tabbed.searchQuery)
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.animator.Owns() {
+		t.Error("Esc while typing must close the picker")
 	}
 }
 

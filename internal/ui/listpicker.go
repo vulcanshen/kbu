@@ -10,18 +10,11 @@ import (
 )
 
 // ListPickerModel is the generic "pick one from a list" popup, used
-// wherever a flow needs the user to choose between named options
-// (e.g. Sort flow: which column → which direction). Reusing one
-// model means the column picker and direction picker share their
-// visual style, keybindings, and animation lifecycle automatically.
-//
-// Chaining: app.go invokes Open(...) for the first step, receives a
-// ListPickerActionMsg on commit, then invokes Open(...) AGAIN with
-// the next step's content. Open detects "already open" and swaps
-// content in place rather than running a close-then-reopen
-// animation — the user sees the title + items change without a
-// flicker. pickerID tags each step so the app-side switch knows
-// which step is committing.
+// wherever a flow needs the user to choose between named options. The
+// sort flow runs two instances: the column picker and, stacked on it,
+// the direction picker — each step of a multi-step flow is its own
+// popup with its own height (tdp F1, F4). pickerID tags the step so the
+// app-side switch knows which one is committing.
 type ListPickerModel struct {
 	animator PopupAnimator
 	pickerID string
@@ -30,15 +23,6 @@ type ListPickerModel struct {
 	cursor   int
 	screenW  int
 	theme    *theme.Theme
-
-	// Pending swap content — set by Open when called on an already-
-	// open picker. The mini swap animation runs Compress → midpoint
-	// → Expand; at the midpoint HandleTick copies these into the
-	// active fields so the user sees the new content as the popup
-	// expands back out.
-	pendingPickerID string
-	pendingTitle    string
-	pendingItems    []ListPickerItem
 
 	layer       int
 	borderColor lipgloss.Color
@@ -65,6 +49,8 @@ type ListPickerModel struct {
 //     pickers that mix multiple operation kinds (e.g. sort
 //     column picker: "fields" above the column list,
 //     "all" above the Reset shortcut).
+//   - Disabled:  the row exists but can't run right now (tdp M6) —
+//     dimmed; the cursor can rest on it, Enter and clicks do nothing.
 type ListPickerItem struct {
 	Key       string
 	Label     string
@@ -72,6 +58,7 @@ type ListPickerItem struct {
 	Badge     string
 	Separator bool
 	Header    bool
+	Disabled  bool
 }
 
 // ListPickerActionMsg is emitted when the user commits a row (Enter
@@ -83,7 +70,7 @@ type ListPickerActionMsg struct {
 	Key      string
 }
 
-// ListPickerCancelMsg is emitted on Esc / Space. PickerID tags
+// ListPickerCancelMsg is emitted on Esc (or a right-click). PickerID tags
 // the cancelled step so app.go can drop any in-flight flow state
 // (e.g. the cached column from the column step when direction is
 // cancelled).
@@ -92,10 +79,20 @@ type ListPickerCancelMsg struct {
 }
 
 func NewListPickerModel(t *theme.Theme) ListPickerModel {
+	return newListPickerModel(t, "listpicker")
+}
+
+// NewSortDirPickerModel is the sort flow's second step, stacked on the
+// column picker.
+func NewSortDirPickerModel(t *theme.Theme) ListPickerModel {
+	return newListPickerModel(t, "listpicker_dir")
+}
+
+func newListPickerModel(t *theme.Theme, target string) ListPickerModel {
 	bc := theme.PopupLayerColor(1)
 	return ListPickerModel{
 		theme:       t,
-		animator:    NewPopupAnimator("listpicker", bc),
+		animator:    NewPopupAnimator(target, bc),
 		borderColor: bc,
 		layer:       1,
 	}
@@ -108,31 +105,10 @@ func (m *ListPickerModel) SetLayer(layer int) {
 	m.animator.Color = m.borderColor
 }
 
-// Open shows the picker with the given title + items. If the picker
-// is already open (chained step), content swaps in place — no
-// close-reopen animation. Cursor resets to the first item with
-// Badge == "current" (so the user sees where they are now), or 0
-// otherwise.
+// Open shows the picker with the given title + items. The cursor starts
+// on the first item with Badge == "current" (so the user sees where they
+// are now), or on the first selectable row.
 func (m *ListPickerModel) Open(pickerID, title string, items []ListPickerItem) tea.Cmd {
-	if m.animator.State == PopupOpen {
-		// Already open: defer content until the swap animation
-		// midpoint so the user sees a "yawn" cue instead of an
-		// instant swap. HandleTick promotes pending fields when
-		// the animator transitions Compress → Expand.
-		m.pendingPickerID = pickerID
-		m.pendingTitle = title
-		m.pendingItems = items
-		return m.animator.Swap()
-	}
-	m.applyContent(pickerID, title, items)
-	return m.animator.Open()
-}
-
-// applyContent installs the picker's content + parks the cursor on
-// the first selectable row, then promotes it to a Badge=="current"
-// row if any. Shared between immediate Open (when the popup was
-// closed) and the swap midpoint (when the popup is mid-animation).
-func (m *ListPickerModel) applyContent(pickerID, title string, items []ListPickerItem) {
 	m.pickerID = pickerID
 	m.title = title
 	m.items = items
@@ -142,6 +118,17 @@ func (m *ListPickerModel) applyContent(pickerID, title string, items []ListPicke
 			m.cursor = i
 			break
 		}
+	}
+	return m.animator.Open()
+}
+
+// SetItems refreshes the rows of an open picker in place — badges after a
+// sort tier lands, a row dimmed or lit — keeping the cursor where the
+// user left it. The row count stays what it was at Open (tdp F7).
+func (m *ListPickerModel) SetItems(items []ListPickerItem) {
+	m.items = items
+	if m.cursor >= len(items) {
+		m.cursor = m.firstSelectable()
 	}
 }
 
@@ -212,18 +199,7 @@ func (m *ListPickerModel) HandleTick(msg AnimTickMsg) tea.Cmd {
 	if msg.Target != m.animator.Target {
 		return nil
 	}
-	// Detect the swap midpoint: animator just transitioned from
-	// SwappingCompress to SwappingExpand. Cache state BEFORE the
-	// tick advances it.
-	beforeState := m.animator.State
-	cmd := m.animator.Tick()
-	if beforeState == PopupSwappingCompress && m.animator.State == PopupSwappingExpand && m.pendingItems != nil {
-		m.applyContent(m.pendingPickerID, m.pendingTitle, m.pendingItems)
-		m.pendingPickerID = ""
-		m.pendingTitle = ""
-		m.pendingItems = nil
-	}
-	return cmd
+	return m.animator.Tick()
 }
 
 func (m ListPickerModel) Update(msg tea.Msg) (ListPickerModel, tea.Cmd) {
@@ -251,11 +227,11 @@ func (m ListPickerModel) Update(msg tea.Msg) (ListPickerModel, tea.Cmd) {
 		if m.cursor < 0 || m.cursor >= len(m.items) {
 			return m, nil
 		}
-		if m.items[m.cursor].Separator || m.items[m.cursor].Header {
+		if it := m.items[m.cursor]; it.Separator || it.Header || it.Disabled {
 			return m, nil
 		}
 		return m, m.commit(m.items[m.cursor].Key)
-	case "esc", " ":
+	case "esc":
 		// Cancel — emit a tagged msg so app.go can drop in-flight
 		// flow state, then run the close animation. Order: close
 		// cmd comes FIRST so the popup starts closing immediately;
@@ -284,7 +260,7 @@ func (m ListPickerModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (Li
 	}
 	switch msg.Button {
 	case tea.MouseButtonLeft:
-		if m.items[row].Separator || m.items[row].Header {
+		if it := m.items[row]; it.Separator || it.Header || it.Disabled {
 			return m, nil
 		}
 		m.cursor = row
@@ -299,10 +275,8 @@ func (m ListPickerModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (Li
 }
 
 // commit emits the action msg WITHOUT running the close animation.
-// app.go decides whether to chain (open the next step with new
-// content — Open swaps in place) or to close the picker (call
-// Close() explicitly). Letting the picker auto-close here would
-// fight the in-place content swap that powers chained flows.
+// app.go decides what the step does next: open the next step over it,
+// refresh it in place, or close it.
 func (m *ListPickerModel) commit(key string) tea.Cmd {
 	pickerID := m.pickerID
 	return func() tea.Msg {
@@ -323,38 +297,14 @@ func (m ListPickerModel) renderFullPopup() string {
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	badgeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#b4befe"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimCursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Background(lipgloss.Color("#45475a"))
 
 	title := " " + m.title + " "
 	bottomHint := " j/k: move  Enter: pick  Esc: cancel "
 
-	// Width: pick widest of title / bottom hint / rows; clamp to 85% screen.
-	maxInnerW := 60
-	if m.screenW > 0 {
-		maxInnerW = m.screenW * 85 / 100
-		if maxInnerW < 40 {
-			maxInnerW = 40
-		}
-	}
-	innerW := lipgloss.Width(title) + 4
-	if w := lipgloss.Width(bottomHint) + 4; w > innerW {
-		innerW = w
-	}
-	for _, it := range m.items {
-		w := 1 + 2 + lipgloss.Width(it.Label)
-		if it.Badge != "" {
-			w += 1 + lipgloss.Width(it.Badge)
-		}
-		if it.Hint != "" {
-			w += 4 + lipgloss.Width(it.Hint)
-		}
-		w += 1
-		if w > innerW {
-			innerW = w
-		}
-	}
-	if innerW > maxInnerW {
-		innerW = maxInnerW
-	}
+	// tdp F7: one width for every popup, whatever it shows.
+	innerW := popupInnerWidth(m.screenW)
 
 	const gutter = "  "
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
@@ -393,8 +343,16 @@ func (m ListPickerModel) renderFullPopup() string {
 			padW = 0
 		}
 		pad := strings.Repeat(" ", padW)
+		if isCursor && it.Disabled {
+			rows = append(rows, dimCursorStyle.Render(bodyPlain+pad))
+			continue
+		}
 		if isCursor {
 			rows = append(rows, cursorStyle.Render(bodyPlain+pad))
+			continue
+		}
+		if it.Disabled {
+			rows = append(rows, dimStyle.Render(bodyPlain)+pad)
 			continue
 		}
 		// Non-cursor: keep label plain, dim hint, accent badge.

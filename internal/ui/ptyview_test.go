@@ -36,7 +36,7 @@ func TestPtyView_PtyDims_ClampsToMinimum(t *testing.T) {
 		useExactAssert bool
 	}{
 		{"tiny host clamps to minimum", 10, 5, 20, 5, 0, 0, false},
-		{"normal host = host - 2*margin - border", 100, 50, 0, 0, 94, 45, true},
+		{"normal host = host - 2*margin - border", 100, 50, 0, 0, 96, 45, true}, // tdp F7: W−2 frame
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -178,7 +178,7 @@ func TestPtyView_StartEcho_Exits(t *testing.T) {
 	if cmd2 == nil {
 		t.Fatal("expected exit command from tick after done flag set")
 	}
-	// Two-phase teardown (popup-convention v2 §1.10 + close-anim fix):
+	// Two-phase teardown (tdp T1 + close-anim fix):
 	// done-detection batches a close-animation cmd + the PtyExitMsg
 	// emitter. cmd2() returns a BatchMsg carrying both — unwrap and
 	// find the PtyExitMsg.
@@ -641,27 +641,42 @@ func TestPtyView_AltT_HidesShellKind(t *testing.T) {
 	}
 }
 
-func TestPtyView_AltT_DoesNotHideEditKind(t *testing.T) {
-	p := hookedPtyView(PtyKindEdit)
-	keyAltT := tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune{'t'}}
-	p2, _ := p.Update(keyAltT)
-	if p2.IsHidden() {
-		t.Error("Alt+T on Edit-kind PtyView must NOT hide popup (transient — should forward)")
+// tdp K10: Alt+t is the exit key of a kubectl edit / exec PTY too. It
+// can't hide those (no background session), so it asks to leave.
+func TestPtyView_AltT_AsksToLeaveEditAndExec(t *testing.T) {
+	for _, kind := range []PtyKind{PtyKindEdit, PtyKindExec} {
+		p := hookedPtyView(kind)
+		keyAltT := tea.KeyMsg{Type: tea.KeyRunes, Alt: true, Runes: []rune{'t'}}
+		p2, cmd := p.Update(keyAltT)
+		if p2.IsHidden() {
+			t.Errorf("kind %v: Alt+t must not hide an edit / exec PTY", kind)
+		}
+		if cmd == nil {
+			t.Fatalf("kind %v: Alt+t must ask to leave", kind)
+		}
+		if req, ok := cmd().(ptyLeaveRequestMsg); !ok || req.kind != kind {
+			t.Errorf("kind %v: Alt+t must emit ptyLeaveRequestMsg, got %#v", kind, cmd())
+		}
 	}
 }
 
 func TestPtyView_BottomBorderShowsAltTHintForShell(t *testing.T) {
 	p := hookedPtyView(PtyKindShell)
 	out := p.RenderPopup()
-	if !strings.Contains(out, "Alt+t") {
+	if !strings.Contains(out, "Alt-t") {
 		t.Errorf("Shell-kind popup bottom border must surface Alt+T hint")
 	}
 }
 
-func TestPtyView_BottomBorderOmitsAltTHintForEdit(t *testing.T) {
+// tdp K10: the exit key is shown whenever focus is in the PTY — for edit
+// / exec too, alt-screen (the editor) included.
+func TestPtyView_BottomBorderShowsTheExitKeyForEdit(t *testing.T) {
 	p := hookedPtyView(PtyKindEdit)
-	out := p.RenderPopup()
-	if strings.Contains(out, "Alt+t") {
-		t.Errorf("Edit-kind popup must not advertise Alt+T (no hide semantics)")
+	if out := p.RenderPopup(); !strings.Contains(out, "Alt-t:leave") {
+		t.Errorf("an edit PTY must show its exit key, got %q", out)
+	}
+	_, _ = p.term.Write([]byte("\x1b[?1049h")) // enter alt-screen, like the editor
+	if out := p.RenderPopup(); !strings.Contains(out, "Alt-t:leave") {
+		t.Error("the exit key must stay shown in alt-screen")
 	}
 }
