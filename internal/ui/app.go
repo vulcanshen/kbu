@@ -1336,16 +1336,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// confirm stacks over the PTY; Esc returns to it.
 	if req, ok := msg.(ptyLeaveRequestMsg); ok {
 		action, question, detail := ConfirmEndShell, "End the shell session?", "the kubectl exec session is closed"
-		if req.kind == PtyKindEdit {
+		switch req.kind {
+		case PtyKindEdit:
 			action, question, detail = ConfirmLeaveEdit, "Leave kubectl edit?", "the edit is cancelled; nothing is applied"
+		case PtyKindShell:
+			question, detail = "End the Alterm shell?", "the shell and anything still running in it stop"
 		}
-		onConfirm := func() tea.Msg { return ptyKillMsg{} }
+		kind := req.kind
+		onConfirm := func() tea.Msg { return ptyKillMsg{kind: kind} }
 		m.confirm.SetSize(m.width, m.height)
 		m.confirm.SetLayer(m.popupDepth() + 1)
 		return m, m.confirm.Show(action, question, detail, onConfirm)
 	}
-	if _, ok := msg.(ptyKillMsg); ok {
-		m.txPty.Kill()
+	if kill, ok := msg.(ptyKillMsg); ok {
+		if kill.kind == PtyKindShell {
+			m.shellPty.Kill()
+		} else {
+			m.txPty.Kill()
+		}
 		return m, nil
 	}
 
@@ -2712,8 +2720,9 @@ func (m *AppModel) confirmContextSwitch(name string) tea.Cmd {
 		"~/.kube/config is not changed", onConfirm)
 }
 
-// ptyKillMsg: the user confirmed leaving a kubectl edit / exec session.
-type ptyKillMsg struct{}
+// ptyKillMsg: the user confirmed ending a PTY session — Alterm's shell
+// (kind PtyKindShell) or the kubectl edit / exec one.
+type ptyKillMsg struct{ kind PtyKind }
 
 // quitCmd starts the leave flow (tdp K9). kbu leaves straight away — no
 // confirm step; the quitMsg handler does the teardown (streams, PTYs,

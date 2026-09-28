@@ -51,7 +51,7 @@
 - **Edit (`E`)** -- runs the real `kubectl edit` in a terminal popup inside kbu, with your `$KUBE_EDITOR` / `$EDITOR`.
 - **Shell (`S`)** -- `kubectl exec` into a container, also inside kbu.
 - **Delete (`D`)** -- always asks first; deleting a namespace carries an extra warning.
-- **Alterm (`Alt-t`)** -- a persistent shell inside kbu. Hide it and bring it back with the same key; directory, history, and running jobs are kept. Anything kbu doesn't do, your usual tools can do here.
+- **Alterm (`Alt-t`)** -- a persistent shell inside kbu. Hide it and bring it back with the same key; directory, history, and running jobs are kept. `Alt-Esc` ends it. Anything kbu doesn't do, your usual tools can do here.
 - **Copy (`y`)** -- copies the current row or the whole view to your clipboard via OSC 52, so it works over SSH and tmux too.
 - **Audit log** -- every edit and delete made from kbu is recorded.
 
@@ -189,7 +189,8 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 
 | Key | Action |
 |---|---|
-| `Alt-t` | Leave: Alterm hides (the shell keeps running); `kubectl edit` / `exec` asks, then ends the session (an unsaved edit is dropped) |
+| `Alt-t` | Alterm: hide it (the shell keeps running) |
+| `Alt-Esc` | Close the terminal — asks, then ends the session: Alterm's shell and anything running in it stop; an unsaved `kubectl edit` is dropped |
 | `PgUp` / `PgDn` | Scroll history by one page |
 | `Home` / `End` | Jump to top of history / back to live |
 | Any other key | Snap back to live, key forwards to subprocess |

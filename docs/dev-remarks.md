@@ -34,7 +34,7 @@
 - **Status 欄上色 —— 只標異常**：panel 2 的 Status 欄（每個有 Status 的種類 —— Pod / Node / Namespace / PVC / PV / Helm Release）加上 Events 的 Type 欄，**只**替異常值上色。黃色是過渡 / 降級（Pending / Terminating / SchedulingDisabled / Released / pending-* / Init:*），紅色是失敗（Failed / Error / CrashLoopBackOff / ImagePullBackOff / NotReady / Lost / Warning）。健康值（Running / Bound / Active / Deployed / Normal）維持列的基本前景色。顏色是訊號，不是裝飾 —— 眼睛只會被需要注意的列吸過去。cursor / lock 列改用較深的 Catppuccin Latte 版本，粉彩色才不會在反白底上被洗掉
 - **切換列的 debounce（300ms）**：panel 2 狂按 j/k 以前會對每一列都發一次 detail fetch + 一次 log 串流 Start，連 cursor 一掠而過的列也是。現在 dispatch 有 debounce：每次切列把序號加一，排 300ms 後才做 fetch / 串流 Start，快速捲過 49 列只發一次 fetch（停下的那一列），而不是 49 次。lie-as-lock 不變式維持：便宜的狀態變動（停掉前一個串流、清掉 retry throttle）當場做，所以 panel 2 仍然感覺即時；只有昂貴的工作延後。跟既有 sidebar `switchSeq` 的 debounce 視窗一致，肌肉記憶相同
 - **用內嵌 PTY 做編輯與 shell exec**：`E` 跑 `kubectl edit`、`S` 跑 `kubectl exec -it -- /bin/sh`，都在 app 內的虛擬終端機裡，editor 與 shell session 永遠不碰宿主終端機的 scrollback。editor 依 `$KUBE_EDITOR` / `$EDITOR`（或 `config.yaml` 的 `editor`）
-- **Alterm 內部終端機**：`Alt+t` 切換 kbu 內嵌的 shell（完整 env / cwd 的 login shell）—— 像在 popup 裡 `ssh localhost`。跑 `kubectl apply -f`、`helm`，任何平常要跳出 kbu 才能做的事。shell 是**常駐的**：popup 可見時按 `Alt+t` 隱藏它但不殺 shell；再按一次重新接上（cwd、history、env、背景 job 都保留）。shell 在背景活著時，statusbar 右側顯示 `[Alt-t]erm` chip —— 跟 `[C]ontext` / `[N]amespace` 同樣的方括號熱鍵格式（statusbar 一條規則：括起來的就是熱鍵）。跟 `kubectl edit` / `kubectl exec` 互相獨立 —— 可以讓 Alterm 跑著，同時在另一個 popup 裡編輯資源或 exec 進 container
+- **Alterm 內部終端機**：`Alt+t` 切換 kbu 內嵌的 shell（完整 env / cwd 的 login shell）—— 像在 popup 裡 `ssh localhost`。跑 `kubectl apply -f`、`helm`，任何平常要跳出 kbu 才能做的事。shell 是**常駐的**：popup 可見時按 `Alt+t` 隱藏它但不殺 shell；再按一次重新接上（cwd、history、env、背景 job 都保留）；要結束 shell 按 `Alt-Esc`（先 confirm）。shell 在背景活著時，statusbar 右側顯示 `[Alt-t]erm` chip —— 跟 `[C]ontext` / `[N]amespace` 同樣的方括號熱鍵格式（statusbar 一條規則：括起來的就是熱鍵）。跟 `kubectl edit` / `kubectl exec` 互相獨立 —— 可以讓 Alterm 跑著，同時在另一個 popup 裡編輯資源或 exec 進 container
 - **PTY popup 永遠是 layer 1**：Alterm、`kubectl edit`、`kubectl exec` 都用 layer 1 的邊框色（lavenphire25）。它們是 context-shift target，**取代** popup tree 而不是疊上去（entry handler 會關掉底下每個 blocking popup），所以 layer 的意思是「畫面上唯一的 popup」。所有 PTY surface 同一個邊框色，不論從哪條 menu 鏈叫出來。標題（`Alterm: hostname` 對 `Edit: pod/foo` 對 `Shell: pod/foo → ctnr`）負責區分種類
 - **PTY scrollback**：所有 PTY popup（Alterm、shell exec、edit）有 10k 行歷史。`PgUp` / `PgDn` 翻頁，`Home` / `End` 跳到頂 / 回到 live。alt-screen 的程式（vim、less、htop）停用，讓它們保有自己的翻頁
 - **per-container 上色的 log 標籤**：多 container 的 pod 可以逐行分辨；每個 container 名稱有穩定的顏色
@@ -120,7 +120,7 @@
 tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由 app 決定、跟出口鍵一樣常駐揭露（v0.1.2 的 K10 只准出口鍵，
 下面兩條那時列在「偏離 tdp」）。
 
-- **每個 PTY 的出口鍵都是 `Alt-t`（tdp K10）。** Alterm 按了隱藏（shell 留著）；`kubectl edit` / `exec` 沒辦法留在背景，按了先跳 confirm（「Leave kubectl edit?」/「End the shell session?」，疊在 PTY 上，`Esc` 回到 PTY），接受才結束子程序（`PtyView.Kill()`，之後走一般的結束路徑），focus 回到 panel 2。所以 confirm 與 key reference 在 `stackOrder()` 裡排在 PTY 之上。出口鍵在下框 hint 常駐，alt-screen（editor）裡也在。
+- **PTY 的出口鍵（tdp K10）：每個 PTY 都是 `Alt-Esc`，Alterm 另有 `Alt-t` 隱藏。** `Alt-Esc` 是關閉，跟家族其他成員（sshu、filu）同一個鍵：按了先跳 confirm（「End the Alterm shell?」/「Leave kubectl edit?」/「End the shell session?」，疊在 PTY 上，`Esc` 回到 PTY），接受才結束子程序（`PtyView.Kill()`，`ptyKillMsg` 帶著是哪一個槽，之後走一般的結束路徑）。`Alt-t` 只給 Alterm：隱藏（shell 留著），再按叫回來；在 `kubectl edit` / `exec` 裡 `Alt-t` 照常送給子程序（2026-09-29 user 裁定：`Alt-t` 單純留給 Alterm，關閉一律 `Alt-Esc`、一律先問）。confirm 與 key reference 在 `stackOrder()` 裡排在 PTY 之上。出口鍵在下框 hint 常駐（Alterm `Alt-t:hide  Alt-Esc:end`、edit / exec `Alt-Esc:leave`），alt-screen（editor）裡也在。
 - **PTY 裡攔下捲動鍵（tdp K10）。** Alterm、`kubectl edit`、`kubectl exec` 的 PTY 不在 alt-screen 時，`PgUp` / `PgDn` / `Home` / `End` 由 kbu 攔下做 10k 行 scrollback（`ptyview.go`），不送給子程序：純 shell 輸出沒有自己的翻頁，少了 scrollback 就看不到捲出畫面的輸出。子程序一進 alt-screen（vim、less、htop、kubectl edit 的 editor）這四個鍵就照常轉送，讓它們保有自己的翻頁。揭露：不在 alt-screen 時下框 hint 寫 `PgUp/Home:scroll`。
 - **Alterm 的出口多一個 `Ctrl-t`（tdp K10）。** Alterm 除了 `Alt-t` 也攔 `Ctrl-t`（`app.go`、`ptyview.go`；panel 上的 `Ctrl-t` 同樣叫出 Alterm），因為錄 demo 用的 VHS 0.11 在 Chrome 與 PTY 之間會丟掉 Alt modifier，demo tape 只能送 `Ctrl-t`。代價：Alterm 裡 zsh 的 transpose-chars（`Ctrl-t`）用不到。這個別名不出現在任何 help 或 hint —— 這一點仍是偏離，見「偏離 tdp」。
 
@@ -175,7 +175,7 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - **K6、K8 的輸入態**：panel 搜尋、picker 篩選、YAML 搜尋打字中（`typing()`），`?`、`q`、空白、字母都進搜尋字串；`Ctrl-C` 仍然離開。
 - **K7**：panel 3 的 `[` / `]` 跟 `h` / `l` 一樣切 tab，列在 panel 3 的 `?`；YAML 裡 `left` / `right` 是 `h` / `l` 的別名（移 cursor），
   只有 YAML 有「移 cursor 左右」這個角色。方向鍵在每個有 `j` / `k` 的 surface 都有效。
-- **K10**：`PgUp` / `PgDn` / `Home` / `End` 只在非 alt-screen 時攔下並揭露在下框 hint；出口 `Alt-t` 常駐在下框 hint。
+- **K10**：`PgUp` / `PgDn` / `Home` / `End` 只在非 alt-screen 時攔下並揭露在下框 hint；出口鍵（每個 PTY 的 `Alt-Esc`、Alterm 的 `Alt-t`）常駐在下框 hint。
 - **M1**：footer（`statusline.go`）固定一列、永遠列出 `? help` 與 `Space menu`；拖曳模式裡換成 `? keys` 與模式的鍵（K11）。
 - **M5**：每一列都有名稱與一句說明；README 也照畫面的寫法（`Alt-t`、`Alt-S`、`Ctrl-C`，2026-09-28 user 要求一致）。
 - **M9**：`C` 在 panel 2 是 Compare、其他 panel 是 context；statusbar 的 `[C]ontext` 與 `[C]ompare` chip 依 focus 一亮一暗
@@ -216,7 +216,7 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - 開啟 popup 的熱鍵不兼關閉：picker、breadcrumb、Settings、App log 只認 `Esc`（`N`、`C`、`>`、`!` 不會把自己開的框關掉）。
 - menu 裡 core key 的列寫成 `[Enter] …`、`[Esc] …`，跟熱鍵列同一個形狀。
 - 每個 panel、每個 tab 的 `Enter` 見 README 的核心鍵表。
-- helm 管理的物件：Edit / Delete 變暗、不藏（見「設計決定」）；`kubectl edit` / `exec` 用 `Alt-t` 離開時先 confirm（見「PTY 裡的鍵」）。
+- helm 管理的物件：Edit / Delete 變暗、不藏（見「設計決定」）；關閉 PTY（Alterm、`kubectl edit` / `exec`）一律 `Alt-Esc`、先 confirm；`Alt-t` 只給 Alterm 的隱藏（2026-09-29，見「PTY 裡的鍵」）。
 - Events 失焦變暗：寫成偏離（見「偏離 tdp」）。
 
 ## 設計文件導讀
