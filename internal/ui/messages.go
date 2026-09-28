@@ -114,11 +114,6 @@ type relativeDrillFetchedMsg struct {
 	err       error
 }
 
-// RelativeBreadcrumbMsg is emitted when the user presses `i` on the Relatives
-// tab at depth>1 — opens the breadcrumb popup so they can jump back to
-// any ancestor level.
-type RelativeBreadcrumbMsg struct{}
-
 // SwitchToResourceMsg is emitted when the user confirms a Relatives-tab
 // "jump to this resource" action. AppModel routes it by updating sidebar
 // selection, recording a pending row-select for the next ResourceDataMsg,

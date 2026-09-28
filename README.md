@@ -27,7 +27,7 @@
 
 ### Find your way around
 
-- **Relatives** -- every resource lists what it is connected to: its owner, the Pods a Service selects, the workload an HPA scales, the Pods mounting a PVC, the Pods using a ConfigMap or Secret. `Enter` follows a link, `Esc` steps back, and the `Space` menu's **Jump to an ancestor** takes you to any point in the chain you walked.
+- **Relatives** -- every resource lists what it is connected to: its owner, the Pods a Service selects, the workload an HPA scales, the Pods mounting a PVC, the Pods using a ConfigMap or Secret. `Enter` follows a link, `Esc` steps back, and `B` (**Breadcrumb**, also in the `Space` menu) takes you to any point in the chain you walked.
 - **Drill-down** -- Deployment / StatefulSet / DaemonSet / Job → Pods → Containers, CronJob → Jobs, HPA → its target, Helm release → every object the chart deployed.
 - **28 built-in resource types plus your CRDs** -- Custom Resources are discovered at startup, and every list updates live through the Kubernetes Watch API.
 - **Multi-namespace view** -- check any set of namespaces in the `N` picker, or pick "All Namespaces". kbu remembers the selection.

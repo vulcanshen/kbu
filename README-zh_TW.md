@@ -27,7 +27,7 @@
 
 ### 到處走走
 
-- **Relatives** — 每個 resource 都會列出它連到哪些東西：它的 owner、Service 選到的 Pods、HPA 在 scale 的 workload、掛載某個 PVC 的 Pods、用到某個 ConfigMap 或 Secret 的 Pods。`Enter` 順著連結走、`Esc` 退回一步，`Space` menu 的 **Jump to an ancestor** 可以直接跳回走過的鏈上任何一點。
+- **Relatives** — 每個 resource 都會列出它連到哪些東西：它的 owner、Service 選到的 Pods、HPA 在 scale 的 workload、掛載某個 PVC 的 Pods、用到某個 ConfigMap 或 Secret 的 Pods。`Enter` 順著連結走、`Esc` 退回一步，`B`（**Breadcrumb**，`Space` menu 裡也有）可以直接跳回走過的鏈上任何一點。
 - **鑽入** — Deployment / StatefulSet / DaemonSet / Job → Pods → Containers，CronJob → Jobs，HPA → 目標 workload，Helm release → chart 部署出來的每個物件。
 - **內建 28 種 resource，外加你的 CRD** — Custom Resource 啟動時自動探索，所有列表透過 Kubernetes Watch API 即時更新。
 - **多 namespace 檢視** — 在 `N` picker 勾選任意幾個 namespace，或選「All Namespaces」。kbu 會記住你的選擇。

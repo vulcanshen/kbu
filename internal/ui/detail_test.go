@@ -826,27 +826,6 @@ func TestDetailModel_RelativesH_Retired(t *testing.T) {
 	}
 }
 
-// TestDetailModel_RelativesB_Retired — v1.5.x: `b` retired. Space opens
-// the breadcrumb popup at the app layer; this handler should not emit
-// RelativeBreadcrumbMsg from `b` anymore.
-func TestDetailModel_RelativesB_Retired(t *testing.T) {
-	m := newTestDetail()
-	m.SetResourceType(k8s.ResourcePods)
-	m.SetDetail(samplePodRelativesDetail(), nil)
-	m = m.switchToTab(1)
-	m.PushDrillFrame(
-		k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "nginx"},
-		k8s.ResourceItem{}, k8s.ResourceDetail{},
-	)
-
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
-	if cmd != nil {
-		if _, ok := cmd().(RelativeBreadcrumbMsg); ok {
-			t.Errorf("b must NOT emit RelativeBreadcrumbMsg anymore (retired in v1.5.x)")
-		}
-	}
-}
-
 func TestDetailModel_DrillChain_RootFirst(t *testing.T) {
 	m := newTestDetail()
 	m.SetResourceType(k8s.ResourcePods)
