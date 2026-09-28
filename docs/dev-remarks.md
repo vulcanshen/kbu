@@ -181,7 +181,7 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - **M9**：`C` 在 panel 2 是 Compare、其他 panel 是 context；statusbar 的 `[C]ontext` 與 `[C]ompare` chip 依 focus 一亮一暗
   （`ViewFull()`）。panel 邊框 hint 只寫該 panel 自己的鍵。
 - **L1**：80 × 40 下 menu、key reference、picker 都放得下（`l4_test.go` 量整個畫面）。panel 2 的欄位在 80 欄時擠到三四格
-  （`Sta…`），`z` 放大該 panel；窄版面收掉什麼由 app 決定。
+  （`Sta…`），`z` 放大該 panel；窄版面收掉什麼由 app 決定（user 2026-09-29 實機看過，維持現狀）。
 - **L5**：focus 雙線 `╔═╗` + Blue、非 focus 圓角 `╭─╮` + Surface2，兩套框線同寬（`renderPanelWithScroll()`），切換不位移。
 - **F1 的 confirm**：confirm 帶一行明細（`kubectl edit …`、`helm rollback …`），v0.1.13 起就是 confirm。YAML 的 `/`、`y`、`E` 是 note
   自己的熱鍵，`v` 是模式。
