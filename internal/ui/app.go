@@ -2083,6 +2083,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, discoverCRDs(newClient))
 		return m, tea.Batch(cmds...)
 
+	case clearStackMsg:
+		// An accepted Delete / Rollback finished the flow: the Space
+		// menu and anything else under the confirm pointed at the
+		// thing just deleted or rolled back (tdp T1).
+		return m, m.closeAllBlockingPopups()
+
 	case drillDownFailedMsg:
 		if msg.err != nil {
 			m.appLog.Warn(fmt.Sprintf("drill %s/%s: %s", msg.parentType.KubectlName(), msg.parentName, msg.err.Error()))
@@ -3340,7 +3346,7 @@ func (m *AppModel) confirmDelete(rt k8s.ResourceType, item k8s.ResourceItem) tea
 	message, detail := deleteConfirmSurface(rt, item)
 	m.confirm.SetSize(m.width, m.height)
 	m.confirm.SetLayer(m.popupDepth() + 1)
-	return m.confirm.Show(ConfirmDelete, message, detail,
+	return m.confirm.ShowCompleting(ConfirmDelete, message, detail,
 		deleteResource(rt, item.Name, item.Namespace, m.k8sClient.ContextName()))
 }
 
@@ -3370,7 +3376,7 @@ func (m *AppModel) confirmRollback() tea.Cmd {
 	cmdStr := k8s.RollbackCommandString(root.Name, root.Namespace, rev.Revision)
 	m.confirm.SetSize(m.width, m.height)
 	m.confirm.SetLayer(m.popupDepth() + 1)
-	return m.confirm.Show(ConfirmRollback, msg, cmdStr, rollbackReleaseCmd(root.Name, root.Namespace, rev.Revision))
+	return m.confirm.ShowCompleting(ConfirmRollback, msg, cmdStr, rollbackReleaseCmd(root.Name, root.Namespace, rev.Revision))
 }
 
 // shellExec returns a Cmd that asks AppModel to launch a PTY for kubectl exec.

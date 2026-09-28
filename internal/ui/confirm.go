@@ -22,13 +22,17 @@ const (
 )
 
 type ConfirmModel struct {
-	animator    PopupAnimator
-	action      ConfirmAction
-	message     string
-	detail      string
-	screenW     int
-	theme       *theme.Theme
-	onConfirm   tea.Cmd
+	animator  PopupAnimator
+	action    ConfirmAction
+	message   string
+	detail    string
+	screenW   int
+	theme     *theme.Theme
+	onConfirm tea.Cmd
+	// completes: accepting finishes the flow that led here, so the
+	// whole popup stack closes (tdp T1) — e.g. the Space menu under a
+	// Delete confirm points at the object just deleted.
+	completes   bool
 	layer       int
 	borderColor lipgloss.Color
 }
@@ -55,12 +59,25 @@ func (m *ConfirmModel) SetLayer(layer int) {
 }
 
 func (m *ConfirmModel) Show(action ConfirmAction, message, detail string, onConfirm tea.Cmd) tea.Cmd {
+	m.completes = false
 	m.action = action
 	m.message = message
 	m.detail = detail
 	m.onConfirm = onConfirm
 	return m.animator.Open()
 }
+
+// ShowCompleting is Show for a confirm whose acceptance finishes the whole
+// flow: accepting also closes every popup beneath (clearStackMsg). Esc
+// still returns to the popup that opened it (tdp F4, T1).
+func (m *ConfirmModel) ShowCompleting(action ConfirmAction, message, detail string, onConfirm tea.Cmd) tea.Cmd {
+	cmd := m.Show(action, message, detail, onConfirm)
+	m.completes = true
+	return cmd
+}
+
+// clearStackMsg asks the app to close every popup in the stack.
+type clearStackMsg struct{}
 
 func (m *ConfirmModel) Close() tea.Cmd {
 	m.onConfirm = nil
@@ -88,6 +105,10 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 			cmd := m.onConfirm
 			m.onConfirm = nil
 			closeCmd := m.animator.Close()
+			if m.completes {
+				clear := func() tea.Msg { return clearStackMsg{} }
+				return m, tea.Batch(cmd, closeCmd, clear)
+			}
 			return m, tea.Batch(cmd, closeCmd)
 		case "esc", "n":
 			// Space does NOT cancel: that would make it a second Esc

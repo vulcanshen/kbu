@@ -163,19 +163,6 @@ namespace `kube-system` + 兩個 chip + `! 3 errors` 就折成 2 列；EKS ARN �
 剛好等於終端機寬，含 popup 疊上去與長 context 名稱）—— 舊清單待確認的 L4 那題併進這裡，statusbar 正是這種測試會抓到的例子。
 
 
-## 23. 刪除完成後 Space menu 還留在畫面上 —— T1
-
-**現況**：panel 2 Space menu 選 `[D]elete` → confirm 疊在 menu 上；`Enter` 接受後 confirm 關掉、`deleteResource()` 在背景跑，menu 還開著，
-標題與各列都指向剛刪掉的資源（`DeleteDoneMsg` 只寫 App log）。
-
-**規則**：T1（概念）—— 預設保留 source；功能上判斷「完成 target 之後 source 已經失去意義」時清掉。家族預設（D3）是「取消回到
-source；完成動作清掉整個 stack」。
-
-**怎麼改**：delete confirm 接受時清掉整疊；取消照舊回到 menu（F4）。filu 的做法：每一個完成點各寫一次，各補一個「Space menu 在底下，
-完成後它也不見」的測試。同一輪把 kbu 其他完成點對一次：context 選定（已關）、breadcrumb 跳轉（`SwitchToResourceMsg` 已關）、Mark /
-Unmark anchor（已關）、Edit / Shell（context-shift 已清）、sort（刻意回到選欄位那一步）。
-
-
 ## 24. README 的需求沒寫 truecolor —— D6
 
 **現況**：兩份 README 的需求段（`README.md`「Requirements」、`README-zh_TW.md`「需求」）只寫 Nerd Font。
