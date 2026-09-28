@@ -121,6 +121,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   Edit is otherwise off. It now shows the same confirm (`Esc` goes back to the
   YAML), does nothing where Edit is unavailable, and the viewer's hint and `?`
   only list `E` where it works.
+- **`Esc` takes a toast down first.** With a toast showing over a popup, a
+  search you're typing or the pin drag, `Esc` used to close what was under the
+  toast and leave the toast to time out. It now closes the toast, one layer at
+  a time like everywhere else; the next `Esc` goes to what's beneath.
 - **The confirm's bottom border lines up again.** Its right corner sat one
   cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a
