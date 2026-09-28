@@ -401,19 +401,6 @@ anchor），同一次 `Esc` 先 `clearCompareLock()`、再 `exitDrillDown()`，�
 - 上面那個測試改寫成守「一次一層」（改名、反轉斷言），不要刪；`..._NoDrill_JustClearsLock` 照舊。
 
 
-## 27. 開啟 popup 的熱鍵再按一次會關掉它 —— K7（已定案）
-
-**現況**：namespace picker 的 `n` / `N`（`namespace.go` 兩處）、context picker 的 `c` / `C`（`context.go`）、App log 的 `!`
-（`applog.go`）、Settings 的 `>`（`settingspopup.go`）在各自的 popup 裡等於 `Esc`；其他 popup 不認這些鍵（`n` 在 YAML popup 是
-「找下一個」）。
-
-**規則**：K7 —— 一個角色綁多個鍵時，別名必須在所有 surface 同樣有效；做不到就不要做別名。
-
-**已定案**（user，2026-09-28）：拿掉，這四個 popup 只認 `Esc`（`Space` 在第 4 條已拿掉）。家族前例：filu 的 breadcrumb `b`。從 global
-operation popup 開的，`Esc` 回到 global operation popup（第 6 條）；從 panel 直接按熱鍵開的，`Esc` 回到 panel。下框 hint 與 key
-reference 不再列這些鍵；守「再按一次關閉」的測試改寫成「不作用」。`?` 再按一次關掉 key reference 是 K6 本身，不動。
-
-
 ## 28. Events tab 失焦變暗 —— T2（已定案：寫成偏離）
 
 **現況**：panel 3 失焦時 Events 暗成 `TableDimRowStyle()`（`detail.go`），Logs 不暗。Events 有跟 Logs 一樣的 live ▶ / paused ⏸

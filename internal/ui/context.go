@@ -120,9 +120,10 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 		}
 	case "enter":
 		return m.selectCurrent(items)
-	case "esc", "c", "C":
+	case "esc":
 		// tdp F1, K4: filtering is a phase of the picker, not a
-		// layer — Esc closes the whole picker, filter and all.
+		// layer — Esc closes the whole picker, filter and all. The
+		// C that opened it does not close it (tdp K7).
 		return m, m.animator.Close()
 	}
 	return m, nil

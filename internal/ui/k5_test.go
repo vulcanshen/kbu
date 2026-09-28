@@ -92,6 +92,26 @@ func TestK5_SpaceDoesNotClosePopupsThatAreNotTheSpaceMenu(t *testing.T) {
 	}
 }
 
+// tdp K7: the hotkey that opened the App log (!) or Settings (>) is not a
+// second Esc on it.
+func TestK7_OpeningHotkeyDoesNotClose(t *testing.T) {
+	m := stackTestApp(t)
+	_ = m.appLog.Toggle()
+	m.appLog.animator.Finalize()
+	updated, _ := m.Update(key("!"))
+	if got := updated.(AppModel); !got.appLog.owns() {
+		t.Error("! must not close the App log")
+	}
+
+	m = stackTestApp(t)
+	_ = m.settingsPopup.Open(m.buildSettingsItems())
+	m.settingsPopup.animator.Finalize()
+	updated, _ = m.Update(key(">"))
+	if got := updated.(AppModel); !got.settingsPopup.owns() {
+		t.Error("> must not close Settings")
+	}
+}
+
 // tdp F6 + D3: the confirm's hint says what Enter will do, not "OK".
 func TestConfirm_HintNamesTheAction(t *testing.T) {
 	cases := map[ConfirmAction]string{

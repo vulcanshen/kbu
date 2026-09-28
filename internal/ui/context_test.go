@@ -175,29 +175,16 @@ func TestContextPickerModel_CloseOnEsc(t *testing.T) {
 	}
 }
 
-func TestContextPickerModel_CloseOnC(t *testing.T) {
-	m := newTestContextPicker()
-	m.Open([]string{"a", "b"}, "a")
-	m.animator.Finalize()
-
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	m.animator.Finalize()
-
-	if m.IsActive() {
-		t.Error("expected picker to be inactive after c")
-	}
-}
-
-func TestContextPickerModel_CloseOnUppercaseC(t *testing.T) {
-	m := newTestContextPicker()
-	m.Open([]string{"a", "b"}, "a")
-	m.animator.Finalize()
-
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
-	m.animator.Finalize()
-
-	if m.IsActive() {
-		t.Error("expected picker to be inactive after C (alias)")
+// tdp K7: the C that opened the picker does not close it.
+func TestContextPickerModel_CDoesNotClose(t *testing.T) {
+	for _, r := range []rune{'c', 'C'} {
+		m := newTestContextPicker()
+		m.Open([]string{"a", "b"}, "a")
+		m.animator.Finalize()
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		if !m.animator.Owns() {
+			t.Errorf("%c must not close the context picker", r)
+		}
 	}
 }
 

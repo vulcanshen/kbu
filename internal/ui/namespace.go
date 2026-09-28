@@ -187,8 +187,7 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		// an empty placeholder would either no-op or fire bogus
 		// selections, so we just ignore them until the real list
 		// lands.
-		switch keyMsg.String() {
-		case "esc", "n", "N":
+		if keyMsg.String() == "esc" {
 			return m, m.animator.Close()
 		}
 		return m, nil
@@ -246,9 +245,11 @@ func (m NamespacePickerModel) Update(msg tea.Msg) (NamespacePickerModel, tea.Cmd
 		}
 	case "enter":
 		return m.toggleCurrent(items)
-	case "esc", "n", "N":
+	case "esc":
 		// tdp F1, K4: filtering is a phase of the picker, not a
-		// layer — Esc closes the whole picker, filter and all.
+		// layer — Esc closes the whole picker, filter and all. The
+		// N that opened it does not close it: an alias that works on
+		// one popup only is a rule to learn (tdp K7).
 		return m, m.animator.Close()
 	}
 	return m, nil
