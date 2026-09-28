@@ -97,21 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 3. Compare popup 上按 `Space` 疊出一個 menu —— K5
-
-**現況**：`comparepopup.go` `handlePopupKey()` 的 `case " "` 開 `comparemenu`（`menuItems()`：`Switch to <layout> view`、
-`Close` 兩列），`comparemenu` 畫在 Compare 自己的框裡（`renderFullPopup()` 最後的 `m.menu.Render(frame)`）；下框 hint
-`Space: menu  j/k: scroll  Esc: close`。
-
-**規則**：K5 —— popup 自己的操作用熱鍵執行，揭露在 popup 下框的 hint 與該 popup 的 `?` key reference，不在 popup 上再疊一個
-Space menu。
-
-**怎麼改**（owner 已定案）：切換版面改成一個熱鍵，寫進下框 hint 與 Compare 的 key reference（第 12 條）；鍵由 kbu 決定
-（D5 的慣例把小寫 `h` / `l` 留給移動，例如用 `L`）。`Close` 那一列拿掉（`Esc` 就是關閉）。`comparemenu.go` 與 Compare 裡轉送
-tick、按鍵的 sub-popup 路由一起刪。README 兩份的 Compare 說明、dev-remarks「功能筆記」YAML Compare popup 條目（「diff popup 有自己
-的動作 menu（`Space`）」）、「依層數決定的 popup 邊框」裡「Compare 裡的 Diff menu」的例子一起改。
-
-
 ## 4. `Space` 會關掉不是 Space menu 的 popup —— K5、F6
 
 **現況**：下列 popup 的 `Update()` 都把 `" "` 當成關閉 / 取消：

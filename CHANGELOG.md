@@ -16,6 +16,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   answers. The mouse wheel also scrolls a YAML viewer opened over a menu, and
   no longer types `u` / `d` into a visible Alterm or `kubectl edit` / `exec`
   terminal.
+- **Compare switches layout with `L`.** The diff popup's own `Space` menu
+  (Switch view / Close) is gone: `L` flips between unified and side by side,
+  `Esc` closes, and the bottom hint says so. `Space` no longer opens a menu on
+  top of a popup.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

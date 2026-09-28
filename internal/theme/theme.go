@@ -24,7 +24,7 @@ import (
 const (
 	Lavender     = "#b4befe" // scale anchor — popups DON'T use this
 	Lavenphire25 = "#A4C0FA" // L1 — first-tier popup
-	Lavenphire50 = "#94C3F5" // L2 — popup over popup (e.g. comparemenu over comparepopup)
+	Lavenphire50 = "#94C3F5" // L2 — popup over popup (e.g. a confirm over a Space menu)
 	Lavenphire75 = "#84C5F0" // L3 — popup over popup over popup (unused today)
 	Sapphire     = "#74c7ec" // L4 ceiling — catppuccin Mocha sapphire
 )
