@@ -67,7 +67,7 @@ func everyPopup(t *testing.T, w, h int) map[string]string {
 
 	yp := NewYamlPopupModel(th)
 	yp.SetSize(w, h)
-	_ = yp.Open("a: 1\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"}, "dev")
+	_ = yp.Open("a: 1\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
 	out["yaml"] = yp.renderFullPopup()
 
 	cmp := NewCompareYamlPopupModel(th)
@@ -130,7 +130,7 @@ func TestF7_HeightFollowsContent(t *testing.T) {
 		for i := 0; i < lines; i++ {
 			fmt.Fprintf(&b, "k%d: v\n", i)
 		}
-		_ = yp.Open(b.String(), k8s.ResourcePods, k8s.ResourceItem{Name: "a"}, "dev")
+		_ = yp.Open(b.String(), k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
 		_, h := popupBox(yp.renderFullPopup())
 		return h
 	}

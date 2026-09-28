@@ -43,7 +43,7 @@ status:
 
 func openTestPopup(m YamlPopupModel, yaml string) YamlPopupModel {
 	item := k8s.ResourceItem{Name: "nginx-789abc", Namespace: "default"}
-	m.Open(yaml, k8s.ResourcePods, item, "test-ctx")
+	m.Open(yaml, k8s.ResourcePods, item)
 	m.animator.Finalize()
 	return m
 }
@@ -211,37 +211,25 @@ func TestYamlPopup_SearchBackspace(t *testing.T) {
 	}
 }
 
-func TestYamlPopup_EditEmitsStartEditMsg(t *testing.T) {
+// tdp F6: E asks the app to confirm the edit — it never starts kubectl
+// edit itself, and the viewer stays open under the confirm (F4).
+func TestYamlPopup_EditAsksTheApp(t *testing.T) {
 	m := newTestYamlPopup()
 	m = openTestPopup(m, sampleYAML)
 
-	_, cmd := m.Update(keyMsg('E'))
+	m, cmd := m.Update(keyMsg('E'))
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd from E key")
 	}
-	msg := cmd()
-	// Cmd returns tea.Batch result — for the E path it returns nil due to
-	// the closure firing both close + startEditMsg as a batch. Walk the batch.
-	// tea.Batch returns a tea.BatchMsg which is a slice of cmds — we need to
-	// find the inner startEditMsg.
-	foundEdit := false
-	switch v := msg.(type) {
-	case tea.BatchMsg:
-		for _, c := range v {
-			if c == nil {
-				continue
-			}
-			inner := c()
-			if _, ok := inner.(startEditMsg); ok {
-				foundEdit = true
-				break
-			}
-		}
-	case startEditMsg:
-		foundEdit = true
+	req, ok := cmd().(yamlEditRequestMsg)
+	if !ok {
+		t.Fatalf("E must ask the app (yamlEditRequestMsg), got %T", cmd())
 	}
-	if !foundEdit {
-		t.Errorf("expected startEditMsg in cmd output, got %T", msg)
+	if req.resource != k8s.ResourcePods || req.item.Name != "nginx-789abc" {
+		t.Errorf("request carries %v %q, want the viewer's pod", req.resource, req.item.Name)
+	}
+	if !m.animator.Owns() {
+		t.Error("the viewer closed itself on E; it stays under the confirm")
 	}
 }
 
@@ -265,7 +253,7 @@ func TestYamlPopup_CopyEmitsClipboardCmd(t *testing.T) {
 
 func TestYamlPopup_CopyNoOpWhenEmpty(t *testing.T) {
 	m := newTestYamlPopup()
-	m.Open("", k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.Open("", k8s.ResourcePods, k8s.ResourceItem{Name: "x"})
 	m.animator.Finalize()
 
 	_, cmd := m.Update(keyMsg('y'))
@@ -277,7 +265,7 @@ func TestYamlPopup_CopyNoOpWhenEmpty(t *testing.T) {
 func TestYamlPopup_EditNoOpWithoutItem(t *testing.T) {
 	m := newTestYamlPopup()
 	// Open with empty item (drill-down container case)
-	m.Open(sampleYAML, k8s.ResourcePods, k8s.ResourceItem{}, "test-ctx")
+	m.Open(sampleYAML, k8s.ResourcePods, k8s.ResourceItem{})
 	m.animator.Finalize()
 
 	_, cmd := m.Update(keyMsg('E'))
@@ -596,7 +584,7 @@ func TestYamlPopup_VisualYankNoSoftWrapNewline(t *testing.T) {
 	// A long value with no spaces → wrapPlain hard-breaks it into chunks
 	// with no dropped spaces, so the raw line is unambiguous.
 	longLine := "annotation: " + strings.Repeat("x", 100)
-	m.Open(longLine, k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.Open(longLine, k8s.ResourcePods, k8s.ResourceItem{Name: "x"})
 	m.animator.Finalize()
 	if len(m.contentLineRaw) < 2 {
 		t.Skip("YAML didn't wrap; test premise not met")
@@ -630,7 +618,7 @@ func TestYamlPopup_VisualYankPreservesWrapBoundarySpace(t *testing.T) {
 	// Spaces present → wrapPlain word-wraps and trims boundary spaces.
 	// Trailing space stripped so the equality assertion is unambiguous.
 	longLine := "note: " + strings.TrimSpace(strings.Repeat("word ", 30))
-	m.Open(longLine, k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.Open(longLine, k8s.ResourcePods, k8s.ResourceItem{Name: "x"})
 	m.animator.Finalize()
 	if len(m.contentLineRaw) < 2 {
 		t.Skip("YAML didn't wrap; test premise not met")
@@ -656,7 +644,7 @@ func TestYamlPopup_VisualYankRealNewlineBetweenRawLines(t *testing.T) {
 	m.SetSize(40, 20)
 	first := strings.Repeat("a", 90) // no spaces → hard wrap into ≥2 chunks
 	second := "second: line"
-	m.Open(first+"\n"+second, k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.Open(first+"\n"+second, k8s.ResourcePods, k8s.ResourceItem{Name: "x"})
 	m.animator.Finalize()
 	// Confirm the first raw line actually wrapped.
 	wrapped := 0
@@ -926,7 +914,7 @@ func TestYamlPopup_GutterBlankOnContinuationLines(t *testing.T) {
 	m := newTestYamlPopup()
 	m.SetSize(40, 20) // narrow → force wrap
 	longYAML := "verylongfieldname: " + strings.Repeat("value ", 20)
-	m.Open(longYAML, k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.Open(longYAML, k8s.ResourcePods, k8s.ResourceItem{Name: "x"})
 	m.animator.Finalize()
 	if len(m.contentLineRaw) < 2 {
 		t.Skip("YAML didn't wrap; test premise not met")
@@ -945,7 +933,7 @@ func TestYamlPopup_GutterBlankOnContinuationLines(t *testing.T) {
 
 func TestYamlPopup_EmptyYAMLDoesNotCrash(t *testing.T) {
 	m := newTestYamlPopup()
-	m.Open("", k8s.ResourcePods, k8s.ResourceItem{Name: "x"}, "ctx")
+	m.Open("", k8s.ResourcePods, k8s.ResourceItem{Name: "x"})
 	m.animator.Finalize()
 	// Drive a few keys
 	m, _ = m.Update(keyMsg('j'))

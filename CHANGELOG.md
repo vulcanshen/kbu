@@ -116,6 +116,11 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   beneath it — the panels, streaming logs, the popups under it — is drawn in
   a faded version of its own colours, so you can see at a glance which popup
   answers your keys. Toasts don't dim anything.
+- **`E` in the YAML viewer asks first, like `E` everywhere else.** It used to
+  start `kubectl edit` straight away — even on a helm-managed object, whose
+  Edit is otherwise off. It now shows the same confirm (`Esc` goes back to the
+  YAML), does nothing where Edit is unavailable, and the viewer's hint and `?`
+  only list `E` where it works.
 - **The confirm's bottom border lines up again.** Its right corner sat one
   cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a

@@ -87,7 +87,7 @@ func TestK11_DragFooterListsTheModesKeys(t *testing.T) {
 // answers with a toast.
 func TestK11_YamlSelectionMode(t *testing.T) {
 	m := stackTestApp(t)
-	_ = m.yamlPopup.Open("a: 1\nb: 2\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"}, "")
+	_ = m.yamlPopup.Open("a: 1\nb: 2\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
 	m.yamlPopup.animator.Finalize()
 	m.yamlPopup, _ = m.yamlPopup.Update(key("v"))
 
