@@ -32,7 +32,7 @@ func appWithSizeAndCfg(t *testing.T, w, h int, cfg *config.Config) AppModel {
 		settingsPopup:   NewSettingsPopupModel(th),
 		spaceMenu:       NewSpaceMenuModel(th),
 		globalMenu:      NewGlobalMenuModel(th),
-		hintPopup:       NewHintPopupModel(th),
+		sortDirPicker:   NewSortDirPickerModel(th),
 		namespacePicker: NewNamespacePickerModel(th),
 		contextPicker:   NewContextPickerModel(th),
 		yamlPopup:       NewYamlPopupModel(th),

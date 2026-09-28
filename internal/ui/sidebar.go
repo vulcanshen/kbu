@@ -101,15 +101,6 @@ type SidebarDragCommitMsg struct{}
 // point.
 type SidebarDragCancelMsg struct{}
 
-// SidebarDragRequestDropMenuMsg notifies app.go that the user pressed
-// Space mid-drag and wants to see the drop-only menu (mirror of the
-// regular panel-1 Space cheatsheet, but trimmed to just the Drop
-// action). App.go responds by opening hintPopup with that single
-// action. Drag mode stays active across the popup's lifetime —
-// closing the popup (Esc) returns to normal drag; committing Drop
-// fires CommitDrag via the HintActionMsg path.
-type SidebarDragRequestDropMenuMsg struct{}
-
 // SetPinned replaces the pinned-kinds list — called at startup from
 // the config-loaded slice. Duplicates / unknown kinds are NOT filtered
 // here; the caller is responsible for resolving config strings to
@@ -603,12 +594,10 @@ func (m SidebarModel) handleDragKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		return m, m.CommitDrag()
 	}
 	if msg.Type == tea.KeySpace || (msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == ' ') {
-		// Space is the universal "what can I do here" gesture (one of
-		// the four core gestures). In drag mode it opens the trimmed
-		// drop-only menu — it does NOT cancel like every other non-
-		// j/k/D/Enter key. Sidebar emits the request msg; app.go
-		// renders the popup.
-		return m, func() tea.Msg { return SidebarDragRequestDropMenuMsg{} }
+		// tdp K11: in a mode Space opens no menu and does nothing —
+		// it doesn't cancel either. The mode's keys are in ? and the
+		// footer.
+		return m, nil
 	}
 	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
 		switch msg.Runes[0] {

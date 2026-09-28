@@ -107,7 +107,6 @@ type AppModel struct {
 	// global operation popup its last row opens (M4).
 	spaceMenu  MenuPopupModel
 	globalMenu MenuPopupModel
-	hintPopup  HintPopupModel
 	// listPicker is the sort flow's column step; sortDirPicker is its
 	// direction step, stacked on it (tdp F1: one popup per step).
 	listPicker    ListPickerModel
@@ -1255,7 +1254,6 @@ func NewAppModel(t *theme.Theme, client *k8s.Client, cfg *config.Config, state *
 		breadcrumbPopup:    NewBreadcrumbPopupModel(t),
 		spaceMenu:          NewSpaceMenuModel(t),
 		globalMenu:         NewGlobalMenuModel(t),
-		hintPopup:          NewHintPopupModel(t),
 		listPicker:         NewListPickerModel(t),
 		sortDirPicker:      NewSortDirPickerModel(t),
 		settingsPopup:      NewSettingsPopupModel(t),
@@ -1384,9 +1382,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.globalMenu.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
-		if c := m.hintPopup.HandleTick(tickMsg); c != nil {
-			animCmds = append(animCmds, c)
-		}
 		if c := m.listPicker.HandleTick(tickMsg); c != nil {
 			animCmds = append(animCmds, c)
 		}
@@ -1487,6 +1482,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.openKeyRef()
 			}
 		}
+		// tdp K11: in the YAML viewer's selection mode Tab is
+		// suspended, but answers.
+		if top == &m.yamlPopup && m.yamlPopup.visualMode && k.String() == "tab" {
+			return m, m.toast.Show("Esc leaves the selection first")
+		}
 		if top != nil {
 			if !top.ready() {
 				return m, nil
@@ -1508,12 +1508,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// is "anything else," which cancels the drag and reverts.
 		// Consume the event — don't propagate to focus shift / row
 		// selection / popup hit-test, mirroring the same intent as
-		// the keyboard cancel path.
-		//
-		// EXCEPT when the drop-only hint popup is up (Space mid-drag
-		// surfaced it): popup owns the click so the user can commit
-		// Drop via mouse or right-click to close back into bare drag.
-		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && !m.hintPopup.owns() {
+		// the keyboard cancel path. (A popup over the drag — the
+		// key reference — takes its own clicks.)
+		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && m.topLayer() == nil {
 			cmd := m.sidebar.CancelDrag()
 			return m, cmd
 		}
@@ -2207,14 +2204,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (cursor + Enter, its hotkey, or a click).
 		return m, m.runMenuAction(msg)
 
-	case HintActionMsg:
-		// The drag mode's drop-only menu (Space mid-drag): Drop commits
-		// the new pinned order, same as D / Enter.
-		if msg.Action == "DropPinned" {
-			return m, m.sidebar.CommitDrag()
-		}
-		return m, nil
-
 	case ListPickerActionMsg:
 		// Sort flow commits routed by PickerID. Column step picks a
 		// column → opens the direction step over it. Direction step
@@ -2239,46 +2228,25 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.commitSettingsToggle(msg.Key)
 
 	case SidebarDragEnterMsg:
-		// Sticky toast so the keyboard contract stays on screen for
-		// the whole drag — paired with Dismiss() in the commit /
-		// cancel handlers below. Persistent reminder also covers
-		// users who don't catch the entry flash.
-		return m, m.toast.ShowSticky("Drag mode · j/k move · Enter or D drop · anything else cancels")
+		// Drag is a mode (tdp K11): its keys go in the footer for as
+		// long as it lasts, with ? for the full list.
+		m.statusLine.SetDragMode(true)
+		return m, nil
 
 	case SidebarDragCommitMsg:
-		// Take the sticky toast down first, THEN persist. Order
-		// doesn't matter for correctness but it reads as "drag
-		// finished → contract goes away → save happens." Failure
-		// surfaces via appLog + a fresh transient warn toast (which
-		// will outlive Dismiss because Show schedules its own tick).
-		dismissCmd := m.toast.Dismiss()
+		m.statusLine.SetDragMode(false)
 		if err := m.persistPinnedKinds(); err != nil {
 			m.appLog.Error("pin order save failed: " + err.Error())
-			return m, tea.Batch(dismissCmd, m.toast.Show("pin order save failed"))
+			return m, m.toast.Show("pin order save failed")
 		}
-		return m, dismissCmd
+		return m, nil
 
 	case SidebarDragCancelMsg:
 		// Sidebar already reverted its pinned slice from the
-		// snapshot. Just dismiss the sticky toast — no cancellation
-		// toast (cancelling shouldn't nag the user about something
-		// they decided not to do).
-		return m, m.toast.Dismiss()
-
-	case SidebarDragRequestDropMenuMsg:
-		// Space mid-drag → drop-only menu. Single action surfaces the
-		// drop affordance for users who don't recall the D / Enter
-		// keyboard contract. Drag mode stays active across the
-		// popup: closing via Esc returns to bare drag (sticky toast
-		// + header indicator still visible); committing Drop fires
-		// HintActionMsg → CommitDrag.
-		m.hintPopup.SetSize(m.width, m.height)
-		title := " " + titleIcon + " Drag mode — confirm new order?"
-		actions := []hintAction{
-			{label: "Drop to confirm new order", key: "D", action: "DropPinned"},
-		}
-		m.hintPopup.SetLayer(m.popupDepth() + 1)
-		return m, m.hintPopup.OpenWithActions(title, actions, nil)
+		// snapshot. No cancellation toast — cancelling shouldn't nag
+		// the user about something they decided not to do.
+		m.statusLine.SetDragMode(false)
+		return m, nil
 
 	case ListPickerCancelMsg:
 		// Esc on the direction step returns to the column step (tdp
@@ -2355,6 +2323,12 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 	// should cancel, not switch focus. (q and Ctrl+C never get here:
 	// the leave flow runs before any surface sees the key.)
 	if m.activePanel == SidebarPanel && m.sidebar.IsDragging() {
+		// tdp K11: Tab and the panel keys are suspended in the mode but
+		// answer — the drag stays, the toast says how to leave it.
+		switch msg.String() {
+		case "tab", "shift+tab", "1", "2", "3":
+			return m.toast.Show("Esc leaves drag mode first")
+		}
 		sidebar, cmd := m.sidebar.Update(msg)
 		m.sidebar = sidebar
 		return cmd
@@ -2752,16 +2726,6 @@ func (m AppModel) View() string {
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
 	}
 
-	// Sticky toasts composite BEFORE the popup stack so a popup the
-	// user opens AFTERWARDS sits on top. Mirrors the "displayed
-	// later wins" rule — a sticky toast goes up first (it's the
-	// background reminder of the current mode), so popups opened
-	// later must overlay it. Drag mode's keyboard-contract toast is
-	// the canonical case.
-	if m.toast.IsActive() && m.toast.IsSticky() {
-		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
 	// The popup stack, bottom first — the same stackOrder the keys and
 	// clicks are routed by, so the popup drawn on top is the one that
 	// answers them. A popup still running its close animation is drawn
@@ -2773,12 +2737,10 @@ func (m AppModel) View() string {
 		}
 	}
 
-	// Non-sticky toasts composite AFTER the popup stack so a fresh
-	// transient message (error, save-failed status) interrupts
-	// whatever popup is on screen — the toast is the "later
-	// displayed" element. Sticky toasts were already rendered before
-	// the popups above.
-	if m.toast.IsActive() && !m.toast.IsSticky() {
+	// The toast composites AFTER the popup stack so a fresh message
+	// (error, save-failed status) shows over whatever popup is on
+	// screen. It is not a layer: it never takes keys (tdp F1, F8).
+	if m.toast.IsActive() {
 		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 

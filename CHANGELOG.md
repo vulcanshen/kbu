@@ -68,6 +68,12 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   keys, stacked on top (`Esc` returns to the popup). It used to be one fixed
   cheatsheet that left out the panel keys and did nothing over a popup. The
   footer's `Esc exit` now reads `Esc back` — `Esc` never leaves kbu.
+- **Modes answer the core keys the same way.** In the pinned-kind drag and the
+  YAML viewer's selection, `Space` does nothing (the drag used to open a
+  one-row "Drop" menu), `?` lists the mode's keys, and `Tab` stays put with a
+  toast saying `Esc` leaves the mode first. The drag's keys now sit in the
+  footer while it lasts, replacing the toast that stayed on screen; the
+  selection's keys sit in the viewer's bottom hint.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.
