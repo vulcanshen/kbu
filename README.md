@@ -21,108 +21,7 @@
 
 ## Demo
 
-### Getting around kbu
-
 ![basics](docs/demo-basics.gif)
-
-### Select multiple namespaces at once
-
-![namespace](docs/demo-namespace.gif)
-
-### Navigate Kubernetes by relatives
-
-![relatives](docs/demo-relatives.gif)
-
-### Edit live resources via the Space menu
-
-![yaml-edit](docs/demo-yaml-edit.gif)
-
-### Diff two resources side-by-side
-
-![compare](docs/demo-compare.gif)
-
-### Helm as a first-class resource
-
-![helm](docs/demo-helm.gif)
-
-### TUI + persistent shell in one window
-
-![alterm](docs/demo-alterm.gif)
-
-## Four keys to drive kbu
-
-| Key | Behavior |
-|---|---|
-| **`Tab`** | Switch panel focus (or `1` / `2` / `3` directly) |
-| **`Enter`** | Drill in / commit a choice |
-| **`Space`** | *What can I do here?* — opens a contextual menu or cheatsheet on every panel and every tab |
-| **`Esc`** | Back out — pop one drill level / close any popup |
-
-When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt+Shift+S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also reachable through the `Space` menu, so nothing's required to memorize unless you want it.
-
-**Mouse works too**: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `>` to open the Settings popup if you want to flip mouse off and stay keyboard-only.
-
-## Install
-
-### Quick Install (macOS/Linux)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/install.sh | sh
-```
-
-### Quick Install (Windows PowerShell)
-
-```powershell
-irm https://raw.githubusercontent.com/vulcanshen/kbu/main/install.ps1 | iex
-```
-
-### Homebrew (macOS/Linux)
-
-```bash
-brew install vulcanshen/tap/kbu
-```
-
-### Scoop (Windows)
-
-```powershell
-scoop bucket add vulcanshen https://github.com/vulcanshen/scoop-bucket
-scoop install kbu
-```
-
-### From source
-
-```bash
-go install github.com/vulcanshen/kbu/cmd@latest
-```
-
-### Build locally
-
-```bash
-git clone https://github.com/vulcanshen/kbu.git
-cd kbu
-go build -o kbu ./cmd/
-./kbu
-```
-
-### Uninstall
-
-```bash
-# macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | sh
-
-# Windows PowerShell
-irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
-```
-
-## Quick Start
-
-```bash
-kbu
-```
-
-Connects to your current kubeconfig context. Press `Enter` to drill, `Space` for the contextual menu, `Esc` to back out, `Tab` to move between panels.
-
-Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesseduffield/lazygit), [lazydocker](https://github.com/jesseduffield/lazydocker), and [k9s](https://github.com/derailed/k9s). Built with Go and [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
 ## Features
 
@@ -162,6 +61,73 @@ Inspired by [Lens IDE](https://k8slens.dev/), [lazygit](https://github.com/jesse
 - **Mouse** -- click to focus and select, double-click to drill, right-click for the menu, wheel to scroll. Turn it off in Settings (`>`) if you prefer keyboard only.
 - **Full screen (`z`)** -- expand the list or detail panel, `z` again to restore.
 - **Themes** -- override any color with a `theme.yaml`.
+
+## Install
+
+### Requirements
+
+- **kubectl** on `$PATH` (for edit, delete, and shell exec)
+- A valid **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`)
+- A running Kubernetes cluster
+- **A Nerd Font**, preferably a Mono variant (e.g. JetBrains Mono Nerd Font Mono) so icons line up with the grid.
+
+### Quick Install (macOS/Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/install.sh | sh
+```
+
+### Quick Install (Windows PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/vulcanshen/kbu/main/install.ps1 | iex
+```
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew install vulcanshen/tap/kbu
+```
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add vulcanshen https://github.com/vulcanshen/scoop-bucket
+scoop install kbu
+```
+
+Building from source is in [`docs/dev-remarks.md`](docs/dev-remarks.md).
+
+### Uninstall
+
+```bash
+# macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | sh
+
+# Windows PowerShell
+irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
+```
+
+## Quick Start
+
+```bash
+kbu
+```
+
+Connects to your current kubeconfig context. Press `Enter` to drill, `Space` for the contextual menu, `Esc` to back out, `Tab` to move between panels.
+
+## Four keys to drive kbu
+
+| Key | Behavior |
+|---|---|
+| **`Tab`** | Switch panel focus (or `1` / `2` / `3` directly) |
+| **`Enter`** | Drill in / commit a choice |
+| **`Space`** | *What can I do here?* — opens a contextual menu or cheatsheet on every panel and every tab |
+| **`Esc`** | Back out — pop one drill level / close any popup |
+
+When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt+Shift+S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also reachable through the `Space` menu, so nothing's required to memorize unless you want it.
+
+**Mouse works too**: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `>` to open the Settings popup if you want to flip mouse off and stay keyboard-only.
 
 ## Key Bindings
 
@@ -389,18 +355,22 @@ status:
   unknown: "#7f849c"
 ```
 
-## Requirements
+## Limits
 
-- **kubectl** on `$PATH` (for edit, delete, and shell exec)
-- A valid **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`)
-- A running Kubernetes cluster
-- **A Nerd Font**, preferably a Mono variant (e.g. JetBrains Mono Nerd Font Mono) so icons line up with the grid.
+- **Use the Mono variant of your Nerd Font.** With a proportional variant, or a terminal set to East-Asian-Ambiguous=double (some tmux + iTerm2 CJK setups), helm-managed rows and popup top borders may sit 1 cell off the grid. Switch to the Mono variant or set ambiguous-width to single.
+- **Helm needs the `helm` CLI.** The Helm category only appears when `helm` is on your `PATH`, and the release list refreshes every 3 seconds (Helm has no watch API).
+- **Workload logs follow the Pods that exist when you select the row.** After a rollout, select the row again to pick up the new Pods.
+- **Some deletes and edits are blocked.** Events and Nodes can't be deleted from kbu; helm-managed objects can't be edited or deleted — use `helm upgrade` / `rollback` / `uninstall`.
+- **Panel 3 has no `/` search.** Open the YAML with `Y` and search there.
 
-## Further reading
+## Links
 
-- [docs/dev-remarks.md](docs/dev-remarks.md) -- design notes and rationale behind each feature
-- [docs/kbu-implementation.md](docs/kbu-implementation.md) -- how kbu implements its TUI design principles
-- [CHANGELOG.md](CHANGELOG.md) -- what changed in each release
+- [CHANGELOG.md](CHANGELOG.md) — what changed in each release
+- [`docs/dev-remarks.md`](docs/dev-remarks.md) — the developer's notes: how it works, why, building and testing
+
+## terminu family
+
+kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
 
 ## License
 
