@@ -189,3 +189,41 @@ func TestF5_DrillFailureIsVisible(t *testing.T) {
 }
 
 var errBoom = errors.New("forbidden")
+
+// tdp T1: accepting a Delete finishes the flow — the Space menu under the
+// confirm pointed at the object just deleted, so the whole stack closes.
+// Esc on the confirm still returns to the menu (F4).
+func TestT1_AcceptedDeleteClearsTheStack(t *testing.T) {
+	m := stackTestApp(t)
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, podItem("a", nil), panel2CompareCtx{})
+	_ = m.confirm.ShowCompleting(ConfirmDelete, "Delete?", "kubectl delete pods a", func() tea.Msg { return nil })
+	m.confirm.animator.Finalize()
+
+	updated, cmd := m.Update(key("enter"))
+	got := updated.(AppModel)
+	for _, msg := range drainCmd(cmd) {
+		next, _ := got.Update(msg)
+		got = next.(AppModel)
+	}
+	if got.spaceMenu.owns() {
+		t.Error("an accepted Delete must close the Space menu under it")
+	}
+
+	escd, _ := m.Update(key("esc"))
+	if after := escd.(AppModel); !after.spaceMenu.owns() {
+		t.Error("Esc on the Delete confirm must leave the Space menu open")
+	}
+}
+
+// The Delete and Rollback confirms are the completing kind.
+func TestT1_DeleteAndRollbackConfirmsComplete(t *testing.T) {
+	m := stackTestApp(t)
+	_ = m.confirmDelete(k8s.ResourcePods, podItem("a", nil))
+	if !m.confirm.completes {
+		t.Error("the Delete confirm must close the stack when accepted")
+	}
+	_ = m.confirm.Show(ConfirmEdit, "Edit?", "x", nil)
+	if m.confirm.completes {
+		t.Error("an ordinary confirm must not carry the completing flag over")
+	}
+}
