@@ -87,49 +87,41 @@ func TestListPicker_CursorStartsOnCurrentBadge(t *testing.T) {
 	}
 }
 
-func TestListPicker_OpenWhileOpenAnimatesSwap(t *testing.T) {
-	// Chained pickers: app.go calls Open(...) for step 2 while step 1
-	// is still open. Open now runs a mini "yawn" animation —
-	// pending content is held until the Compress → Expand midpoint,
-	// then promoted into the active fields. Animator stays inside
-	// the swap states until both phases run out, so the popup never
-	// disappears; from the user's perspective the popup just briefly
-	// squeezes and the new content is already inside.
+// SetItems refreshes an open picker in place — the sort flow redraws the
+// column badges after a tier lands — without moving the cursor or
+// changing the row count the popup opened with.
+func TestListPicker_SetItemsRefreshesInPlace(t *testing.T) {
 	m := newListPicker(t)
-	cmd := m.Open("column", "Step 1", []ListPickerItem{
+	cmd := m.Open("sort:column", "Sort", []ListPickerItem{
 		{Key: "a", Label: "A"},
 		{Key: "b", Label: "B"},
 	})
 	drainListPickerToInteractive(t, &m, cmd)
+	m, _ = m.Update(key("j"))
 
-	cmd2 := m.Open("direction", "Step 2", []ListPickerItem{
-		{Key: "asc", Label: "Ascending"},
-		{Key: "desc", Label: "Descending"},
+	m.SetItems([]ListPickerItem{
+		{Key: "a", Label: "A"},
+		{Key: "b", Label: "B", Badge: "↑"},
 	})
-	if cmd2 == nil {
-		t.Fatal("Open while already open must return a swap-tick cmd, got nil")
+	if m.cursor != 1 || m.items[1].Badge != "↑" || !m.IsInteractive() {
+		t.Errorf("SetItems must keep the cursor and the popup open, got cursor=%d badge=%q open=%v",
+			m.cursor, m.items[1].Badge, m.IsInteractive())
 	}
-	// Pending fields stashed; active content still shows step 1.
-	if m.pickerID != "column" || m.title != "Step 1" {
-		t.Errorf("active content must stay on step 1 until the midpoint, got id=%q title=%q", m.pickerID, m.title)
+}
+
+// tdp M6: a dimmed row takes the cursor but Enter does nothing on it.
+func TestListPicker_DisabledRowDoesNotCommit(t *testing.T) {
+	m := newListPicker(t)
+	cmd := m.Open("sort:column", "Sort", []ListPickerItem{
+		{Key: "reset", Label: "Reset", Disabled: true},
+		{Key: "a", Label: "A"},
+	})
+	drainListPickerToInteractive(t, &m, cmd)
+	if m.cursor != 0 {
+		t.Fatalf("the cursor must be able to rest on a dimmed row, at %d", m.cursor)
 	}
-	if m.pendingPickerID != "direction" || m.pendingTitle != "Step 2" || len(m.pendingItems) != 2 {
-		t.Errorf("pending fields not stashed: id=%q title=%q items=%v", m.pendingPickerID, m.pendingTitle, m.pendingItems)
-	}
-	// Drive the animation through both phases; the midpoint tick
-	// promotes pending → active, then the expand phase finishes.
-	for i := 0; i < 50 && (m.animator.State == PopupSwappingCompress || m.animator.State == PopupSwappingExpand); i++ {
-		next := m.HandleTick(AnimTickMsg{Target: m.animator.Target})
-		_ = next
-	}
-	if m.animator.State != PopupOpen {
-		t.Fatalf("animator should land back on PopupOpen after swap, got %v", m.animator.State)
-	}
-	if m.pickerID != "direction" || m.title != "Step 2" || len(m.items) != 2 || m.items[0].Key != "asc" {
-		t.Errorf("swap end left stale content: id=%q title=%q items=%v", m.pickerID, m.title, m.items)
-	}
-	if m.pendingItems != nil || m.pendingPickerID != "" {
-		t.Errorf("pending fields should be cleared after promotion, got pending=%q items=%v", m.pendingPickerID, m.pendingItems)
+	if _, cmd := m.Update(key("enter")); cmd != nil {
+		t.Error("Enter on a dimmed row must do nothing")
 	}
 }
 

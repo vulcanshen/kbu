@@ -97,28 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 9. sort 流程：兩步擠在同一個 picker、panel 1 的 menu 先關掉自己 —— F1、F4、F7
-
-**現況**（`app.go` `openSortColumnPicker()`、`openSortDirectionPicker()`、`commitSortFlow()`、`resetSortFlow()`；`listpicker.go`）：
-
-- 選欄位 → 選方向是同一個 `listPicker` 原地換內容（已開著時 `Open()` 走 swap 動畫、`pendingItems`）；方向選定後
-  `commitSortFlow()` 又換回選欄位那一步。框的高度跟著步驟變。
-- 方向那一步按 `Esc` 關掉整個 picker（`ListPickerCancelMsg` 清掉 `sortFlowKind`），回不到選欄位那一步。
-- 欄位那一步的 Reset 列只在已有排序時出現，排序一建立，開著的框就多一列。
-- panel 1 的 Space menu 選 `Sort panel 2 list` 時，`hintPopup.commitAction()` 先 `Close()` 自己再送 `HintActionMsg`，sort picker
-  底下沒有 source，`Esc` 回到 panel 而不是 menu（`Update()` 裡 listPicker 路由的註解說它疊在 sidebar Space menu 上，實際沒有）。
-  panel 2 的 Space menu（`panel2Menu.commit()` 不關自己）沒有這個問題。
-
-**規則**：F1 —— 多步驟的流程，每一步是自己的 popup，疊起來保留 source（F4），每一步有自己打開時定好的高度（F7）。F4 —— 從 popup
-A 開出 popup B 時 A 留在底下，取消 B 回到 A。
-
-**怎麼改**：方向另開一個 popup，疊在欄位 picker 上（filu 的 `sortDirMenu`）；`Esc` 回到選欄位那一步；方向選定後關掉方向那一步、
-欄位 picker 的 badge 原地更新（kbu「連續疊加多個 tier」的做法照舊）。Reset 列一律在、沒有排序時變暗（M6；filu 同一招，免得開著時
-長出一列）。Space menu 執行一列時不先關自己，由目標決定（照 `panel2Menu.commit()`；做了第 5 條的統一 Space menu 就一起解決）。
-原地換內容的 swap 動畫不再需要；dev-remarks「列表排序」與「依層數決定的 popup 邊框」裡「原地換內容的 picker 保留原本的 layer」
-一起改。
-
-
 ## 10. namespace / context picker 的 `/` 篩選沒照 F1 的階段 —— F1、K2、K3、K4
 
 **現況**（`namespace.go`、`context.go` 的 `Update()` 與 `handleSearchKey()`）：
