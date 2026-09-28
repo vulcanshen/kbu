@@ -49,21 +49,26 @@ func assertScreen(t *testing.T, name string, view string, w, h int) {
 	}
 }
 
-// tdp L2: the statusbar fields have fixed widths — switching namespace
-// (or context) never moves the chips after them.
-func TestL2_StatusbarChipsStayPutAcrossNamespaces(t *testing.T) {
-	col := func(ns string) int {
+// The statusbar fields take their names' width — no padding hole after
+// a short context — and a long name is cut in the middle at the cap
+// (a deviation from tdp L2, ruled 2026-09-28; see dev-remarks).
+func TestStatusbar_FieldsTakeTheirNamesWidth(t *testing.T) {
+	row := func(ctx, ns string) string {
 		m := screenAt(t, 160, 40)
+		m.statusBar.SetClusterInfo(k8s.ClusterInfo{ContextName: ctx})
 		m.statusBar.SetNamespace(ns)
-		row := ansi.Strip(m.statusBar.ViewFull(0, 0, "", &PtyMarker{}, nil))
-		idx := strings.Index(row, "[Alt-t]erm")
-		if idx < 0 {
-			return -1
-		}
-		return ansi.StringWidth(row[:idx]) // display column, not bytes (… is 3 bytes)
+		return ansi.Strip(m.statusBar.ViewFull(0, 0, "", &PtyMarker{}, nil))
 	}
-	if a, b := col("default"), col("very-long-namespace-name-here"); a != b || a < 0 {
-		t.Errorf("the [Alt-t]erm chip moved with the namespace: column %d vs %d", a, b)
+	if got := row("orbstack", "default"); !strings.HasPrefix(got, " [C]ontext: orbstack  [N]amespace: default  [Alt-t]erm") {
+		t.Errorf("short names should sit side by side with no hole: %q", got)
+	}
+	long := row("arn:aws:eks:ap-northeast-1:123456789012:cluster/production-platform-main", "a-very-long-namespace-name")
+	if !strings.Contains(long, "[C]ontext: arn:aws:eks:") || !strings.Contains(long, "…") {
+		t.Errorf("a long context should be cut in the middle: %q", long)
+	}
+	ctxW := ansi.StringWidth(long[strings.Index(long, "ontext: ")+len("ontext: ") : strings.Index(long, "  [N]")])
+	if ctxW != 24 {
+		t.Errorf("a long context takes the %d-cell cap, got %d", 24, ctxW)
 	}
 }
 

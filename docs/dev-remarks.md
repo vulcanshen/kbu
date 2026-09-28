@@ -95,7 +95,7 @@
 - **panel 3 的 tab 列**：starship 風格的膠囊鏈，只有 active tab 是亮膠囊，其他坐在 crust 底；第一個 tab active 時跟 `[3]` 膠囊合併；tab 之間 active↔inactive 用 `E0B0`，inactive↔inactive 用 `E0B1` 細 chevron；尾端用 `E0B4` 收圓。tab 標籤一律同寬，`Logs` / `Events` 的 live / paused glyph 不論 active 與否都畫，切 tab 時 tab 列不伸縮（tdp L2）。
 - **邊框 hint**：上框右端 ` <hint>─`、下框左端 `─<hint>─`、下框右端 ` X of Y `。hint 與框同色系。放不下就整段靜默丟掉、不截斷；下框空間不夠時先丟左側 hint、保留捲動指示。
 - **focus 二態**（tdp L5）：focus 是雙線 `╔═╗` + Blue `#89b4fa`，非 focus 是圓角細線 `╭─╮` + Surface2 `#585b70`；兩套 box 字元同寬，切換零位移。框線粗細是不靠顏色的第二訊號。Blue 是結構色，跟 popup 層級色、使用者足跡的 Lavender 互不干涉。
-- **statusbar 一列、footer（status line）一列**，列數鎖死，內容放不下從尾端捨棄（tdp L3）。statusbar 的 context 與 namespace 是固定寬度的欄位（24 / 16 格，太長從中間截斷，跟 panel 2 的 Name 欄同一種做法），切 context / namespace 時後面的 chip 不位移（L2）；整列由 `fitRow()` 截到剛好終端機寬、badge 貼右，不交給 lipgloss 折行（L4）。`l4_test.go` 在多種終端機尺寸下量整個畫面：每一列剛好等於終端機寬、總列數剛好等於終端機高，含 popup 疊上去與超長的 EKS context 名稱。
+- **statusbar 一列、footer（status line）一列**，列數鎖死，內容放不下從尾端捨棄（tdp L3）。statusbar 的 context 與 namespace 依名稱的長度，上限 24 / 16 格，太長從中間截斷（跟 panel 2 的 Name 欄同一種做法），不補空白（見「偏離 tdp」的 L2）；整列由 `fitRow()` 截到剛好終端機寬、badge 貼右，不交給 lipgloss 折行（L4）。`l4_test.go` 在多種終端機尺寸下量整個畫面：每一列剛好等於終端機寬、總列數剛好等於終端機高，含 popup 疊上去與超長的 EKS context 名稱。
 
 ## 設計決定
 
@@ -147,6 +147,11 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 原本這裡的兩條 K10（PTY 裡攔下捲動鍵、Alterm 多一個出口 `Ctrl-t`）在 tdp v0.1.4 起不再是偏離：K10 改成「至少一個出口鍵，
 其餘組合鍵由 app 決定」，兩條移到「設計決定」的「PTY 裡的鍵」。剩下的只有 `Ctrl-t` 不揭露這一點。
 
+- **statusbar 的 context 與 namespace 依名稱長度，不是固定寬度（L2）。** L2 要求 statusbar 的動態文字用固定寬度的欄位；
+  kbu 的 context / namespace 佔名稱的長度（上限 24 / 16 格，超過從中間截斷，`cappedField()`，`statusbar.go`），切換 context 或
+  namespace 時，後面的 `[N]amespace`、`[Alt-t]erm`、`[C]ompare` 會跟著移。理由（使用者 2026-09-28 裁定，實機看過固定寬度的版本）：
+  固定 24 格讓 `orbstack` 這種短名字後面空出一大格，在 80 欄左右的終端機還把後面的 chip 擠出畫面；切 context / namespace 是使用者
+  自己按的、不常發生，位移發生在使用者正看著 statusbar 的那一刻。
 - **Alterm 的第二個出口 `Ctrl-t` 不揭露（K10）。** K10 要求 PTY 裡保留的鍵跟出口鍵一樣常駐揭露；`Ctrl-t` 刻意不出現在任何
   help 或 hint（`app.go` 的 `Alt+T` 處理、`ptyview.go` 的註解寫明）：它只為錄 demo 存在（見「設計決定」），使用者該記的出口是
   `Alt-t`，揭露兩個只會多一件要記的事。`Ctrl-t` 不是給使用者的鍵，是開發時 VHS 送不出 `Alt+t` 才開的，維持不揭露

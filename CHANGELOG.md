@@ -135,9 +135,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   popup row selected the row next to it.
 - **The top bar stays one row.** A long context name (an EKS ARN, say) made
   the status bar wrap onto two or three rows and push the whole screen down.
-  The context and namespace now have fixed-width fields — a long name is cut in
-  the middle — so the bar is always one row and switching namespace no longer
-  shifts the chips after it.
+  A long context or namespace name is now cut in the middle, so the bar is
+  always one row.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.
