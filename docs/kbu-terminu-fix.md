@@ -209,22 +209,6 @@ namespace `kube-system` + 兩個 chip + `! 3 errors` 就折成 2 列；EKS ARN �
 對到 D3，照內容（層色）應是 D2。dev-remarks 的「四類」改成六類，各 popup 的歸類照上方「popup 盤點」與修完後的樣子。
 
 
-## 26. compare 鎖定時一次 `Esc` 退兩層 —— K4（已定案）
-
-**現況**：`app.go` `case "esc"`：panel 2 在 compare 鎖定中又在 drill 鏈裡時（例：Deployment `nginx` drill 進 Pods，在 Pods 裡標了
-anchor），同一次 `Esc` 先 `clearCompareLock()`、再 `exitDrillDown()`，一次兩層；註解的理由是「按兩次不一致」。同一段裡的篩選卻是
-一次一層（有篩選時 `Esc` 只清篩選）。`TestAppModel_EscOnPanel2WithCompareMode_ClearsLockAndPopsDrill` 守著現在的行為。
-
-**規則**：K4 —— `Esc` 一次關一層。
-
-**已定案**（user，2026-09-28）：
-
-- compare 鎖是 panel 的狀態（跟篩選同一類），**不是** K11 的模式：鎖著時按鍵照原意，Space menu 照常開（`Compare to anchor` 就在
-  裡面）。
-- `Esc` 一次一層：第一次只解鎖、留在這一層；第二次才退 drill。照篩選的寫法，解鎖後就 return。
-- 上面那個測試改寫成守「一次一層」（改名、反轉斷言），不要刪；`..._NoDrill_JustClearsLock` 照舊。
-
-
 ## 28. Events tab 失焦變暗 —— T2（已定案：寫成偏離）
 
 **現況**：panel 3 失焦時 Events 暗成 `TableDimRowStyle()`（`detail.go`），Logs 不暗。Events 有跟 Logs 一樣的 live ▶ / paused ⏸

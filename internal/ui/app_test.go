@@ -1280,12 +1280,11 @@ func TestAppModel_CloseAllBlockingPopups_ClosesActiveOnes(t *testing.T) {
 	}
 }
 
-func TestAppModel_EscOnPanel2WithCompareMode_ClearsLockAndPopsDrill(t *testing.T) {
-	// Panel 2 Esc with compare mode active AND a drill chain in
-	// place: ONE Esc must both release the compare lock AND pop one
-	// drill level. Without this combined handling Esc would either
-	// silently drop one of the actions or force the user to press
-	// Esc twice — both confusing relative to every other Esc in kbu.
+func TestAppModel_EscOnPanel2WithCompareMode_OneLayerPerPress(t *testing.T) {
+	// tdp K4: Esc closes one layer per press. In compare mode AND a
+	// drill chain, the first Esc only releases the compare lock and
+	// stays on this level; the second one pops the drill (ruled
+	// 2026-09-28: the lock is a panel state, like the filter).
 	items := []k8s.ResourceItem{
 		{Name: "a", UID: "uid-a", Row: []string{"a"}},
 		{Name: "b", UID: "uid-b", Row: []string{"b"}},
@@ -1305,10 +1304,14 @@ func TestAppModel_EscOnPanel2WithCompareMode_ClearsLockAndPopsDrill(t *testing.T
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	got := updated.(AppModel)
 	if got.inCompareMode() {
-		t.Error("Esc must release compare lock when both lock + drill are active")
+		t.Error("the first Esc must release the compare lock")
 	}
-	if len(got.drillDownStack) != 0 {
-		t.Errorf("Esc must also pop the drill stack in the same press; got len=%d", len(got.drillDownStack))
+	if len(got.drillDownStack) != 1 {
+		t.Fatalf("the first Esc must stay on this drill level; drill depth = %d", len(got.drillDownStack))
+	}
+	updated, _ = got.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if got = updated.(AppModel); len(got.drillDownStack) != 0 {
+		t.Errorf("the second Esc must back out of the drill; drill depth = %d", len(got.drillDownStack))
 	}
 }
 
