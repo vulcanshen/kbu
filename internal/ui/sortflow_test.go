@@ -38,6 +38,9 @@ func appWithCfg(items []k8s.ResourceItem, cfg *config.Config) AppModel {
 		breadcrumbPopup: NewBreadcrumbPopupModel(th),
 		appLog:          NewAppLogModel(th),
 		listPicker:      NewListPickerModel(th),
+		spaceMenu:       NewSpaceMenuModel(th),
+		globalMenu:      NewGlobalMenuModel(th),
+		sidebar:         NewSidebarModel(th),
 		currentResource: k8s.ResourcePods,
 		cfg:             cfg,
 	}
@@ -574,28 +577,23 @@ func TestTableModel_columnTitles_MultiSort_RendersPriorityBadges(t *testing.T) {
 	}
 }
 
-// TestUpdateRouting_ListPickerWinsOverPanel2Menu pins §1.8: when the
-// panel-2 menu spawns the sort listPicker (via [Alt][S]ort commit),
-// keys go to the picker on top, not the menu underneath. Routing
-// order in app.go places listPicker BEFORE panel2Menu so j/k drives
-// the picker's cursor, not the still-open source menu.
-func TestUpdateRouting_ListPickerWinsOverPanel2Menu(t *testing.T) {
+// TestUpdateRouting_ListPickerWinsOverSpaceMenu pins tdp F4 + D3: when
+// the Space menu spawns the sort listPicker (via [Alt-S]ort), keys go to
+// the picker on top, not the menu underneath.
+func TestUpdateRouting_ListPickerWinsOverSpaceMenu(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
-	th := theme.DefaultTheme()
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
 
 	// Source menu open at layer 1.
-	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
-	m.panel2Menu.animator.Finalize()
-	panel2CursorBefore := m.panel2Menu.cursor
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, panel2CompareCtx{})
+	panel2CursorBefore := m.spaceMenu.cursor
 
 	// Sort picker opens on top at layer 2.
 	_ = m.openSortColumnPicker(k8s.ResourcePods)
 	m.listPicker.animator.Finalize()
-	if !m.panel2Menu.IsActive() || !m.listPicker.IsActive() {
-		t.Fatalf("setup: both popups must be active, got panel2Menu=%v listPicker=%v",
-			m.panel2Menu.IsActive(), m.listPicker.IsActive())
+	if !m.spaceMenu.IsActive() || !m.listPicker.IsActive() {
+		t.Fatalf("setup: both popups must be active, got spaceMenu=%v listPicker=%v",
+			m.spaceMenu.IsActive(), m.listPicker.IsActive())
 	}
 	listCursorBefore := m.listPicker.cursor
 
@@ -604,51 +602,44 @@ func TestUpdateRouting_ListPickerWinsOverPanel2Menu(t *testing.T) {
 	app := updated.(AppModel)
 
 	if app.listPicker.cursor == listCursorBefore {
-		t.Error("j must move listPicker cursor when stacked on panel2Menu")
+		t.Error("j must move listPicker cursor when stacked on the Space menu")
 	}
-	if app.panel2Menu.cursor != panel2CursorBefore {
-		t.Errorf("j must NOT move panel2Menu cursor; was %d, now %d",
-			panel2CursorBefore, app.panel2Menu.cursor)
+	if app.spaceMenu.cursor != panel2CursorBefore {
+		t.Errorf("j must NOT move the Space menu cursor; was %d, now %d",
+			panel2CursorBefore, app.spaceMenu.cursor)
 	}
 }
 
-// TestUpdateRouting_ListPickerWinsOverHintPopup pins the same §1.8
-// invariant for the other stacking path: sidebar Space → SortKind
-// spawns the sort picker on top of the sidebar's hintPopup. j/k must
-// drive the picker, not the menu underneath.
-func TestUpdateRouting_ListPickerWinsOverHintPopup(t *testing.T) {
+// TestUpdateRouting_SortFromPanel1SpaceMenuStacksOverIt pins tdp F4 for
+// panel 1: the Space menu's [S]ort row opens the sort picker OVER the
+// menu (it no longer closes itself first), and j/k then drive the picker
+// while the menu waits underneath.
+func TestUpdateRouting_SortFromPanel1SpaceMenuStacksOverIt(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
-	th := theme.DefaultTheme()
-	m.hintPopup = NewHintPopupModel(th)
+	m.activePanel = SidebarPanel
+	m.sidebar.SnapCursorToKind(k8s.ResourcePods)
+	_ = m.openSpaceMenu()
+	m.spaceMenu.animator.Finalize()
+	menuCursorBefore := m.spaceMenu.cursor
 
-	// hintPopup open at layer 1 (one-row stub is enough — we only
-	// care about input routing, not menu content).
-	_ = m.hintPopup.OpenWithActions(" test ", []hintAction{
-		{label: "a", key: "A"},
-		{label: "b", key: "B"},
-	}, nil)
-	m.hintPopup.animator.Finalize()
-	hintCursorBefore := m.hintPopup.cursor
-
-	// Sort picker opens on top.
-	_ = m.openSortColumnPicker(k8s.ResourcePods)
-	m.listPicker.animator.Finalize()
-	if !m.hintPopup.IsActive() || !m.listPicker.IsActive() {
-		t.Fatalf("setup: both popups must be active, got hintPopup=%v listPicker=%v",
-			m.hintPopup.IsActive(), m.listPicker.IsActive())
+	app := pressInMenu(t, m, "S")
+	if !app.spaceMenu.owns() {
+		t.Fatal("the panel 1 Space menu must stay open under the sort picker")
 	}
-	listCursorBefore := m.listPicker.cursor
+	if !app.listPicker.owns() {
+		t.Fatal("[S]ort must open the sort picker")
+	}
+	app.listPicker.animator.Finalize()
+	listCursorBefore := app.listPicker.cursor
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	app := updated.(AppModel)
-
+	updated, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	app = updated.(AppModel)
 	if app.listPicker.cursor == listCursorBefore {
-		t.Error("j must move listPicker cursor when stacked on hintPopup")
+		t.Error("j must move the sort picker cursor")
 	}
-	if app.hintPopup.cursor != hintCursorBefore {
-		t.Errorf("j must NOT move hintPopup cursor; was %d, now %d",
-			hintCursorBefore, app.hintPopup.cursor)
+	if app.spaceMenu.cursor != menuCursorBefore {
+		t.Error("j must not move the Space menu cursor under the picker")
 	}
 }
 
@@ -687,16 +678,13 @@ func TestOpenSortDirectionPicker_PreservesLayerOnSwap(t *testing.T) {
 func TestOpenSortColumnPicker_PreservesLayerOnLoopBack(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m := appWithCfg([]k8s.ResourceItem{makePod("a", 0)}, cfg)
-	th := theme.DefaultTheme()
-	m.panel2Menu = NewPanel2MenuPopupModel(th)
 
 	// Source menu underneath → sort picker on top at layer 2.
-	_ = m.panel2Menu.Open(k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, false, panel2CompareCtx{})
-	m.panel2Menu.animator.Finalize()
+	openPodMenu(&m.spaceMenu, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx"}, panel2CompareCtx{})
 	_ = m.openSortColumnPicker(k8s.ResourcePods)
 	m.listPicker.animator.Finalize()
 	if got := m.listPicker.layer; got != 2 {
-		t.Fatalf("setup: listPicker must open at layer 2 on top of panel2Menu, got %d", got)
+		t.Fatalf("setup: listPicker must open at layer 2 on top of the Space menu, got %d", got)
 	}
 
 	// Step 2: column → direction swap, still layer 2.

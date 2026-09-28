@@ -25,6 +25,25 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   longer closes the popup — `Esc` does. A confirm in particular can no longer
   be cancelled by a stray `Space`; its hint now names what `Enter` will do
   (`Enter delete · Esc cancel`).
+- **`Space` opens the same kind of menu on every panel and every tab.** It
+  lists everything that can be done there — first what the cursor's item can
+  do, then what the panel or tab can do — and always ends with **Global
+  operation**, which opens the app-wide actions: namespace, context, Alterm,
+  settings, app log and quit. The read-only cheatsheets (panel 1's lower half,
+  Logs / Events / Conditions, the empty list, Relatives), the separate Helm
+  document menu and the History tab's `Space` rollback are gone: the Helm
+  documents are rows next to `YAML`, and rollback and "jump to an ancestor"
+  are rows of their tab's menu. Actions that were hotkey-only are rows now too
+  — search, copy, zoom, go live, switch tab, show/hide helm-managed rows, exit
+  compare mode.
+- **An action that can't run right now is dimmed, not hidden.** Edit and
+  Delete on a helm-managed object, Mark as Compare anchor on a one-row list,
+  Drag with a single pinned kind, and rollback on the deployed revision are
+  listed dimmed; pressing their hotkey does nothing. `E` / `D` on a
+  helm-managed row no longer pop a "Helm-managed (read-only)" toast.
+- **Opening a picker from a menu keeps the menu.** Sort from panel 1's
+  `Space` menu now stacks over the menu (`Esc` returns to it), like every
+  other popup a menu opens.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.
