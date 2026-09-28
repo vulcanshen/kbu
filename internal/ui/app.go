@@ -1504,6 +1504,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.openKeyRef()
 			}
 		}
+		// tdp K4, F3: Esc closes the top popup first, and a toast
+		// counts — it is drawn over everything, so it goes before any
+		// popup, mode or search beneath it. Toasts never take keys
+		// otherwise (F1). One already fading no longer owns Esc: the
+		// press goes on to what is under it.
+		if k.String() == "esc" && m.toast.Owns() {
+			return m, m.toast.Dismiss()
+		}
 		// tdp K11: in the YAML viewer's selection mode Tab is
 		// suspended, but answers.
 		if top == &m.yamlPopup && m.yamlPopup.visualMode && k.String() == "tab" {
@@ -2437,18 +2445,6 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 	case "enter":
 		return m.enterKey()
 	case "esc":
-		// tdp F3 — auto-dismiss toast still has to accept Esc. Toast
-		// is non-blocking (keys pass through to panels), so it
-		// can't intercept Esc itself; the app-level Esc handler
-		// dismisses it first. Higher-priority blocking popups
-		// already short-circuited above this switch, so reaching
-		// here means no popup is claiming Esc and the toast wins
-		// over filter clear / drill exit. A toast already fading
-		// out no longer owns Esc: the press walks the panel chain
-		// instead of being eaten by a toast that is leaving anyway.
-		if m.toast.Owns() {
-			return m.toast.Dismiss()
-		}
 		filterActive := (m.activePanel == SidebarPanel && m.sidebar.HasActiveFilter()) ||
 			(m.activePanel == TablePanel && m.table.HasActiveFilter()) ||
 			(m.activePanel == DetailPanel && m.detail.HasActiveFilter())
