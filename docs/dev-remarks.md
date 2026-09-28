@@ -136,7 +136,6 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - **Helm 沒有 watch API**：release 清單每 3 秒 poll 一次 `helm list -A`。
 - **非 Mono 的 Nerd Font**：helm-managed 列與 popup 上框可能偏 1 格（見「運作方式」的 Nerd Font 渲染）。
 - **未做**：`:` command palette（舊的熱鍵表列為 future）。
-- **尚未符合 tdp 的地方**：逐條列在 [`kbu-terminu-fix.md`](kbu-terminu-fix.md)。
 
 ## 偏離 tdp
 
@@ -152,6 +151,68 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
   help 或 hint（`app.go` 的 `Alt+T` 處理、`ptyview.go` 的註解寫明）：它只為錄 demo 存在（見「設計決定」），使用者該記的出口是
   `Alt-t`，揭露兩個只會多一件要記的事。`Ctrl-t` 不是給使用者的鍵，是開發時 VHS 送不出 `Alt+t` 才開的，維持不揭露
   （使用者 2026-09-27 裁定）。
+
+## 對照 tdp 時確認過的
+
+2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次之後留下的（清單已刪）：
+下次對照不必重查的，以及當時由 user 逐題裁定的。
+
+**已經符合、不用修的**
+
+- **K1**：`q` 只用在離開；`Space`、`?`、`Tab`、`Enter`、`Esc` 沒有被字母熱鍵借用。confirm 的 `y` / `n` 是 confirm 自己的熱鍵（F6），
+  不是 core key。
+- **K2**：`Tab` / `Shift-Tab` 在三個 panel 之間輪替（`cyclePanel()`）；popup 開著時 `Tab` 交給最上層、不會漏到底下切 panel。沒有 input
+  group、沒有灰字提議、沒有多行文字輸入（`kubectl edit` 的 editor 是 PTY，歸 K10），這幾種 `Tab` 規則不適用。namespace / context
+  picker 的 `Tab` 在清單與篩選列之間換 focus（F1 的 finder 形狀）。
+- **K3 的 input 部分**：沒有 input popup；輸入只有單一欄位的搜尋列（panel 1、2 與 YAML 的 `/`）與 picker 的篩選列，`Enter` 送出，送出
+  不會失敗，所以 F7 的錯誤列也不用預留。
+- **K4 的「永不離開 app」**：`Esc` 從不離開，到最上層什麼都不做。
+- **K6、K8 的輸入態**：panel 搜尋、picker 篩選、YAML 搜尋打字中（`typing()`），`?`、`q`、空白、字母都進搜尋字串；`Ctrl-C` 仍然離開。
+- **K7**：panel 3 的 `[` / `]` 跟 `h` / `l` 一樣切 tab，列在 panel 3 的 `?`；YAML 裡 `left` / `right` 是 `h` / `l` 的別名（移 cursor），
+  只有 YAML 有「移 cursor 左右」這個角色。方向鍵在每個有 `j` / `k` 的 surface 都有效。
+- **K10**：`PgUp` / `PgDn` / `Home` / `End` 只在非 alt-screen 時攔下並揭露在下框 hint；出口 `Alt-t` 常駐在下框 hint。
+- **M1**：footer（`statusline.go`）固定一列、永遠列出 `? help` 與 `Space menu`；拖曳模式裡換成 `? keys` 與模式的鍵（K11）。
+- **M5**：每一列都有名稱與一句說明；README 的散文裡寫 `Alt+t`，那是文件不是畫面，不在 M5 的範圍。
+- **M9**：`C` 在 panel 2 是 Compare、其他 panel 是 context；statusbar 的 `[C]ontext` 與 `[C]ompare` chip 依 focus 一亮一暗
+  （`ViewFull()`）。panel 邊框 hint 只寫該 panel 自己的鍵。
+- **L1**：80 × 40 下 menu、key reference、picker 都放得下（`l4_test.go` 量整個畫面）。panel 2 的欄位在 80 欄時擠到三四格
+  （`Sta…`），`z` 放大該 panel；窄版面收掉什麼由 app 決定。
+- **L5**：focus 雙線 `╔═╗` + Blue、非 focus 圓角 `╭─╮` + Surface2，兩套框線同寬（`renderPanelWithScroll()`），切換不位移。
+- **F1 的 confirm**：confirm 帶一行明細（`kubectl edit …`、`helm rollback …`），v0.1.13 起就是 confirm。YAML 的 `/`、`y`、`E` 是 note
+  自己的熱鍵，`v` 是模式。
+- **F2**：每個 popup 都有 `PopupAnimator` 的開關動畫（含 toast 與 PTY）。
+- **F5**：`appLog.Error` / `Warn` 立刻出現在 statusbar 的 badge 與 footer 右側，不擋住 app；namespace 抓取失敗、Relatives drill 失敗、
+  存檔失敗另有 toast。
+- **F6**：問句寫出動作與對象；`Enter` / `y` 接受、`Esc` / `n` 取消；滑鼠左鍵刻意不接受（`HandleMouse()`）。Edit 在 panel、Space menu、
+  YAML 裡都先 confirm。breadcrumb 選定後仍 confirm，是 app 的選擇（F6 允許 picker 算確認，不要求）。
+- **F7 的 loading**：只有 namespace picker 在內容還沒到時就打開，標題後有輪轉 icon（braille，D3 的 circle slice 是家族預設，沒換）；
+  其他 popup 打開時內容都已確定。
+- **T1**：context-shift（`kubectl edit` / `exec`、Alterm、drill-down）的 entry handler 先 `closeAllBlockingPopups()`；切 context
+  （`ContextChangedMsg`）、breadcrumb 跳轉（`SwitchToResourceMsg`）、完成的 delete / rollback（`ShowCompleting`）也清整疊。
+  namespace picker 是多選、勾一個就即時套用、picker 留著，所以底下的 Space menu 與 global operation popup 也留著；Space menu 的
+  item operation 作用在開 menu 當下抓住的那個物件，它仍在叢集裡，只是可能被 namespace 篩掉。
+- **T2 的 Logs**：panel 3 失焦時 Logs 不變暗（`buildLogLines()`）。Events 見「偏離 tdp」。
+- **X1、X2**：沒有滑鼠也能做完所有事；點 panel = focus + 移 cursor、雙擊 panel 2 / 3 = `Enter`（panel 1 的雙擊只選取：`Enter` 在
+  panel 1 會把 focus 送去 panel 2）、右鍵 = `Space`、popup 上右鍵 = `Esc`、滾輪 = `u` / `d`。
+- **S1、S2、S4、S5**：`V` 只在 panel 上打開 splash，popup、輸入態、PTY、拖曳都先攔下；啟動不播；help、hint、footer、README 都沒提；
+  圖案由 `docs/icon.svg` 產生。
+- **D2 的層色**：`theme.PopupLayerColor()` 的四個色碼就是 D2 的表；Lavender 留給使用者足跡。
+
+**對照時的判斷**
+
+- **zoom 不是模式（K4、K11）。** 術語的「模式」是「進入之後一部分鍵換成模式自己的意思」；`z` 放大之後每個鍵的意思都不變，所以不是
+  模式，`Esc` 的「上一層」照 app 定義：搜尋篩選 → compare 鎖 → drill，不收 zoom，`z` 再按一次還原。（filu 把同樣的 zoom 寫成偏離。）
+- **toast 算最上層（K4、F3）。** toast 畫在一切之上，`Esc` 先收 toast，再輪到底下的 popup、模式或打字中的搜尋。代價：拖曳與 YAML
+  選取模式裡按 `Tab` 跳出的「先 `Esc`」toast，要按兩次 `Esc` 才離開模式（第一次收 toast）。
+
+**user 裁定（2026-09-28）**
+
+- compare 鎖是 panel 的狀態（跟搜尋篩選同類），不是 K11 的模式：`Esc` 一次一層，先解鎖、再按才退 drill。
+- 開啟 popup 的熱鍵不兼關閉：picker、breadcrumb、Settings、App log 只認 `Esc`（`N`、`C`、`>`、`!` 不會把自己開的框關掉）。
+- menu 裡 core key 的列寫成 `[Enter] …`、`[Esc] …`，跟熱鍵列同一個形狀。
+- 每個 panel、每個 tab 的 `Enter` 見 README 的核心鍵表。
+- helm 管理的物件：Edit / Delete 變暗、不藏（見「設計決定」）；`kubectl edit` / `exec` 用 `Alt-t` 離開時先 confirm（見「PTY 裡的鍵」）。
+- Events 失焦變暗：寫成偏離（見「偏離 tdp」）。
 
 ## 設計文件導讀
 
