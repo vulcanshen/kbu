@@ -63,7 +63,7 @@ func TestK5_SpaceDoesNotClosePopupsThatAreNotTheSpaceMenu(t *testing.T) {
 			m.appLog.animator.Finalize()
 		}, func(m *AppModel) bool { return m.appLog.owns() }},
 		{"key reference", func(m *AppModel) {
-			_ = m.help.Toggle()
+			_ = m.openKeyRef()
 			m.help.animator.Finalize()
 		}, func(m *AppModel) bool { return m.help.owns() }},
 		{"compare", func(m *AppModel) {

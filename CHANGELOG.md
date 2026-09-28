@@ -62,6 +62,12 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   popup or the drag mode (while you type in a search it is still a letter).
   `Ctrl+C` now goes through the same exit as `q`: it saves the session state
   and stops a running Alterm / edit / exec, which it used to skip.
+- **`?` shows the keys of whatever is in front.** On a panel it lists that
+  panel's own keys (every row of its `Space` menu), plus moving, panels and
+  the core keys; over a menu, popup or confirm it lists only that popup's
+  keys, stacked on top (`Esc` returns to the popup). It used to be one fixed
+  cheatsheet that left out the panel keys and did nothing over a popup. The
+  footer's `Esc exit` now reads `Esc back` — `Esc` never leaves kbu.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.

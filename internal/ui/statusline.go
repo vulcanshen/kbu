@@ -56,7 +56,7 @@ type hint struct {
 func (m StatusLineModel) hints() []hint {
 	return []hint{
 		{"?", "help"},
-		{"Esc", "exit"},
+		{"Esc", "back"},
 		{"Space", "menu"},
 		{"Enter", "commit/into"},
 		{"Tab", "cycle panel"},
