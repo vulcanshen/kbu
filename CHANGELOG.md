@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle) (tdp v0.1.13).
+
+- **A click lands on the popup you see on top.** A confirm, sort picker or
+  YAML viewer opened from a `Space` menu sits centred over the menu; a click
+  on it used to reach the menu first and run whichever menu row happened to
+  lie underneath. Keys, clicks, the drawing order and the popup depth now all
+  follow one bottom-to-top stack, so the popup drawn on top is the one that
+  answers. The mouse wheel also scrolls a YAML viewer opened over a menu, and
+  no longer types `u` / `d` into a visible Alterm or `kubectl edit` / `exec`
+  terminal.
+- **A popup on its way out hands the next key to the one beneath.** Pressing
+  `Esc` twice quickly closes two layers instead of losing the second press to
+  a popup (or a toast) already running its close animation.
+
 ## [v2.2.2] - 2026-09-04
 
 Quit without the extra keystroke; the splash credits its developer.

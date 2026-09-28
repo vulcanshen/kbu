@@ -97,54 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 1. 疊層的順序有好幾份，彼此不一致 —— D3、F4、F8、X2
-
-**現況**（`internal/ui/app.go`）：
-
-- 按鍵路由：`Update()` 前段一串 `if m.X.IsActive()`，順序是 txPty → shellPty → confirm → appLog → help → contextPicker →
-  namespacePicker → yamlPopup → comparePopup → breadcrumbPopup → helmDocMenu → listPicker → hintPopup → panel2Menu → settingsPopup。
-- 繪製：`View()` 由下往上 `overlay.Composite`：sticky toast → appLog → help → contextPicker → namespacePicker → helmDocMenu →
-  panel2Menu → hintPopup → listPicker → settingsPopup → yamlPopup → comparePopup → breadcrumbPopup → confirm → 一般 toast →
-  shellPty → txPty。
-- 滑鼠：`case tea.MouseMsg` 又是一個順序：settingsPopup → panel2Menu → listPicker → namespacePicker → hintPopup → confirm → help →
-  appLog → contextPicker → yamlPopup → comparePopup → breadcrumbPopup → helmDocMenu。
-- 層數：`popupDepth()` 數 `IsActive()`（含關閉中）的 popup；`closeAllBlockingPopups()` 又列一份。沒有 `closeTop`，`Esc` 由各 popup
-  在自己的 `Update()` 處理，app 層只處理 toast。
-- 已經是 bug 的是滑鼠：panel 2 Space menu 開出的 confirm（Edit / Delete）、sort picker（`[Alt-S]ort`）、YAML（`[Y]AML`）都疊在
-  menu 上、同樣置中，但滑鼠順序先問 `panel2Menu.HandleMouse()`；點在上層框裡、剛好落在底下 menu 某一列的位置時，執行的是底下那一列。
-  滾輪也是：底下還有 menu 時 `isMenuPopupActive()` 為真，疊在上面的 YAML / Compare 收不到滾輪。
-- 路由與繪製的差異（help、appLog 路由排在 YAML、Compare、picker 之前，繪製卻在它們底下；settings 路由最後、繪製在 listPicker
-  之上）現在還看不到，因為 `?`、`!`、`>` 只能在沒有 popup 時打開；第 12 條讓 `?` 能疊在任何 popup 上之後就會變成 bug。
-
-**規則**：D3 —— 「放在最上層」要同時改按鍵路由、`closeTop`、繪製順序；F8 的「誰是亮的」必須跟它們是同一份順序（webu 找到的
-第四處）。F4 —— 多層時 `Esc` 只關最上層，底下原樣留著。X2 —— 滑鼠只是鍵盤的對應，點到的應該是看得到、握著鍵盤的那一層。
-
-**怎麼改**：
-
-- 收成一份由下往上的清單：`View()` 照它畫、`Update()` 反過來路由、滑鼠反過來找命中、`popupDepth()` 照它數層、F8 取最後一個
-  `owns()` 當亮的那層（第 19 條）。新 popup 只插進這份清單一次。
-- 順序照「誰開誰」：Space menu < global operation popup < 從它開出的 picker / Settings / App log < confirm < key reference（`?`）。
-  terminal 類照現在的 context-shift 規則清掉底下（T1）。
-- 測試：help 開在 confirm 上時 `Enter` 不會確認底下的 confirm（舊清單就寫過的例子）；Space menu 開出的 confirm、sort picker、
-  YAML 上左鍵點一下，底下 menu 的動作不會觸發。
-
-
-## 2. 正在關的 popup 還會吃按鍵 —— F3
-
-**現況**：
-
-- `app.go` `Update()` 前段的路由（第 1 條那一串）全部用 `IsActive()`（`PopupAnimator.IsActive()` 是 `State != PopupClosed`，
-  關閉中也算）；popup 自己的 `Update()` 在 `!IsInteractive()` 時直接 return，所以這一鍵**被丟掉**。例：Space menu 開出的 Delete
-  confirm 按 `Esc`、關到一半再按 `Esc`，不會關到底下的 menu。
-- toast：`app.go` `case "esc"` 的 `if m.toast.IsActive()` → `Dismiss()`。toast 淡出中再按 `Esc`，那一鍵被吃掉，清 filter、
-  退 drill 都不發生。
-
-**規則**：F3 —— 已經在跑關閉動畫的 popup 不再理會 `Esc`，也不再接收其他按鍵；那一鍵交給底下那一層。
-
-**怎麼改**：路由改用「開啟中或已開」（加 `owns()`），關閉中就讓按鍵往下走；toast 同樣（locku、sshu 的修法）。繪製照舊用
-`IsActive()`（關閉動畫要畫完）。`popupDepth()` 與第 1 條的清單用同一個判斷。測試在關閉動畫中途送鍵（不跑完動畫）。
-
-
 ## 3. Compare popup 上按 `Space` 疊出一個 menu —— K5
 
 **現況**：`comparepopup.go` `handlePopupKey()` 的 `case " "` 開 `comparemenu`（`menuItems()`：`Switch to <layout> view`、

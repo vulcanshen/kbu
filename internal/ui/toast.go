@@ -107,6 +107,10 @@ func (m *ToastModel) SetLayer(layer int) {
 func (m ToastModel) IsActive() bool { return m.animator.IsActive() }
 func (m ToastModel) IsSticky() bool { return m.sticky }
 
+// Owns reports whether the toast is showing and not yet fading out —
+// the only state in which Esc is its to take (tdp F3).
+func (m ToastModel) Owns() bool { return m.animator.Owns() }
+
 // Show is the info-level toast — short reminders, "Copied!", PTY hints.
 // 1s duration, popup-layer border (stamped via SetLayer).
 func (m *ToastModel) Show(message string) tea.Cmd {

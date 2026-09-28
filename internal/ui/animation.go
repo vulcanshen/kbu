@@ -65,6 +65,18 @@ func (a PopupAnimator) IsInteractive() bool {
 	return a.State == PopupOpen
 }
 
+// Owns reports whether the popup still holds its place in the stack:
+// opening, open or swapping content — not closing. A popup already on
+// its way out hands keys and clicks to the layer beneath it (tdp F3),
+// while IsActive still counts it so the close animation keeps drawing.
+func (a PopupAnimator) Owns() bool {
+	switch a.State {
+	case PopupClosed, PopupClosingCompress, PopupClosingLine:
+		return false
+	}
+	return true
+}
+
 // Open begins the opening animation. No-op if already opening/open.
 func (a *PopupAnimator) Open() tea.Cmd {
 	if a.State == PopupOpen || a.State == PopupOpeningLine || a.State == PopupOpeningExpand {

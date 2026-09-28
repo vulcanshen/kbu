@@ -240,118 +240,43 @@ func (m AppModel) compareCtxForMenu(cursorItem k8s.ResourceItem) panel2CompareCt
 	return ctx
 }
 
-// popupDepth returns the count of currently-rendered popups so a
+// popupDepth counts the popups that hold a place in the stack, so a
 // newly-opening popup can stamp itself layer = depth + 1 via SetLayer
-// before its Open/Show/Toggle call. Lavender→sapphire layer scale
-// derives the border color from this count — see
-// .claude/rules/popup-convention.md §1.6.
+// before its Open/Show/Toggle call; the layer picks the border colour
+// on the lavender → sapphire scale (tdp D2). Same stackOrder and the
+// same owns() test the key routing uses: a popup closing on its way
+// out no longer counts (tdp F3).
 func (m AppModel) popupDepth() int {
 	n := 0
-	if m.help.IsActive() {
-		n++
-	}
-	if m.appLog.IsActive() {
-		n++
-	}
-	if m.confirm.IsActive() {
-		n++
-	}
-	if m.contextPicker.IsActive() {
-		n++
-	}
-	if m.namespacePicker.IsActive() {
-		n++
-	}
-	if m.helmDocMenu.IsActive() {
-		n++
-	}
-	if m.panel2Menu.IsActive() {
-		n++
-	}
-	if m.hintPopup.IsActive() {
-		n++
-	}
-	if m.listPicker.IsActive() {
-		n++
-	}
-	if m.settingsPopup.IsActive() {
-		n++
-	}
-	if m.yamlPopup.IsActive() {
-		n++
-	}
-	if m.comparePopup.IsActive() {
-		n++
-	}
-	if m.breadcrumbPopup.IsActive() {
-		n++
-	}
-	if m.shellPty.IsActive() {
-		n++
-	}
-	if m.txPty.IsActive() {
-		n++
+	for _, l := range m.stackOrder() {
+		if l.owns() {
+			n++
+		}
 	}
 	return n
 }
 
-// closeAllBlockingPopups batches the close cmds for every active
-// blocking popup. Used by context-shift target entry handlers (PTY
-// shell / kubectl edit / kubectl exec / drill-down) per popup-
-// convention §1.10 — the source popup that launched the action
-// should not still be sitting underneath when the user returns from
-// a minute-long subprocess session or a swapped-out panel 2 view.
-// Returns nil when nothing is open so callers can unconditionally
-// tea.Batch the result.
+// closeAllBlockingPopups batches the close cmds for every popup in the
+// stack. Used by context-shift target entry handlers (PTY shell /
+// kubectl edit / kubectl exec / drill-down, tdp T1) — the source popup
+// that launched the action should not still be sitting underneath when
+// the user returns from a minute-long subprocess session or a
+// swapped-out panel 2 view. Returns nil when nothing is open so callers
+// can unconditionally tea.Batch the result.
 //
-// Toast is intentionally excluded (§1.10): it is non-blocking and
-// auto-dismisses on its own timer; the close animation of a PTY
-// covers the whole popup region anyway, so any in-flight transient
-// toast vanishes visually with no special handling.
-//
-// PTY slots (shellPty / txPty) are also excluded — they have their
-// own mutual-exclusion logic (toast warn "Close current edit/exec
+// Toast is not in the stack: it is non-blocking and auto-dismisses on
+// its own timer. PTY slots (shellPty / txPty) are skipped — they have
+// their own mutual-exclusion logic (toast warn "Close current edit/exec
 // PTY first") and shouldn't cascade-close each other.
 func (m *AppModel) closeAllBlockingPopups() tea.Cmd {
 	var cmds []tea.Cmd
-	if m.help.IsActive() {
-		cmds = append(cmds, m.help.Close())
-	}
-	if m.appLog.IsActive() {
-		cmds = append(cmds, m.appLog.Close())
-	}
-	if m.confirm.IsActive() {
-		cmds = append(cmds, m.confirm.Close())
-	}
-	if m.contextPicker.IsActive() {
-		cmds = append(cmds, m.contextPicker.Close())
-	}
-	if m.namespacePicker.IsActive() {
-		cmds = append(cmds, m.namespacePicker.Close())
-	}
-	if m.helmDocMenu.IsActive() {
-		cmds = append(cmds, m.helmDocMenu.Close())
-	}
-	if m.panel2Menu.IsActive() {
-		cmds = append(cmds, m.panel2Menu.Close())
-	}
-	if m.hintPopup.IsActive() {
-		cmds = append(cmds, m.hintPopup.Close())
-	}
-	if m.listPicker.IsActive() {
-		cmds = append(cmds, m.listPicker.Close())
-	}
-	if m.settingsPopup.IsActive() {
-		cmds = append(cmds, m.settingsPopup.Close())
-	}
-	if m.yamlPopup.IsActive() {
-		cmds = append(cmds, m.yamlPopup.Close())
-	}
-	if m.comparePopup.IsActive() {
-		cmds = append(cmds, m.comparePopup.Close())
-	}
-	if m.breadcrumbPopup.IsActive() {
-		cmds = append(cmds, m.breadcrumbPopup.Close())
+	for _, l := range m.stackOrder() {
+		if _, isPty := l.(*PtyView); isPty {
+			continue
+		}
+		if l.owns() {
+			cmds = append(cmds, l.closeLayer())
+		}
 	}
 	if len(cmds) == 0 {
 		return nil
@@ -494,7 +419,7 @@ func (m *AppModel) openSortColumnPicker(rt k8s.ResourceType) tea.Cmd {
 	// itself when it's already active, which would double-bump the layer
 	// on a swap (column → direction, or direction → loop-back column).
 	// Only stamp on first open — the swap path keeps its original layer.
-	if !m.listPicker.IsActive() {
+	if !m.listPicker.owns() {
 		m.listPicker.SetLayer(m.popupDepth() + 1)
 	}
 	return m.listPicker.Open("sort:column", title, items)
@@ -546,7 +471,7 @@ func (m *AppModel) openSortDirectionPicker(rt k8s.ResourceType, column string) t
 	// Swap path: listPicker is already active from the column step, so
 	// skip the layer re-stamp — same instance, same layer (see the same
 	// guard in openSortColumnPicker for the rationale).
-	if !m.listPicker.IsActive() {
+	if !m.listPicker.owns() {
 		m.listPicker.SetLayer(m.popupDepth() + 1)
 	}
 	return m.listPicker.Open("sort:direction", title, items)
@@ -790,28 +715,6 @@ func (m *AppModel) commitSettingsToggle(key string) tea.Cmd {
 // doubleClickWindow is the max gap between two left presses that
 // counts as a double-click. Standard desktop default.
 const doubleClickWindow = 500 * time.Millisecond
-
-// isMenuPopupActive reports whether a short menu-style popup is
-// currently up. These popups (panel2 menu, listpicker, settings,
-// hint actions, breadcrumb, helm-doc menu, namespace / context
-// pickers, confirm dialog) all run on tight item lists where
-// half-page wheel scrolling doesn't make sense — the dispatcher
-// swallows the wheel rather than synthesise an unbound u/d that
-// the popup would silently drop. Viewer popups (yamlpopup,
-// comparepopup, appLog, help) are intentionally NOT in this set:
-// they bind u/d for half-page scroll, so wheel through them is
-// genuinely useful.
-func (m AppModel) isMenuPopupActive() bool {
-	return m.panel2Menu.IsActive() ||
-		m.listPicker.IsActive() ||
-		m.settingsPopup.IsActive() ||
-		m.hintPopup.IsActive() ||
-		m.breadcrumbPopup.IsActive() ||
-		m.helmDocMenu.IsActive() ||
-		m.namespacePicker.IsActive() ||
-		m.contextPicker.IsActive() ||
-		m.confirm.IsActive()
-}
 
 // handleMousePress is the main mouse dispatcher. Runs only on
 // MouseActionPress events (release / motion are no-ops in phase 1).
@@ -1575,179 +1478,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, c
 			}
 			return m, nil
-		case tea.KeyMsg:
-			if m.txPty.IsActive() {
-				var cmd tea.Cmd
-				m.txPty, cmd = m.txPty.Update(msg)
-				return m, cmd
-			}
-			if m.shellPty.IsActive() {
-				var cmd tea.Cmd
-				m.shellPty, cmd = m.shellPty.Update(msg)
-				return m, cmd
-			}
-			// All hidden: fall through (Alt+T re-shows Alterm, etc.)
 		}
 	}
 
-	if m.confirm.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.confirm, cmd = m.confirm.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
+	// Keys go to the popup on top of the stack — the last layer in
+	// stackOrder that owns its place. A popup running its close
+	// animation no longer owns it, so the key falls through to the
+	// layer beneath instead of being swallowed (tdp F3, D3). A PTY on
+	// top gets every key (tdp K10); with Alterm hidden, keys fall
+	// through to the panels (Alt+t shows it again).
+	if k, ok := msg.(tea.KeyMsg); ok {
+		if top := m.topLayer(); top != nil {
+			if !top.ready() {
+				return m, nil
 			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.appLog.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.appLog, cmd = m.appLog.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.help.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.help, cmd = m.help.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.contextPicker.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.contextPicker, cmd = m.contextPicker.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.namespacePicker.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.namespacePicker, cmd = m.namespacePicker.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.yamlPopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.yamlPopup, cmd = m.yamlPopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.comparePopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.comparePopup, cmd = m.comparePopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.breadcrumbPopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.breadcrumbPopup, cmd = m.breadcrumbPopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.helmDocMenu.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.helmDocMenu, cmd = m.helmDocMenu.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	// listPicker is checked BEFORE hintPopup / panel2Menu because the Sort
-	// flow stacks the listPicker on top of either source (sidebar Space
-	// menu's SortKind, panel-2 menu's [Alt][S]ort) per §1.8 — the source
-	// stays underneath, the picker owns input. Hard-routing in source-
-	// first order would send j/k to the menu cursor below the picker.
-	if m.listPicker.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.listPicker, cmd = m.listPicker.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.hintPopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.hintPopup, cmd = m.hintPopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.panel2Menu.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.panel2Menu, cmd = m.panel2Menu.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
-		}
-	}
-
-	if m.settingsPopup.IsActive() {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			var cmd tea.Cmd
-			m.settingsPopup, cmd = m.settingsPopup.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
+			return m, top.key(k)
 		}
 	}
 
@@ -1769,38 +1514,38 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// EXCEPT when the drop-only hint popup is up (Space mid-drag
 		// surfaced it): popup owns the click so the user can commit
 		// Drop via mouse or right-click to close back into bare drag.
-		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && !m.hintPopup.IsActive() {
+		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && !m.hintPopup.owns() {
 			cmd := m.sidebar.CancelDrag()
 			return m, cmd
 		}
-		// Mouse routing. Layered:
+		// Mouse routing, top of the stack first — the same topLayer()
+		// the keys go to, so a click lands on the popup the user can
+		// see on top, never on a menu row hidden beneath it (tdp X2):
 		//   1. MouseEnabled gate — short-circuit when off, EXCEPT
 		//      for the Settings popup itself. Users who toggle Mouse
 		//      OFF would otherwise be locked out of the surface that
 		//      toggles it back on; the popup is its own escape hatch.
 		//   2. Wheel → synthesize u/d (half-page) for main panels +
 		//      viewer popups (yaml / compare / appLog / help) that
-		//      bind u/d natively. Menu-style popups (short lists)
-		//      explicitly swallow wheel: u/d is unbound there so the
-		//      synth would no-op anyway, and ignoring it keeps the
-		//      wheel from drifting the underlying panel's cursor
-		//      through the popup overlay.
-		//   3. Settings popup owns its own click (toggle on row).
-		//   4. Other popups route through their HandleMouse.
-		//   5. Otherwise, handleMousePress for the main 3 panels.
+		//      bind u/d natively. With a menu-style popup on top
+		//      (short lists) the wheel is swallowed: u/d is unbound
+		//      there, and ignoring it keeps the wheel from drifting
+		//      the cursor of whatever sits beneath. A PTY on top
+		//      takes no mouse action at all.
+		//   3. A click goes to the top popup's HandleMouse.
+		//   4. Otherwise, handleMousePress for the main 3 panels.
+		top := m.topLayer()
 		if m.cfg != nil && !m.cfg.IsMouseEnabled() {
-			if m.settingsPopup.IsActive() {
-				var cmd tea.Cmd
-				m.settingsPopup, cmd = m.settingsPopup.HandleMouse(msg, m.width, m.height)
-				return m, cmd
+			if top == &m.settingsPopup {
+				return m, top.click(msg, m.width, m.height)
 			}
 			return m, nil
 		}
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			// Menu popups ignore wheel entirely — their content is
-			// short and u/d half-page semantics don't fit a
-			// 3-7-item picker.
-			if m.isMenuPopupActive() {
+			if top != nil && (isMenuLayer(top) || !top.ready()) {
+				return m, nil
+			}
+			if _, isPty := top.(*PtyView); isPty {
 				return m, nil
 			}
 			// Wheel translates to half-page move (u / d). u/d are
@@ -1822,78 +1567,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
 		}
-		// Forward to whichever interactive popup is on top. Each
-		// popup's HandleMouse owns its own hit-test (popup rect,
-		// row offsets) and decides what a click commits.
-		if m.settingsPopup.IsActive() {
-			var cmd tea.Cmd
-			m.settingsPopup, cmd = m.settingsPopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.panel2Menu.IsActive() {
-			var cmd tea.Cmd
-			m.panel2Menu, cmd = m.panel2Menu.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.listPicker.IsActive() {
-			var cmd tea.Cmd
-			m.listPicker, cmd = m.listPicker.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.namespacePicker.IsActive() {
-			var cmd tea.Cmd
-			m.namespacePicker, cmd = m.namespacePicker.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.hintPopup.IsActive() {
-			var cmd tea.Cmd
-			m.hintPopup, cmd = m.hintPopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		// Remaining popups all have HandleMouse now. List-style
-		// popups commit on left-click; scroll-only / dialog popups
-		// close on right-click; left-click is no-op everywhere a
-		// stray click could fire a destructive or surprising
-		// action (confirm dialogs especially).
-		if m.confirm.IsActive() {
-			var cmd tea.Cmd
-			m.confirm, cmd = m.confirm.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.help.IsActive() {
-			var cmd tea.Cmd
-			m.help, cmd = m.help.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.appLog.IsActive() {
-			var cmd tea.Cmd
-			m.appLog, cmd = m.appLog.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.contextPicker.IsActive() {
-			var cmd tea.Cmd
-			m.contextPicker, cmd = m.contextPicker.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.yamlPopup.IsActive() {
-			var cmd tea.Cmd
-			m.yamlPopup, cmd = m.yamlPopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.comparePopup.IsActive() {
-			var cmd tea.Cmd
-			m.comparePopup, cmd = m.comparePopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.breadcrumbPopup.IsActive() {
-			var cmd tea.Cmd
-			m.breadcrumbPopup, cmd = m.breadcrumbPopup.HandleMouse(msg, m.width, m.height)
-			return m, cmd
-		}
-		if m.helmDocMenu.IsActive() {
-			var cmd tea.Cmd
-			m.helmDocMenu, cmd = m.helmDocMenu.HandleMouse(msg, m.width, m.height)
-			return m, cmd
+		// A click goes to the popup on top. Each popup's HandleMouse
+		// owns its own hit-test (popup rect, row offsets) and decides
+		// what a click commits: list popups commit on left-click,
+		// scroll-only and dialog popups close on right-click, and
+		// left-click is a no-op wherever a stray click could fire a
+		// destructive action (confirm especially).
+		if top != nil {
+			return m, top.click(msg, m.width, m.height)
 		}
 		cmd := m.handleMousePress(msg)
 		return m, cmd
@@ -1993,13 +1674,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(closeAll, m.shellPty.Start(cmd, terminalTitle(), m.width, m.height, PtyKindShell))
 		case "?":
 			m.help.SetSize(m.width, m.height)
-			if !m.help.IsActive() {
+			if !m.help.owns() {
 				m.help.SetLayer(m.popupDepth() + 1)
 			}
 			return m, m.help.Toggle()
 		case "!":
 			m.appLog.SetSize(m.width, m.height)
-			if !m.appLog.IsActive() {
+			if !m.appLog.owns() {
 				m.appLog.SetLayer(m.popupDepth() + 1)
 			}
 			return m, m.appLog.Toggle()
@@ -2042,15 +1723,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.enterDrillDown()
 			}
 		case "esc":
-			// §1.9 — auto-dismiss toast still has to accept Esc. Toast
+			// tdp F3 — auto-dismiss toast still has to accept Esc. Toast
 			// is non-blocking (keys pass through to panels), so it
 			// can't intercept Esc itself; the app-level Esc handler
 			// dismisses it first. Higher-priority blocking popups
 			// already short-circuited above this switch, so reaching
 			// here means no popup is claiming Esc and the toast wins
-			// over filter clear / drill exit. Subsequent Esc presses
-			// then walk the panel chain normally.
-			if m.toast.IsActive() {
+			// over filter clear / drill exit. A toast already fading
+			// out no longer owns Esc: the press walks the panel chain
+			// instead of being eaten by a toast that is leaving anyway.
+			if m.toast.Owns() {
 				return m, m.toast.Dismiss()
 			}
 			filterActive := (m.activePanel == SidebarPanel && m.sidebar.HasActiveFilter()) ||
@@ -2525,7 +2207,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// popup's chain is now stale (post-switch the drill chain
 		// resets, so listed levels won't reach the same resources
 		// anymore). Tear it down.
-		if m.breadcrumbPopup.IsActive() {
+		if m.breadcrumbPopup.owns() {
 			if c := m.breadcrumbPopup.Close(); c != nil {
 				batch = append(batch, c)
 			}
@@ -3427,76 +3109,15 @@ func (m AppModel) View() string {
 		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
-	if m.appLog.IsActive() {
-		m.appLog.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.appLog.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.help.IsActive() {
-		m.help.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.help.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.contextPicker.IsActive() {
-		mainView = overlay.Composite(m.contextPicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.namespacePicker.IsActive() {
-		mainView = overlay.Composite(m.namespacePicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	// helmDocMenu renders BEFORE yamlPopup so when the menu spawns a YAML
-	// view the YAML overlays the menu (matching the input-routing order:
-	// yamlPopup catches keys first while it's open, menu sits idle
-	// underneath, then takes input back when YAML closes).
-	if m.helmDocMenu.IsActive() {
-		m.helmDocMenu.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.helmDocMenu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.panel2Menu.IsActive() {
-		m.panel2Menu.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.panel2Menu.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.hintPopup.IsActive() {
-		m.hintPopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.hintPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.listPicker.IsActive() {
-		m.listPicker.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.listPicker.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.settingsPopup.IsActive() {
-		m.settingsPopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.settingsPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.yamlPopup.IsActive() {
-		m.yamlPopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.yamlPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.comparePopup.IsActive() {
-		m.comparePopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.comparePopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	if m.breadcrumbPopup.IsActive() {
-		m.breadcrumbPopup.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.breadcrumbPopup.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	// Confirm renders LAST among modal popups so it sits on top of any
-	// other open popup (breadcrumb especially — space on a breadcrumb
-	// row triggers confirm while breadcrumb stays visible underneath).
-	// Input routing checks confirm before breadcrumb (top of Update), so
-	// the topmost visual popup is also the one receiving keys.
-	if m.confirm.IsActive() {
-		m.confirm.SetSize(m.width, m.height)
-		mainView = overlay.Composite(m.confirm.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
+	// The popup stack, bottom first — the same stackOrder the keys and
+	// clicks are routed by, so the popup drawn on top is the one that
+	// answers them. A popup still running its close animation is drawn
+	// in its slot until the animation ends.
+	for _, l := range m.stackOrder() {
+		if l.drawn() {
+			l.resize(m.width, m.height)
+			mainView = overlay.Composite(l.render(), mainView, overlay.Center, overlay.Center, 0, 0)
+		}
 	}
 
 	// Non-sticky toasts composite AFTER the popup stack so a fresh
@@ -3506,15 +3127,6 @@ func (m AppModel) View() string {
 	// the popups above.
 	if m.toast.IsActive() && !m.toast.IsSticky() {
 		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-
-	// Composite shellPty under txPty: Alterm renders first so a visible
-	// edit/exec popup overlays it. Hidden shellPty contributes nothing.
-	if m.shellPty.IsRendered() {
-		mainView = overlay.Composite(m.shellPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
-	}
-	if m.txPty.IsRendered() {
-		mainView = overlay.Composite(m.txPty.RenderPopup(), mainView, overlay.Center, overlay.Center, 0, 0)
 	}
 
 	return mainView

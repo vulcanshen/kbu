@@ -114,7 +114,7 @@ func (m *AppLogModel) Error(msg string)   { m.Add(LogError, msg) }
 func (m *AppLogModel) Success(msg string) { m.Add(LogSuccess, msg) }
 
 func (m *AppLogModel) Toggle() tea.Cmd {
-	if m.animator.IsActive() {
+	if m.animator.Owns() {
 		return m.animator.Close()
 	}
 	m.scrollOffset = 0
