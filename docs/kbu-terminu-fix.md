@@ -97,23 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 19. 最上層以外沒有 dim —— F8、D2
-
-**現況**：`app.go` `View()` 把 popup 一層層 `overlay.Composite` 疊上去，底下的 panel、串流中的 log、下層 popup 都照原色畫；整個
-專案沒有任何 dim 的程式。兩個 PTY 同時畫出來時（Alterm 在 `kubectl edit` 底下）底下那個也照原色。
-
-**規則**：F8 —— 有 popup 開著時，最上層那個 popup 以外的一切（底下的 popup 與整個 base 畫面，串流內容與警示色也一起）都用 dim 色畫；
-dim 的做法是把每一個顏色（前景與背景）往底色淡化，形狀與版面原封不動，不可以剝色重畫、丟背景、把前景統一成一個 dim 色；底下 popup 的
-邊框是自己層色的 dim 版本；toast 不觸發 dim。D2 —— `dim(c) = c × 0.45 + base × 0.55`（base `#1e1e2e`），前景背景都算，16 / 256 色先換
-RGB；每個通道取原值與淡化值較小的那個，絕不變亮；輸出一律 24-bit；沒有指定前景的文字給 `dim(Text #cdd6f4)`；bold、reverse、文字不動。
-
-**怎麼改**：搬 filu 的 `internal/ui/dim.go`（`dimANSI()`），搬之前逐條對一次 D2。`View()` 照第 1 條的清單，合成最上層（最後一個 `owns()`）
-之前把已經畫好的畫面過一次 `dimANSI()`；toast 畫在 dim 之後（sticky toast 若還留著，也不算一層）；不動任何 popup 的 render。測試開
-truecolor，量背景：panel 的 powerline 膠囊、cursor 列、panel 3 active tab 膠囊、compare anchor 的 lavender 列，在 popup 底下是「自己的
-顏色淡化」，不是消失；預期值手算寫死；「上層開始關時下層亮回來」用不跑動畫的送鍵量。印一次開著 popup 的 `View()`。dev-remarks
-「依層數決定的 popup 邊框」補一句 dim。
-
-
 ## 已經符合、不用修的（對照 v0.1.13）
 
 - **K1（letter hotkey 不佔 core key）**：`q` 只用在離開，`Space`、`?`、`Tab`、`Enter`、`Esc` 沒有被字母熱鍵借用；confirm 的 `y` / `n`、

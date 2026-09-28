@@ -218,7 +218,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	bottomDashes := innerW - len(hint) - 1
+	bottomDashes := innerW - lipgloss.Width(hint) - 1 // display cells: "·" is 2 bytes
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}

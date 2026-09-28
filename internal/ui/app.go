@@ -2837,8 +2837,18 @@ func (m AppModel) View() string {
 	// clicks are routed by, so the popup drawn on top is the one that
 	// answers them. A popup still running its close animation is drawn
 	// in its slot until the animation ends.
+	//
+	// Only the top popup is bright (tdp F8): just before it is drawn,
+	// everything already on screen — the panels, streaming logs, the
+	// popups beneath — is redrawn dimmed. A popup that has started to
+	// close no longer owns the top, so the one beneath lights up again
+	// at once.
+	top := m.topLayer()
 	for _, l := range m.stackOrder() {
 		if l.drawn() {
+			if l == top {
+				mainView = dimANSI(mainView)
+			}
 			l.resize(m.width, m.height)
 			mainView = overlay.Composite(l.render(), mainView, overlay.Center, overlay.Center, 0, 0)
 		}

@@ -112,6 +112,12 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   while it is open. Toasts show at the bottom, just above the footer, not in
   the middle of the screen. Alterm and `kubectl edit` / `exec` get one more
   column on each side.
+- **Only the popup you're in is bright.** With a popup open, everything
+  beneath it — the panels, streaming logs, the popups under it — is drawn in
+  a faded version of its own colours, so you can see at a glance which popup
+  answers your keys. Toasts don't dim anything.
+- **The confirm's bottom border lines up again.** Its right corner sat one
+  cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a
   popup row selected the row next to it.
 - **The top bar stays one row.** A long context name (an EKS ARN, say) made

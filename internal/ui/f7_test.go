@@ -94,12 +94,15 @@ func everyPopup(t *testing.T, w, h int) map[string]string {
 }
 
 // tdp F7: every popup is min(W − 2, 120) wide, whatever it shows — 78 on
-// an 80-column terminal, 120 on a 200-column one (the cap).
+// an 80-column terminal, 120 on a 200-column one (the cap) — every row of
+// it, borders included.
 func TestF7_EveryPopupIsOneWidth(t *testing.T) {
 	for _, c := range []struct{ w, want int }{{80, 78}, {200, 120}} {
 		for name, s := range everyPopup(t, c.w, 40) {
-			if got, _ := popupBox(s); got != c.want {
-				t.Errorf("%s at W=%d: %d wide, want %d", name, c.w, got, c.want)
+			for i, l := range strings.Split(s, "\n") {
+				if got := ansi.StringWidth(l); got != c.want {
+					t.Errorf("%s at W=%d: row %d is %d wide, want %d: %q", name, c.w, i, got, c.want, ansi.Strip(l))
+				}
 			}
 		}
 	}
