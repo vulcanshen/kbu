@@ -287,8 +287,8 @@ func (m NamespacePickerModel) handleSearchKey(msg tea.KeyMsg) (NamespacePickerMo
 			m.cursor = (m.cursor - 1 + len(items)) % len(items)
 		}
 		return m, nil
-	case msg.Type == tea.KeyRunes:
-		for _, r := range msg.Runes {
+	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		for _, r := range typedRunes(msg) {
 			m.searchQuery += string(r)
 		}
 		m.cursor = 0

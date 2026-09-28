@@ -74,6 +74,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   toast saying `Esc` leaves the mode first. The drag's keys now sit in the
   footer while it lasts, replacing the toast that stayed on screen; the
   selection's keys sit in the viewer's bottom hint.
+- **Search lines take spaces.** The sidebar, panel 2, the YAML viewer and the
+  namespace / context filters dropped the space bar, so a YAML search like
+  `image: nginx` couldn't be typed.
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.
