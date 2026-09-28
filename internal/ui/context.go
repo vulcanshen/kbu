@@ -115,7 +115,7 @@ func (m ContextPickerModel) Update(msg tea.Msg) (ContextPickerModel, tea.Cmd) {
 		}
 	case "enter":
 		return m.selectCurrent(items)
-	case "esc", "c", "C", " ":
+	case "esc", "c", "C":
 		if m.searchQuery != "" {
 			m.searchQuery = ""
 			m.cursor = 0
@@ -304,7 +304,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := " Enter: select  /: search  Space: cancel "
+	hint := " Enter: select  /: search  Esc: close "
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0

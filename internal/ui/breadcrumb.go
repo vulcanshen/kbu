@@ -116,11 +116,6 @@ func (m BreadcrumbPopupModel) Update(msg tea.Msg) (BreadcrumbPopupModel, tea.Cmd
 			}
 			ref := m.chain[m.cursor]
 			return m, func() tea.Msg { return RequestSwitchToResourceMsg{Ref: ref} }
-		case " ":
-			// v1.5.x: Space mirrors the open key — close the popup
-			// without committing. Aligns with the global rule "any menu
-			// popup Space = close".
-			return m, m.animator.Close()
 		case "esc":
 			return m, m.animator.Close()
 		}
@@ -204,7 +199,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	currentMarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending)).Bold(true)
 
 	title := "󰍒 Breadcrumb"
-	hint := " j/k: move  Enter: switch  Space: close "
+	hint := " j/k: move  Enter: switch  Esc: close "
 
 	// Widened from 70% to 85% so long resource names (RS-hash suffixes,
 	// generated Job names, ...) get more horizontal room before the

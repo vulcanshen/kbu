@@ -97,33 +97,6 @@ scratch 複本實測：W = 200 時 key reference 198 欄寬、YAML 198 × 38（�
 （menu，第 9 條）；少掉：`comparemenu`（第 3 條）、`hintPopup` 的混合用法與拖曳的 Drop menu（第 5、14 條）。
 
 
-## 4. `Space` 會關掉不是 Space menu 的 popup —— K5、F6
-
-**現況**：下列 popup 的 `Update()` 都把 `" "` 當成關閉 / 取消：
-
-- `confirm.go`：`case "esc", "n", " "`（取消 confirm），下框 hint `Enter/y: confirm  Space: cancel`
-- `yamlpopup.go`：`case " "`（註解寫明是舊的肌肉記憶；visual 模式裡也一樣，見第 14 條）
-- `breadcrumb.go`：`case " "`，hint `Space: close`
-- `namespace.go`：loading 中與一般狀態兩處 `"esc", "n", "N", " "`
-- `context.go`：`"esc", "c", "C", " "`，hint `Space: cancel`
-- `listpicker.go`：`"esc", " "`（sort picker）
-- `settingspopup.go`：`"esc", " ", ">"`
-- `applog.go`：`"esc", "!", " "`，hint `Space:close`
-- `help.go`：`"esc", "?", " "`，hint `Esc/?/Space:close`；key reference 的 `Space` 說明寫 `Open menu / close popup`（`helpContent()`）
-- `helmdocmenu.go`：`"esc", " "`。它現在是 Helm Release 列上 `Space` 開的 menu；第 5 條把它併進 Space menu 後就是 K5 本身，若保留成
-  從 Space menu 開出的另一個 popup，`Space` 就不能關它
-- `comparemenu.go`（第 3 條拿掉後隨之消失）、`hintpopup.go` 的唯讀模式（第 5 條拿掉後隨之消失）
-
-**規則**：K5 —— `Space` 只關它自己開的 Space menu；由 `Enter` 或熱鍵打開的 confirm、picker、note 上按 `Space` 不作用，由 `Esc` 或
-自己的流程關閉。F6 —— confirm 由 `Enter` 接受、`Esc` 取消；`Space` 能關 confirm 就兼了 `Esc` 的「取消」（P4）。
-
-**怎麼改**：以上各處拿掉 `" "`，只留真正的 Space menu（`panel2Menu` 與第 5、6 條組出來的各 panel Space menu；filu 用一個
-`spaceToggle` 旗標標出哪些是）。global operation popup 不是 Space menu，`Space` 在上面也不作用。confirm 下框 hint 改成說出後果
-的寫法（D3：`Enter <動詞> · Esc cancel`，動詞依 `ConfirmAction`，例如 `Enter delete`）；其他 popup 的 hint 拿掉 `Space`。
-dev-remarks「功能筆記」多 namespace 選取的「`Esc`/`Space` 關閉」一起改。測試 `TestBreadcrumbPopup_SpaceCloses`、
-`TestHelmDocMenu_SpaceCloses`、`TestHintPopup_SpaceCloses` 等改寫成「Space 不作用」，不要刪。
-
-
 ## 5. panel 上的 `Space` 不一定開 Space menu —— K5、M2、M7、F1
 
 **現況**（`app.go` `Update()` 的 `case " "`）：

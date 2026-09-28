@@ -40,11 +40,10 @@ func TestBreadcrumbPopup_EnterEmitsSwitchMsg(t *testing.T) {
 	}
 }
 
-// TestBreadcrumbPopup_SpaceCloses — v1.5.x mental model: Space mirrors
-// open and closes the popup without committing. Aligns with the global
-// rule "any menu popup Space = close". Don't call cmd() — animator
-// close uses tea.Tick which would block under test harness.
-func TestBreadcrumbPopup_SpaceCloses(t *testing.T) {
+// TestBreadcrumbPopup_SpaceDoesNothing — tdp K5: Space only closes the
+// Space menu it opened. The breadcrumb is opened by Enter on a Space-menu
+// row, so Space does nothing here; Esc closes it.
+func TestBreadcrumbPopup_SpaceDoesNothing(t *testing.T) {
 	m := newTestBreadcrumb()
 	chain := []k8s.RefTarget{
 		{Type: k8s.ResourcePods, Name: "pod-a", Namespace: "ns-x"},
@@ -54,13 +53,13 @@ func TestBreadcrumbPopup_SpaceCloses(t *testing.T) {
 	m.animator.State = PopupOpen
 	m.cursor = 1
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	if cmd == nil {
-		t.Fatal("Space must return a close Cmd")
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if cmd != nil {
+		t.Error("Space must not close or commit the breadcrumb")
 	}
-	// Type-level check would require invoking cmd(), which blocks on
-	// the animator tick. Non-nil is the contract — close cmd is an
-	// implementation detail of PopupAnimator.
+	if !m.animator.Owns() {
+		t.Error("the breadcrumb must stay open on Space")
+	}
 }
 
 // TestBreadcrumbPopup_EnterNoOpOnEmptyChain — bounds check still applies

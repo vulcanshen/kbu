@@ -86,10 +86,9 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 			m.onConfirm = nil
 			closeCmd := m.animator.Close()
 			return m, tea.Batch(cmd, closeCmd)
-		case "esc", "n", " ":
-			// Space cancels too — the same key that opens the confirm
-			// (Relatives-tab space-jump) re-pressed by reflex should
-			// dismiss rather than re-trigger.
+		case "esc", "n":
+			// Space does NOT cancel: that would make it a second Esc
+			// (tdp K5, F6). Only the Space menu closes on Space.
 			m.onConfirm = nil
 			return m, m.animator.Close()
 		}
@@ -98,7 +97,7 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 }
 
 // HandleMouse routes a click against the confirm dialog.
-// Right-click inside the popup cancels (mirror of Esc / n / Space).
+// Right-click inside the popup cancels (mirror of Esc / n).
 // Left-click intentionally does NOT confirm — accidental click
 // could fire a destructive delete / edit / rollback, so the user
 // must commit deliberately via keyboard Enter / y. Outside-popup
@@ -117,6 +116,24 @@ func (m ConfirmModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (Confi
 	return m, nil
 }
 
+// confirmVerb is what Enter does, named in the hint so the user reads the
+// consequence before accepting (tdp F6, D3).
+func confirmVerb(a ConfirmAction) string {
+	switch a {
+	case ConfirmShellExec:
+		return "exec"
+	case ConfirmDelete:
+		return "delete"
+	case ConfirmEdit:
+		return "edit"
+	case ConfirmSwitch:
+		return "switch"
+	case ConfirmRollback:
+		return "rollback"
+	}
+	return "confirm"
+}
+
 func (m ConfirmModel) View() string {
 	return ""
 }
@@ -133,7 +150,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
 
 	title := "󰦕 Confirm"
-	hint := " Enter/y: confirm  Space: cancel "
+	hint := " Enter " + confirmVerb(m.action) + " · Esc cancel "
 
 	// Cap inner width at 70% of screen (or 80 chars if no screen size).
 	maxInnerW := 80
