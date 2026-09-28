@@ -1459,11 +1459,27 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Keys go to the popup on top of the stack — the last layer in
 	// stackOrder that owns its place. A popup running its close
 	// animation no longer owns it, so the key falls through to the
-	// layer beneath instead of being swallowed (tdp F3, D3). A PTY on
-	// top gets every key (tdp K10); with Alterm hidden, keys fall
-	// through to the panels (Alt+t shows it again).
+	// layer beneath instead of being swallowed (tdp F3, D3).
 	if k, ok := msg.(tea.KeyMsg); ok {
-		if top := m.topLayer(); top != nil {
+		top := m.topLayer()
+		// A PTY on top gets every key, q and Ctrl+C included (tdp
+		// K10); with Alterm hidden, keys fall through to the panels
+		// (Alt+t shows it again).
+		if _, isPty := top.(*PtyView); isPty {
+			return m, top.key(k)
+		}
+		// tdp K9: q and Ctrl+C are one leave flow, on every surface
+		// — a popup, a menu, a mode. Ctrl+C works even while typing;
+		// q is a character there (K8).
+		switch k.String() {
+		case "ctrl+c":
+			return m, quitCmd
+		case "q":
+			if !m.typing() {
+				return m, quitCmd
+			}
+		}
+		if top != nil {
 			if !top.ready() {
 				return m, nil
 			}
@@ -2326,41 +2342,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 	// Sidebar drag-and-drop mode is modal: only j/k (swap),
 	// D (commit), and "anything else" (cancel) make sense. Route
-	// ALL keypresses to the sidebar first so global hotkeys like
-	// Tab / 1 / 2 / 3 / q can't slip past — pressing them mid-
-	// drag should cancel, not switch focus or quit. ctrl+c stays
-	// special: it still kills kbu (the sidebar's cancel will
-	// fire on the way out, harmless).
-	if m.activePanel == SidebarPanel && m.sidebar.IsDragging() && msg.String() != "ctrl+c" {
+	// every key that reaches the panel to the sidebar first so hotkeys
+	// like Tab / 1 / 2 / 3 can't slip past — pressing them mid-drag
+	// should cancel, not switch focus. (q and Ctrl+C never get here:
+	// the leave flow runs before any surface sees the key.)
+	if m.activePanel == SidebarPanel && m.sidebar.IsDragging() {
 		sidebar, cmd := m.sidebar.Update(msg)
 		m.sidebar = sidebar
 		return cmd
 	}
-	// When any panel is in search mode, only ctrl+c passes through.
-	searching := (m.activePanel == TablePanel && m.table.IsSearching()) ||
-		(m.activePanel == SidebarPanel && m.sidebar.IsSearching()) ||
-		(m.activePanel == DetailPanel && m.detail.IsSearching())
-	if searching {
-		switch msg.String() {
-		case "ctrl+c":
-			m.watcher.Stop()
-			m.logStreamer.Stop()
-			return tea.Quit
-		}
+	// While a panel search is typing, every key is the search's.
+	if m.panelTyping() {
 		return m.dispatchToPanel(msg)
 	}
 	switch msg.String() {
-	case "ctrl+c":
-		m.watcher.Stop()
-		m.logStreamer.Stop()
-		return tea.Quit
-	case "q":
-		// `q` quits straight away — no confirm step. Routed
-		// through quitMsg so the teardown (streams, PTYs,
-		// session-state save) stays in one place.
-		return func() tea.Msg {
-			return quitMsg{}
-		}
 	case "V":
 		return m.splash.Show()
 	case ">":
@@ -2635,6 +2630,37 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 		return m.openSpaceMenu()
 	}
 	return m.dispatchToPanel(msg)
+}
+
+// quitCmd starts the leave flow (tdp K9). kbu leaves straight away — no
+// confirm step; the quitMsg handler does the teardown (streams, PTYs,
+// session-state save) in one place.
+func quitCmd() tea.Msg { return quitMsg{} }
+
+// panelTyping reports whether the focused panel's search line is taking
+// keystrokes.
+func (m *AppModel) panelTyping() bool {
+	return (m.activePanel == TablePanel && m.table.IsSearching()) ||
+		(m.activePanel == SidebarPanel && m.sidebar.IsSearching()) ||
+		(m.activePanel == DetailPanel && m.detail.IsSearching())
+}
+
+// typing reports whether the frontmost surface is an input taking
+// keystrokes (tdp K8): a panel's search line, a picker's filter line, the
+// YAML viewer's search line. There, printable keys — q and ? included —
+// are characters.
+func (m *AppModel) typing() bool {
+	switch top := m.topLayer(); top {
+	case nil:
+		return m.panelTyping()
+	case &m.namespacePicker:
+		return m.namespacePicker.searching
+	case &m.contextPicker:
+		return m.contextPicker.searching
+	case &m.yamlPopup:
+		return m.yamlPopup.IsSearching()
+	}
+	return false
 }
 
 // dispatchToPanel hands a message to the focused panel's own Update.
