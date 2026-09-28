@@ -163,18 +163,6 @@ namespace `kube-system` + 兩個 chip + `! 3 errors` 就折成 2 列；EKS ARN �
 剛好等於終端機寬，含 popup 疊上去與長 context 名稱）—— 舊清單待確認的 L4 那題併進這裡，statusbar 正是這種測試會抓到的例子。
 
 
-## 21. splash 只認三個鍵 —— S3
-
-**現況**：`splash.go` `Update()` 只有 `"esc", "enter", " "` 會關掉 splash；其他鍵（`q`、`Ctrl-C`、`?`、字母）被 `app.go` 的 splash 分支
-吞掉、什麼都不做，splash 繼續開著；提示字 `Press Esc to close`。舊清單「先看」說 S3 已符合，只核對了路由順序（splash 在 `Ctrl-C`
-之前），沒看 splash 自己收哪些鍵。
-
-**規則**：S3 —— splash 開著時，**任何鍵**都只會關掉它，包括 `q`、`Ctrl-C`、`Esc`、`Space`、`?`；那個鍵不會再做別的事。
-
-**怎麼改**：splash 開著時任何 `tea.KeyMsg` 都關掉它（路由位置不動，仍在 `Ctrl-C` 之前）；提示字改成「任何鍵關閉」的意思。測試：`q`、
-`Ctrl-C`、`?`、一個字母各按一次，splash 關掉、app 沒有離開、沒有開出任何 popup。
-
-
 ## 22. panel 2 drill-down 失敗時沒有任何訊息 —— F5
 
 **現況**：`app.go` `enterDrillDown()` 的非 Pod 分支，`k8s.FetchChildResources()` 回錯誤（或零個子項）時 cmd 回 `nil`：`Enter` 按下去
