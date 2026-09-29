@@ -937,7 +937,7 @@ func (m *YamlPopupModel) scrollToMatch() {
 
 // Popup sizing constants — absolute cells, no percentage math. Both popups
 // (YAML + Help) leave one row/col of breathing room between their outer
-// border and the terminal edge. overlay.Composite centers the popup, so a
+// border and the terminal edge. compositeDisp centers the popup, so a
 // popup outer width of (m.width - 2*popupHMargin) ends up with exactly
 // popupHMargin cells of empty space on each side.
 const (
@@ -1054,17 +1054,17 @@ func (m YamlPopupModel) renderFullPopup() string {
 	modeW := 0
 	if m.visualMode {
 		mode = "Visual"
-		modeW = lipgloss.Width(mode) + 3 // + the junctions and the dash before the corner
+		modeW = dispWidth(mode) + 3 // + the junctions and the dash before the corner
 	}
 	truncated := false
-	if lipgloss.Width(title) > innerW-1-modeW {
+	if dispWidth(title) > innerW-1-modeW {
 		// Reserve 1 cell for "…" — mirrors the comparepopup fix so
 		// narrow-terminal title cuts read as cut, not as a literal
 		// trailing fragment.
 		title = ansiTruncate(title, innerW-2-modeW)
 		truncated = true
 	}
-	titleVisualW := lipgloss.Width(title)
+	titleVisualW := dispWidth(title)
 	if truncated {
 		titleVisualW++ // the "…" we'll append
 	}
@@ -1169,7 +1169,7 @@ func (m YamlPopupModel) renderFullPopup() string {
 				lineStart, lineEnd = 0, len([]rune(m.contentPlain[i]))-1
 			}
 			content = overlaySelectionOnStyledLine(m.contentLines[i], m.contentPlain[i], lineStart, lineEnd, hasCursor, m.cursorCol, selectionStyle, cursorStyle)
-			if lipgloss.Width(content) > contentW {
+			if dispWidth(content) > contentW {
 				content = ansiTruncate(content, contentW)
 			}
 		case hasCursor && !isMatch:
@@ -1177,7 +1177,7 @@ func (m YamlPopupModel) renderFullPopup() string {
 			// the cursor cell into the styled line so surrounding
 			// syntax colours survive.
 			content = overlayCursorOnStyledLine(m.contentLines[i], m.contentPlain[i], m.cursorCol, cursorStyle)
-			if lipgloss.Width(content) > contentW {
+			if dispWidth(content) > contentW {
 				content = ansiTruncate(content, contentW)
 			}
 		case isMatch:
@@ -1188,13 +1188,13 @@ func (m YamlPopupModel) renderFullPopup() string {
 			if i >= len(m.contentPlain) {
 				plain = ansi.Strip(m.contentLines[i])
 			}
-			if lipgloss.Width(plain) > contentW {
+			if dispWidth(plain) > contentW {
 				plain = ansiTruncate(plain, contentW)
 			}
-			content = matchRowStyle.Width(contentW).Render(plain)
+			content = matchRowStyle.Render(padDisp(plain, contentW))
 		default:
 			content = m.contentLines[i]
-			if lipgloss.Width(content) > contentW {
+			if dispWidth(content) > contentW {
 				content = ansiTruncate(content, contentW)
 			}
 		}
@@ -1211,10 +1211,10 @@ func (m YamlPopupModel) renderFullPopup() string {
 	lines = lines[:panelH-2]
 
 	for _, l := range lines {
-		lw := lipgloss.Width(l)
+		lw := dispWidth(l)
 		if lw > innerW {
 			l = ansiTruncate(l, innerW)
-			lw = lipgloss.Width(l)
+			lw = dispWidth(l)
 		}
 		pad := ""
 		if lw < innerW {
@@ -1230,7 +1230,7 @@ func (m YamlPopupModel) renderFullPopup() string {
 
 	hints, indicator := m.bottomBarStrings(contentH, innerW-1)
 	hint := popupHint(hints...)
-	bottomDashes := innerW - lipgloss.Width(hint) - lipgloss.Width(indicator) - 1
+	bottomDashes := innerW - dispWidth(hint) - dispWidth(indicator) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
@@ -1349,7 +1349,7 @@ func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hints []keyHi
 	}
 
 	fits := func() bool {
-		return lipgloss.Width(popupHint(hints...))+lipgloss.Width(indicator) <= available
+		return dispWidth(popupHint(hints...))+dispWidth(indicator) <= available
 	}
 	if fits() {
 		return

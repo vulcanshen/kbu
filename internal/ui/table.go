@@ -6,7 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/kbu/internal/config"
 	"github.com/vulcanshen/kbu/internal/k8s"
 	"github.com/vulcanshen/kbu/internal/theme"
@@ -135,9 +134,9 @@ func ColumnsForResource(rt k8s.ResourceType) []Column {
 	// alignment stays consistent. Cell value is k8s.HelmRowMark() — a
 	// Nerd Font PUA glyph (nf-md-ship_wheel, U+F0833) on the Helm-
 	// managed rows, empty string elsewhere. PUA has ambiguous cell
-	// width across terminals — go-runewidth reports 1 cell, but
-	// terminals running EAW-double / NF non-Mono variants paint 2 —
-	// MinWidth: 2 keeps the column slot wide enough either way.
+	// width across terminals; dispWidth counts it two cells where the
+	// startup probe found icons two wide (tdp D6). MinWidth: 2 keeps the
+	// column slot the same on either font, so the layout does not shift.
 	out = append(out, Column{Title: "", MinWidth: 2})
 	for i := 1; i < len(cols); i++ {
 		if i == skipIdx {
@@ -495,7 +494,7 @@ func (m TableModel) View() string {
 			msg = "No " + kind
 		}
 		styled := m.theme.TableDimRowStyle().Render(msg)
-		b.WriteString(lipgloss.Place(m.width, visible, lipgloss.Center, lipgloss.Center, styled))
+		b.WriteString(centerDisp(m.width, visible, styled))
 		return b.String()
 	}
 
@@ -676,10 +675,10 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 		// len(val) and val[:w-1], which sliced UTF-8 mid-codepoint for any
 		// multi-byte content — e.g. the Nerd Font helm glyph "" is
 		// 3 bytes / 1 cell, so a 2-cell column would slice the first byte
-		// and render \xee as ◇. ansi.Truncate is grapheme- and ANSI-aware
-		// and accounts for wide characters; visual width comes from
-		// lipgloss.Width for the padding side.
-		if vw := lipgloss.Width(val); vw > w {
+		// and render \xee as ◇. truncate is grapheme- and ANSI-aware
+		// and accounts for wide characters and wide icons (tdp D6);
+		// visual width comes from dispWidth for the padding side.
+		if vw := dispWidth(val); vw > w {
 			if w >= 1 {
 				// Name and Namespace columns middle-truncate so the
 				// distinctive front AND tail stay visible — kubectl-style
@@ -690,12 +689,12 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 				if i < len(m.columns) && (m.columns[i].Title == "Name" || m.columns[i].Title == "Namespace") {
 					val = truncateMiddle(val, w)
 				} else {
-					val = ansi.Truncate(val, w, "…")
+					val = truncate(val, w)
 				}
 			} else {
 				val = ""
 			}
-			vw = lipgloss.Width(val)
+			vw = dispWidth(val)
 			if vw < w {
 				val = val + strings.Repeat(" ", w-vw)
 			}
@@ -711,7 +710,7 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 
 	// Trailing pad to full row width, also row-styled so the highlight
 	// stretches edge-to-edge.
-	lineLen := lipgloss.Width(line)
+	lineLen := dispWidth(line)
 	if lineLen < m.width {
 		line = line + style.Render(strings.Repeat(" ", m.width-lineLen))
 	}
@@ -727,14 +726,14 @@ func (m TableModel) renderRow(colWidths []int, values []string, style lipgloss.S
 // "nginx-6d8f7c-xyz" (16 cells) at w=10 becomes "nginx…-xyz".
 //
 // Both halves get as-equal-as-possible cell budgets; left absorbs any
-// leftover cell when (w-1) is odd. Reads visual width per rune via
-// lipgloss.Width so wide / Nerd Font PUA glyphs (see
-// [[reference-nerd-font-pua-width-stability]]) count correctly.
+// leftover cell when (w-1) is odd. Reads display width per rune via
+// dispWidth so wide characters and Nerd Font icons — two cells where the
+// probe found them two (tdp D6) — count correctly.
 func truncateMiddle(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
-	if lipgloss.Width(s) <= w {
+	if dispWidth(s) <= w {
 		return s
 	}
 	if w == 1 {
@@ -746,7 +745,7 @@ func truncateMiddle(s string, w int) string {
 	runes := []rune(s)
 	leftEnd, leftUsed := 0, 0
 	for i, r := range runes {
-		rw := lipgloss.Width(string(r))
+		rw := dispWidth(string(r))
 		if leftUsed+rw > leftW {
 			break
 		}
@@ -755,7 +754,7 @@ func truncateMiddle(s string, w int) string {
 	}
 	rightStart, rightUsed := len(runes), 0
 	for i := len(runes) - 1; i >= 0; i-- {
-		rw := lipgloss.Width(string(runes[i]))
+		rw := dispWidth(string(runes[i]))
 		if rightUsed+rw > rightW {
 			break
 		}

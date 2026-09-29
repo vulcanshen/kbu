@@ -77,7 +77,13 @@
 
 ### Nerd Font 的渲染
 
-終端機用 **Nerd Font 的 Mono 變體**（例如 JetBrains Mono Nerd Font Mono、FiraCode Nerd Font Mono）。kbu 的 popup 標題與列標記用 Material Design icon 區段的 Nerd Font glyph；Mono 變體設計成每個 glyph 剛好畫 1 格，欄位與框線對齊才穩定。比例寬度的（非 Mono）變體、以及設成 East-Asian-Ambiguous=double 的終端機（部分 tmux + iTerm2 的 CJK 設定）可能把這些 glyph 畫成 2 格 —— kbu 仍然能用，但 helm-managed 的列與 popup 上框可能偏 1 格。看到偏移就換 Mono 變體，或把 ambiguous-width 設成 single。
+kbu 的 popup 標題、列標記、helm 標記、loading icon、splash 的像素都是 Nerd Font 的 PUA glyph。有些字型（CJK 的「全寬 icon」字型）讓游標跨過一個 icon 前進兩格，lipgloss / x-ansi 卻量成一格，框線就歪（tdp D6）。
+
+- **量寬度一律走 `width.go`**（照搬 filu 的參考實作）：`dispWidth()`（量到的寬度加上每個 icon 多佔的格數）、`dispClip()`、`padDisp()`、`truncate()`、`dispCutLeft()`、`centerDisp()`（取代 `lipgloss.Place`）、`joinH()` / `joinV()`（取代 lipgloss 的 Join）、`compositeDisp()`（取代 `overlay.Composite`，疊 popup 與 toast）。`internal/ui` 的正式程式碼裡找不到 `lipgloss.Width`、`lipgloss.Place`、`ansi.StringWidth`、`ansi.Truncate`、lipgloss 的 Join、`overlay.Composite`；style 的 `.Width(n)` 改成先 `padDisp()` 再上色（lipgloss 的補空白也不認得寬 icon）。YAML viewer 游標與選取用的 `ansi.Cut` 切的是 YAML 內容自己的格數，例外。
+- **`iconCells`** 預設 1，這時 `dispWidth()` 就是 `ansi.StringWidth()`，一般字型的畫面完全不變（既有測試原封不動通過）。`isWideIcon()`：BMP 與補充 PUA 算，powerline 端點（U+E0A0–E0D7，panel 膠囊的圓角）不算。
+- **探測**（`iconwidth_unix.go` 的 `DetectIconWidth()`，`cmd/main.go` 在建 model、進 Bubble Tea 之前呼叫）：raw mode 下印一個 icon、送 CPR（`ESC[6n`），讀游標停在第幾欄，200ms 內沒回應就維持 1。量的是游標實際前進幾格：icon 看起來比一格寬、游標只前進一格的字型（glyph 溢出）是 1。`KBU__ICON_WIDTH=1|2` 蓋過探測；Windows（`iconwidth_other.go`）沒有探測，只讀這個變數。`kbu iconwidth` 印出量到的值，給使用者自己查。
+- **跟 filu 不同的地方**：`compositeDisp()` 在 popup 比畫面寬或高時（resize 那一格用舊尺寸畫的框）從 0 開始、超出的部分切掉；filu 的版本 x、y 會是負的，`strings.Repeat` 或索引直接 panic（`overlay.Composite` 原本是讓那一列超出畫面）。kbu 另有 Windows 版，所以多一個非 unix 的探測檔。splash 的像素照 filu：icon 佔兩格時只畫 glyph，不補空白。helm 欄的 `MinWidth: 2` 保留，一般字型上的欄位位置不變。
+- **測試**（`d6_test.go`）：icon 佔 1 格與 2 格、80 × 40 與 120 × 40 下，每一種 popup 各開一次，量單獨的框每一列等寬、疊上去的整個畫面每一列等於終端機寬；panel 2 帶 helm 標記的列每一欄都在表頭底下；`compositeDisp()` 的四種邊界與比畫面大的框；寬度函式本身。
 
 ### Popup 的分類與結構
 
@@ -310,6 +316,7 @@ git clone https://github.com/vulcanshen/kbu.git
 cd kbu
 go build -o kbu ./cmd/
 ./kbu
+./kbu iconwidth   # 啟動時的 icon 寬度探測量到幾格（tdp D6）
 ```
 
 `make`（或 `make help`）列出所有 target：`make build`（`CGO_ENABLED=0` 靜態、`-trimpath`、strip、注入版本）、`make run`、`make test`、`make test-race`（每次 release 前跑一次）、`make vet`、`make fmt`。`go install` 裝出來的版本字串不經 ldflags 注入。

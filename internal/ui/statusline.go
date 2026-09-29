@@ -2,7 +2,6 @@ package ui
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/kbu/internal/theme"
 )
 
@@ -133,24 +132,23 @@ func (m StatusLineModel) ViewWithNotice(unreadErrors, unreadWarns int, lastError
 	}
 
 	if noticeText == "" || m.width <= 0 {
-		return barStyle.Width(m.width).Render(line)
+		return barStyle.Render(padDisp(line, m.width))
 	}
 
-	lineW := lipgloss.Width(line)
+	lineW := dispWidth(line)
 	maxLen := m.width - lineW - 4
 	if maxLen < 10 {
 		// Not enough room for the notice — drop it (the App Log popup
 		// still has the full text).
-		return barStyle.Width(m.width).Render(line)
+		return barStyle.Render(padDisp(line, m.width))
 	}
 	text := noticeText
-	if lipgloss.Width(text) > maxLen {
-		text = ansi.Truncate(text, maxLen-1, "") + "…"
+	if dispWidth(text) > maxLen {
+		text = dispClip(text, maxLen-1) + "…"
 	}
-	leftPart := barStyle.Width(lineW + 2).Render(line)
+	leftPart := barStyle.Render(padDisp(line, lineW+2))
 	noticePart := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(noticeColor)).
-		Width(m.width - lineW - 2).
-		Render(" " + text)
+		Render(padDisp(" "+text, m.width-lineW-2))
 	return leftPart + noticePart
 }

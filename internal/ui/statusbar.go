@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/kbu/internal/k8s"
 	"github.com/vulcanshen/kbu/internal/theme"
 )
@@ -202,7 +201,7 @@ const (
 // cappedField cuts s in the middle when it is wider than w cells; a
 // shorter s is left as it is.
 func cappedField(s string, w int) string {
-	if ansi.StringWidth(s) > w {
+	if dispWidth(s) > w {
 		return truncateMiddle(s, w)
 	}
 	return s
@@ -215,15 +214,15 @@ func fitRow(left, right string, width int, bar lipgloss.Style) string {
 	if width <= 0 {
 		return ""
 	}
-	rightW := ansi.StringWidth(right)
+	rightW := dispWidth(right)
 	if rightW > width {
 		right, rightW = "", 0
 	}
 	room := width - rightW
-	if ansi.StringWidth(left) > room {
-		left = ansi.Truncate(left, room, "")
+	if dispWidth(left) > room {
+		left = dispClip(left, room)
 	}
-	gap := room - ansi.StringWidth(left)
+	gap := room - dispWidth(left)
 	return bar.Render(left+strings.Repeat(" ", gap)) + right
 }
 

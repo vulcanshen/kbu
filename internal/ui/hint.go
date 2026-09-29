@@ -83,7 +83,7 @@ func fitPopupHint(room int, hs ...keyHint) string {
 // fitHints drops entries from the end until the line fits in w cells —
 // a whole entry at a time, never half of one (tdp D1).
 func fitHints(hs []keyHint, w int) []keyHint {
-	for len(hs) > 0 && lipgloss.Width(hintText(hs)) > w {
+	for len(hs) > 0 && dispWidth(hintText(hs)) > w {
 		hs = hs[:len(hs)-1]
 	}
 	return hs
