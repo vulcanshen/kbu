@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/vulcanshen/kbu/internal/k8s"
@@ -30,7 +31,7 @@ func TestK11_YamlSelectionFrameIsYellow(t *testing.T) {
 		t.Errorf("in the selection mode the title is %v, want Yellow", row[at].fg)
 	}
 	top := screenCells(m.yamlPopup.renderFullPopup())[0]
-	vis := strings.Index(rowText(top), " Visual ─╮")
+	vis := strings.Index(rowText(top), "┤Visual├─╮")
 	if vis < 0 {
 		t.Fatalf("the selection mode must name itself top right: %q", rowText(top))
 	}
@@ -51,7 +52,7 @@ func TestK11_YamlSelectionFrameIsYellow(t *testing.T) {
 		long := yamlOpenFor(t, k8s.ResourcePods, k8s.ResourceItem{Name: strings.Repeat("n", n), Namespace: "default"})
 		long.yamlPopup, _ = long.yamlPopup.Update(key("v"))
 		lines := strings.Split(ansi.Strip(long.yamlPopup.renderFullPopup()), "\n")
-		if !strings.HasSuffix(lines[0], " Visual ─╮") {
+		if !strings.HasSuffix(lines[0], "┤Visual├─╮") {
 			t.Errorf("a %d-letter name pushed the mode name out: %q", n, lines[0])
 		}
 		if w, box := ansi.StringWidth(lines[0]), ansi.StringWidth(lines[1]); w != box {
@@ -105,7 +106,11 @@ func TestK11_DragModeShowsInPanel1(t *testing.T) {
 	truecolor(t)
 	for _, width := range []int{120, 80} {
 		m := dragApp(t)
-		m.width = width
+		resized, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
+		m = resized.(AppModel)
+		if !m.sidebar.IsDragging() {
+			t.Fatal("setup: resizing ended the drag")
+		}
 		row, x := panel1Top(t, m)
 		if row[x].r != '╔' || !near(row[x].fg, hexRGB(theme.Yellow)) {
 			t.Errorf("%d cols, dragging: panel 1's corner %q is %v, want a Yellow ╔", width, row[x].r, row[x].fg)
@@ -113,8 +118,11 @@ func TestK11_DragModeShowsInPanel1(t *testing.T) {
 		if chip := row[x+3]; chip.r != '[' || !near(chip.bg, hexRGB(theme.Yellow)) {
 			t.Errorf("%d cols, dragging: the [1] chip %q is %v, want Yellow", width, chip.r, chip.bg)
 		}
+		if len(row) != width {
+			t.Errorf("%d cols, dragging: the top row is %d cells wide (L4)", width, len(row))
+		}
 		top := rowText(row[:x+panelSidebarWidth])
-		at := strings.Index(top, " Drag═╗")
+		at := strings.Index(top, "╡Drag╞═╗")
 		if at < 0 {
 			t.Fatalf("%d cols, dragging: panel 1's top %q does not name the mode", width, top)
 		}
@@ -139,7 +147,7 @@ func TestK11_DragModeShowsInPanel1(t *testing.T) {
 		if row[x].r != '╔' || !near(row[x].fg, hexRGB(m.theme.Sidebar.CategoryFg)) {
 			t.Errorf("after %s: panel 1's corner %q is %v, want the focus Blue ╔", end, row[x].r, row[x].fg)
 		}
-		if strings.Contains(rowText(row), " Drag═") {
+		if strings.Contains(rowText(row), "Drag") {
 			t.Errorf("after %s: the mode name must go", end)
 		}
 		m.sidebar.SetSize(panelSidebarWidth-2, 20)
