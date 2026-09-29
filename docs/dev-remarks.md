@@ -161,8 +161,9 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 ## 對照 tdp 時確認過的
 
 兩輪對照留下的（清單都已刪）：2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次；
-2026-09-29 照第二份清單（對照 v0.1.14–v0.1.17 的改動，6 條）修完、再拿 v0.1.17 全文對一次。下次對照不必重查的，以及由 user
-逐題裁定的。
+2026-09-29 照第二份清單（對照 v0.1.14–v0.1.17 的改動，6 條）修完、再拿 v0.1.17 全文對一次；同日第三份清單（對照 v0.1.17 →
+v0.1.19，4 條）修完第 1–3 條，第 4 條（icon 寬度，D6）等 filu 做完再照搬、仍在 `kbu-terminu-fix.md`。下次對照不必重查的，以及由
+user 逐題裁定的。
 
 **已經符合、不用修的**
 
@@ -222,6 +223,15 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
   沒有 `S` / `Alt-S`。
 - **M6 的「別的 surface」（v0.1.16）**：kbu 只有 namespace / context picker `?` 裡的「while typing」一段，照亮顯示。panel `?` 的
   「app-wide (also in Global operation)」一段是這個 panel 上按得到的鍵，照一般規則。
+- **L5（v0.1.19）**：focus 的 panel 雙線 `╔═╗`、失焦圓角 `╭─╮`，不只靠顏色；模式把框換成 Yellow 時，focus 的 panel 仍是雙線
+  （拖曳中的 panel 1）。
+- **D2 的失焦 panel 邊框 hint（v0.1.18）**：`recededHint()`（鍵 Overlay0 加粗、冒號與說明 Surface2）正是 D2 新增的那一列 ——
+  第二輪自己下的判斷，user 實機維持，v0.1.18 寫成家族預設。
+- **K9（v0.1.19）：focus 在 PTY 裡時 `q`、`Ctrl-C` 屬於子程序**：`Update()` 先看最上層是不是 PTY，是就整個交給它
+  （`TestK9_PtyOnTopKeepsQAndCtrlC`）；Alterm 隱藏時 focus 不在 PTY，`q` 照常離開；PTY 上疊著 `Alt-Esc` 的 confirm 時最上層是
+  confirm，`q` / `Ctrl-C` 走離開流程。
+- **K10（v0.1.19）：子程序還沒準備好時可以不轉送**：這是「可以」。kbu 的三個 PTY 都是本機子程序，`Start()` 同步拿到 `ptmx`，
+  按鍵從開啟動畫的第一格就轉送；`kubectl exec` 連線中的鍵由 kubectl 自己收著。出口鍵在 `PtyView.Update()` 裡排在轉送之前。
 - **F7 以外的等待文字**：panel 裡的「Waiting for logs...」、YAML 的「(no YAML — resource may still be loading)」是內容裡的文字，不是
   loading 中的 popup，不用 D3 的 icon。
 - **術語「模式」：zoom 不是模式（K4、K11）。** `z` 放大之後每個鍵的意思都不變，所以不是模式；`Esc` 的「上一層」照 app 定義：搜尋
@@ -261,6 +271,13 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
   層色底，讓 focus 在哪一邊看得出來（user 認為這個表達方式可以建議寫回 tdp）。tdp v0.1.18 寫進 F1 / D3，篩選列定成整列灰色（Overlay0），不用淡化。
 - loading 中打開的 `?` 不在清單到了時重算（重開才亮）。user：維持。
 - 重開 picker 多排的 tick 原本不擋（只多重畫、不會轉快）。user：照 filu 加旗標（`loadingTicking`、`keepLoading()`）。
+
+**第三輪自己下的判斷**（清單說是實作細節、不必問；2026-09-29 修完時還沒實機看過）
+
+- 模式名用一個詞：拖曳寫 `Drag`、YAML 選取寫 `Visual`（user 叫它 visual mode，hint 是 `v:visual`）。`Drag mode` 在 24 欄寬的
+  panel 1 上框放不下（`[1] Kinds` 膠囊佔 11 格，右上角的字連同兩側只剩 10 格），放不下時 `renderPanelWithScroll()` 會整個不畫。
+- 拖曳時 `[1] Kinds` 膠囊跟著外框換成 Yellow（tdp 只說外框；膠囊是上框的一部分，一起換才讀得出「這個框在模式裡」）。
+- panel 邊框的 hint 也照 D3 從尾端整組捨（D3 講 popup 的下框，panel 邊框清單交給 kbu 決定）；捲動指示器留著。
 
 ## 設計文件導讀
 
