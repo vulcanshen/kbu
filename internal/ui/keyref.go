@@ -40,9 +40,9 @@ func (m *AppModel) keyRef() (string, []helpRow) {
 	case &m.breadcrumbPopup:
 		return "Breadcrumb keys", pickerRows("switch panels 1 and 2 to that resource", "close the breadcrumb")
 	case &m.namespacePicker:
-		return "Namespace picker keys", filterPickerRows("check / uncheck the highlighted namespace")
+		return "Namespace picker keys", filterPickerRows("check / uncheck the highlighted namespace", m.namespacePicker.loading)
 	case &m.contextPicker:
-		return "Context picker keys", filterPickerRows("switch to the highlighted context")
+		return "Context picker keys", filterPickerRows("switch to the highlighted context", false)
 	case &m.appLog:
 		return "App log keys", []helpRow{
 			{key: "y", desc: "copy the whole log"},
@@ -104,8 +104,8 @@ func keyName(k string) string {
 // menuRows turns menu rows into key-reference rows: every row with a key
 // the user can press, under the region header it sits in. Rows without
 // one (the Global operation row, the Helm documents) and regions left
-// empty are dropped. Dimmed rows stay: the key exists, it just can't run
-// right now.
+// empty are dropped. Dimmed rows stay, dimmed here too: the key exists,
+// it just can't run right now (tdp M6).
 func menuRows(items []menuItem) []helpRow {
 	var rows []helpRow
 	var pending *helpRow // a region header, written once a row under it is
@@ -128,7 +128,7 @@ func menuRows(items []menuItem) []helpRow {
 		if it.hint != "" {
 			desc += " — " + it.hint
 		}
-		rows = append(rows, helpRow{key: keyName(it.key), desc: desc})
+		rows = append(rows, helpRow{key: keyName(it.key), desc: desc, dim: it.disabled})
 	}
 	return rows
 }
@@ -158,15 +158,18 @@ func pickerRows(enter, esc string) []helpRow {
 }
 
 // filterPickerRows are the keys of the namespace / context pickers, list
-// phase (while typing, every key but these is a character).
-func filterPickerRows(enter string) []helpRow {
+// phase (while typing, every key but these is a character). loading: the
+// picker is open but its list hasn't arrived — only Esc works, the rest
+// are dimmed (tdp M6). The "while typing" section describes another
+// surface (? there is a character), so it stays bright.
+func filterPickerRows(enter string, loading bool) []helpRow {
 	return []helpRow{
-		{key: "j k", desc: "move the cursor"},
-		{key: "u d", desc: "half a page"},
-		{key: "gg G", desc: "first / last row"},
-		{key: "Enter", desc: enter},
-		{key: "/", desc: "type to filter (a new filter)"},
-		{key: "Tab", desc: "back to typing, keeping the filter"},
+		{key: "j k", desc: "move the cursor", dim: loading},
+		{key: "u d", desc: "half a page", dim: loading},
+		{key: "gg G", desc: "first / last row", dim: loading},
+		{key: "Enter", desc: enter, dim: loading},
+		{key: "/", desc: "type to filter (a new filter)", dim: loading},
+		{key: "Tab", desc: "back to typing, keeping the filter", dim: loading},
 		{key: "Esc", desc: "close the picker"},
 		{header: true, desc: "while typing"},
 		{key: "↑ ↓", desc: "move the cursor"},
@@ -230,7 +233,7 @@ func (m *AppModel) panelKeyRef() (string, []helpRow) {
 			helpRow{key: "j k", desc: "scroll a line (on Relatives / History: move the cursor)"},
 			helpRow{key: "u d", desc: "half a page"},
 			helpRow{key: "gg G", desc: "top / bottom"},
-			helpRow{key: "h l", desc: "previous / next tab (also [ ])"})
+			helpRow{key: "h l", desc: "previous / next tab (also [ ])", dim: m.detail.TabCount() < 2})
 	} else {
 		rows = append(rows,
 			helpRow{key: "j k", desc: "move the cursor"},

@@ -297,7 +297,7 @@ func (m MenuPopupModel) renderFullPopup() string {
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay0))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
 	dimCursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Background(lipgloss.Color("#45475a"))
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))

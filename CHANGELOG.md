@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle) (tdp v0.1.13).
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.17/principle) (tdp v0.1.17).
 
 - **A click lands on the popup you see on top.** A confirm, sort picker or
   YAML viewer opened from a `Space` menu sits centred over the menu; a click
@@ -46,7 +46,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   Delete on a helm-managed object, Mark as Compare anchor on a one-row list,
   Drag with a single pinned kind, and rollback on the deployed revision are
   listed dimmed; pressing their hotkey does nothing. `E` / `D` on a
-  helm-managed row no longer pop a "Helm-managed (read-only)" toast.
+  helm-managed row no longer pop a "Helm-managed (read-only)" toast. `?`
+  lists their keys dimmed too, as it does the tab keys on a one-tab panel and,
+  while the namespace picker is still loading, every picker key but `Esc`.
 - **Opening a picker from a menu keeps the menu.** Sort from panel 1's
   `Space` menu now stacks over the menu (`Esc` returns to it), like every
   other popup a menu opens.

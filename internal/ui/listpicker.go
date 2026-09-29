@@ -297,7 +297,7 @@ func (m ListPickerModel) renderFullPopup() string {
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 	badgeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#b4befe"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay0))
 	dimCursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Background(lipgloss.Color("#45475a"))
 
 	title := " " + m.title + " "
