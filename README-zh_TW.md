@@ -126,7 +126,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | **`Space`** | *這裡能幹嘛？* — 列出這個 panel 或 tab 能做的每一件事，最後一列 **Global operation** 是全域動作（namespace、context、Alterm、settings、app log、離開）|
 | **`Esc`** | 退回 — 回上一層 / 關閉 popup |
 
-不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt-S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都是 `Space` menu 裡的一列（全域的在它的 **Global operation** 那一列裡）— 想記再記，不想記也沒關係。暫時不能執行的列會變暗，而不是藏起來。popup 疊上來時只有你正在操作的那一個是亮的，底下的一切都變暗。
+不知道下一步該按什麼時，按 `Space` 就對了。進階快速鍵（`P` pin / `S` sort 或 shell / `D` drag-pin 或 delete / `Alt-S` panel 2 sort / `C` compare 或 context / `Y` YAML / `E` edit / `N` ns / `>` settings）只是加速器，每一項都是 `Space` menu 裡的一列（全域的在它的 **Global operation** 那一列裡）— 想記再記，不想記也沒關係。暫時不能執行的列會變暗，而不是藏起來；`?` 列出的按鍵也一樣。popup 疊上來時只有你正在操作的那一個是亮的，底下的一切都變暗。
 
 **滑鼠也能用**：左鍵點 panel 切焦點 + 移 cursor，雙擊鑽入，右鍵開 context menu，滾輪半頁滾動。按 `>` 開 Settings popup 可以關掉滑鼠改成純鍵盤。
 

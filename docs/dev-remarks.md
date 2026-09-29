@@ -51,7 +51,7 @@
 - **長值折行，永不截斷**：適用於 YAML、Events 與 Logs；panel 改變大小時重新折行
 - **Panel 放大**：`z` 讓 focus 所在的 Table 或 Detail panel 全螢幕；再按 `z` 回到三 panel 版面
 - **主題系統**：在設定目錄放一份 `theme.yaml` 覆寫顏色
-- **key reference（`?`）與 App Log（`!`）**：`?` 在任何 surface 都打開**最前端那個 surface** 的 key reference（tdp K6、M4，`keyref.go`）：panel 上是這個 panel 的 Space menu 列（只收按得出來的鍵，跟 menu 同一份來源）加上移動、panel 切換、core key 與全域熱鍵；popup / menu 上只列那個 popup 自己的鍵（confirm 的 `y` / `n` 也在，F6）；模式裡是模式的鍵（K11）。它是 note：唯讀、可捲動、沒有游標，疊在最上面，`?` 或 `Esc` 關掉回到底下那一層。輸入態裡 `?` 是字元（K8）。`!` 是 App Log popup
+- **key reference（`?`）與 App Log（`!`）**：`?` 在任何 surface 都打開**最前端那個 surface** 的 key reference（tdp K6、M4，`keyref.go`）：panel 上是這個 panel 的 Space menu 列（只收按得出來的鍵，跟 menu 同一份來源）加上移動、panel 切換、core key 與全域熱鍵；popup / menu 上只列那個 popup 自己的鍵（confirm 的 `y` / `n` 也在，F6）；模式裡是模式的鍵（K11）。它是 note：唯讀、可捲動、沒有游標，疊在最上面，`?` 或 `Esc` 關掉回到底下那一層。輸入態裡 `?` 是字元（K8）。現在不能按的鍵照樣列出、變暗（M6，見「按鍵筆記」）；namespace picker 的清單還沒到時（loading）只有 `Esc` 作用，清單階段的其他鍵都變暗。picker 的「while typing」一段說明的是打字那一階段（那裡 `?` 是字元，看不到 key reference），算別的 surface，照亮顯示（tdp v0.1.16）。key reference 在打開時算好：loading 中打開的 `?`，清單在它開著時到了不會自己亮回來，重開才亮（loading 通常不到一秒）。`!` 是 App Log popup
 - **錯誤通知**：statusbar badge + status line 訊息
 - **Crash log**：panic 寫進 kbu 的 log 目錄
 - **Audit log**：每次 `kubectl edit` 與 `kubectl delete` 記進 `audit-*.log`
@@ -65,7 +65,7 @@
 **Space menu（每個 panel、每個 tab）。** `menus.go` 組 menu，形狀固定（tdp M2）：`item operation`（cursor 那一項能做的）→ `panel operation`（這個 panel 或 tab 整體能做的）→ 分隔線 → 一列 `Global operation`（不加標題）。兩區一律加標題，空的那區連標題一起不出現；沒有 cursor 項目時（空清單、分類標題、Logs 這類內容 tab）menu 照樣打開，只剩 panel 區與 global 那一列（M7）。每一列是名稱 + 一句說明（M5），熱鍵在名稱裡用 `[]` 標出、大小寫算數（`Cop[y]` 是 `y`、`[Y]AML` 是 `Shift+Y`；不在名稱裡的放前面：`[/] Search`）；core key 直接寫進名稱（`[Enter] Drill in`、`[Esc] Back`，D4）。modifier 全 app 一種寫法（M5：menu、footer、panel hint、popup hint 一套）：`Alt-t`、`Alt-S`（大寫就是 Shift）、`Ctrl-C`、`Shift-Tab`，key reference（`keyName()`）與 PTY 下框 hint 也照這個寫，`m5_test.go` 守著畫面上不出現 `Alt+`。每個熱鍵都是某一列的捷徑（M3）：列執行時走的就是那個熱鍵的程式（`panelKey()`），兩邊不會不一致。panel 2 的 item operation 作用在開 menu 當下那一列（menu 開的時候先抓住，watcher tick 換了排序也不會打到別列）。
 
 - 列會開 popup 的（YAML、confirm、picker、文件、breadcrumb、global operation popup）執行後 menu 留在底下（F4）；只改狀態的（複製、放大、搜尋、切 tab、Mark / Unmark anchor……）執行完關掉 menu（T1）。
-- 暫時不能執行的列照樣列出、變暗，cursor 可以停、`Enter` 與熱鍵都不作用（M6）：helm 管理的列的 `[E]dit` / `[D]elete`、只有一列時的 `Mark as [C]ompare anchor`、pin 不到兩個時的 `[D]rag`、目前部署版本上的 rollback、只有一個 tab 時的 `Switch tab`。對象根本不存在的不列：Events / Contexts / Releases 沒有 Edit，Nodes 另外沒有 Delete，沒有 container 的種類沒有 Shell。
+- 暫時不能執行的列照樣列出、變暗，cursor 可以停、`Enter` 與熱鍵都不作用（M6）：helm 管理的列的 `[E]dit` / `[D]elete`、只有一列時的 `Mark as [C]ompare anchor`、pin 不到兩個時的 `[D]rag`、目前部署版本上的 rollback、只有一個 tab 時的 `Switch tab`。對象根本不存在的不列：Events / Contexts / Releases 沒有 Edit，Nodes 另外沒有 Delete，沒有 container 的種類沒有 Shell。`?` 的 key reference 照同一套：menu 列的 `disabled` 帶進 `helpRow.dim`，這些鍵照樣列出、鍵與說明都畫成 menu 暗列的 Overlay0（`theme.Overlay0`，menu、sort picker、key reference 共用）；panel 3 移動段切 tab 的鍵跟 Switch tab 同一個條件。
 - panel 2：`[Esc] Back`（說明寫出回到哪個清單）在 panel 區；compare 模式開著時 `Esc` 先解除 compare，所以那一列改成 `[Esc] Exit compare mode`，另有一列不帶熱鍵的 `Back`。container 列的 item 區是 `[S]hell` 與 `Cop[y]`。
 - menu 內只有 `j` / `k`（與方向鍵）移動、頭尾相接；沒有 `g` / `G`，因為 `[G]o live` 是 Logs / Events 的熱鍵。
 
