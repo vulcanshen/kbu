@@ -71,3 +71,17 @@ func TestK4_EscTakesTheToastBeforeTyping(t *testing.T) {
 		t.Errorf("first Esc: toast up %v, still typing %v — want the toast gone, the search kept", m.toast.Owns(), m.table.IsSearching())
 	}
 }
+
+// tdp F1 (v0.1.14): a toast takes only Esc; every other key passes
+// through it to what is beneath, and the toast stays up.
+func TestF1_KeysOtherThanEscPassThroughTheToast(t *testing.T) {
+	m := withToast(stackTestApp(t))
+	updated, _ := m.Update(key(" "))
+	got := updated.(AppModel)
+	if !got.spaceMenu.owns() {
+		t.Error("Space under a toast must reach the panel and open the Space menu")
+	}
+	if !got.toast.Owns() {
+		t.Error("a key other than Esc must leave the toast up")
+	}
+}
