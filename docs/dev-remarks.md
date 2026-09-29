@@ -1,7 +1,7 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策：各功能背後的設計筆記、理由與實作細節。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle)（tdp）；
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.22/principle)（tdp）；
 使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
@@ -305,7 +305,7 @@ v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 
 
 ## 設計文件導讀
 
-kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle)。
+kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.22/principle)。
 
 | 檔案 | 內容 |
 |---|---|
