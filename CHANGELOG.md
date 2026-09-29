@@ -151,6 +151,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   each in a single colour. The namespace and context pickers show `/` and
   `Tab` as the two things they are (`/:new filter Tab:filter`), and the
   footer's panel entry reads `Tab/1–3:panels`.
+- **The namespace picker's loading icon is the family's.** While the list is
+  on its way, the title shows a circle filling one slice at a time instead of
+  a braille spinner; it turns at the same pace however often the screen
+  redraws.
 - **The confirm's bottom border lines up again.** Its right corner sat one
   cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a
