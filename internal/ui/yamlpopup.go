@@ -1047,13 +1047,14 @@ func (m YamlPopupModel) renderFullPopup() string {
 	if m.item.Namespace != "" {
 		title += " (" + m.item.Namespace + ")"
 	}
-	// tdp K11: the selection mode names itself top right, " Visual ─"
-	// before the corner; the title gives way to it, never the other way.
+	// tdp K11: the selection mode names itself top right, "┤Visual├─"
+	// before the corner — set into the frame between two junctions, as a
+	// panel's mode is; the title gives way to it, never the other way.
 	mode := ""
 	modeW := 0
 	if m.visualMode {
-		mode = " Visual "
-		modeW = lipgloss.Width(mode) + 1 // + the dash before the corner
+		mode = "Visual"
+		modeW = lipgloss.Width(mode) + 3 // + the junctions and the dash before the corner
 	}
 	truncated := false
 	if lipgloss.Width(title) > innerW-1-modeW {
@@ -1083,7 +1084,7 @@ func (m YamlPopupModel) renderFullPopup() string {
 	}
 	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter)))
 	if mode != "" {
-		b.WriteString(tStyle.Render(mode) + bStyle.Render("─"))
+		b.WriteString(bStyle.Render("┤") + tStyle.Render(mode) + bStyle.Render("├─"))
 	}
 	b.WriteString(bStyle.Render("╮"))
 	b.WriteString("\n")

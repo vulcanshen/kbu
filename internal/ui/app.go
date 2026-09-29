@@ -3834,6 +3834,12 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	if focused {
 		tl, tr, bl, br, horiz, vert = "╔", "╗", "╚", "╝", "═", "║"
 	}
+	// The top-right label sits between two junctions of the frame's own
+	// line, like a tab set into it: ┤Drag├, ╡Drag╞ on the double line.
+	jl, jr := "┤", "├"
+	if focused {
+		jl, jr = "╡", "╞"
+	}
 
 	innerW := width - 2
 	innerH := height - 2
@@ -3847,12 +3853,12 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	var b strings.Builder
 
 	titleVis := lipgloss.Width(title)
-	// Top-right hint format: " <hint>─" (leading space + hint + 1 dash
-	// before the corner). Drop the hint silently if title+hint+1 dash
+	// Top-right label format: "╡<label>╞═" (two junctions + label + 1 dash
+	// before the corner). Drop the label silently if title+label+1 dash
 	// would overflow innerW — small terminals get plain border.
 	hintVis := 0
 	if topRight != "" {
-		hintVis = lipgloss.Width(topRight) + 2
+		hintVis = lipgloss.Width(topRight) + 3
 		if titleVis+hintVis+1 > innerW {
 			hintVis = 0
 			topRight = ""
@@ -3866,9 +3872,9 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	b.WriteString(title)
 	b.WriteString(bStyle.Render(strings.Repeat(horiz, dashesAfter)))
 	if topRight != "" {
-		b.WriteString(bStyle.Render(" "))
+		b.WriteString(bStyle.Render(jl))
 		b.WriteString(tStyle.Render(topRight))
-		b.WriteString(bStyle.Render(horiz))
+		b.WriteString(bStyle.Render(jr + horiz))
 	}
 	b.WriteString(bStyle.Render(tr))
 	b.WriteString("\n")

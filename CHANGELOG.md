@@ -84,10 +84,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   toast saying `Esc` leaves the mode first. The drag's keys now sit in the
   footer while it lasts, replacing the toast that stayed on screen; the
   selection's keys, `h/j/k/l` included, sit in the viewer's bottom hint.
-  A mode names itself in the top-right corner of its frame, which turns
-  yellow: `Visual` on the YAML viewer while it selects, `Drag` on panel 1
-  while you drag, where the drag handle also sits at the start of the row
-  being moved.
+  A mode names itself in the top-right corner of its frame, set into the
+  border between two junctions, and the frame turns yellow: `┤Visual├` on the
+  YAML viewer while it selects, `╡Drag╞` on panel 1 while you drag, where the
+  drag handle also sits at the start of the row being moved.
 - **Search lines take spaces.** The sidebar, panel 2, the YAML viewer and the
   namespace / context filters dropped the space bar, so a YAML search like
   `image: nginx` couldn't be typed.
