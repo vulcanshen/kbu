@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.22/principle) (tdp v0.1.22).
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.23/principle) (tdp v0.1.23).
 
 - **Environment variables take the family's names; old names are no longer
   read.** `KBU__CONFIGPATH` (a file) is now `KBU__CONFIG`, a directory:
