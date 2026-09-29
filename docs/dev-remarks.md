@@ -127,7 +127,7 @@ kbu 的 popup 標題、列標記、helm 標記、loading icon、splash 的像素
 
 照 tdp D6 的家族命名 `KBU__<名稱>`（app 名後兩個底線、名稱全大寫、單字之間一個底線），自己讀的都照這個寫，測試用的也是
 （`KBU__TEST_K8S`）。`KBU__CONFIG` 是設定**目錄**（`ConfigDir()` 第一順位）：`config.yaml`、`theme.yaml`、`logs/`，以及沒設
-`KBU__STATE` 時的 `state.yaml` 都跟著它 —— 以前的 `KBU__CONFIGPATH` 是設定檔路徑、刻意不動 theme，改成目錄之後全部跟著走才一致。
+`KBU__STATE` 時的 `state.yaml` 都跟著它 —— 以前的 `KBU__CONFIGPATH` 是設定檔路徑、刻意不動 theme，改成目錄之後全部跟著走才一致（user 2026-09-29 確認：theme 與 state 一起搬）。
 `KBU__STATE` 是狀態目錄（`state.yaml` 放在裡面）。兩個都先 TrimSpace。v0.1.21 改名時不留舊名（user 2026-09-29 裁定）：
 `KBU__CONFIGPATH`、`KBU__STATEPATH` 與 km8 時期的 `KM8__*` 都不再讀，`EnvDeprecations()` 與它每次啟動的 App Log 提醒一起拿掉；km8 → kbu
 的設定**目錄**遷移（`MigrateLegacyConfigDir()`）不是環境變數，保留。測試的 `TestMain` 除了隔離 `XDG_CONFIG_HOME`，也清掉
