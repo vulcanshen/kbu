@@ -184,13 +184,11 @@ func compositeDisp(fg, bg string, xPos, yPos overlay.Position, xOff, yOff int) s
 	fgLines, bgLines := strings.Split(fg, "\n"), strings.Split(bg, "\n")
 	fgW, bgW := blockWidth(fgLines), blockWidth(bgLines)
 	fgH, bgH := len(fgLines), len(bgLines)
-	if fgW >= bgW && fgH >= bgH {
-		return fg
-	}
 	// A box wider or taller than the screen (drawn at the old size for the
-	// frame a resize lands in) starts at 0 and is cut at the screen's edge:
-	// clampSpan alone would give a negative start, and a negative start
-	// panics below (overlay.Composite let the row run past the screen).
+	// frame a resize lands in) starts at 0 and is cut at the screen's edge,
+	// larger both ways too: clampSpan alone would give a negative start, and a
+	// negative start panics below (overlay.Composite let the row run past the
+	// screen). A box the size of the screen (a PTY) simply covers it.
 	x := max(clampSpan(placeOffset(xPos, bgW, fgW)+xOff, bgW-fgW), 0)
 	y := max(clampSpan(placeOffset(yPos, bgH, fgH)+yOff, bgH-fgH), 0)
 	for i, line := range fgLines {
