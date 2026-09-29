@@ -1266,8 +1266,8 @@ func overlaySelectionOnStyledLine(styled, plain string, selStart, selEnd int, ha
 		selEnd = len(plainRunes) - 1
 	}
 	const largeRight = 1_000_000
-	before := ansi.Cut(styled, 0, selStart)
-	after := ansi.Cut(styled, selEnd+1, largeRight)
+	before := ansi.Cut(styled, 0, cellsBefore(plainRunes, selStart))
+	after := ansi.Cut(styled, cellsBefore(plainRunes, selEnd+1), largeRight)
 
 	var block strings.Builder
 	for i := selStart; i <= selEnd; i++ {
@@ -1310,8 +1310,8 @@ func overlayCursorOnStyledLine(styled, plain string, cursorCol int, cursorStyle 
 	// bound; MaxInt would work but is easy to misread. 1e6 is plenty
 	// for any real YAML line and keeps the intent obvious.
 	const largeRight = 1_000_000
-	before := ansi.Cut(styled, 0, cursorCol)
-	after := ansi.Cut(styled, cursorCol+1, largeRight)
+	before := ansi.Cut(styled, 0, cellsBefore(plainRunes, cursorCol))
+	after := ansi.Cut(styled, cellsBefore(plainRunes, cursorCol+1), largeRight)
 	return before + cursorStyle.Render(cell) + after
 }
 
