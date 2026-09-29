@@ -93,20 +93,8 @@ func (m *NamespacePickerModel) OpenLoading() tea.Cmd {
 	m.searchQuery = ""
 	m.pendingG = false
 	m.loading = true
-	return tea.Batch(m.animator.Open(), loadingTick())
-}
-
-// HandleLoadingTick keeps the loading icon turning: the next tick while
-// the list is still loading, nil once SetNamespaces has it (tdp D3: the
-// tick runs only while something loads). The clock picks the frame, so
-// the tick only asks for a redraw; a second chain from closing and
-// reopening before the list arrives redraws twice as often but turns
-// no faster.
-func (m *NamespacePickerModel) HandleLoadingTick() tea.Cmd {
-	if !m.loading {
-		return nil
-	}
-	return loadingTick()
+	// The loading icon's tick is the app's (keepLoading, tdp D3).
+	return m.animator.Open()
 }
 
 // SetNamespaces fills in the real list. Safe to call whether or not

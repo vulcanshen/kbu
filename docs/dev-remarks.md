@@ -199,8 +199,9 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
   YAML 裡都先 confirm。breadcrumb 選定後仍 confirm，是 app 的選擇（F6 允許 picker 算確認，不要求）。
 - **F7 的 loading**：只有 namespace picker 在內容還沒到時就打開，標題後是 D3 的 loading icon（`loading.go`：
   `nf-md-circle_slice_1`–`_8` 八格、一格 90ms，哪一格由時鐘決定 `frames[(now / 90ms) % 8]`；原本是計數驅動的十格 braille，
-  2026-09-29 user 定案換掉）。tick（`loadingTickMsg`）只在清單還沒到時續排，到了就停；清單到之前關掉又重開會多排一條
-  tick，只是多重畫、不會轉快，所以沒加旗標擋。不 loading 時那一格是一個空白，上框寬度不變。其他 popup 打開時內容都已確定。
+  2026-09-29 user 定案換掉）。tick（`loadingTickMsg`）由 app 管，照 filu：`keepLoading()` 只在有東西 loading
+  （`anyLoading()`）、又沒有 tick 在跑（`loadingTicking`）時排一條；tick 進來先放下旗標，清單還沒到才續排，到了就停。清單到之前
+  關掉又重開，沿用正在跑的那一條，不多排。不 loading 時那一格是一個空白，上框寬度不變。其他 popup 打開時內容都已確定。
 - **T1**：context-shift（`kubectl edit` / `exec`、Alterm、drill-down）的 entry handler 先 `closeAllBlockingPopups()`；切 context
   （`ContextChangedMsg`）、breadcrumb 跳轉（`SwitchToResourceMsg`）、完成的 delete / rollback（`ShowCompleting`）也清整疊。
   namespace picker 是多選、勾一個就即時套用、picker 留著，所以底下的 Space menu 與 global operation popup 也留著；Space menu 的
@@ -247,14 +248,17 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - 「偏離 tdp」中間那段過時的說明交給 kbu session 整理。
 - 照留：L2 的 statusbar 偏離、`Ctrl-T` 不揭露、zoom 不是模式、`Alt-t` 隱藏不問。
 
-**這一輪自己下的判斷**（清單說是實作細節、不必問；2026-09-29 修完時還沒實機看過）
+**這一輪自己下的判斷**（清單說是實作細節、不必問；2026-09-29 修完後逐項跟 user 實機看過）
 
-- hint 的鍵保留粗體（D2 只規定顏色）；沒 focus 的 panel 邊框 hint 用較暗的一對（鍵 Overlay0、說明 Surface2）。
-- 拖曳 footer 的 `drag mode`、YAML 選取 hint 的 `selecting` 拿掉。拖曳的部分 user 實機看過後改成：Pinned 標題寫 `[D]rag mode`（原本 `Pinned 󰩐 [D]rop`），icon 移到被拖那一列的列首；YAML 選取時框與標題換成 Yellow，下框補 `h/j/k/l:select`。
-- YAML 的窄版 hint（只寫鍵）拿掉，放不下時照 D1 從尾端整組捨棄。
-- footer 的 panel 那一項寫成 D1 的 `Tab/1–3:panels`（原本 `Tab cycle panel`）。
-- picker 的 `/` 與 `Tab` 分成兩項：`/:new filter Tab:filter`。user 實機看過後另外要求：`Tab` 到清單時篩選列變暗、cursor 列換成 popup 的層色底，讓 focus 在哪一邊看得出來。
-- loading 中打開的 `?` 不在清單到了時重算（重開才亮）；重開 picker 多排的 tick 不加旗標擋。
+- hint 的鍵保留粗體（D2 只規定顏色）；沒 focus 的 panel 邊框 hint 用較暗的一對（鍵 Overlay0、說明 Surface2）。user：維持。
+- 拖曳 footer 的 `drag mode`、YAML 選取 hint 的 `selecting` 拿掉。user 改成：拖曳時 Pinned 標題寫 `[D]rag mode`（原本
+  `Pinned 󰩐 [D]rop`），icon 移到被拖那一列的列首；YAML 選取時框與標題換成 Yellow，下框補 `h/j/k/l:select`。
+- YAML 的窄版 hint（只寫鍵）拿掉，放不下時照 D1 從尾端整組捨棄。user：維持。
+- footer 的 panel 那一項寫成 D1 的 `Tab/1–3:panels`（原本 `Tab cycle panel`）。user：維持。
+- picker 的 `/` 與 `Tab` 分成兩項：`/:new filter Tab:filter`。user 另外要求：`Tab` 到清單時篩選列變暗、cursor 列換成 popup 的
+  層色底，讓 focus 在哪一邊看得出來（user 認為這個表達方式可以建議寫回 tdp）。
+- loading 中打開的 `?` 不在清單到了時重算（重開才亮）。user：維持。
+- 重開 picker 多排的 tick 原本不擋（只多重畫、不會轉快）。user：照 filu 加旗標（`loadingTicking`、`keepLoading()`）。
 
 ## 設計文件導讀
 

@@ -87,6 +87,7 @@ type AppModel struct {
 	statusBar       StatusBarModel
 	statusLine      StatusLineModel
 	namespacePicker NamespacePickerModel
+	loadingTicking  bool // a loading-icon tick is in flight (tdp D3)
 	contextPicker   ContextPickerModel
 	help            HelpModel
 	appLog          AppLogModel
@@ -2255,8 +2256,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toastDismissMsg:
 		return m, m.toast.Update(msg)
 
-	case loadingTickMsg:
-		return m, m.namespacePicker.HandleLoadingTick()
+	case loadingTickMsg: // redraw the loading icon; re-arm only while something loads (tdp D3)
+		m.loadingTicking = false
+		return m, m.keepLoading()
 
 	case CRDsDiscoveredMsg:
 		if msg.Err != nil {
@@ -3331,7 +3333,7 @@ func (m *AppModel) openNamespacePicker() tea.Cmd {
 	m.namespacePicker.SetLayer(m.popupDepth() + 1)
 	m.namespacePicker.SetSelection(m.k8sClient.Selection())
 	openCmd := m.namespacePicker.OpenLoading()
-	return tea.Batch(openCmd, fetchNamespaces(m.k8sClient))
+	return tea.Batch(openCmd, m.keepLoading(), fetchNamespaces(m.k8sClient))
 }
 
 // toggleAlterm is the single Alterm entry (Alt+t, or the global
