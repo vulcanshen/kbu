@@ -27,15 +27,21 @@ func IconCells() int { return iconCells }
 // changes on a normal font.
 var iconCells = 1
 
-// iconWidthOverride reads KBU__ICON_WIDTH (1 or 2), the manual override for a
-// terminal whose CPR reply is missing or wrong, and the only way to set it
-// where the probe does not run (Windows).
+// iconWidthOverride reads the icon width from the environment, before the
+// probe (tdp D6): KBU__ICON_WIDTH, the manual override for a terminal whose CPR
+// reply is missing or wrong and the only way to set it where the probe does not
+// run (Windows); then TERMINU__ICON_WIDTH, which a family app sets for what
+// runs in its PTY — in there the probe is answered by that app's terminal
+// emulator, which counts an icon as one cell. Only 1 or 2 count; anything else
+// is as if unset.
 func iconWidthOverride() (int, bool) {
-	n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("KBU__ICON_WIDTH")))
-	if err != nil || n < 1 || n > 2 {
-		return 0, false
+	for _, name := range []string{"KBU__ICON_WIDTH", "TERMINU__ICON_WIDTH"} {
+		n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
+		if err == nil && n >= 1 && n <= 2 {
+			return n, true
+		}
 	}
-	return n, true
+	return 0, false
 }
 
 // isWideIcon reports whether r is a Nerd Font file-type glyph that a CJK icon
