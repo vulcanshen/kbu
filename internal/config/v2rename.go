@@ -5,22 +5,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
-// v2.0 km8 → kbu rename transition helpers.
+// v2.0 km8 → kbu rename transition: config directory migration. A
+// v1.7.x user relaunches on v2.0 and finds ~/.config/kbu/ empty;
+// MigrateLegacyConfigDir copies the contents of ~/.config/km8/ into it
+// (one-shot; subsequent launches skip because ~/.config/kbu/ now exists).
 //
-// Two concerns handled here:
-//  1. Config directory migration — a v1.7.x user relaunches on v2.0 and
-//     finds ~/.config/kbu/ empty. MigrateLegacyConfigDir copies the
-//     contents of ~/.config/km8/ into it (one-shot; subsequent launches
-//     skip because ~/.config/kbu/ now exists).
-//  2. Env var deprecation — $KBU__* is the new name for $KM8__*.
-//     EnvDeprecations returns any warnings for legacy env vars still set
-//     while the new name isn't. Fires per-launch until the user updates
-//     their shell rc / launchctl plist.
-//
-// Removable when the transition tier is retired (planned v2.1).
+// The legacy $KM8__* environment variables are no longer read: tdp D6
+// renames without keeping old names (user ruling 2026-09-29).
 
 // MigrateLegacyConfigDir copies the pre-v2.0 config directory
 // (~/.config/km8/) into the current one (~/.config/kbu/) when the
@@ -67,33 +60,6 @@ func MigrateLegacyConfigDir() (string, error) {
 		"config: migrated %s → %s (v2.0 km8 → kbu rename). The old directory is left in place — delete it once you're satisfied the new setup works.",
 		oldDir, newDir,
 	), nil
-}
-
-// EnvDeprecations returns warnings for any legacy $KM8__* env vars
-// still set while their $KBU__* replacement isn't. One warning per
-// deprecated var. Empty slice = user has already migrated (or never
-// used the legacy names).
-//
-// Fires per-launch on purpose: env vars live in shell rc / launchctl
-// plists / systemd units that kbu can't rewrite. A persistent nudge
-// is the right pressure until the user updates their environment.
-func EnvDeprecations() []string {
-	var out []string
-
-	if os.Getenv("KBU__CONFIGPATH") == "" && strings.TrimSpace(os.Getenv("KM8__CONFIGPATH")) != "" {
-		out = append(out, "env: $KM8__CONFIGPATH is deprecated, rename to $KBU__CONFIGPATH (the old name is still read this release; remove next release)")
-	}
-	if os.Getenv("KBU__STATEPATH") == "" && strings.TrimSpace(os.Getenv("KM8__STATEPATH")) != "" {
-		out = append(out, "env: $KM8__STATEPATH is deprecated, rename to $KBU__STATEPATH (the old name is still read this release; remove next release)")
-	}
-	if os.Getenv("KBU__ALTERM_SHELL") == "" && strings.TrimSpace(os.Getenv("KM8__ALTERM_SHELL")) != "" {
-		out = append(out, "env: $KM8__ALTERM_SHELL is deprecated, rename to $KBU__ALTERM_SHELL (the old name is still read this release; remove next release)")
-	}
-	if os.Getenv("KBU__ALTERM_LOGIN_SHELL") == "" && strings.TrimSpace(os.Getenv("KM8__ALTERM_LOGIN_SHELL")) != "" {
-		out = append(out, "env: $KM8__ALTERM_LOGIN_SHELL is deprecated, rename to $KBU__ALTERM_LOGIN_SHELL (the old name is still read this release; remove next release)")
-	}
-
-	return out
 }
 
 // copyDirTree recursively copies src into dst. dst is created if

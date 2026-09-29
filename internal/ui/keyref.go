@@ -201,12 +201,16 @@ func yamlRows(hasEdit, canEdit bool) []helpRow {
 }
 
 // yamlVisualRows are the keys of the YAML viewer's selection mode (tdp
-// K11: a mode has no Space menu; its keys live here and in the hint).
+// K11: a mode has no Space menu; its keys live here and in the hint) —
+// every vim motion D5 gives a selection mode, which the viewer answers
+// in the mode as out of it.
 func yamlVisualRows() []helpRow {
 	return []helpRow{
 		{key: "h/j/k/l", desc: "extend the selection"},
 		{key: "w/b/e", desc: "extend by word"},
 		{key: "0/$", desc: "extend to line start / end"},
+		{key: "u/d", desc: "extend by half a page"},
+		{key: "gg/G", desc: "extend to the top / bottom"},
 		{key: "y", desc: "copy the selection and leave"},
 		{key: "v/Esc", desc: "leave the selection"},
 		{key: "q/Ctrl-C", desc: "quit kbu"},

@@ -94,20 +94,15 @@ func DefaultState() *State {
 // user's config-dir stays flat and both files are equally discoverable
 // on `ls`.
 //
-// $KBU__STATEPATH override mirrors the $KBU__CONFIGPATH pattern —
-// useful for tests, sandboxed launches, or a per-project state file.
-// v2.0 rename transition: $KM8__STATEPATH is the legacy env var name;
-// if $KBU__STATEPATH is not set but $KM8__STATEPATH is, we fall back
-// to it silently. EnvDeprecations() surfaces the warning at startup.
-// Whitespace-trimmed for the same reason ConfigPath is: a leading
-// space from a copy-pasted .env value would otherwise create a
+// $KBU__STATE (the family's <APP>__STATE, tdp D6) is a state directory:
+// state.yaml goes in it — useful for tests, sandboxed launches, or a
+// per-project session. Unset, the state follows ConfigDir() (and so
+// $KBU__CONFIG). Whitespace-trimmed for the same reason ConfigDir is: a
+// leading space from a copy-pasted .env value would otherwise create a
 // literal-space directory.
 func StatePath() string {
-	if p := strings.TrimSpace(os.Getenv("KBU__STATEPATH")); p != "" {
-		return p
-	}
-	if p := strings.TrimSpace(os.Getenv("KM8__STATEPATH")); p != "" {
-		return p
+	if d := strings.TrimSpace(os.Getenv("KBU__STATE")); d != "" {
+		return filepath.Join(d, "state.yaml")
 	}
 	return filepath.Join(ConfigDir(), "state.yaml")
 }

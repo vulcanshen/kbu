@@ -13,7 +13,7 @@
 **Language**: [English](README.md) · 繁體中文
 
 > [!WARNING]
-> **v2.0 改名說明**：kbu 就是 v1.7.x 以前叫做 **km8** 的工具。使用方式全數保留 — 指令 binary 現在是 `kbu`、config 目錄從 `~/.config/km8/` 搬到 `~/.config/kbu/` 首次啟動會自動 migrate、`$KM8__*` 環境變數仍會 fallback 讀、永久保留向下相容（見環境變數表）。升級無需手動步驟。
+> **v2.0 改名說明**：kbu 就是 v1.7.x 以前叫做 **km8** 的工具。使用方式全數保留 — 指令 binary 現在是 `kbu`、config 目錄從 `~/.config/km8/` 搬到 `~/.config/kbu/`、首次啟動會自動 migrate。km8 時期的環境變數不再讀取 —— 請用環境變數表裡的 `KBU__*` 名稱。
 
 **一個視窗搞定 Kubernetes** — `Tab` / `Space` / `Enter` / `Esc` 四鍵驅動一切，不用背快捷鍵、不用設定、零學習成本。Relatives 關聯導覽、YAML compare、常駐 shell 全都內建；其他你信任的 terminal 工具靠那個 shell 都能掛進來一起用。
 
@@ -290,12 +290,12 @@ resource_kind_config:
 
 這些變數會 override 對應的 config 欄位，用於不改 YAML 的一次性執行 — 適合 CI、demo 腳本、臨時試另一個 shell 的場合。
 
-> **v2.0 改名說明**：下表的 `KBU__*` 是 pre-v2.0 `KM8__*` 的新名。舊 `KM8__*` 仍會 fallback 讀（永久保留、向下相容）— 舊 `~/.zshrc` 裡的 `KM8__CONFIGPATH` 可以繼續用。同時設 `KBU__` 與對應 `KM8__` 時，`KBU__` 勝出。
+> 名稱照 terminu 家族的 `KBU__<名稱>`。舊名稱不再讀取，改名的對照見 [CHANGELOG](CHANGELOG.md)。
 
 | 變數 | 作用 | 優先順序 |
 |---|---|---|
-| `KBU__CONFIGPATH` | 改用這個檔案作為 config file，繞過預設 layout（`$XDG_CONFIG_HOME/kbu/config.yaml` 等）。Theme file 路徑**不受影響**、仍在 OS config 目錄下。建議用絕對路徑；相對路徑會在 load/save 當下對 CWD 解析。 | `KBU__CONFIGPATH` > 預設 layout |
-| `KBU__STATEPATH` | 改用這個檔案作為 session state file，取代 `<config-dir>/state.yaml`。適合想讓每次執行各有獨立 state、又不想動到真正 state file 的沙盒 / 測試場合。 | `KBU__STATEPATH` > 預設 layout |
+| `KBU__CONFIG` | 改用這個目錄作為 kbu 的設定目錄，取代預設（`$XDG_CONFIG_HOME/kbu` 等）：`config.yaml`、`theme.yaml`、session state（沒設 `KBU__STATE` 時）與 crash log 都在這裡讀寫。建議用絕對路徑；相對路徑對目前目錄解析。前後空白會被 trim。 | `KBU__CONFIG` > `$XDG_CONFIG_HOME/kbu` > OS 預設 |
+| `KBU__STATE` | 把 session state（`state.yaml`）放在這個目錄，而不是設定目錄。適合想讓每次執行各有獨立 state、又不想動到真正 state 的沙盒 / 測試場合。 | `KBU__STATE` > 設定目錄 |
 | `KBU__ALTERM_SHELL` | 改用這個 binary 作為 Alterm 的 shell。純名字會在 popup 開啟時走 `$PATH` 查找（Go `exec.Command` 語意）、絕對路徑直接 exec。前後空白會被 trim。 | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
 | `KBU__ALTERM_LOGIN_SHELL` | 強制 Alterm shell 進入或退出 login mode（`-l`）。Truthy 值：`true` / `1` / `yes`（大小寫都接受）。其他值關閉 login mode。當從非 login 父 shell 啟動而 PATH 在 `.zprofile` 時使用。 | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
 | `KBU__ICON_WIDTH` | Nerd Font 的 icon 在你的終端機上佔幾格：`1` 或 `2`。蓋過 kbu 啟動時的檢查；Windows 沒有檢查，要 `2` 只能靠它。其他值不理會。 | `KBU__ICON_WIDTH` > 啟動時檢查的結果 > `1` |
@@ -306,8 +306,8 @@ resource_kind_config:
 # 不改 config.yaml、臨時在 Alterm 試 fish
 KBU__ALTERM_SHELL=/opt/homebrew/bin/fish kbu
 
-# 指向專案內 config（例如 commit 到 repo 的 .kbu.yaml）
-KBU__CONFIGPATH="$PWD/.kbu.yaml" kbu
+# 指向專案內的設定目錄（例如 commit 到 repo 的 .kbu/）
+KBU__CONFIG="$PWD/.kbu" kbu
 ```
 
 ### theme.yaml
@@ -373,7 +373,7 @@ status:
 
 ## terminu family
 
-kbu 遵循 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.20/principle)：跟家族其他成員一樣的按鍵、一樣的 menu —— [filu](https://github.com/vulcanshen/filu)（檔案）、[sshu](https://github.com/vulcanshen/sshu)（ssh）、[webu](https://github.com/vulcanshen/webu)（網頁）、[locku](https://github.com/vulcanshen/locku)（螢幕鎖）。
+kbu 遵循 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle)：跟家族其他成員一樣的按鍵、一樣的 menu —— [filu](https://github.com/vulcanshen/filu)（檔案）、[sshu](https://github.com/vulcanshen/sshu)（ssh）、[webu](https://github.com/vulcanshen/webu)（網頁）、[locku](https://github.com/vulcanshen/locku)（螢幕鎖）。
 
 ## License
 
