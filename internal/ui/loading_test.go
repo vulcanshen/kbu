@@ -81,3 +81,36 @@ func TestD3_LoadingTickStopsWhenLoaded(t *testing.T) {
 		t.Error("once the list is in, the tick must stop")
 	}
 }
+
+// One tick at a time (tdp D3, as filu does): reopening the picker before
+// its list arrives keeps the tick that is running instead of starting a
+// second; when the tick stops, the next load starts a new one.
+func TestD3_OneLoadingTickAtATime(t *testing.T) {
+	m := stackTestApp(t)
+	_ = m.openNamespacePicker()
+	if !m.loadingTicking {
+		t.Fatal("opening the picker must start the tick")
+	}
+	_ = m.openNamespacePicker() // closed and reopened, list still on its way
+	if m.keepLoading() != nil {
+		t.Error("a tick is already running: no second one")
+	}
+
+	updated, cmd := m.Update(loadingTickMsg{})
+	m = updated.(AppModel)
+	if cmd == nil || !m.loadingTicking {
+		t.Error("while loading, the tick must re-arm itself")
+	}
+
+	m.namespacePicker.SetNamespaces([]string{"default"})
+	updated, cmd = m.Update(loadingTickMsg{})
+	m = updated.(AppModel)
+	if cmd != nil || m.loadingTicking {
+		t.Error("once the list is in, the tick must stop and say so")
+	}
+
+	_ = m.openNamespacePicker()
+	if !m.loadingTicking {
+		t.Error("the next load must start a new tick")
+	}
+}

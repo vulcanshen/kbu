@@ -32,3 +32,21 @@ type loadingTickMsg struct{}
 func loadingTick() tea.Cmd {
 	return tea.Tick(loadingStep, func(time.Time) tea.Msg { return loadingTickMsg{} })
 }
+
+// anyLoading reports something on screen showing the loading icon: the
+// namespace picker while its list is on its way.
+func (m *AppModel) anyLoading() bool {
+	return m.namespacePicker.loading
+}
+
+// keepLoading starts the icon tick when something is loading and none is in
+// flight; the tick then re-arms itself only while something still loads (tdp
+// D3). Closing and reopening the picker before its list arrives keeps the one
+// tick instead of starting a second.
+func (m *AppModel) keepLoading() tea.Cmd {
+	if m.loadingTicking || !m.anyLoading() {
+		return nil
+	}
+	m.loadingTicking = true
+	return loadingTick()
+}
