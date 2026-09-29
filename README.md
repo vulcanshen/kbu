@@ -378,7 +378,7 @@ status:
 
 ## terminu family
 
-kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.17/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
+kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
 
 ## License
 
