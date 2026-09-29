@@ -128,8 +128,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **`E` in the YAML viewer asks first, like `E` everywhere else.** It used to
   start `kubectl edit` straight away — even on a helm-managed object, whose
   Edit is otherwise off. It now shows the same confirm (`Esc` goes back to the
-  YAML), does nothing where Edit is unavailable, and the viewer's hint and `?`
-  only list `E` where it works.
+  YAML) and does nothing where Edit is unavailable. The viewer's hint lists `E`
+  only where it works; `?` lists it dimmed on a helm-managed object.
 - **`Esc` takes a toast down first.** With a toast showing over a popup, a
   search you're typing or the pin drag, `Esc` used to close what was under the
   toast and leave the toast to time out. It now closes the toast, one layer at

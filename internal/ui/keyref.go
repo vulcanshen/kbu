@@ -57,7 +57,7 @@ func (m *AppModel) keyRef() (string, []helpRow) {
 		if m.yamlPopup.visualMode {
 			return "Selection keys", yamlVisualRows()
 		}
-		return "YAML keys", yamlRows(m.yamlPopup.CanEdit())
+		return "YAML keys", yamlRows(m.yamlPopup.HasEdit(), m.yamlPopup.CanEdit())
 	case &m.comparePopup:
 		return "Compare keys", []helpRow{
 			{key: "L", desc: "switch layout: unified / side by side"},
@@ -179,14 +179,16 @@ func filterPickerRows(enter string, loading bool) []helpRow {
 	}
 }
 
-func yamlRows(canEdit bool) []helpRow {
+// yamlRows are the YAML viewer's keys. E is listed where the viewer has
+// it, dimmed where it can't run right now (hasEdit, canEdit: tdp M6).
+func yamlRows(hasEdit, canEdit bool) []helpRow {
 	rows := []helpRow{
 		{key: "/", desc: "search; n / N next / previous match"},
 		{key: "v", desc: "select characters (a mode — ? there lists its keys)"},
 		{key: "y", desc: "copy the whole YAML"},
 	}
-	if canEdit {
-		rows = append(rows, helpRow{key: "E", desc: "kubectl edit this resource (asks first)"})
+	if hasEdit {
+		rows = append(rows, helpRow{key: "E", desc: "kubectl edit this resource (asks first)", dim: !canEdit})
 	}
 	return append(rows, []helpRow{
 		{header: true, desc: "move"},
