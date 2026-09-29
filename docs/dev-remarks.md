@@ -160,8 +160,9 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 
 ## 對照 tdp 時確認過的
 
-2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次之後留下的（清單已刪）：
-下次對照不必重查的，以及當時由 user 逐題裁定的。
+兩輪對照留下的（清單都已刪）：2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次；
+2026-09-29 照第二份清單（對照 v0.1.14–v0.1.17 的改動，6 條）修完、再拿 v0.1.17 全文對一次。下次對照不必重查的，以及由 user
+逐題裁定的。
 
 **已經符合、不用修的**
 
@@ -177,6 +178,7 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - **K7**：panel 3 的 `[` / `]` 跟 `h` / `l` 一樣切 tab，列在 panel 3 的 `?`；YAML 裡 `left` / `right` 是 `h` / `l` 的別名（移 cursor），
   只有 YAML 有「移 cursor 左右」這個角色。方向鍵在每個有 `j` / `k` 的 surface 都有效。
 - **K10**：`PgUp` / `PgDn` / `Home` / `End` 只在非 alt-screen 時攔下並揭露在下框 hint；出口鍵（每個 PTY 的 `Alt-Esc`、Alterm 的 `Alt-t`）常駐在下框 hint。
+  `Alt-Esc` 一律先 confirm，alt-screen 裡也攔（v0.1.16 的 D5）；kbu 的 `Alt-Esc` 只有「結束」一種。Alterm 的 `Alt-t` 隱藏不問（D5 交給 app）。
 - **M1**：footer（`statusline.go`）固定一列、永遠列出 `?:help` 與 `Space:menu`；拖曳模式裡換成 `?:keys` 與模式的鍵（K11）。
 - **M5**：每一列都有名稱與一句說明。鍵的寫法照 v0.1.15 定案的一套（menu、footer、panel hint、popup hint、key reference、README）：
   鍵名用鍵帽上的名字、`Ctrl` 後面的字母大寫、modifier 用 `-`；做同一件事的鍵用 `/`、範圍用 `–`；label 用括號標記（`[r]ename`、
@@ -209,6 +211,18 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - **S1、S2、S4、S5**：`V` 只在 panel 上打開 splash，popup、輸入態、PTY、拖曳都先攔下；啟動不播；help、hint、footer、README 都沒提；
   圖案由 `docs/icon.svg` 產生。
 - **D2 的層色**：`theme.PopupLayerColor()` 的四個色碼就是 D2 的表；Lavender 留給使用者足跡。
+- **F1、F8 的 toast（v0.1.14 的說法）**：toast 不在 `stackOrder()` 裡；`Update()` 的按鍵路由在 PTY、`q` / `Ctrl-C`、`?` 之後，toast
+  `Owns()` 時只攔 `Esc`，其他鍵照常交給最上層 popup 或 panel（`TestF1_KeysOtherThanEscPassThroughTheToast`）；滑鼠打不到 toast。
+  toast 畫在 dim 之後，不觸發 dim。PTY 在最上層時 `Esc` 屬於子程序（K10），toast 等時間到。
+- **M6 的 hint 與 footer**：YAML 下框 hint 只在能 edit 時列 `E`、footer 列固定的幾個核心鍵 —— M6 允許 hint 與 footer 只列現在按得了的。
+- **M6 的其他 key reference**：global operation popup、sort 兩步、Settings、breadcrumb、context picker、App log、Compare、confirm、拖曳
+  模式、YAML 選取模式列出的鍵，都沒有「現在不能按」的條件。sort 的 Reset 在 picker 裡變暗，它沒有熱鍵，`?` 不列。對象不存在就不列的，
+  跟 menu 同一份來源：panel 2 空清單沒有 item operation 的鍵、沒 drill 就沒有 `[Esc] Back`、Relatives 深度 1 沒有 `B`、不能排序的種類
+  沒有 `S` / `Alt-S`。
+- **M6 的「別的 surface」（v0.1.16）**：kbu 只有 namespace / context picker `?` 裡的「while typing」一段，照亮顯示。panel `?` 的
+  「app-wide (also in Global operation)」一段是這個 panel 上按得到的鍵，照一般規則。
+- **F7 以外的等待文字**：panel 裡的「Waiting for logs...」、YAML 的「(no YAML — resource may still be loading)」是內容裡的文字，不是
+  loading 中的 popup，不用 D3 的 icon。
 - **術語「模式」：zoom 不是模式（K4、K11）。** `z` 放大之後每個鍵的意思都不變，所以不是模式；`Esc` 的「上一層」照 app 定義：搜尋
   篩選 → compare 鎖 → drill，不收 zoom，`z` 再按一次還原。這原本是對照 v0.1.13 時自己下的判斷（filu 把同樣的 zoom 寫成偏離），
   user 2026-09-29 實機確認維持；tdp v0.1.14 把「版面的切換不是模式，`Esc` 不必退出它」寫進術語。
@@ -224,6 +238,23 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - 每個 panel、每個 tab 的 `Enter` 見 README 的核心鍵表。
 - helm 管理的物件：Edit / Delete 變暗、不藏（見「設計決定」）；關閉 PTY（Alterm、`kubectl edit` / `exec`）一律 `Alt-Esc`、先 confirm；`Alt-t` 只給 Alterm 的隱藏（2026-09-29，見「PTY 裡的鍵」；tdp v0.1.16 的 D5 把「`Alt-Esc` 一律先 confirm」寫成了家族做法）。
 - Events 失焦變暗：寫成偏離（見「偏離 tdp」）。
+
+**user 裁定（2026-09-29，對照 v0.1.14–v0.1.17）**
+
+- YAML 的 `E`：helm 管理的物件 `?` 列出、變暗，下框 hint 不列（M6）。
+- namespace picker 的 loading icon 換成 D3 的圓形切片。
+- 鍵的寫法照 v0.1.15 的 M5。
+- 「偏離 tdp」中間那段過時的說明交給 kbu session 整理。
+- 照留：L2 的 statusbar 偏離、`Ctrl-T` 不揭露、zoom 不是模式、`Alt-t` 隱藏不問。
+
+**這一輪自己下的判斷**（清單說是實作細節、不必問；2026-09-29 修完時還沒實機看過）
+
+- hint 的鍵保留粗體（D2 只規定顏色）；沒 focus 的 panel 邊框 hint 用較暗的一對（鍵 Overlay0、說明 Surface2）。
+- 拖曳 footer 的 `drag mode`、YAML 選取 hint 的 `selecting` 拿掉，不移到標題。
+- YAML 的窄版 hint（只寫鍵）拿掉，放不下時照 D1 從尾端整組捨棄。
+- footer 的 panel 那一項寫成 D1 的 `Tab/1–3:panels`（原本 `Tab cycle panel`）。
+- picker 的 `/` 與 `Tab` 分成兩項：`/:new filter Tab:filter`。
+- loading 中打開的 `?` 不在清單到了時重算（重開才亮）；重開 picker 多排的 tick 不加旗標擋。
 
 ## 設計文件導讀
 
