@@ -187,7 +187,7 @@ func TestD2_PanelHintColoursFollowFocus(t *testing.T) {
 		focused   bool
 		key, desc string
 	}{{true, theme.Blue, theme.Overlay0}, {false, theme.Overlay0, theme.Surface2}} {
-		drawn := renderPanelWithScroll("x", "t", 30, 5, c.focused, theme.DefaultTheme(), nil, "", hints)
+		drawn := renderPanelWithScroll("x", "t", 30, 5, c.focused, theme.DefaultTheme(), nil, "", hints, "")
 		row, at := cellsOf(t, drawn, "Enter:drill")
 		checkHintCells(t, "panel border", row, at, "Enter", c.key, c.desc)
 	}
