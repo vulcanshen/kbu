@@ -2255,8 +2255,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toastDismissMsg:
 		return m, m.toast.Update(msg)
 
-	case namespaceSpinnerTickMsg:
-		return m, m.namespacePicker.HandleSpinnerTick(msg)
+	case loadingTickMsg:
+		return m, m.namespacePicker.HandleLoadingTick()
 
 	case CRDsDiscoveredMsg:
 		if msg.Err != nil {

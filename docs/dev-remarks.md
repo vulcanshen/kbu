@@ -192,8 +192,10 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
   存檔失敗另有 toast。
 - **F6**：問句寫出動作與對象；`Enter` / `y` 接受、`Esc` / `n` 取消；滑鼠左鍵刻意不接受（`HandleMouse()`）。Edit 在 panel、Space menu、
   YAML 裡都先 confirm。breadcrumb 選定後仍 confirm，是 app 的選擇（F6 允許 picker 算確認，不要求）。
-- **F7 的 loading**：只有 namespace picker 在內容還沒到時就打開，標題後有輪轉 icon（braille，D3 的 circle slice 是家族預設，沒換）；
-  其他 popup 打開時內容都已確定。
+- **F7 的 loading**：只有 namespace picker 在內容還沒到時就打開，標題後是 D3 的 loading icon（`loading.go`：
+  `nf-md-circle_slice_1`–`_8` 八格、一格 90ms，哪一格由時鐘決定 `frames[(now / 90ms) % 8]`；原本是計數驅動的十格 braille，
+  2026-09-29 user 定案換掉）。tick（`loadingTickMsg`）只在清單還沒到時續排，到了就停；清單到之前關掉又重開會多排一條
+  tick，只是多重畫、不會轉快，所以沒加旗標擋。不 loading 時那一格是一個空白，上框寬度不變。其他 popup 打開時內容都已確定。
 - **T1**：context-shift（`kubectl edit` / `exec`、Alterm、drill-down）的 entry handler 先 `closeAllBlockingPopups()`；切 context
   （`ContextChangedMsg`）、breadcrumb 跳轉（`SwitchToResourceMsg`）、完成的 delete / rollback（`ShowCompleting`）也清整疊。
   namespace picker 是多選、勾一個就即時套用、picker 留著，所以底下的 Space menu 與 global operation popup 也留著；Space menu 的
