@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle) (tdp v0.1.21).
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.22/principle) (tdp v0.1.22).
 
 - **Environment variables take the family's names; old names are no longer
   read.** `KBU__CONFIGPATH` (a file) is now `KBU__CONFIG`, a directory:
@@ -183,6 +183,16 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   borders, popup frames, the helm mark's column, popups laid over the screen,
   the splash. Set `KBU__ICON_WIDTH=1` or `2` when the check gets it wrong, and
   on Windows, which has no check; `kbu iconwidth` prints what kbu detects.
+- **Inside another terminu app, kbu draws icons as wide as that app does.**
+  The width check at start is answered by the app's terminal there, which
+  counts an icon as one cell; kbu now takes `KBU__ICON_WIDTH`, then the
+  family's `TERMINU__ICON_WIDTH`, then the check. The other way round, what
+  runs in Alterm and the `kubectl edit` / `exec` terminals gets
+  `TERMINU__ICON_WIDTH` set to the width kbu uses, so a family app run there
+  lines up too.
+- **A popup larger than the window is cut at its edge.** In the frame after
+  the window shrinks, a popup drawn at the old size, such as a full-screen
+  Alterm, spilled past the window instead of being cut to it.
 - **The YAML viewer's cursor lands on the right character in Chinese text.**
   On a line with CJK characters the cursor and the selection were drawn on
   the wrong character, repeating a letter and shifting the rest of the line.

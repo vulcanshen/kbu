@@ -1,7 +1,7 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策：各功能背後的設計筆記、理由與實作細節。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle)（tdp）；
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.22/principle)（tdp）；
 使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
@@ -81,9 +81,11 @@ kbu 的 popup 標題、列標記、helm 標記、loading icon、splash 的像素
 
 - **量寬度一律走 `width.go`**（照搬 filu 的參考實作）：`dispWidth()`（量到的寬度加上每個 icon 多佔的格數）、`dispClip()`、`padDisp()`、`truncate()`、`dispCutLeft()`、`centerDisp()`（取代 `lipgloss.Place`）、`joinH()` / `joinV()`（取代 lipgloss 的 Join）、`compositeDisp()`（取代 `overlay.Composite`，疊 popup 與 toast）。`internal/ui` 的正式程式碼裡找不到 `lipgloss.Width`、`lipgloss.Place`、`ansi.StringWidth`、`ansi.Truncate`、lipgloss 的 Join、`overlay.Composite`；style 的 `.Width(n)` 改成先 `padDisp()` 再上色（lipgloss 的補空白也不認得寬 icon）。YAML viewer 游標與選取用的 `ansi.Cut` 切的是 YAML 內容自己的格數，例外；游標與選取存的是字元索引，先經 `cellsBefore()` 換成格數再切 —— 原本直接交給 `ansi.Cut`，中文字一個字元兩格，游標與選取落在錯的字上、還把字多畫一次（2026-09-29 照 filu `a242c9b` 修，user 同意一起修）。
 - **`iconCells`** 預設 1，這時 `dispWidth()` 就是 `ansi.StringWidth()`，一般字型的畫面完全不變（既有測試原封不動通過）。`isWideIcon()`：BMP 與補充 PUA 算，powerline 端點（U+E0A0–E0D7，panel 膠囊的圓角）不算。
-- **探測**（`iconwidth_unix.go` 的 `DetectIconWidth()`，`cmd/main.go` 在建 model、進 Bubble Tea 之前呼叫）：raw mode 下印一個 icon、送 CPR（`ESC[6n`），讀游標停在第幾欄，200ms 內沒回應就維持 1。量的是游標實際前進幾格：icon 看起來比一格寬、游標只前進一格的字型（glyph 溢出）是 1。`KBU__ICON_WIDTH=1|2` 蓋過探測；Windows（`iconwidth_other.go`）沒有探測，只讀這個變數。`kbu iconwidth` 印出量到的值，給使用者自己查。2026-09-29 user 的終端機量到 1（畫面跟以前一樣）；CJK icon 字型沒有實機看，user 決定等收到 issue 再說。
-- **跟 filu 不同的地方**：`compositeDisp()` 在 popup 比畫面寬或高時（resize 那一格用舊尺寸畫的框）從 0 開始、超出的部分切掉；filu 的版本 x、y 會是負的，`strings.Repeat` 或索引直接 panic（`overlay.Composite` 原本是讓那一列超出畫面）。kbu 另有 Windows 版，所以多一個非 unix 的探測檔。splash 的像素照 filu：icon 佔兩格時只畫 glyph，不補空白。helm 欄的 `MinWidth: 2` 保留，一般字型上的欄位位置不變。
-- **測試**（`d6_test.go`）：icon 佔 1 格與 2 格、80 × 40 與 120 × 40 下，每一種 popup 各開一次，量單獨的框每一列等寬、疊上去的整個畫面每一列等於終端機寬；panel 2 帶 helm 標記的列每一欄都在表頭底下；`compositeDisp()` 的四種邊界與比畫面大的框；寬度函式本身。
+- **探測**（`iconwidth_unix.go` 的 `DetectIconWidth()`，`cmd/main.go` 在建 model、進 Bubble Tea 之前呼叫）：raw mode 下印一個 icon、送 CPR（`ESC[6n`），讀游標停在第幾欄，200ms 內沒回應就維持 1。量的是游標實際前進幾格：icon 看起來比一格寬、游標只前進一格的字型（glyph 溢出）是 1。探測之前先看兩個變數（`iconWidthOverride()`，tdp D6 v0.1.22）：`KBU__ICON_WIDTH`（手動覆寫）→ `TERMINU__ICON_WIDTH`（家族 app 在自己的 PTY 裡設給子程序的 —— 在別的 app 的 PTY 裡，探測由外層 app 的終端模擬器回答，它把 icon 一律當一格）；只收 `1`、`2`（前後空白先 trim），其他值當沒設；有一個有值就不送 CPR。Windows（`iconwidth_other.go`）沒有探測，只讀這兩個變數。`kbu iconwidth` 印出量到的值，給使用者自己查。2026-09-29 user 的終端機量到 1（畫面跟以前一樣）；CJK icon 字型沒有實機看，user 決定等收到 issue 再說。
+- **傳給 PTY 裡的程式**：`PtyView.Start()`（Alterm、`kubectl exec`、`kubectl edit` 都從這裡開）在子程序的環境設 `TERMINU__ICON_WIDTH=<iconCells>`（`withEnv()`：已有同名的就取代、不重複，其他環境照留；`cmd.Env` 是 nil 時從 kbu 自己的環境開始）。kbu 的 PTY 是 vt10x，把 icon 當一格回答 CPR；在裡面跑的家族 app 改讀這個值，跟 kbu 用同一個寬度，巢狀幾層都傳得下去（tdp D6 v0.1.22，照 filu `1ab4b18`）。`kubectl edit` 的環境先經 `sanitizeEditorEnv()` 清過，再加上這一個，它開的 editor 一樣拿得到。
+- **疊 popup 比畫面大**：`compositeDisp()` 在 popup 比畫面寬或高時（resize 那一格用舊尺寸畫的框）從 0 開始、超出的部分切掉；寬、高兩邊都比畫面大時也一樣切 —— 從 `overlay.Composite` 帶過來的「寬高都不小於畫面就把框原樣交出去」特例在 tdp v0.1.22 拿掉，跟畫面一樣大的框（PTY 用滿）照樣整個蓋上。filu 的參考實作原本 x、y 會是負的，`strings.Repeat` 或索引直接 panic（`overlay.Composite` 原本是讓那一列超出畫面）；kbu 照搬時補上，filu 在 `b2436f3` 跟上。
+- **跟 filu 不同的地方**：kbu 另有 Windows 版，所以多一個非 unix 的探測檔。splash 的像素照 filu：icon 佔兩格時只畫 glyph，不補空白。helm 欄的 `MinWidth: 2` 保留，一般字型上的欄位位置不變。
+- **測試**（`d6_test.go`；PTY 的那一個在 `ptyview_test.go`）：icon 佔 1 格與 2 格、80 × 40 與 120 × 40 下，每一種 popup 各開一次，量單獨的框每一列等寬、疊上去的整個畫面每一列等於終端機寬；panel 2 帶 helm 標記的列每一欄都在表頭底下；`compositeDisp()` 的四種邊界、比畫面寬 / 高 / 兩邊都大的框（每一列剛好畫面寬、列數等於畫面高）與跟畫面一樣大的框；寬度函式本身；取寬度的順序（兩個變數與探測、不合法的值）；PTY 的子程序拿到一個 `TERMINU__ICON_WIDTH`、值等於 `iconCells`（1 與 2），繼承來的舊值被取代，`kubectl edit` 清過的環境照留，shell 實際印得出來。
 
 ### Popup 的分類與結構
 
@@ -133,6 +135,9 @@ kbu 的 popup 標題、列標記、helm 標記、loading icon、splash 的像素
 的設定**目錄**遷移（`MigrateLegacyConfigDir()`）不是環境變數，保留。測試的 `TestMain` 除了隔離 `XDG_CONFIG_HOME`，也清掉
 `KBU__CONFIG` / `KBU__STATE`（它們排在 XDG 前面）；會存檔的測試自己設 `KBU__CONFIG` 到暫存目錄。
 
+`TERMINU__ICON_WIDTH` 是家族共用的一個（tdp D6 v0.1.22），不照 `KBU__`：kbu 讀它，排在 `KBU__ICON_WIDTH` 後面，也在開 PTY 時設給子程序（見「Nerd Font 的渲染」）。
+測 icon 寬度的測試自己把它設成空的，免得在家族 app 的 PTY 裡跑 `go test` 時吃到外層設的值。
+
 ### PTY 裡的鍵
 
 tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由 app 決定、跟出口鍵一樣常駐揭露（v0.1.2 的 K10 只准出口鍵，
@@ -176,11 +181,12 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 
 ## 對照 tdp 時確認過的
 
-兩輪對照留下的（清單都已刪）：2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次；
+各輪對照留下的（清單都已刪）：2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次；
 2026-09-29 照第二份清單（對照 v0.1.14–v0.1.17 的改動，6 條）修完、再拿 v0.1.17 全文對一次；同日第三份清單（對照 v0.1.17 →
 v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 做完，對照 v0.1.20 時照搬完成（見「Nerd Font 的渲染」），清單刪除；
-第五份清單（對照 v0.1.21，1 條：環境變數命名，見「環境變數」）修完，全文對照時另補選取模式 `?` 漏列的 `u/d`、`gg/G`。下次對照不必重查的，
-以及由 user 逐題裁定的。
+第五份清單（對照 v0.1.21，1 條：環境變數命名，見「環境變數」）修完，全文對照時另補選取模式 `?` 漏列的 `u/d`、`gg/G`；
+第六份清單（對照 v0.1.22，3 條，都在 D6：疊 popup 寬高都大也切、讀 `TERMINU__ICON_WIDTH`、開 PTY 時設給子程序，見「Nerd Font 的渲染」）
+修完，全文對照沒有新的。下次對照不必重查的，以及由 user 逐題裁定的。
 
 **已經符合、不用修的**
 
@@ -250,7 +256,11 @@ v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 
 - **K10（v0.1.19）：子程序還沒準備好時可以不轉送**：這是「可以」。kbu 的三個 PTY 都是本機子程序，`Start()` 同步拿到 `ptmx`，
   按鍵從開啟動畫的第一格就轉送；`kubectl exec` 連線中的鍵由 kubectl 自己收著。出口鍵在 `PtyView.Update()` 裡排在轉送之前。
 - **D6 疊 popup 不 panic（v0.1.21）**：`compositeDisp()` 在 popup 比畫面寬或高時起點取 0、超出切掉（`TestD6_CompositeDisp`）——
-  v0.1.21 就是照 kbu 照搬時補的這一段寫的。
+  v0.1.21 就是照 kbu 照搬時補的這一段寫的。v0.1.22 再要求寬高兩邊都大也切，kbu 照改（拿掉從 overlay 帶來的特例）。
+- **D6 環境變數過不了遠端（v0.1.22）**：tdp 講的是 ssh；kbu 的 `kubectl exec` 一樣 —— `TERMINU__ICON_WIDTH` 設在本機的 `kubectl` 行程上，
+  pod 裡的 shell 拿不到。在 pod 裡跑家族 app 不是會發生的用法，不另外做通道。
+- **D6 驗收 grep（v0.1.22 對照時再跑一次）**：`internal/ui` 的正式程式碼裡 `lipgloss.Width` / `Size` / `Place`、`ansi.StringWidth` /
+  `Truncate` 只剩在 `width.go` 的寬度函式本身。
 - **D5 選取模式的移動（v0.1.21）**：YAML viewer 的選取模式照 vim 的 `h/j/k/l`、`w/b/e`、`0/$`、`gg/G`、`u/d` 移動（跟一般模式同一段程式）。
 - **F7 以外的等待文字**：panel 裡的「Waiting for logs...」、YAML 的「(no YAML — resource may still be loading)」是內容裡的文字，不是
   loading 中的 popup，不用 D3 的 icon。
@@ -305,7 +315,7 @@ v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 
 
 ## 設計文件導讀
 
-kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle)。
+kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.22/principle)。
 
 | 檔案 | 內容 |
 |---|---|
