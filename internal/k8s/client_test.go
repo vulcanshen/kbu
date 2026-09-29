@@ -7,8 +7,8 @@ import (
 
 func skipUnlessK8s(t *testing.T) {
 	t.Helper()
-	if os.Getenv("KBU_TEST_K8S") == "" {
-		t.Skip("set KBU_TEST_K8S=1 to run k8s integration tests")
+	if os.Getenv("KBU__TEST_K8S") == "" {
+		t.Skip("set KBU__TEST_K8S=1 to run k8s integration tests")
 	}
 }
 

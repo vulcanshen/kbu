@@ -38,15 +38,10 @@ func unsetEnvForTest(t *testing.T, key string) {
 }
 
 // isolateAltermEnv unsets every env var that buildShellTerminalCmd reads
-// so a test can prove its own env value drives the result. Covers both
-// tiers: the current $KBU__ALTERM_* names and the v2.0 legacy $KM8__ALTERM_*
-// fallbacks.
+// so a test can prove its own env value drives the result.
 func isolateAltermEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{
-		"KBU__ALTERM_SHELL", "KBU__ALTERM_LOGIN_SHELL",
-		"KM8__ALTERM_SHELL", "KM8__ALTERM_LOGIN_SHELL",
-	} {
+	for _, k := range []string{"KBU__ALTERM_SHELL", "KBU__ALTERM_LOGIN_SHELL"} {
 		unsetEnvForTest(t, k)
 	}
 }
@@ -104,32 +99,16 @@ func TestBuildShellTerminalCmd_KBUAltermShellOverridesEverything(t *testing.T) {
 	}
 }
 
-func TestBuildShellTerminalCmd_LegacyKM8AltermShellFallback(t *testing.T) {
-	// v2.0 rename: $KM8__ALTERM_SHELL still honored when $KBU__ALTERM_SHELL
-	// isn't set. Fallback ordering keeps existing shell rc / launchctl
-	// plists working through the transition; EnvDeprecations surfaces the
-	// nudge to rename.
+// tdp D6: a rename keeps no old name — the pre-v2.0 $KM8__ALTERM_SHELL is
+// not read; the config's shell is.
+func TestBuildShellTerminalCmd_LegacyKM8AltermShellIgnored(t *testing.T) {
 	isolateAltermEnv(t)
 	t.Setenv("SHELL", "/bin/zsh")
 	t.Setenv("KM8__ALTERM_SHELL", "/bin/bash")
 
 	cmd := buildShellTerminalCmd("/opt/homebrew/bin/fish", false)
-	if cmd.Args[0] != "/bin/bash" {
-		t.Errorf("expected legacy $KM8__ALTERM_SHELL to win when new not set, got %q", cmd.Args[0])
-	}
-}
-
-func TestBuildShellTerminalCmd_KBUWinsOverLegacyKM8(t *testing.T) {
-	// Both set: KBU__ALTERM_SHELL wins, KM8__ALTERM_SHELL silently ignored
-	// as the migration target.
-	isolateAltermEnv(t)
-	t.Setenv("SHELL", "/bin/zsh")
-	t.Setenv("KM8__ALTERM_SHELL", "/bin/dash")
-	t.Setenv("KBU__ALTERM_SHELL", "/bin/bash")
-
-	cmd := buildShellTerminalCmd("", false)
-	if cmd.Args[0] != "/bin/bash" {
-		t.Errorf("expected KBU__ to win over KM8__, got %q", cmd.Args[0])
+	if cmd.Args[0] != "/opt/homebrew/bin/fish" {
+		t.Errorf("$KM8__ALTERM_SHELL must not be read, got %q", cmd.Args[0])
 	}
 }
 
@@ -185,16 +164,15 @@ func TestBuildShellTerminalCmd_LoginEnvFalseOverridesConfig(t *testing.T) {
 	}
 }
 
-func TestBuildShellTerminalCmd_LegacyKM8LoginFallback(t *testing.T) {
-	// v2.0 rename fallback: $KM8__ALTERM_LOGIN_SHELL still read when
-	// $KBU__ALTERM_LOGIN_SHELL isn't set.
+// tdp D6: the pre-v2.0 $KM8__ALTERM_LOGIN_SHELL is not read either.
+func TestBuildShellTerminalCmd_LegacyKM8LoginIgnored(t *testing.T) {
 	isolateAltermEnv(t)
 	t.Setenv("SHELL", "/bin/zsh")
 	t.Setenv("KM8__ALTERM_LOGIN_SHELL", "true")
 
 	cmd := buildShellTerminalCmd("", false)
-	if len(cmd.Args) != 2 || cmd.Args[1] != "-l" {
-		t.Errorf("expected legacy $KM8__ALTERM_LOGIN_SHELL=true to force login mode, got %v", cmd.Args)
+	if len(cmd.Args) != 1 {
+		t.Errorf("$KM8__ALTERM_LOGIN_SHELL must not be read, got %v", cmd.Args)
 	}
 }
 

@@ -24,6 +24,7 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestConfigDir(t *testing.T) {
+	t.Setenv("KBU__CONFIG", "")
 	dir := ConfigDir()
 
 	if dir == "" {
@@ -35,10 +36,9 @@ func TestConfigDir(t *testing.T) {
 }
 
 func TestConfigPath(t *testing.T) {
-	// Isolate from any inherited KBU__/KM8__ env vars in the runner
-	// so the default-layout shape can be asserted.
-	t.Setenv("KBU__CONFIGPATH", "")
-	t.Setenv("KM8__CONFIGPATH", "")
+	// Isolate from an inherited $KBU__CONFIG in the runner so the
+	// default-layout shape can be asserted.
+	t.Setenv("KBU__CONFIG", "")
 
 	path := ConfigPath()
 
@@ -54,45 +54,44 @@ func TestConfigPath(t *testing.T) {
 	}
 }
 
-func TestConfigPath_RespectsKBUConfigPathEnv(t *testing.T) {
-	// $KBU__CONFIGPATH wins outright — caller is responsible for the
-	// path validity, we just thread it through.
-	t.Setenv("KM8__CONFIGPATH", "")
-	t.Setenv("KBU__CONFIGPATH", "/tmp/custom-kbu.yaml")
-	if got := ConfigPath(); got != "/tmp/custom-kbu.yaml" {
-		t.Errorf("ConfigPath() with env: got %q, want %q", got, "/tmp/custom-kbu.yaml")
+// tdp D6: $KBU__CONFIG is the config directory — config.yaml, theme.yaml
+// and logs/ all move with it — trimmed of surrounding whitespace.
+func TestConfigDir_KBUConfigIsTheDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "kbu-cfg")
+	for _, v := range []string{dir, "  " + dir + "\t"} {
+		t.Setenv("KBU__CONFIG", v)
+		if got := ConfigDir(); got != dir {
+			t.Errorf("KBU__CONFIG=%q: ConfigDir() = %q, want %q", v, got, dir)
+		}
+		for name, got := range map[string]string{
+			"config.yaml": ConfigPath(), "theme.yaml": ThemePath(), "logs": LogDir(),
+		} {
+			if want := filepath.Join(dir, name); got != want {
+				t.Errorf("KBU__CONFIG=%q: %s at %q, want %q", v, name, got, want)
+			}
+		}
 	}
 }
 
 func TestConfigPath_EmptyEnvFallsBack(t *testing.T) {
-	// Empty string = treat as unset; fall back to the default layout.
-	t.Setenv("KM8__CONFIGPATH", "")
-	t.Setenv("KBU__CONFIGPATH", "")
-	got := ConfigPath()
-	if filepath.Base(got) != "config.yaml" || filepath.Dir(got) != ConfigDir() {
-		t.Errorf("empty env must fall back to default layout, got %q", got)
+	// Empty or blank = treat as unset; fall back to the default layout.
+	for _, v := range []string{"", "   "} {
+		t.Setenv("KBU__CONFIG", v)
+		got := ConfigPath()
+		if filepath.Base(got) != "config.yaml" || filepath.Base(filepath.Dir(got)) != "kbu" {
+			t.Errorf("KBU__CONFIG=%q must fall back to the default layout, got %q", v, got)
+		}
 	}
 }
 
-func TestConfigPath_LegacyKM8EnvFallback(t *testing.T) {
-	// v2.0 rename transition: $KM8__CONFIGPATH is still honored when
-	// $KBU__CONFIGPATH is not set. Silent fallback — the deprecation
-	// warning is surfaced separately by EnvDeprecations() at startup.
-	t.Setenv("KBU__CONFIGPATH", "")
-	t.Setenv("KM8__CONFIGPATH", "/tmp/legacy-kbu.yaml")
-	if got := ConfigPath(); got != "/tmp/legacy-kbu.yaml" {
-		t.Errorf("legacy KM8 env fallback: got %q, want %q", got, "/tmp/legacy-kbu.yaml")
-	}
-}
-
-func TestConfigPath_KBUWinsOverKM8(t *testing.T) {
-	// Both env vars set: KBU__ takes precedence. Legacy KM8__ silently
-	// ignored (the deprecation warning still fires from EnvDeprecations
-	// on the presence, not the win).
-	t.Setenv("KM8__CONFIGPATH", "/tmp/legacy-kbu.yaml")
-	t.Setenv("KBU__CONFIGPATH", "/tmp/new-kbu.yaml")
-	if got := ConfigPath(); got != "/tmp/new-kbu.yaml" {
-		t.Errorf("KBU should win over KM8: got %q, want %q", got, "/tmp/new-kbu.yaml")
+// tdp D6: a rename keeps no old name. $KBU__CONFIGPATH (a file, v2.x) and
+// the pre-v2.0 $KM8__CONFIGPATH are not read.
+func TestConfigPath_OldNamesAreNotRead(t *testing.T) {
+	t.Setenv("KBU__CONFIG", "")
+	t.Setenv("KBU__CONFIGPATH", "/tmp/old-kbu.yaml")
+	t.Setenv("KM8__CONFIGPATH", "/tmp/legacy-km8.yaml")
+	if got := ConfigPath(); got == "/tmp/old-kbu.yaml" || got == "/tmp/legacy-km8.yaml" {
+		t.Errorf("an old name was read: ConfigPath() = %q", got)
 	}
 }
 

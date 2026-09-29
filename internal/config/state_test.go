@@ -95,36 +95,36 @@ func TestState_OmitEmpty(t *testing.T) {
 	}
 }
 
-func TestStatePath_EnvOverride(t *testing.T) {
-	t.Setenv("KM8__STATEPATH", "")
-	t.Setenv("KBU__STATEPATH", "/tmp/kbu-test-state.yaml")
-	if got := StatePath(); got != "/tmp/kbu-test-state.yaml" {
-		t.Errorf("StatePath env override: got %q, want %q", got, "/tmp/kbu-test-state.yaml")
+// tdp D6: $KBU__STATE is the state directory; state.yaml goes in it,
+// trimmed of surrounding whitespace.
+func TestStatePath_KBUStateIsTheDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "kbu-state")
+	for _, v := range []string{dir, "  " + dir + "  "} {
+		t.Setenv("KBU__STATE", v)
+		if got, want := StatePath(), filepath.Join(dir, "state.yaml"); got != want {
+			t.Errorf("KBU__STATE=%q: StatePath() = %q, want %q", v, got, want)
+		}
 	}
 }
 
-func TestStatePath_LeadingWhitespaceIsTrimmed(t *testing.T) {
-	t.Setenv("KM8__STATEPATH", "")
-	t.Setenv("KBU__STATEPATH", "  /tmp/kbu-test-state.yaml  ")
-	if got := StatePath(); got != "/tmp/kbu-test-state.yaml" {
-		t.Errorf("StatePath trim: got %q", got)
+// Unset, the state follows the config directory — $KBU__CONFIG included.
+func TestStatePath_FollowsTheConfigDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "kbu-cfg")
+	t.Setenv("KBU__STATE", "")
+	t.Setenv("KBU__CONFIG", dir)
+	if got, want := StatePath(), filepath.Join(dir, "state.yaml"); got != want {
+		t.Errorf("StatePath() = %q, want %q", got, want)
 	}
 }
 
-func TestStatePath_LegacyKM8EnvFallback(t *testing.T) {
-	// v2.0 rename transition: $KM8__STATEPATH honored when $KBU__STATEPATH
-	// is not set. Silent fallback; deprecation surfaced via EnvDeprecations.
-	t.Setenv("KBU__STATEPATH", "")
-	t.Setenv("KM8__STATEPATH", "/tmp/legacy-kbu-state.yaml")
-	if got := StatePath(); got != "/tmp/legacy-kbu-state.yaml" {
-		t.Errorf("legacy KM8 env fallback: got %q, want %q", got, "/tmp/legacy-kbu-state.yaml")
-	}
-}
-
-func TestStatePath_KBUWinsOverKM8(t *testing.T) {
-	t.Setenv("KM8__STATEPATH", "/tmp/legacy-kbu-state.yaml")
-	t.Setenv("KBU__STATEPATH", "/tmp/new-kbu-state.yaml")
-	if got := StatePath(); got != "/tmp/new-kbu-state.yaml" {
-		t.Errorf("KBU should win over KM8: got %q, want %q", got, "/tmp/new-kbu-state.yaml")
+// tdp D6: a rename keeps no old name. $KBU__STATEPATH (a file, v2.x) and
+// the pre-v2.0 $KM8__STATEPATH are not read.
+func TestStatePath_OldNamesAreNotRead(t *testing.T) {
+	t.Setenv("KBU__STATE", "")
+	t.Setenv("KBU__CONFIG", "")
+	t.Setenv("KBU__STATEPATH", "/tmp/old-kbu-state.yaml")
+	t.Setenv("KM8__STATEPATH", "/tmp/legacy-km8-state.yaml")
+	if got, want := StatePath(), filepath.Join(ConfigDir(), "state.yaml"); got != want {
+		t.Errorf("an old name was read: StatePath() = %q, want %q", got, want)
 	}
 }
