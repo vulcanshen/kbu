@@ -29,7 +29,7 @@ const (
 	Sapphire     = "#74c7ec" // L4 ceiling — catppuccin Mocha sapphire
 )
 
-// Catppuccin Mocha stops the key hints use (tdp D2).
+// Catppuccin Mocha stops with one job each (tdp D2).
 const (
 	// Blue is a key in a hint, the footer or the key reference.
 	Blue = "#89b4fa"
@@ -39,6 +39,8 @@ const (
 	Overlay0 = "#6c7086"
 	// Surface2 is an unfocused panel's border.
 	Surface2 = "#585b70"
+	// Yellow is selection: the YAML viewer's frame while it selects.
+	Yellow = "#f9e2af"
 )
 
 // PopupLayerColor maps a popup's 1-based nesting depth to its

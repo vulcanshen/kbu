@@ -1025,6 +1025,12 @@ func (m YamlPopupModel) RenderPopup() string {
 
 func (m YamlPopupModel) renderFullPopup() string {
 	bc := m.borderColor
+	if m.visualMode {
+		// The selection mode shows in the frame: border and title turn
+		// Yellow, the colour of selection (tdp D2), in place of the layer
+		// colour, and go back when the mode ends.
+		bc = lipgloss.Color(theme.Yellow)
+	}
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	// matchRowStyle highlights the line under the search cursor with the same
@@ -1314,7 +1320,7 @@ func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hints []keyHi
 	if m.visualMode {
 		// tdp K11: in the selection mode the hint lists the mode's
 		// keys, starting with ? for the full list.
-		hints = []keyHint{{"?", "keys"}, {"y", "copy"}, {"v/Esc", "leave"}}
+		hints = []keyHint{{"?", "keys"}, {"h/j/k/l", "select"}, {"y", "copy"}, {"v/Esc", "leave"}}
 	}
 
 	total := len(m.contentLines)
