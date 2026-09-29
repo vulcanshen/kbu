@@ -6,8 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle) (tdp v0.1.19).
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle) (tdp v0.1.21).
 
+- **Environment variables take the family's names; old names are no longer
+  read.** `KBU__CONFIGPATH` (a file) is now `KBU__CONFIG`, a directory:
+  `config.yaml` goes in it, and so do `theme.yaml`, the session state and crash
+  logs, which the old variable did not move. `KBU__STATEPATH` (a file) is now
+  `KBU__STATE`, a directory holding `state.yaml`. The pre-v2.0 `KM8__*` names
+  are no longer read either, and kbu no longer warns about them at start.
+  Rename them where you set them:
+
+  | Old | New |
+  |---|---|
+  | `KBU__CONFIGPATH=/some/dir/config.yaml`, `KM8__CONFIGPATH=…` | `KBU__CONFIG=/some/dir` |
+  | `KBU__STATEPATH=/some/dir/state.yaml`, `KM8__STATEPATH=…` | `KBU__STATE=/some/dir` |
+  | `KM8__ALTERM_SHELL`, `KM8__ALTERM_LOGIN_SHELL` | `KBU__ALTERM_SHELL`, `KBU__ALTERM_LOGIN_SHELL` |
 - **A click lands on the popup you see on top.** A confirm, sort picker or
   YAML viewer opened from a `Space` menu sits centred over the menu; a click
   on it used to reach the menu first and run whichever menu row happened to

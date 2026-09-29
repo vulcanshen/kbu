@@ -123,6 +123,16 @@ kbu 的 popup 標題、列標記、helm 標記、loading icon、splash 的像素
 - **context-shift target 清掉 source**（tdp T1）。`txPty`（kubectl edit / exec，分鐘級的 subprocess）、`shellPty`（Alterm）、`enterDrillDown`（panel 2 換欄位與列）不是 inline 動作：從它們回來時，浮在已換掉的畫面上的舊 source 是 stale 的。規則：context-shift target 的 **entry handler** 在最前面呼叫 `AppModel.closeAllBlockingPopups()`（關掉所有 blocking popup，排除 PTY 自己與 toast；沒有東西開著時回 `nil`），由 target 關、不由 caller 關，每個叫出它的地方自動拿到正確行為。目前的 entry point：`app.go` 的 `startEditMsg`、`startShellExecMsg`、`Alt-t` handler、`enterDrillDown()`。新增 context-shift target（例如日後的 port-forward viewer）時一併補上。
 - **Logs 失焦不變暗**（tdp T2）。panel 3 失焦時，Events / Conditions / Relatives / History 暗到 overlay1，Logs 不暗、保留 pod / container 的顏色。Events 也是串流（有 live / paused 追尾），但照樣變暗 —— 這是刻意的偏離，見「偏離 tdp」。業界前例：Lens、k9s 的串流 log 都不變暗。
 
+### 環境變數
+
+照 tdp D6 的家族命名 `KBU__<名稱>`（app 名後兩個底線、名稱全大寫、單字之間一個底線），自己讀的都照這個寫，測試用的也是
+（`KBU__TEST_K8S`）。`KBU__CONFIG` 是設定**目錄**（`ConfigDir()` 第一順位）：`config.yaml`、`theme.yaml`、`logs/`，以及沒設
+`KBU__STATE` 時的 `state.yaml` 都跟著它 —— 以前的 `KBU__CONFIGPATH` 是設定檔路徑、刻意不動 theme，改成目錄之後全部跟著走才一致。
+`KBU__STATE` 是狀態目錄（`state.yaml` 放在裡面）。兩個都先 TrimSpace。v0.1.21 改名時不留舊名（user 2026-09-29 裁定）：
+`KBU__CONFIGPATH`、`KBU__STATEPATH` 與 km8 時期的 `KM8__*` 都不再讀，`EnvDeprecations()` 與它每次啟動的 App Log 提醒一起拿掉；km8 → kbu
+的設定**目錄**遷移（`MigrateLegacyConfigDir()`）不是環境變數，保留。測試的 `TestMain` 除了隔離 `XDG_CONFIG_HOME`，也清掉
+`KBU__CONFIG` / `KBU__STATE`（它們排在 XDG 前面）；會存檔的測試自己設 `KBU__CONFIG` 到暫存目錄。
+
 ### PTY 裡的鍵
 
 tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由 app 決定、跟出口鍵一樣常駐揭露（v0.1.2 的 K10 只准出口鍵，

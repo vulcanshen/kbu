@@ -10,8 +10,9 @@ import (
 // L in the Compare popup writes the layout it switched to into
 // config.yaml (compare.layout), so the next start opens with it.
 func TestCompare_LayoutSurvivesARestart(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	t.Setenv("KBU__CONFIGPATH", path) // never the user's real config
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	t.Setenv("KBU__CONFIG", dir) // never the user's real config
 
 	m := stackTestApp(t)
 	m.comparePopup.SetDefaultLayout(CompareLayoutUnified)

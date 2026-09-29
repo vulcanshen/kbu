@@ -29,5 +29,9 @@ func TestMain(m *testing.M) {
 	}
 	defer os.RemoveAll(tmp)
 	_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	// $KBU__CONFIG / $KBU__STATE win over XDG: a developer's own would
+	// point the tests at their real directories.
+	_ = os.Unsetenv("KBU__CONFIG")
+	_ = os.Unsetenv("KBU__STATE")
 	os.Exit(m.Run())
 }
