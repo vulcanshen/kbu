@@ -1,8 +1,12 @@
 # kbu — terminu fix
 
-kbu 尚未符合 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle)（tdp v0.1.19）的地方，逐條待修。
+kbu 尚未符合 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.20/principle)（tdp v0.1.20）的地方，逐條待修。
 修好一條就刪掉一條，並同步 README（兩份）與 `docs/dev-remarks.md` 裡描述該行為的段落。有意不修的，改寫成
 `dev-remarks.md`「偏離 tdp」的一條並附理由。
+
+> **v0.1.20（2026-09-29）**：K11 / D3 —— 模式名夾在兩個框線接頭之間（雙線 `╡Drag╞`、單線 `┤Visual├`），模式色加粗、盡量一個詞，
+> 放不下先截標題，panel 膠囊跟著外框換色；D6 —— icon 寬度量的是游標實際前進幾格，參考實作的完整清單、`<APP>_ICON_WIDTH`
+> 覆寫、只在 unix 探測、做完的驗收。filu 的參考實作已完成，icon 寬度那一條現在可以做。本清單的每一條已照 v0.1.20 重新核對過。
 
 盤點日期：2026-09-29，依據 `main` 的 `8a625ea`（對照 v0.1.17 → v0.1.19 的改動）。第 1–3 條已修（2026-09-29，`terminu-fix` 分支：
 `3b403dc` finder 篩選列灰色、`6ebb869` 模式名在右上角與 Yellow 外框、`f085fb4` 下框 hint 從尾端整組捨，併回 `main`），「已經符合」
@@ -23,7 +27,21 @@ kbu 尚未符合 [terminu design principle](https://github.com/vulcanshen/termin
 - patch 腳本與 commit message 寫成檔案再執行；patch 裡的 Nerd Font 字元寫成 escape。
 
 
-## 4. icon 的寬度用 lipgloss 量，CJK icon 字型上框線會歪 —— D6（等 filu 做完再照搬）
+## 4. icon 的寬度用 lipgloss 量，CJK icon 字型上框線會歪 —— D6（filu 已完成，照搬）
+
+**filu 的參考實作已完成**（2026-09-29，`e1de220`，filu 第六輪）。照搬的東西（v0.1.20 的 D6 有同一份清單，細節在 terminu
+`.local/family-fix/filu/README.md`「第六輪」最後的「D6 照搬清單」）：
+
+- filu `internal/ui/width.go` 整個檔：`iconCells` / `IconCells()`、`isWideIcon()`、`iconCount()`、`dispWidth()`、`dispClip()`、
+  `padDisp()`、`padDispRight()`、`truncate()`、`dispCutLeft()`、`compositeDisp()`（跟 `overlay.Composite` 同介面，直接換掉呼叫）、
+  `centerDisp()`（取代 `lipgloss.Place`）、`blockWidth()`、`joinH()` / `joinV()`（取代 lipgloss 的 Join）。
+- `iconwidth_unix.go` 的 `DetectIconWidth()`，在 `tea.NewProgram` 之前呼叫；手動覆寫用 `<APP>_ICON_WIDTH`（filu 是
+  `FILU_ICON_WIDTH`）。探測只在 unix 做，Windows 預設一格、靠環境變數覆寫。
+- 測試照 `d6_test.go`：icon 1 / 2 格下每一種 popup 各開一次，量**單獨的框**（並排的框量單一個）與**疊上去的整個畫面**每一列；
+  `compositeDisp()` 的四種邊界（popup 列有 icon、被蓋的列有 icon、icon 被左 / 右框邊切半）。
+- 驗收：`grep -n 'lipgloss.Width\|lipgloss.Size\|lipgloss.Place\|ansi.StringWidth\|ansi.Truncate' internal/ui/*.go` 只剩寬度函式本身。
+- filu 的提醒：寬度改走 `dispWidth()` 後，在 `iconCells = 1` 的終端機上畫面完全不變（既有測試原封不動通過），只有探測到 2 才作用。
+
 
 **現況**：kbu 沒有探測 icon 寬度，所有寬度都用 lipgloss / x-ansi 量（Nerd Font 的 PUA 字元一律當一格）。README 兩份的需求（「preferably a
 Mono variant」）與限制（「Use the Mono variant of your Nerd Font…」）、dev-remarks「Nerd Font 的渲染」是現在的應對：請使用者換字型。
@@ -92,3 +110,9 @@ U+F0233、`settingspopup.go` U+F013、`sidebar.go` U+F0A50、`spacemenu.go` U+F4
   toast、PTY、helm 標記所在的 panel 2。mutation：任一處換回 `lipgloss.Width`（兩格時那一列就差一格）要紅。
 - 同步：README 兩份的需求（Mono 變體）與限制（「Use the Mono variant…」）改寫成 kbu 會探測 icon 寬度；dev-remarks「Nerd Font 的渲染」
   改寫、「運作方式」加一段寬度的做法。
+
+
+## 已經符合、不用修的（對照 v0.1.20 的改動）
+
+- **K11、D3（v0.1.20）**：模式名夾在框線接頭之間（`╡Drag╞`、`┤Visual├`，`app.go` 的上框標籤）、一個詞、放不下先截標題，拖曳時
+  `[1] Kinds` 膠囊跟著換 Yellow —— v0.1.20 就是照 kbu `248f883` 寫的。
