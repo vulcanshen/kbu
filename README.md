@@ -69,7 +69,7 @@
 - **kubectl** on `$PATH` (for edit, delete, and shell exec)
 - A valid **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`)
 - A running Kubernetes cluster
-- **A Nerd Font**, preferably a Mono variant (e.g. JetBrains Mono Nerd Font Mono) so icons line up with the grid.
+- **A Nerd Font.** kbu checks at start how many cells an icon takes on your terminal and lays the screen out to match, so a font that draws icons two cells wide lines up too.
 - **A truecolor terminal** (24-bit color). kbu's soft colors and the shading between stacked popups can't be told apart in 256 colors.
 
 ### Quick Install (macOS/Linux)
@@ -304,6 +304,7 @@ Override the corresponding config slot for one-shot runs without editing the YAM
 | `KBU__STATEPATH` | Use this file as the session state file instead of `<config-dir>/state.yaml`. Same TrimSpace-then-empty-check pattern as `KBU__CONFIGPATH`. Handy for sandbox / test runs where you want per-run state without touching the real state file. | `KBU__STATEPATH` > default layout |
 | `KBU__ALTERM_SHELL` | Use this binary as the Alterm shell. Bare names are looked up on `$PATH` at popup-open time (Go `exec.Command` semantics); absolute paths run verbatim. Leading / trailing whitespace is trimmed. | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
 | `KBU__ALTERM_LOGIN_SHELL` | Force the Alterm shell into login mode (`-l`) or out of it. Truthy values: `true` / `1` / `yes` (and uppercase). Any other value disables login mode. Use when launched from a non-login parent and your PATH is set in `.zprofile`. | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
+| `KBU__ICON_WIDTH` | How many cells a Nerd Font icon takes on your terminal: `1` or `2`. Overrides the check kbu runs at start; on Windows, where there is no check, it is the only way to say `2`. Other values are ignored. | `KBU__ICON_WIDTH` > checked at start > `1` |
 
 Example:
 
@@ -365,7 +366,7 @@ status:
 
 ## Limits
 
-- **Use the Mono variant of your Nerd Font.** With a proportional variant, or a terminal set to East-Asian-Ambiguous=double (some tmux + iTerm2 CJK setups), helm-managed rows and popup top borders may sit 1 cell off the grid. Switch to the Mono variant or set ambiguous-width to single.
+- **If borders still sit a cell off the grid**, the check kbu runs at start (it draws an icon and asks the terminal where the cursor ended up) got no answer or a wrong one. `kbu iconwidth` prints what kbu detects; set `KBU__ICON_WIDTH=2` for icons two cells wide, or `KBU__ICON_WIDTH=1`. Windows has no check: set the variable there if your font draws icons two cells wide.
 - **Helm needs the `helm` CLI.** The Helm category only appears when `helm` is on your `PATH`, and the release list refreshes every 3 seconds (Helm has no watch API).
 - **Workload logs follow the Pods that exist when you select the row.** After a rollout, select the row again to pick up the new Pods.
 - **Some deletes and edits are blocked.** Events and Nodes can't be deleted from kbu; helm-managed objects can't be edited or deleted — use `helm upgrade` / `rollback` / `uninstall`.

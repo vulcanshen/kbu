@@ -157,12 +157,15 @@ func (m SplashModel) Render(width, height int) string {
 		}
 	}
 
+	// A pixel is the glyph plus a space, two cells; where the font draws the
+	// glyph two cells wide already, the glyph alone is the pixel (tdp D6).
+	pixel := pixelGlyph(0) + strings.Repeat(" ", max(2-iconCells, 0))
 	var logoLines []string
 	for r := 0; r < len(logoPixels); r++ {
 		var line strings.Builder
 		for c := 0; c < cols; c++ {
 			if color := cellColor[r*cols+c]; color != "" {
-				line.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(pixelGlyph(0) + " "))
+				line.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(pixel))
 			} else {
 				line.WriteString("  ")
 			}
@@ -194,19 +197,19 @@ func (m SplashModel) Render(width, height int) string {
 		hintText = dimStyle.Render("Press any key to close")
 	}
 	caption := "\n\n" +
-		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, identityText) +
+		centerDisp(logoW, 0, identityText) +
 		"\n" +
-		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, versionText) +
+		centerDisp(logoW, 0, versionText) +
 		"\n" +
-		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, taglineText) +
+		centerDisp(logoW, 0, taglineText) +
 		"\n\n" +
-		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, creditText) +
+		centerDisp(logoW, 0, creditText) +
 		"\n" +
-		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, emailText) +
+		centerDisp(logoW, 0, emailText) +
 		"\n\n" +
-		lipgloss.PlaceHorizontal(logoW, lipgloss.Center, hintText)
+		centerDisp(logoW, 0, hintText)
 
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, logo+caption)
+	return centerDisp(width, height, logo+caption)
 }
 
 // Update handles key events and animation ticks when splash is active.

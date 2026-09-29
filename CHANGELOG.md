@@ -163,6 +163,12 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   on its way, the title shows a circle filling one slice at a time instead of
   a braille spinner; it turns at the same pace however often the screen
   redraws.
+- **Fonts that draw icons two cells wide line up.** kbu checks at start how
+  many cells a Nerd Font icon takes on your terminal (it draws one and asks
+  where the cursor ended up) and measures every width with that: panel
+  borders, popup frames, the helm mark's column, popups laid over the screen,
+  the splash. Set `KBU__ICON_WIDTH=1` or `2` when the check gets it wrong, and
+  on Windows, which has no check; `kbu iconwidth` prints what kbu detects.
 - **The confirm's bottom border lines up again.** Its right corner sat one
   cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a

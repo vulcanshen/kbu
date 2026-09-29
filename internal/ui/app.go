@@ -2824,8 +2824,8 @@ func (m AppModel) View() string {
 		m.detail.SetSize(panelW-2, panelH-2)
 		fullPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, true)+m.detail.TabTitle(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint(), "")
 		hMargin := blankColumn(panelHMargin, panelH)
-		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, fullPanel, hMargin)
-		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
+		middle := joinH(hMargin, fullPanel, hMargin)
+		mainView = joinV(statusBar, middle, statusLine)
 	} else if m.tableExpanded {
 		_, _, upperH, detailH := m.panelSizes()
 		panelW := m.width - 2*panelHMargin
@@ -2836,8 +2836,8 @@ func (m AppModel) View() string {
 		middle := joinTableAndDetail(tablePanel, detailPanel, panelW)
 		fullH := upperH + panelVSpace + detailH
 		hMargin := blankColumn(panelHMargin, fullH)
-		middleWithMargins := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, middle, hMargin)
-		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middleWithMargins, statusLine)
+		middleWithMargins := joinH(hMargin, middle, hMargin)
+		mainView = joinV(statusBar, middleWithMargins, statusLine)
 	} else {
 		sw, rw, upperH, detailH := m.panelSizes()
 		fullH := upperH + panelVSpace + detailH // sidebar matches right side total height
@@ -2861,8 +2861,8 @@ func (m AppModel) View() string {
 		// the outer edges so panel borders sit 1 cell inside the terminal.
 		hMargin := blankColumn(panelHMargin, fullH)
 		hSpace := blankColumn(panelHSpace, fullH)
-		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, sidebarPanel, hSpace, rightSide, hMargin)
-		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
+		middle := joinH(hMargin, sidebarPanel, hSpace, rightSide, hMargin)
+		mainView = joinV(statusBar, middle, statusLine)
 	}
 
 	// The popup stack, bottom first — the same stackOrder the keys and
@@ -2882,7 +2882,7 @@ func (m AppModel) View() string {
 				mainView = dimANSI(mainView)
 			}
 			l.resize(m.width, m.height)
-			mainView = overlay.Composite(l.render(), mainView, overlay.Center, overlay.Center, 0, 0)
+			mainView = compositeDisp(l.render(), mainView, overlay.Center, overlay.Center, 0, 0)
 		}
 	}
 
@@ -2892,7 +2892,7 @@ func (m AppModel) View() string {
 	if m.toast.IsActive() {
 		// tdp F7: the toast sits at the bottom, just above the footer.
 		m.toast.SetSize(m.width)
-		mainView = overlay.Composite(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Bottom, 0, -1)
+		mainView = compositeDisp(m.toast.RenderPopup(), mainView, overlay.Center, overlay.Bottom, 0, -1)
 	}
 
 	return mainView
@@ -2964,7 +2964,7 @@ func (m AppModel) panelSizes() (sw, rw, upperH, detailH int) {
 }
 
 // blankColumn builds a w×h block of spaces, suitable for use as a horizontal
-// spacer column in lipgloss.JoinHorizontal. Returns "" for zero or negative
+// spacer column in joinH. Returns "" for zero or negative
 // dimensions.
 func blankColumn(w, h int) string {
 	if w <= 0 || h <= 0 {
@@ -2982,10 +2982,10 @@ func blankColumn(w, h int) string {
 // them; when 0 (current default) the borders sit flush.
 func joinTableAndDetail(tablePanel, detailPanel string, w int) string {
 	if panelVSpace <= 0 {
-		return lipgloss.JoinVertical(lipgloss.Left, tablePanel, detailPanel)
+		return joinV(tablePanel, detailPanel)
 	}
 	spacer := blankColumn(w, panelVSpace)
-	return lipgloss.JoinVertical(lipgloss.Left, tablePanel, spacer, detailPanel)
+	return joinV(tablePanel, spacer, detailPanel)
 }
 
 func (m *AppModel) enterDrillDown() tea.Cmd {
@@ -3237,34 +3237,10 @@ func (m AppModel) breadcrumb() string {
 }
 
 func ansiTruncate(s string, maxWidth int) string {
-	if lipgloss.Width(s) <= maxWidth {
+	if dispWidth(s) <= maxWidth {
 		return s
 	}
-	var result []byte
-	w := 0
-	inEscape := false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\x1b' {
-			inEscape = true
-			result = append(result, c)
-			continue
-		}
-		if inEscape {
-			result = append(result, c)
-			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-		if w >= maxWidth {
-			break
-		}
-		result = append(result, c)
-		w++
-	}
-	result = append(result, "\x1b[0m"...)
-	return string(result)
+	return dispClip(s, maxWidth) + "\x1b[0m"
 }
 
 func truncateName(name string, max int) string {
@@ -3852,13 +3828,13 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 
 	var b strings.Builder
 
-	titleVis := lipgloss.Width(title)
+	titleVis := dispWidth(title)
 	// Top-right label format: "╡<label>╞═" (two junctions + label + 1 dash
 	// before the corner). Drop the label silently if title+label+1 dash
 	// would overflow innerW — small terminals get plain border.
 	hintVis := 0
 	if topRight != "" {
-		hintVis = lipgloss.Width(topRight) + 3
+		hintVis = dispWidth(topRight) + 3
 		if titleVis+hintVis+1 > innerW {
 			hintVis = 0
 			topRight = ""
@@ -3883,10 +3859,10 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	rightBorder := bStyle.Render(vert)
 	emptyLine := strings.Repeat(" ", innerW)
 	for _, line := range lines {
-		lw := lipgloss.Width(line)
+		lw := dispWidth(line)
 		if lw > innerW {
 			line = ansiTruncate(line, innerW)
-			lw = lipgloss.Width(line)
+			lw = dispWidth(line)
 		}
 		pad := ""
 		if lw < innerW {
@@ -3917,7 +3893,7 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 		if focused {
 			colours = brightHint()
 		}
-		leftHintVis = lipgloss.Width(hintText(bottomLeft)) + 2 // dash + content + dash
+		leftHintVis = dispWidth(hintText(bottomLeft)) + 2 // dash + content + dash
 		leftHintRendered = bStyle.Render(horiz) + renderHints(bottomLeft, colours) + bStyle.Render(horiz)
 	}
 

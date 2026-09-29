@@ -236,7 +236,7 @@ func (m ContextPickerModel) View() string {
 	return ""
 }
 
-// RenderPopup returns the context picker box for use with overlay.Composite.
+// RenderPopup returns the context picker box for use with compositeDisp.
 func (m ContextPickerModel) RenderPopup() string {
 	return m.animator.RenderFrame(m.renderFullPopup())
 }
@@ -264,7 +264,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 
 	var lines []string
 	if len(items) == 0 {
-		lines = append(lines, normalStyle.Width(innerW).Render(" (no matches)"))
+		lines = append(lines, normalStyle.Render(padDisp(" (no matches)", innerW)))
 	} else {
 		for i := start; i < end; i++ {
 			marker := "  "
@@ -273,16 +273,16 @@ func (m ContextPickerModel) renderFullPopup() string {
 			}
 			label := marker + items[i]
 			if i == m.cursor {
-				lines = append(lines, selectedStyle.Width(innerW).Render(label))
+				lines = append(lines, selectedStyle.Render(padDisp(label, innerW)))
 			} else {
-				lines = append(lines, normalStyle.Width(innerW).Render(label))
+				lines = append(lines, normalStyle.Render(padDisp(label, innerW)))
 			}
 		}
 	}
 	body := strings.Join(lines, "\n")
 
 	title := "󰈷 Contexts"
-	dashesAfter := innerW - 1 - lipgloss.Width(title)
+	dashesAfter := innerW - 1 - dispWidth(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -302,7 +302,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 
 	b.WriteString(padRow) // top padding row
 	for _, line := range contentLines {
-		lw := lipgloss.Width(line)
+		lw := dispWidth(line)
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
@@ -315,7 +315,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 	if m.searching {
 		hint = fitPopupHint(innerW-1, keyHint{"↑/↓", "move"}, keyHint{"Enter", "select"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
 	}
-	bottomDashes := innerW - lipgloss.Width(hint) - 1
+	bottomDashes := innerW - dispWidth(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}

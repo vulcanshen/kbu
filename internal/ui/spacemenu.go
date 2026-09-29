@@ -313,7 +313,7 @@ func (m MenuPopupModel) renderFullPopup() string {
 	labelCol := 0
 	for _, it := range m.items {
 		if it.selectable() {
-			labelCol = max(labelCol, lipgloss.Width(bracketHotkey(it.label, it.key)))
+			labelCol = max(labelCol, dispWidth(bracketHotkey(it.label, it.key)))
 		}
 	}
 
@@ -329,10 +329,10 @@ func (m MenuPopupModel) renderFullPopup() string {
 			continue
 		}
 		labelDisplay := bracketHotkey(it.label, it.key)
-		labelW := lipgloss.Width(labelDisplay)
+		labelW := dispWidth(labelDisplay)
 		gap := strings.Repeat(" ", labelCol-labelW+2)
 		bodyPlain := " " + gutter + labelDisplay + gap + it.hint
-		padW := innerW - 1 - lipgloss.Width(bodyPlain)
+		padW := innerW - 1 - dispWidth(bodyPlain)
 		if padW < 0 {
 			padW = 0
 		}
@@ -349,7 +349,7 @@ func (m MenuPopupModel) renderFullPopup() string {
 		}
 	}
 
-	dashesAfter := innerW - 1 - lipgloss.Width(title)
+	dashesAfter := innerW - 1 - dispWidth(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -360,10 +360,10 @@ func (m MenuPopupModel) renderFullPopup() string {
 	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
 	b.WriteString(padRow)
 	for _, line := range rows {
-		lw := lipgloss.Width(line)
+		lw := dispWidth(line)
 		if lw > innerW {
 			line = ansiTruncate(line, innerW)
-			lw = lipgloss.Width(line)
+			lw = dispWidth(line)
 		}
 		pad := ""
 		if lw < innerW {
@@ -372,7 +372,7 @@ func (m MenuPopupModel) renderFullPopup() string {
 		b.WriteString(left + line + pad + right + "\n")
 	}
 	b.WriteString(padRow)
-	bottomDashes := innerW - lipgloss.Width(hint) - 1
+	bottomDashes := innerW - dispWidth(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}

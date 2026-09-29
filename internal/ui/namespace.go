@@ -385,9 +385,9 @@ func (m NamespacePickerModel) renderFullPopup() string {
 		// shows a single empty row so the popup has visible interior
 		// instead of collapsing to top + padRows + bottom. When data
 		// arrives the empty row gets replaced by items.
-		lines = append(lines, normalStyle.Width(innerW).Render(""))
+		lines = append(lines, normalStyle.Render(padDisp("", innerW)))
 	case len(items) == 0:
-		lines = append(lines, normalStyle.Width(innerW).Render(" (no matches)"))
+		lines = append(lines, normalStyle.Render(padDisp(" (no matches)", innerW)))
 	default:
 		green := lipgloss.Color(m.theme.Status.Running)
 		for i := start; i < end; i++ {
@@ -407,7 +407,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 			if checked {
 				style = style.Foreground(green)
 			}
-			lines = append(lines, style.Width(innerW).Render(label))
+			lines = append(lines, style.Render(padDisp(label, innerW)))
 		}
 	}
 	body := strings.Join(lines, "\n")
@@ -421,7 +421,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 		slot = loadingIcon()
 	}
 	title := " Namespaces " + slot
-	dashesAfter := innerW - 1 - lipgloss.Width(title)
+	dashesAfter := innerW - 1 - dispWidth(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -441,7 +441,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 
 	b.WriteString(padRow) // top padding row
 	for _, line := range contentLines {
-		lw := lipgloss.Width(line)
+		lw := dispWidth(line)
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
@@ -456,7 +456,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	if m.searching {
 		hint = fitPopupHint(innerW-1, keyHint{"↑/↓", "move"}, keyHint{"Enter", "toggle"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
 	}
-	bottomDashes := innerW - lipgloss.Width(hint) - 1
+	bottomDashes := innerW - dispWidth(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
