@@ -181,11 +181,12 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 
 ## 對照 tdp 時確認過的
 
-兩輪對照留下的（清單都已刪）：2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次；
+各輪對照留下的（清單都已刪）：2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次；
 2026-09-29 照第二份清單（對照 v0.1.14–v0.1.17 的改動，6 條）修完、再拿 v0.1.17 全文對一次；同日第三份清單（對照 v0.1.17 →
 v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 做完，對照 v0.1.20 時照搬完成（見「Nerd Font 的渲染」），清單刪除；
-第五份清單（對照 v0.1.21，1 條：環境變數命名，見「環境變數」）修完，全文對照時另補選取模式 `?` 漏列的 `u/d`、`gg/G`。下次對照不必重查的，
-以及由 user 逐題裁定的。
+第五份清單（對照 v0.1.21，1 條：環境變數命名，見「環境變數」）修完，全文對照時另補選取模式 `?` 漏列的 `u/d`、`gg/G`；
+第六份清單（對照 v0.1.22，3 條，都在 D6：疊 popup 寬高都大也切、讀 `TERMINU__ICON_WIDTH`、開 PTY 時設給子程序，見「Nerd Font 的渲染」）
+修完，全文對照沒有新的。下次對照不必重查的，以及由 user 逐題裁定的。
 
 **已經符合、不用修的**
 
@@ -255,7 +256,11 @@ v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 
 - **K10（v0.1.19）：子程序還沒準備好時可以不轉送**：這是「可以」。kbu 的三個 PTY 都是本機子程序，`Start()` 同步拿到 `ptmx`，
   按鍵從開啟動畫的第一格就轉送；`kubectl exec` 連線中的鍵由 kubectl 自己收著。出口鍵在 `PtyView.Update()` 裡排在轉送之前。
 - **D6 疊 popup 不 panic（v0.1.21）**：`compositeDisp()` 在 popup 比畫面寬或高時起點取 0、超出切掉（`TestD6_CompositeDisp`）——
-  v0.1.21 就是照 kbu 照搬時補的這一段寫的。
+  v0.1.21 就是照 kbu 照搬時補的這一段寫的。v0.1.22 再要求寬高兩邊都大也切，kbu 照改（拿掉從 overlay 帶來的特例）。
+- **D6 環境變數過不了遠端（v0.1.22）**：tdp 講的是 ssh；kbu 的 `kubectl exec` 一樣 —— `TERMINU__ICON_WIDTH` 設在本機的 `kubectl` 行程上，
+  pod 裡的 shell 拿不到。在 pod 裡跑家族 app 不是會發生的用法，不另外做通道。
+- **D6 驗收 grep（v0.1.22 對照時再跑一次）**：`internal/ui` 的正式程式碼裡 `lipgloss.Width` / `Size` / `Place`、`ansi.StringWidth` /
+  `Truncate` 只剩在 `width.go` 的寬度函式本身。
 - **D5 選取模式的移動（v0.1.21）**：YAML viewer 的選取模式照 vim 的 `h/j/k/l`、`w/b/e`、`0/$`、`gg/G`、`u/d` 移動（跟一般模式同一段程式）。
 - **F7 以外的等待文字**：panel 裡的「Waiting for logs...」、YAML 的「(no YAML — resource may still be loading)」是內容裡的文字，不是
   loading 中的 popup，不用 D3 的 icon。
