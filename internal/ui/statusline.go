@@ -57,9 +57,9 @@ func (m StatusLineModel) hints() []keyHint {
 	if m.dragMode {
 		// tdp K11, M1: in a mode the footer still shows ?, then the
 		// mode's own keys. Space does nothing in a mode, so it isn't
-		// listed. The mode shows itself in panel 1 (the dragged row, the
-		// Pinned title's [D]rop), not as a word here: the footer holds
-		// keys only (M5).
+		// listed. The mode shows itself in panel 1 (the Pinned title's
+		// [D]rag mode, the drag handle on the dragged row), not as a word
+		// here: the footer holds keys only (M5).
 		return []keyHint{
 			{"?", "keys"},
 			{"j/k", "move"},

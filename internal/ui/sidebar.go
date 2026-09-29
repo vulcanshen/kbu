@@ -40,10 +40,9 @@ type visibleItem struct {
 // exactly one location, so the categoryIndex alone disambiguates.
 const pinnedCategoryIndex = -2
 
-// dragHandleGlyph (U+F0A50) is the Nerd Font drag-handle icon shown
-// next to the Pinned category header while drag-and-drop reorder
-// mode is active. Persistent visual cue — survives until commit /
-// cancel without consuming an extra row.
+// dragHandleGlyph (U+F0A50) is the Nerd Font drag-handle icon shown in
+// the leading gap of the row being dragged while drag-and-drop reorder
+// mode is active — it marks what moves, without an extra column.
 const dragHandleGlyph = "\U000f0a50"
 
 // SidebarModel is the Bubble Tea model for the sidebar panel.
@@ -873,10 +872,11 @@ func (m SidebarModel) View() string {
 			if item.categoryIndex == pinnedCategoryIndex {
 				style = pinnedCategoryStyle
 				if m.dragActive {
-					// Persistent mode indicator on the Pinned header —
-					// zero extra vertical space, always visible while
-					// dragging, vanishes on commit/cancel.
-					label = item.label + " " + dragHandleGlyph + " [D]rop"
+					// The mode names itself on the Pinned header — the
+					// footer holds keys only (tdp M5) — with D, the key
+					// that ends it keeping the new order. Zero extra
+					// rows; gone on commit/cancel.
+					label = item.label + " [D]rag mode"
 				}
 			}
 			// Unfocused → dim every category header (Pinned + system)
@@ -901,7 +901,9 @@ func (m SidebarModel) View() string {
 			}
 			switch {
 			case m.dragActive && item.resourceType == m.draggedKind:
-				line = dragRowStyle.Width(m.width).Render(label)
+				// The drag handle takes the first cell of the row's
+				// leading gap: same width, the moving row is marked.
+				line = dragRowStyle.Width(m.width).Render(dragHandleGlyph + label[1:])
 			case isCursor && m.focused:
 				line = selectedStyle.Width(m.width).Render(label)
 			case isCursor:

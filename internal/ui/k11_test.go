@@ -4,8 +4,55 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/vulcanshen/kbu/internal/k8s"
 )
+
+// sidebarLine is the first line of panel 1 that holds text.
+func sidebarLine(t *testing.T, view, text string) string {
+	t.Helper()
+	for _, l := range strings.Split(ansi.Strip(view), "\n") {
+		if strings.Contains(l, text) {
+			return l
+		}
+	}
+	t.Fatalf("panel 1 has no %q line", text)
+	return ""
+}
+
+// The drag mode names itself in panel 1, since the footer holds keys only
+// (tdp M5): the Pinned title reads [D]rag mode and the drag handle takes
+// the first cell of the dragged row. Both go when the drag ends; every
+// row stays the panel's width.
+func TestK11_DragModeShowsInPanel1(t *testing.T) {
+	m := dragApp(t)
+	m.sidebar.SetSize(30, 20)
+	view := m.sidebar.View()
+	if got := sidebarLine(t, view, "Pinned"); !strings.HasPrefix(got, "Pinned [D]rag mode") || strings.Contains(got, dragHandleGlyph) {
+		t.Errorf("the dragging Pinned title is %q, want Pinned [D]rag mode", got)
+	}
+	if got := sidebarLine(t, view, "Pods"); !strings.HasPrefix(got, dragHandleGlyph+" Pods") {
+		t.Errorf("the dragged row is %q, want the drag handle in its first cell", got)
+	}
+	if got := sidebarLine(t, view, "Deployments"); !strings.HasPrefix(got, "  Deployments") {
+		t.Errorf("a row not being dragged is %q, want its plain gap", got)
+	}
+	for _, l := range strings.Split(ansi.Strip(view), "\n") {
+		if w := ansi.StringWidth(l); w != 30 {
+			t.Errorf("row %q is %d wide, want 30", l, w)
+		}
+	}
+
+	updated, _ := m.Update(key("esc"))
+	view = updated.(AppModel).sidebar.View()
+	if got := sidebarLine(t, view, "Pinned"); strings.TrimSpace(got) != "Pinned" {
+		t.Errorf("after the drag the title is %q, want Pinned", got)
+	}
+	if strings.Contains(view, dragHandleGlyph) {
+		t.Error("the drag handle must go when the drag ends")
+	}
+}
 
 // dragApp is an app in the pinned-kind drag mode on panel 1.
 func dragApp(t *testing.T) AppModel {
