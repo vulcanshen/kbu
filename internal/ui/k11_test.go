@@ -11,6 +11,29 @@ import (
 	"github.com/vulcanshen/kbu/internal/theme"
 )
 
+// tdp K11 + D5: the selection mode's key reference lists every vim motion
+// a selection mode moves by — the viewer answers them all in the mode.
+func TestK11_YamlSelectionKeysListEveryMotion(t *testing.T) {
+	keys := refKeys(yamlVisualRows())
+	for _, k := range []string{"h/j/k/l", "w/b/e", "0/$", "gg/G", "u/d"} {
+		if !contains(keys, k) {
+			t.Errorf("the selection mode's ? is missing %q: %v", k, keys)
+		}
+	}
+	m := yamlOpenFor(t, k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
+	_ = m.yamlPopup.Open(strings.Repeat("line\n", 40), k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
+	m.yamlPopup.animator.Finalize()
+	m.yamlPopup, _ = m.yamlPopup.Update(key("v"))
+	m.yamlPopup, _ = m.yamlPopup.Update(key("d"))
+	if !m.yamlPopup.visualMode || m.yamlPopup.cursorLine == 0 {
+		t.Errorf("d in the selection mode must move down and keep the mode (line %d)", m.yamlPopup.cursorLine)
+	}
+	m.yamlPopup, _ = m.yamlPopup.Update(key("G"))
+	if !m.yamlPopup.visualMode || m.yamlPopup.cursorLine != m.yamlPopup.lastLine() {
+		t.Errorf("G in the selection mode must reach the last line and keep the mode (line %d)", m.yamlPopup.cursorLine)
+	}
+}
+
 // tdp K11 + D2: the YAML viewer's selection mode shows in its frame —
 // border and title Yellow (selection) while it lasts, the layer colour
 // again once Esc leaves it.

@@ -96,7 +96,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   one-row "Drop" menu), `?` lists the mode's keys, and `Tab` stays put with a
   toast saying `Esc` leaves the mode first. The drag's keys now sit in the
   footer while it lasts, replacing the toast that stayed on screen; the
-  selection's keys, `h/j/k/l` included, sit in the viewer's bottom hint.
+  selection's keys, `h/j/k/l` included, sit in the viewer's bottom hint, and
+  its `?` lists every motion it answers, `u/d` and `gg/G` included.
   A mode names itself in the top-right corner of its frame, set into the
   border between two junctions, and the frame turns yellow: `┤Visual├` on the
   YAML viewer while it selects, `╡Drag╞` on panel 1 while you drag, where the
