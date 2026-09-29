@@ -100,7 +100,7 @@ func TestM5_PopupHintsAreKeyColonDescription(t *testing.T) {
 		"app log":          " j/k:scroll u/d:page y:copy D:clear Esc:close ",
 		"compare":          " L:layout j/k:scroll Esc:close ",
 		"yaml":             " v:visual y:copy E:edit /:search Esc:close ",
-		"yaml selection":   " ?:keys y:copy v/Esc:leave ",
+		"yaml selection":   " ?:keys h/j/k/l:select y:copy v/Esc:leave ",
 		"alterm":           " Alt-t:hide Alt-Esc:end PgUp/Home:scroll ",
 		"edit":             " Alt-Esc:leave PgUp/Home:scroll ",
 		"exec":             " Alt-Esc:leave PgUp/Home:scroll ",

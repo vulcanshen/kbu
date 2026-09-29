@@ -7,7 +7,33 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/internal/theme"
 )
+
+// tdp K11 + D2: the YAML viewer's selection mode shows in its frame —
+// border and title Yellow (selection) while it lasts, the layer colour
+// again once Esc leaves it.
+func TestK11_YamlSelectionFrameIsYellow(t *testing.T) {
+	truecolor(t)
+	m := yamlOpenFor(t, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx", Namespace: "default"})
+	corner := func() [3]int { return screenCells(m.yamlPopup.renderFullPopup())[0][0].fg }
+	layer := hexRGB(string(theme.PopupLayerColor(1)))
+	if got := corner(); !near(got, layer) {
+		t.Fatalf("setup: the frame is %v, want the layer colour", got)
+	}
+	m.yamlPopup, _ = m.yamlPopup.Update(key("v"))
+	if got := corner(); !near(got, hexRGB(theme.Yellow)) {
+		t.Errorf("in the selection mode the frame is %v, want Yellow", got)
+	}
+	row, at := cellsOf(t, m.yamlPopup.renderFullPopup(), "YAML")
+	if !near(row[at].fg, hexRGB(theme.Yellow)) {
+		t.Errorf("in the selection mode the title is %v, want Yellow", row[at].fg)
+	}
+	m.yamlPopup, _ = m.yamlPopup.Update(key("esc"))
+	if got := corner(); !near(got, layer) {
+		t.Errorf("after the selection the frame is %v, want the layer colour back", got)
+	}
+}
 
 // sidebarLine is the first line of panel 1 that holds text.
 func sidebarLine(t *testing.T, view, text string) string {
