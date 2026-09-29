@@ -1,7 +1,7 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策：各功能背後的設計筆記、理由與實作細節。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.17/principle)（tdp）；
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle)（tdp）；
 使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
@@ -12,7 +12,7 @@
 
 每個功能完整的說明，包括它為什麼這樣運作、在哪個版本落地。
 
-- **Pin 資源種類（`P` + `D` 拖放）**：panel 1 的 sidebar 最上面長出一個 Pinned 區。任何資源列上按 `P` 切換 pin / unpin，順序寫進設定檔。Pin 是**移動**不是複製：被 pin 的種類從原本的分類消失、出現在 Pinned 底下，每個種類只有一個家。有兩個以上 pin 時，在 pinned 列按 `D` 進入模態拖放：`j/k` 把鎖定的種類跟鄰居交換，`Enter` 或 `D` 確定新順序，`Esc` 與其他任何鍵還原成進入時的快照。拖曳中標題顯示 `Pinned [D]rag mode`，被拖的列塗 lavender、列首的空格放拖曳 icon（`󰩐`，U+F0A50）。拖曳是模式（tdp K11）：footer 換成 `?:keys j/k:move Enter:drop Esc:cancel`，`?` 是拖曳模式的 key reference；`Space` 不開任何 menu、也不取消；`Tab` 與數字鍵回一個 toast「先 `Esc`」、拖曳留著；`q` / `Ctrl-C` 照樣離開（拖曳不保留）；其他鍵與滑鼠取消拖曳、還原順序。pin / sort / 日後的 per-kind 設定共用同一個 per-kind 設定區塊，所以暫時消失的 CRD（operator 重裝之類）會默默保留 pin 與 sort，回來的那一刻兩者都恢復
+- **Pin 資源種類（`P` + `D` 拖放）**：panel 1 的 sidebar 最上面長出一個 Pinned 區。任何資源列上按 `P` 切換 pin / unpin，順序寫進設定檔。Pin 是**移動**不是複製：被 pin 的種類從原本的分類消失、出現在 Pinned 底下，每個種類只有一個家。有兩個以上 pin 時，在 pinned 列按 `D` 進入模態拖放：`j/k` 把鎖定的種類跟鄰居交換，`Enter` 或 `D` 確定新順序，`Esc` 與其他任何鍵還原成進入時的快照。拖曳中 panel 1 的框與 `[1] Kinds` 膠囊換成 Yellow（仍是 focus 的雙線，L5）、上框右側寫 `Drag`（tdp K11：模式名一律在框的右上角；`Drag mode` 在 24 欄寬的 panel 1 放不下），被拖的列塗 lavender、列首的空格放拖曳 icon（`󰩐`，U+F0A50）。拖曳是模式（tdp K11）：footer 換成 `?:keys j/k:move Enter:drop Esc:cancel`，`?` 是拖曳模式的 key reference；`Space` 不開任何 menu、也不取消；`Tab` 與數字鍵回一個 toast「先 `Esc`」、拖曳留著；`q` / `Ctrl-C` 照樣離開（拖曳不保留）；其他鍵與滑鼠取消拖曳、還原順序。pin / sort / 日後的 per-kind 設定共用同一個 per-kind 設定區塊，所以暫時消失的 CRD（operator 重裝之類）會默默保留 pin 與 sort，回來的那一刻兩者都恢復
 - **YAML Compare popup（`C`）**：panel 2 的列級 diff。在某列按 `C` 把它標成 **compare anchor**（anchor 存在時 statusbar 出現 `[C]ompare` chip）；在同一種類的另一列按 `C` 打開左右並排或 unified 的 YAML diff。在 anchor 本身按 `C` 取消 —— 同一個鍵切換三種狀態（標記 / diff / 取消）。`[C]ompare` chip 跟 `[C]ontext` 用反相的明暗：在 panel 2（表格把 `C` 拿去做 compare）`[C]ompare` 亮、`[C]ontext` 暗；在 panel 1 / 3 反過來，明暗的交接告訴使用者「在當前 panel 按 `C` 會觸發哪一個」。compare 模式下在 panel 2 開 menu，「Compare to anchor」排在**第一項**（使用者在候選列上開 menu 時，這就是主要意圖）；Mark / Unmark 留在列動作的位置；清單只有一列時 Mark 變暗（沒有可以比對的另一列，tdp M6）。compare 模式開著時，panel operation 區多一列 `[Esc] Exit compare mode`。diff popup 上按 `L` 即時切換版面（左右並排 / unified），預設版面讀設定檔的 `compare.layout`（沒設是 Unified）。Compare 的 YAML 會先清理（拿掉 status / managedFields / resourceVersion / uid），讓 diff 只看使用者真正寫的內容
 - **列表排序（sidebar 上 `S`、panel 2 上 `Alt-S`）**：per-kind 多欄排序，重啟後保留。選欄位會在欄位 picker 上疊出方向那一步（另一個 popup，tdp F1：多步驟一步一 popup）；選定方向後方向那一步關掉、欄位 picker 的 badge 原地更新，不必重新叫出流程就能疊加更多 tier。方向那一步按 `Esc` 回到選欄位（F4），選欄位按 `Esc` 結束。每個 tier 在 panel 2 表頭顯示優先序與方向（`Name (1) ↑ · Restarts (2) ↓ …`）；只有一個 tier 時收成只剩箭頭，讓簡單情況保持安靜。最下面的 Reset 列一次丟掉整條 chain，一律列出、沒有排序時變暗（M6）—— 欄位 picker 打開時的高度就是之後的高度，不會在第一個 tier 落地時多長一列（F7）；方向那一步的 `Unset` 只移除單一 tier（只在那一欄已經在 chain 裡時出現）。`Esc` 是唯一出口 —— picker 在操作之間不會自己關掉。比較器看型別：`Age` / `Updated` 用底層時間戳（不是渲染出來的 "5d3h" 字串）；`Ready` 把 "N/M" 解析成一對整數；`Restarts`、`Desired`、`Current`、`Up-to-date`、`Available`、`Active`、`Rev` 用整數比較，所以 "10" 排在 "2" 之上。不認得的欄位默默跳過，stale 的設定不會弄壞排序。沒有存排序時 = `(namespace, name)` 升冪，跟 kubectl 跨 namespace 的預設一致
 - **滑鼠支援**：點 panel 取得 focus 並移動 cursor，雙擊在 panel 2、3 合成 `Enter`、panel 1 只選列（panel 1 的 `Enter` 會把 focus 帶到 panel 2，點一下就讓 focus 跑走不對），右鍵開該列的 context menu（合成 `Space`），滾輪半頁捲動（合成 `u` / `d`）。13 個 popup 也有回應：list popup 左鍵即 commit，viewer popup（YAML / Compare / App Log / Help）保留滾輪捲動，confirm 對話框刻意讓左鍵不作用，免得誤點觸發破壞性的 delete / edit / rollback。滑鼠可在 Settings popup（`>`）關掉，`scroll_direction: natural | reverse` 給偏好反向的使用者翻轉滾輪
@@ -25,7 +25,7 @@
 - **Drill-down 導覽**：Deployment / DaemonSet / StatefulSet / Job → Pods → Containers；CronJob → Jobs；HPA → 目標 workload；PVC → 掛載它的 Pods；PDB → 受保護的 Pods；Helm Release → chart 部署的每個原生 K8s 物件
 - **Relatives tab —— Lens 風格導覽**：每個 detail panel（Namespaces 除外）列出該資源可導覽的參照（owner、選到的 pod、scaleTargetRef、掛載它的 pod……）。`Enter` 鑽進 cursor 所在的參照 —— panel 重畫成*那個*資源的 Relatives，形成一條鏈（Deployment → Pod → ConfigMap → 使用它的 Pods……）。`Esc` 退一層。panel 3 下框左側顯示依 tab 而定的 hint（depth 1 是 `Enter:drill`，鑽進去之後是 `Enter:drill Esc:back`）。depth>1 時 `B`（Space menu 的 `[B]readcrumb` 列，跟 popup 標題同名；大寫因為作用在整個 panel）開 breadcrumb popup（從 menu 開時 Space menu 留在底下），可以把 panel 1+2 跳回鏈上任何祖先（先確認；確認後整疊關掉，tdp T1）。depth>1 時 tab 標籤顯示 `Relatives N`。`Y` 打開 cursor 所在那一筆的 YAML。循環偵測擋住回到祖先；fetch 失敗 toast 後留在原地。27 種資源涵蓋 26 種 —— ConfigMaps / Secrets / ServiceAccounts 顯示*反向*參照（哪些 Pod 用我、哪些 RoleBinding 以這個 SA 為 subject……）；Helm release 顯示 `Deployed Resources`，chart 部署的每個 K8s 物件都一步可達
 - **Helm releases（`helm` 在 `PATH` 上時）**：專屬的 `Helm > Releases` sidebar 分類列出叢集裡每個 release（每 3 秒 poll 一次 `helm list -A`；Helm 沒有 watch API）。panel 2 欄位：`NAME / NAMESPACE / CHART / APP VER / REV / STATUS / UPDATED`。release 列的 Space menu 在 `[Y]AML` 旁邊列出幾份文件（Manifest / Creator Notes / User Values / Merged Values / Hooks，item operation）；選一份以 `helm get ...` 取回，在 YAML popup 顯示。Space menu 留在 YAML 底下（tdp F4），連續看幾份文件不必重開。panel 3 以 `History` tab 取代 Events —— 每個 revision 的表格（REV / STATUS / DATE / CHART / DESCRIPTION），目前部署的 rev 標 `●`。History 的 Space menu 有 `Roll back to this revision`（目前部署的那一列上變暗）；confirm 顯示確切的 `helm rollback` 指令、非同步執行，結果以 toast 顯示。helm 管理的 K8s 物件（label `app.kubernetes.io/managed-by: Helm` 或 annotation `meta.helm.sh/release-name`）在 panel 2 標 `` glyph；它的 Space menu 照樣列出 `[E]dit` / `[D]elete` 但變暗，`E` / `D` 熱鍵也不作用（tdp M6）—— 請改用 `helm upgrade` / `rollback` / `uninstall`。在任何非 Releases 清單按 `.` 隱藏所有 helm 管理的物件（panel 2 下框左側永遠顯示 `.:helm` hint）
-- **YAML popup（`Y`）**：選取資源的原始 `kubectl get -o yaml`，popup 的高度跟著 YAML 的長度（tdp F7），以 **vim 風格 buffer** 運作：`h/j/k/l` 移動 cursor（自動捲動保持可見）、`w/b/e` 單字移動、`0/$` 行首 / 行尾、`gg/G` buffer 頭尾、`u/d` 半頁。按 `v` 進入字元 visual 模式（anchor 在 cursor，`h/j/k/l` 延伸選取）；visual 模式下 `y` 複製選取的子字串，visual 模式外 `y` 複製整份 YAML。`/` 搜尋，`n/N` 逐一跳（整列高亮，cursor 跳到每個符合處），`E` 跟 panel 上的 `E` 同一個 confirm（tdp F6：要 confirm 的動作每次都 confirm；confirm 疊在 YAML 上，`Esc` 回到 YAML），panel 的 Edit 列變暗或不列的地方（helm 管理的物件、kbu 不 edit 的種類、Helm release 的文件）`E` 不作用：helm 管理的物件 `?` 列出 `E`、變暗（M6：鍵存在、現在不能按，`HasEdit()` 為真、`CanEdit()` 為假），下框 hint 不列；kbu 不 edit 的種類與 Helm release 的文件沒有 `E`，兩邊都不列，`Esc` 先退出 visual、再關閉。visual 是模式（tdp K11）：`Space` 不作用、`?` 列出選取的鍵、`Tab` 回一個 toast「先 `Esc`」，下框 hint 換成 `?:keys h/j/k/l:select y:copy v/Esc:leave`，框與標題從層色換成 Yellow（`theme.Yellow`，D2 的「選取」色），離開就換回 —— hint 只放鍵（M5），模式靠框的顏色看出來（2026-09-29 user 實機看過後定案）。YAML 放在 popup 不放在 detail panel，直式版面就不會把長 YAML 行折得很難看
+- **YAML popup（`Y`）**：選取資源的原始 `kubectl get -o yaml`，popup 的高度跟著 YAML 的長度（tdp F7），以 **vim 風格 buffer** 運作：`h/j/k/l` 移動 cursor（自動捲動保持可見）、`w/b/e` 單字移動、`0/$` 行首 / 行尾、`gg/G` buffer 頭尾、`u/d` 半頁。按 `v` 進入字元 visual 模式（anchor 在 cursor，`h/j/k/l` 延伸選取）；visual 模式下 `y` 複製選取的子字串，visual 模式外 `y` 複製整份 YAML。`/` 搜尋，`n/N` 逐一跳（整列高亮，cursor 跳到每個符合處），`E` 跟 panel 上的 `E` 同一個 confirm（tdp F6：要 confirm 的動作每次都 confirm；confirm 疊在 YAML 上，`Esc` 回到 YAML），panel 的 Edit 列變暗或不列的地方（helm 管理的物件、kbu 不 edit 的種類、Helm release 的文件）`E` 不作用：helm 管理的物件 `?` 列出 `E`、變暗（M6：鍵存在、現在不能按，`HasEdit()` 為真、`CanEdit()` 為假），下框 hint 不列；kbu 不 edit 的種類與 Helm release 的文件沒有 `E`，兩邊都不列，`Esc` 先退出 visual、再關閉。visual 是模式（tdp K11）：`Space` 不作用、`?` 列出選取的鍵、`Tab` 回一個 toast「先 `Esc`」，下框 hint 換成 `?:keys h/j/k/l:select y:copy v/Esc:leave`，框與標題從層色換成 Yellow（`theme.Yellow`，D2 的模式色），上框右側寫 `Visual`（tdp K11；標題太長時截斷標題，模式名不讓位），離開就換回 —— hint 只放鍵（M5），模式靠框看出來（2026-09-29 user 實機看過後要 Yellow，tdp v0.1.18 的 K11 再加上右上角的模式名）。YAML 放在 popup 不放在 detail panel，直式版面就不會把長 YAML 行折得很難看
 - **Pod log 串流與自動追尾**：多 container 支援，格式 `<container>|<log>`；Logs tab 預設黏在尾端。Logs tab 標籤帶一個 Nerd Font glyph 顯示追尾狀態 —— 自動追尾時 `▶`（live，U+F0753），使用者往上捲之後 `⏸`（paused，U+F0754）。不論 tab 是否 active，glyph 都留在 tab 上，切 tab 時 panel 3 的 tab 列寬度不變。往上捲（`k/↑/u/gg`）暫停、讀歷史；按 `G` 追上並恢復追尾。panel 3 下框左側顯示 `u/d:page gg:top G:live` 當作隨手的小抄
 - **所有 workload 種類的彙總 log**：選到 workload 列時，它管理的**每個 Pod** 的 log 串進同一個 Logs tab。每行加上前綴 `<pod-hash>│<container>│<text>`，每段有自己穩定的顏色，rollout 時不必 drill-down 就一眼看出哪個 pod 在噴錯。涵蓋 Deployment（目前的 ReplicaSet，RBAC 不足時退回用 selector）、StatefulSet、DaemonSet、Job、ReplicaSet、CronJob（跨所有保留的 Job）。Pod 汰換：串流在選列當下取快照；重新選列才會刷新
 - **workload 種類的子 events 彙總**：workload 列的 Events tab 合併 workload 本身與它的子 Pods 的 events，最新的在前。Object 欄（「`Pod/web-abc-xyz`」對「`Deployment/web`」）寫出每筆 event 的來源，整條鏈就地可見。CronJob 是三層：CronJob 自己的 events + 它擁有的每個 Job 的 events + 每個 Pod 的 events，所以「昨晚的 cron 為什麼失敗」在一個 tab 讀完，不必 `kubectl describe` × N
@@ -42,7 +42,7 @@
 - **搜尋 / 過濾**：`/` 在 sidebar 與表格 panel、以及 namespace / context picker popup 裡搜尋。sidebar 搜尋也比對分類名（例如 "cluster" 會展開 Cluster 分類）。focus 移到別的 panel 時搜尋自動清掉 —— 選取保留，過濾不保留
 - **複製到剪貼簿（`y`）**：透過 OSC 52 複製 focus 元素的內容（tmux / SSH 都通，不需要 `xclip` / `pbcopy`）。語意跟著 focus：focus 目標有 cursor 時（sidebar 種類、panel 2 的列、panel 3 Relatives / History 的列、visual 模式下的 YAML popup），`y` 只複製那一列 / 選取 —— cursor 列是 tab 分隔的原始值，可直接餵 `awk` / `cut`，YAML visual 選取是原樣子字串。沒有 cursor 時（panel 3 Logs / Events / Conditions、App Log popup、非 visual 模式的 YAML popup），`y` 複製整個 focus 內容
 - **分級的 toast 通知**（畫面下方、footer 之上，寬度跟其他 popup 一樣，訊息太長截尾）：info 級（1 秒、popup layer 邊框 + `󰵅 kbu` 標題、hint 寫 `auto-dismiss`）用於「Copied!」之類的確認；warning 級（2 秒、Catppuccin Peach + `󰀦 kbu` 標題）用於被擋下的動作，例如 Relatives 循環偵測或 drill 失敗
-- **多 namespace 選取（v2.1）**：`N` 打開勾選框 picker。`Enter` 切換 cursor 所在的 namespace 並立即套用（panel 2 馬上重抓）；popup 保持開著，可以連續勾好幾個，勾選的 namespace 顯示綠色。`j/k` 移動（`u/d` 翻頁、`gg/G` 跳），`Esc` 關閉（`Space` 只開關 Space menu，在 picker 上不作用，tdp K5）。`/` 進入打字：打字時是附候選清單的 input（tdp F1），可列印的鍵都是字元、方向鍵在候選之間移動，`Enter` 勾選反白的那一個、繼續打字；`Tab` 在打字與清單之間切換、篩選留著，focus 在哪一邊哪一邊亮：打字時篩選列亮、清單的 cursor 列是淡的反白（Subtext1），`Tab` 到清單後篩選列用 F8 的 `dimANSI()` 變暗、cursor 列換成 popup 的層色底加深色粗體字，跟 menu 的 cursor 列一樣（`finderSearchBox()`、`finderCursorStyle()`，`search.go`；2026-09-29 user 實機看過後定案）；任何階段按 `Esc` 都關掉整個 picker（篩選是階段、不是一層，K4）。context picker 同一套，打字時 `Enter` 直接切換並關閉。「All Namespaces」與個別 namespace 互斥 —— 勾任一個個別的會清掉 All，取消最後一個會回到 All。個別選取時每個 namespace 分開 list（client-go 的 namespaced List，依名稱順序，每個回來就漸進渲染）；「All Namespaces」維持單一的全叢集 list —— 不做先全抓再過濾。namespaced 資源的清單多一個開頭的 Namespace 欄（第一欄，在 Name 之前；跟 Name 一樣中間截斷），statusbar 顯示單一 namespace、「All Namespaces」或「N selected」。選取重啟後保留，啟動時跟仍存在的 namespace 對帳 —— 刪掉的丟棄，全部都不在就退回 All。`C` 切換 context（大寫 —— 觸發鍵用大寫，避免打搜尋字時誤觸）
+- **多 namespace 選取（v2.1）**：`N` 打開勾選框 picker。`Enter` 切換 cursor 所在的 namespace 並立即套用（panel 2 馬上重抓）；popup 保持開著，可以連續勾好幾個，勾選的 namespace 顯示綠色。`j/k` 移動（`u/d` 翻頁、`gg/G` 跳），`Esc` 關閉（`Space` 只開關 Space menu，在 picker 上不作用，tdp K5）。`/` 進入打字：打字時是附候選清單的 input（tdp F1），可列印的鍵都是字元、方向鍵在候選之間移動，`Enter` 勾選反白的那一個、繼續打字；`Tab` 在打字與清單之間切換、篩選留著，focus 在哪一邊哪一邊亮：打字時篩選列亮、清單的 cursor 列是淡的反白（Subtext1），`Tab` 到清單後篩選列整列（框、放大鏡、篩選字）畫成 Overlay0 灰色、不畫游標與背景，cursor 列換成 popup 的層色底加深色粗體字，跟 menu 的 cursor 列一樣（`finderSearchBox()`、`finderCursorStyle()`，`search.go`；2026-09-29 user 實機看過後定案，tdp v0.1.18 寫進 F1 / D3）。篩選列原本用 F8 的 `dimANSI()` 淡化自己的顏色，D3 定成灰色：有篩選字時框是 Peach，淡化後的反白有時反而比灰色亮；任何階段按 `Esc` 都關掉整個 picker（篩選是階段、不是一層，K4）。context picker 同一套，打字時 `Enter` 直接切換並關閉。「All Namespaces」與個別 namespace 互斥 —— 勾任一個個別的會清掉 All，取消最後一個會回到 All。個別選取時每個 namespace 分開 list（client-go 的 namespaced List，依名稱順序，每個回來就漸進渲染）；「All Namespaces」維持單一的全叢集 list —— 不做先全抓再過濾。namespaced 資源的清單多一個開頭的 Namespace 欄（第一欄，在 Name 之前；跟 Name 一樣中間截斷），statusbar 顯示單一 namespace、「All Namespaces」或「N selected」。選取重啟後保留，啟動時跟仍存在的 namespace 對帳 —— 刪掉的丟棄，全部都不在就退回 All。`C` 切換 context（大寫 —— 觸發鍵用大寫，避免打搜尋字時誤觸）
 - **KubeConfig ▸ Contexts（v2.2）**：唯讀檢視 kubeconfig 的 contexts，放在 sidebar 最前面的新分類「KubeConfig」。panel 2 列出 Name / Cluster / User / Namespace / Server，目前連線的 context 尾端標 `*`；panel 3 的 Info tab 加上 TLS 與 Auth 摘要，`Y` 打開 kubeconfig 形狀的 YAML 檢視。直接讀 kubeconfig（叢集連不上也能用）。嚴格唯讀 —— 不能編輯 / 刪除。列上 `Enter` 切換到那個 context（先 confirm；已經在的 context 上不作用、Space menu 那一列變暗），接受後跟 `C` picker 選定走同一條路。憑證永遠不顯示：只露出非機密的 metadata，YAML 由 allowlist 組出，token / password / key 一律顯示 `<redacted>`
 - **Session-local context**：在 kbu 裡切 context 不碰 `~/.kube/config`。另一個終端機同時跑 `kubectl` 互不干擾
 - **Session 狀態保存（v1.7.10）**：關掉再開會回到原處。每次離開時 kbu 把目前的 `(context, namespace, kind, panel 2 列 cursor, focus panel, panel 3 active tab)` 記進設定目錄裡、跟 `config.yaml` 放在一起的 `state.yaml`。下次啟動在 k8s client 連線前先套用記下的 context + namespace，把 sidebar cursor 還原到記下的 Kind，等 watcher tick 到了再把 panel 2 cursor 對到上次選的物件。focus panel（sidebar / table / detail）也還原，所以從 panel 2 按 `q` 離開，回來還在 panel 2。panel 3 的 active tab（v1.7.11）以 tab 名稱經 `SwitchToTabByName` 還原，新選的 Kind 沒有那個 tab 時默默退回該種類的預設。記下的值不存在了（namespace 被刪、CRD 被移除、物件汰換掉）就退回預設，並在 App Log 記一行 INFO —— 不 toast、不警告；在意的話 `!` 看得到。`state.yaml` 刻意跟 `config.yaml` 分開，理由見「設計決定」
@@ -69,7 +69,7 @@
 - panel 2：`[Esc] Back`（說明寫出回到哪個清單）在 panel 區；compare 模式開著時 `Esc` 先解除 compare，所以那一列改成 `[Esc] Exit compare mode`，另有一列不帶熱鍵的 `Back`。container 列的 item 區是 `[S]hell` 與 `Cop[y]`。
 - menu 內只有 `j` / `k`（與方向鍵）移動、頭尾相接；沒有 `g` / `G`，因為 `[G]o live` 是 Logs / Events 的熱鍵。
 
-**hint 的寫法（tdp M5、D2）。** popup 下框、PTY 下框、panel 邊框、footer 的 hint 都是 `[]keyHint`，由 `hint.go` 畫：`鍵:說明`，冒號前後不空格、項目之間一個空格（`j/k:move Enter:run Esc:close`）；鍵 Blue（`theme.Blue`，加粗，跟 key reference 的鍵一樣）、冒號與說明 Overlay0（`theme.Overlay0`）。footer 的鍵沿用主題的 `status_line.foreground`（預設就是 Blue）。panel 邊框的 hint 跟著 focus：focus 的 panel 用上面那一對，沒 focus 的用較暗的一對 —— 鍵 Overlay0、說明 Surface2（邊框本身的色）—— 跟著 panel 一起退後、仍是兩個顏色。寬度一律用沒上色的 `hintText()` 量。放不下時從尾端整組捨棄（`fitHints()`，D1）：footer 在 80 欄捨掉 `>:settings`；YAML 先縮範圍指示器、再拿掉它、最後才捨 hint 的尾端（原本另有一個只寫鍵的窄版，拿掉了：新寫法 80 欄就放得下）。hint 只放鍵：原本拖曳 footer 尾端的 `drag mode`、YAML 選取 hint 開頭的 `selecting` 不是鍵，拿掉（拖曳看 panel 1 標題的 `[D]rag mode` 與被拖那一列的 icon —— 模式名稱原本在 footer 尾端，user 2026-09-29 實機看過後移到標題；YAML 看變成 Yellow 的框）。namespace / context picker 的 `/` 與 `Tab` 分成兩項（`/:new filter Tab:filter`）：`/` 開新的篩選、`Tab` 回到打字並保留篩選，做的事不同，`/` 本身又是鍵，不能再用 `/` 接起來。footer 的 panel 那一項照 D1 寫 `Tab/1–3:panels`。F8 的 dim 把兩個顏色各自淡化，不另外處理。`hint_test.go` 寫死每個 popup 各狀態的 hint，並在 truecolor 下量鍵與說明的顏色。
+**hint 的寫法（tdp M5、D2）。** popup 下框、PTY 下框、panel 邊框、footer 的 hint 都是 `[]keyHint`，由 `hint.go` 畫：`鍵:說明`，冒號前後不空格、項目之間一個空格（`j/k:move Enter:run Esc:close`）；鍵 Blue（`theme.Blue`，加粗，跟 key reference 的鍵一樣）、冒號與說明 Overlay0（`theme.Overlay0`）。footer 的鍵沿用主題的 `status_line.foreground`（預設就是 Blue）。panel 邊框的 hint 跟著 focus：focus 的 panel 用上面那一對，沒 focus 的用較暗的一對 —— 鍵 Overlay0、說明 Surface2（邊框本身的色）—— 跟著 panel 一起退後、仍是兩個顏色。寬度一律用沒上色的 `hintText()` 量。放不下時從尾端整組捨棄（`fitHints()`，D1、D3）：footer 在 80 欄捨掉 `>:settings`；每個 popup 的下框經 `fitPopupHint()`，照自己下框的寬度捨（popup 最窄 24 欄時每個 hint 都會捨到）；YAML 與 App log 先讓指示器（YAML 先縮、再拿掉，App log 直接拿掉），最後才捨 hint 的尾端（YAML 原本另有一個只寫鍵的窄版，拿掉了：新寫法 80 欄就放得下）；panel 邊框的 hint 跟捲動指示器分寬度，指示器留著、hint 從尾端捨；PTY 的出口鍵排第一（見「PTY 裡的鍵」）。原本只有 footer 與 YAML 會捨，其他 popup 放不下時下框比框寬（L4），PTY 整條不畫。hint 只放鍵：原本拖曳 footer 尾端的 `drag mode`、YAML 選取 hint 開頭的 `selecting` 不是鍵，拿掉（模式照 tdp K11 在框的右上角寫模式名、外框換成 Yellow：拖曳是 panel 1 的 `Drag`，YAML 選取是 `Visual`）。namespace / context picker 的 `/` 與 `Tab` 分成兩項（`/:new filter Tab:filter`）：`/` 開新的篩選、`Tab` 回到打字並保留篩選，做的事不同，`/` 本身又是鍵，不能再用 `/` 接起來。footer 的 panel 那一項照 D1 寫 `Tab/1–3:panels`。F8 的 dim 把兩個顏色各自淡化，不另外處理。`hint_test.go` 寫死每個 popup 各狀態的 hint，並在 truecolor 下量鍵與說明的顏色。
 
 **global operation popup（tdp M4）。** Space menu 最後一列 `Enter` 打開，疊在 Space menu 上：`[N]amespace`、`[C]ontext`、`[Alt-t]erm`、`[>] Settings`、`[!] App log`、`[q]uit`，清單只有 `globalActions` 一份。從它開的 picker、Settings、App log 疊在它上面，`Esc` 一層層退回；選定 context 後整疊關掉（T1），Alterm 是 context-shift 照樣清掉整疊。`Space` 在它上面不作用（它不是 Space menu，K5）。
 
@@ -122,7 +122,7 @@
 tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由 app 決定、跟出口鍵一樣常駐揭露（v0.1.2 的 K10 只准出口鍵，
 下面兩條那時列在「偏離 tdp」）。
 
-- **PTY 的出口鍵（tdp K10）：每個 PTY 都是 `Alt-Esc`，Alterm 另有 `Alt-t` 隱藏。** `Alt-Esc` 是關閉，跟家族其他成員（sshu、filu）同一個鍵：按了先跳 confirm（「End the Alterm shell?」/「Leave kubectl edit?」/「End the shell session?」，疊在 PTY 上，`Esc` 回到 PTY），接受才結束子程序（`PtyView.Kill()`，`ptyKillMsg` 帶著是哪一個槽，之後走一般的結束路徑）。`Alt-t` 只給 Alterm：隱藏（shell 留著），再按叫回來；在 `kubectl edit` / `exec` 裡 `Alt-t` 照常送給子程序（2026-09-29 user 裁定：`Alt-t` 單純留給 Alterm，關閉一律 `Alt-Esc`、一律先問）。confirm 與 key reference 在 `stackOrder()` 裡排在 PTY 之上。出口鍵在下框 hint 常駐（Alterm `Alt-t:hide Alt-Esc:end`、edit / exec `Alt-Esc:leave`），alt-screen（editor）裡也在。
+- **PTY 的出口鍵（tdp K10）：每個 PTY 都是 `Alt-Esc`，Alterm 另有 `Alt-t` 隱藏。** `Alt-Esc` 是關閉，跟家族其他成員（sshu、filu）同一個鍵：按了先跳 confirm（「End the Alterm shell?」/「Leave kubectl edit?」/「End the shell session?」，疊在 PTY 上，`Esc` 回到 PTY），接受才結束子程序（`PtyView.Kill()`，`ptyKillMsg` 帶著是哪一個槽，之後走一般的結束路徑）。`Alt-t` 只給 Alterm：隱藏（shell 留著），再按叫回來；在 `kubectl edit` / `exec` 裡 `Alt-t` 照常送給子程序（2026-09-29 user 裁定：`Alt-t` 單純留給 Alterm，關閉一律 `Alt-Esc`、一律先問）。confirm 與 key reference 在 `stackOrder()` 裡排在 PTY 之上。出口鍵在下框 hint 常駐（Alterm `Alt-Esc:end Alt-t:hide`、edit / exec `Alt-Esc:leave`），alt-screen（editor）裡也在；`Alt-Esc` 排第一，下框窄的時候 hint 從尾端整組捨（D3），出口鍵最後才走（K10 要它常駐揭露）。原本 Alterm 是 `Alt-t:hide Alt-Esc:end`、放不下時整條 hint 都不畫，出口鍵也跟著不見。
 - **PTY 裡攔下捲動鍵（tdp K10）。** Alterm、`kubectl edit`、`kubectl exec` 的 PTY 不在 alt-screen 時，`PgUp` / `PgDn` / `Home` / `End` 由 kbu 攔下做 10k 行 scrollback（`ptyview.go`），不送給子程序：純 shell 輸出沒有自己的翻頁，少了 scrollback 就看不到捲出畫面的輸出。子程序一進 alt-screen（vim、less、htop、kubectl edit 的 editor）這四個鍵就照常轉送，讓它們保有自己的翻頁。揭露：不在 alt-screen 時下框 hint 寫 `PgUp/Home:scroll`。
 - **Alterm 的隱藏多一個 `Ctrl-T`（tdp K10）。** Alterm 除了 `Alt-t` 也攔 `Ctrl-T`（`app.go`、`ptyview.go`；panel 上的 `Ctrl-T` 同樣叫出 Alterm），因為錄 demo 用的 VHS 0.11 在 Chrome 與 PTY 之間會丟掉 Alt modifier，demo tape 只能送 `Ctrl-T`。代價：Alterm 裡 zsh 的 transpose-chars（`Ctrl-T`）用不到。這個別名不出現在任何 help 或 hint —— 這一點仍是偏離，見「偏離 tdp」。
 
@@ -161,8 +161,9 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 ## 對照 tdp 時確認過的
 
 兩輪對照留下的（清單都已刪）：2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次；
-2026-09-29 照第二份清單（對照 v0.1.14–v0.1.17 的改動，6 條）修完、再拿 v0.1.17 全文對一次。下次對照不必重查的，以及由 user
-逐題裁定的。
+2026-09-29 照第二份清單（對照 v0.1.14–v0.1.17 的改動，6 條）修完、再拿 v0.1.17 全文對一次；同日第三份清單（對照 v0.1.17 →
+v0.1.19，4 條）修完第 1–3 條，第 4 條（icon 寬度，D6）等 filu 做完再照搬、仍在 `kbu-terminu-fix.md`。下次對照不必重查的，以及由
+user 逐題裁定的。
 
 **已經符合、不用修的**
 
@@ -222,6 +223,15 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
   沒有 `S` / `Alt-S`。
 - **M6 的「別的 surface」（v0.1.16）**：kbu 只有 namespace / context picker `?` 裡的「while typing」一段，照亮顯示。panel `?` 的
   「app-wide (also in Global operation)」一段是這個 panel 上按得到的鍵，照一般規則。
+- **L5（v0.1.19）**：focus 的 panel 雙線 `╔═╗`、失焦圓角 `╭─╮`，不只靠顏色；模式把框換成 Yellow 時，focus 的 panel 仍是雙線
+  （拖曳中的 panel 1）。
+- **D2 的失焦 panel 邊框 hint（v0.1.18）**：`recededHint()`（鍵 Overlay0 加粗、冒號與說明 Surface2）正是 D2 新增的那一列 ——
+  第二輪自己下的判斷，user 實機維持，v0.1.18 寫成家族預設。
+- **K9（v0.1.19）：focus 在 PTY 裡時 `q`、`Ctrl-C` 屬於子程序**：`Update()` 先看最上層是不是 PTY，是就整個交給它
+  （`TestK9_PtyOnTopKeepsQAndCtrlC`）；Alterm 隱藏時 focus 不在 PTY，`q` 照常離開；PTY 上疊著 `Alt-Esc` 的 confirm 時最上層是
+  confirm，`q` / `Ctrl-C` 走離開流程。
+- **K10（v0.1.19）：子程序還沒準備好時可以不轉送**：這是「可以」。kbu 的三個 PTY 都是本機子程序，`Start()` 同步拿到 `ptmx`，
+  按鍵從開啟動畫的第一格就轉送；`kubectl exec` 連線中的鍵由 kubectl 自己收著。出口鍵在 `PtyView.Update()` 裡排在轉送之前。
 - **F7 以外的等待文字**：panel 裡的「Waiting for logs...」、YAML 的「(no YAML — resource may still be loading)」是內容裡的文字，不是
   loading 中的 popup，不用 D3 的 icon。
 - **術語「模式」：zoom 不是模式（K4、K11）。** `z` 放大之後每個鍵的意思都不變，所以不是模式；`Esc` 的「上一層」照 app 定義：搜尋
@@ -253,16 +263,25 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - hint 的鍵保留粗體（D2 只規定顏色）；沒 focus 的 panel 邊框 hint 用較暗的一對（鍵 Overlay0、說明 Surface2）。user：維持。
 - 拖曳 footer 的 `drag mode`、YAML 選取 hint 的 `selecting` 拿掉。user 改成：拖曳時 Pinned 標題寫 `[D]rag mode`（原本
   `Pinned 󰩐 [D]rop`），icon 移到被拖那一列的列首；YAML 選取時框與標題換成 Yellow，下框補 `h/j/k/l:select`。
+  tdp v0.1.18 的 K11 定成模式名一律寫在框的右上角、外框 Yellow：Pinned 標題的 `[D]rag mode` 拿掉，改在 panel 1 右上角寫 `Drag`、
+  框與膠囊 Yellow；YAML 右上角加 `Visual`。
 - YAML 的窄版 hint（只寫鍵）拿掉，放不下時照 D1 從尾端整組捨棄。user：維持。
 - footer 的 panel 那一項寫成 D1 的 `Tab/1–3:panels`（原本 `Tab cycle panel`）。user：維持。
 - picker 的 `/` 與 `Tab` 分成兩項：`/:new filter Tab:filter`。user 另外要求：`Tab` 到清單時篩選列變暗、cursor 列換成 popup 的
-  層色底，讓 focus 在哪一邊看得出來（user 認為這個表達方式可以建議寫回 tdp）。
+  層色底，讓 focus 在哪一邊看得出來（user 認為這個表達方式可以建議寫回 tdp）。tdp v0.1.18 寫進 F1 / D3，篩選列定成整列灰色（Overlay0），不用淡化。
 - loading 中打開的 `?` 不在清單到了時重算（重開才亮）。user：維持。
 - 重開 picker 多排的 tick 原本不擋（只多重畫、不會轉快）。user：照 filu 加旗標（`loadingTicking`、`keepLoading()`）。
 
+**第三輪自己下的判斷**（清單說是實作細節、不必問；2026-09-29 修完時還沒實機看過）
+
+- 模式名用一個詞：拖曳寫 `Drag`、YAML 選取寫 `Visual`（user 叫它 visual mode，hint 是 `v:visual`）。`Drag mode` 在 24 欄寬的
+  panel 1 上框放不下（`[1] Kinds` 膠囊佔 11 格，右上角的字連同兩側只剩 10 格），放不下時 `renderPanelWithScroll()` 會整個不畫。
+- 拖曳時 `[1] Kinds` 膠囊跟著外框換成 Yellow（tdp 只說外框；膠囊是上框的一部分，一起換才讀得出「這個框在模式裡」）。
+- panel 邊框的 hint 也照 D3 從尾端整組捨（D3 講 popup 的下框，panel 邊框清單交給 kbu 決定）；捲動指示器留著。
+
 ## 設計文件導讀
 
-kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.17/principle)。
+kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle)。
 
 | 檔案 | 內容 |
 |---|---|

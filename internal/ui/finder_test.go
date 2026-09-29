@@ -2,11 +2,14 @@ package ui
 
 import (
 	"testing"
+
+	"github.com/vulcanshen/kbu/internal/theme"
 )
 
-// tdp F1, F8: a finder lights only the part that takes the keys. While
+// tdp F1, D3: a finder lights only the part that takes the keys. While
 // typing, the typing line is bright and the list's cursor row keeps the
-// quiet highlight; once Tab moves focus to the list, the typing line dims
+// quiet highlight; once Tab moves focus to the list, the whole typing line
+// is Overlay0 grey — frame, glyph and filter, no background, no cursor —
 // and the cursor row takes the popup's own colour, like a menu's.
 func TestF1_FinderLightsThePartWithFocus(t *testing.T) {
 	truecolor(t)
@@ -41,8 +44,21 @@ func TestF1_FinderLightsThePartWithFocus(t *testing.T) {
 		}
 
 		list := c.draw(false)
-		if got := screenCells(list)[2][1]; got.r != '╭' || !near(got.fg, dimRGB(hexRGB(m.theme.Status.Pending))) {
-			t.Errorf("%s, list: the typing line's corner %q is %v, want it dimmed", c.name, got.r, got.fg)
+		cells := screenCells(list)
+		if cells[2][1].r != '╭' {
+			t.Fatalf("%s, list: the typing line is not on row 2", c.name)
+		}
+		for _, rowCells := range cells[2:5] {
+			for _, cl := range rowCells[1 : len(rowCells)-1] {
+				switch {
+				case cl.r == '█':
+					t.Errorf("%s, list: the typing line draws a cursor", c.name)
+				case cl.bg != unset:
+					t.Errorf("%s, list: %q in the typing line has a background %v", c.name, cl.r, cl.bg)
+				case cl.r != ' ' && cl.fg != hexRGB(theme.Overlay0):
+					t.Errorf("%s, list: %q in the typing line is %v, want Overlay0", c.name, cl.r, cl.fg)
+				}
+			}
 		}
 		row, at = cellsOf(t, list, c.row)
 		if !near(row[at].bg, c.border) {

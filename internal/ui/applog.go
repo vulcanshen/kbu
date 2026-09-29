@@ -454,11 +454,17 @@ func (m AppLogModel) renderFullPopup() string {
 		b.WriteString("\n")
 	}
 	b.WriteString(padRow) // bottom padding row
-	hint := popupHint(keyHint{"j/k", "scroll"}, keyHint{"u/d", "page"}, keyHint{"y", "copy"}, keyHint{"D", "clear"}, keyHint{"Esc", "close"})
+	hints := []keyHint{{"j/k", "scroll"}, {"u/d", "page"}, {"y", "copy"}, {"D", "clear"}, {"Esc", "close"}}
 	indicator := ""
 	if totalLines := len(allLines); totalLines > 0 {
 		indicator = fmt.Sprintf(" %d of %d ", m.scrollOffset+1, totalLines)
 	}
+	// When the border is narrow the position indicator goes first, then
+	// hint entries drop whole from the end (tdp D3), as in the YAML viewer.
+	if lipgloss.Width(popupHint(hints...))+lipgloss.Width(indicator) > innerW-1 {
+		indicator = ""
+	}
+	hint := fitPopupHint(innerW-1, hints...)
 	bottomDashes := innerW - lipgloss.Width(hint) - lipgloss.Width(indicator) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0

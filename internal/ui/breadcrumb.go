@@ -199,7 +199,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	currentMarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending)).Bold(true)
 
 	title := "󰍒 Breadcrumb"
-	hint := popupHint(keyHint{"j/k", "move"}, keyHint{"Enter", "switch"}, keyHint{"Esc", "close"})
+	hint := fitPopupHint(popupInnerWidth(m.screenW)-1, keyHint{"j/k", "move"}, keyHint{"Enter", "switch"}, keyHint{"Esc", "close"})
 
 	// tdp F7: one width for every popup, whatever it shows.
 	innerW := popupInnerWidth(m.screenW)
