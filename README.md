@@ -13,7 +13,7 @@
 **Language**: English · [繁體中文](README-zh_TW.md)
 
 > [!WARNING]
-> **v2.0 rename note.** kbu is the same tool previously released as **km8** (v1.7.x and earlier). Everything you know still works — the command binary is now `kbu`, the config directory moved from `~/.config/km8/` to `~/.config/kbu/` with a one-shot auto-migration on first launch, and `$KM8__*` env vars are still read as a fallback, kept permanently for backward compatibility (see the Environment variables table). Upgrade is drop-in; no manual steps required.
+> **v2.0 rename note.** kbu is the same tool previously released as **km8** (v1.7.x and earlier). Everything you know still works — the command binary is now `kbu`, and the config directory moved from `~/.config/km8/` to `~/.config/kbu/` with a one-shot auto-migration on first launch. Environment variables from the km8 days are no longer read — use the `KBU__*` names in the Environment variables table.
 
 **A single-pane Kubernetes workspace** — `Tab` / `Space` / `Enter` / `Esc` drive everything. No hotkey memorization, no setup, no learning curve. Relatives navigation, YAML compare, and an embedded persistent shell are built in; any other terminal tool you trust rides along through the shell.
 
@@ -296,12 +296,12 @@ resource_kind_config:
 
 Override the corresponding config slot for one-shot runs without editing the YAML — useful for CI / scripted demos / quick "try this shell" sessions.
 
-> **v2.0 rename note.** The `KBU__*` names below replaced the pre-v2.0 `KM8__*` names. The old `KM8__*` names are still read as a fallback (kept permanently for backward compatibility) — a `KM8__CONFIGPATH` in your `~/.zshrc` from a v1.7.x install keeps working. If both a `KBU__` and its legacy `KM8__` counterpart are set, `KBU__` wins.
+> The names follow the terminu family's `KBU__<NAME>`. Older names are not read; the [CHANGELOG](CHANGELOG.md) lists the renames.
 
 | Variable | Effect | Precedence |
 |---|---|---|
-| `KBU__CONFIGPATH` | Use this file as the config file instead of the default layout (`$XDG_CONFIG_HOME/kbu/config.yaml` etc.). Theme file path is NOT affected — it still lives under the OS config directory. Absolute path recommended; relative path resolves against CWD at load/save time. | `KBU__CONFIGPATH` > default layout |
-| `KBU__STATEPATH` | Use this file as the session state file instead of `<config-dir>/state.yaml`. Same TrimSpace-then-empty-check pattern as `KBU__CONFIGPATH`. Handy for sandbox / test runs where you want per-run state without touching the real state file. | `KBU__STATEPATH` > default layout |
+| `KBU__CONFIG` | Use this directory as kbu's config directory instead of the default (`$XDG_CONFIG_HOME/kbu` etc.): `config.yaml`, `theme.yaml`, the session state (unless `KBU__STATE` is set) and crash logs are read and written there. Absolute path recommended; a relative path resolves against the current directory. Leading / trailing whitespace is trimmed. | `KBU__CONFIG` > `$XDG_CONFIG_HOME/kbu` > OS default |
+| `KBU__STATE` | Keep the session state (`state.yaml`) in this directory instead of the config directory. Handy for sandbox / test runs that want per-run state without touching the real one. | `KBU__STATE` > config directory |
 | `KBU__ALTERM_SHELL` | Use this binary as the Alterm shell. Bare names are looked up on `$PATH` at popup-open time (Go `exec.Command` semantics); absolute paths run verbatim. Leading / trailing whitespace is trimmed. | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
 | `KBU__ALTERM_LOGIN_SHELL` | Force the Alterm shell into login mode (`-l`) or out of it. Truthy values: `true` / `1` / `yes` (and uppercase). Any other value disables login mode. Use when launched from a non-login parent and your PATH is set in `.zprofile`. | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
 | `KBU__ICON_WIDTH` | How many cells a Nerd Font icon takes on your terminal: `1` or `2`. Overrides the check kbu runs at start; on Windows, where there is no check, it is the only way to say `2`. Other values are ignored. | `KBU__ICON_WIDTH` > checked at start > `1` |
@@ -312,8 +312,8 @@ Example:
 # Try fish in Alterm without editing config.yaml
 KBU__ALTERM_SHELL=/opt/homebrew/bin/fish kbu
 
-# Point kbu at a per-project config (e.g. checked into the repo)
-KBU__CONFIGPATH="$PWD/.kbu.yaml" kbu
+# Point kbu at a per-project config directory (e.g. checked into the repo)
+KBU__CONFIG="$PWD/.kbu" kbu
 ```
 
 ### theme.yaml
@@ -379,7 +379,7 @@ status:
 
 ## terminu family
 
-kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.20/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
+kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
 
 ## License
 

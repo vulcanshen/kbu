@@ -6,8 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle) (tdp v0.1.19).
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle) (tdp v0.1.21).
 
+- **Environment variables take the family's names; old names are no longer
+  read.** `KBU__CONFIGPATH` (a file) is now `KBU__CONFIG`, a directory:
+  `config.yaml` goes in it, and so do `theme.yaml`, the session state and crash
+  logs, which the old variable did not move. `KBU__STATEPATH` (a file) is now
+  `KBU__STATE`, a directory holding `state.yaml`. The pre-v2.0 `KM8__*` names
+  are no longer read either, and kbu no longer warns about them at start.
+  Rename them where you set them:
+
+  | Old | New |
+  |---|---|
+  | `KBU__CONFIGPATH=/some/dir/config.yaml`, `KM8__CONFIGPATH=…` | `KBU__CONFIG=/some/dir` |
+  | `KBU__STATEPATH=/some/dir/state.yaml`, `KM8__STATEPATH=…` | `KBU__STATE=/some/dir` |
+  | `KM8__ALTERM_SHELL`, `KM8__ALTERM_LOGIN_SHELL` | `KBU__ALTERM_SHELL`, `KBU__ALTERM_LOGIN_SHELL` |
 - **A click lands on the popup you see on top.** A confirm, sort picker or
   YAML viewer opened from a `Space` menu sits centred over the menu; a click
   on it used to reach the menu first and run whichever menu row happened to
@@ -83,7 +96,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   one-row "Drop" menu), `?` lists the mode's keys, and `Tab` stays put with a
   toast saying `Esc` leaves the mode first. The drag's keys now sit in the
   footer while it lasts, replacing the toast that stayed on screen; the
-  selection's keys, `h/j/k/l` included, sit in the viewer's bottom hint.
+  selection's keys, `h/j/k/l` included, sit in the viewer's bottom hint, and
+  its `?` lists every motion it answers, `u/d` and `gg/G` included.
   A mode names itself in the top-right corner of its frame, set into the
   border between two junctions, and the frame turns yellow: `┤Visual├` on the
   YAML viewer while it selects, `╡Drag╞` on panel 1 while you drag, where the

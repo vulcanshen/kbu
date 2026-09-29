@@ -1,7 +1,7 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策：各功能背後的設計筆記、理由與實作細節。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.20/principle)（tdp）；
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle)（tdp）；
 使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
@@ -25,7 +25,7 @@
 - **Drill-down 導覽**：Deployment / DaemonSet / StatefulSet / Job → Pods → Containers；CronJob → Jobs；HPA → 目標 workload；PVC → 掛載它的 Pods；PDB → 受保護的 Pods；Helm Release → chart 部署的每個原生 K8s 物件
 - **Relatives tab —— Lens 風格導覽**：每個 detail panel（Namespaces 除外）列出該資源可導覽的參照（owner、選到的 pod、scaleTargetRef、掛載它的 pod……）。`Enter` 鑽進 cursor 所在的參照 —— panel 重畫成*那個*資源的 Relatives，形成一條鏈（Deployment → Pod → ConfigMap → 使用它的 Pods……）。`Esc` 退一層。panel 3 下框左側顯示依 tab 而定的 hint（depth 1 是 `Enter:drill`，鑽進去之後是 `Enter:drill Esc:back`）。depth>1 時 `B`（Space menu 的 `[B]readcrumb` 列，跟 popup 標題同名；大寫因為作用在整個 panel）開 breadcrumb popup（從 menu 開時 Space menu 留在底下），可以把 panel 1+2 跳回鏈上任何祖先（先確認；確認後整疊關掉，tdp T1）。depth>1 時 tab 標籤顯示 `Relatives N`。`Y` 打開 cursor 所在那一筆的 YAML。循環偵測擋住回到祖先；fetch 失敗 toast 後留在原地。27 種資源涵蓋 26 種 —— ConfigMaps / Secrets / ServiceAccounts 顯示*反向*參照（哪些 Pod 用我、哪些 RoleBinding 以這個 SA 為 subject……）；Helm release 顯示 `Deployed Resources`，chart 部署的每個 K8s 物件都一步可達
 - **Helm releases（`helm` 在 `PATH` 上時）**：專屬的 `Helm > Releases` sidebar 分類列出叢集裡每個 release（每 3 秒 poll 一次 `helm list -A`；Helm 沒有 watch API）。panel 2 欄位：`NAME / NAMESPACE / CHART / APP VER / REV / STATUS / UPDATED`。release 列的 Space menu 在 `[Y]AML` 旁邊列出幾份文件（Manifest / Creator Notes / User Values / Merged Values / Hooks，item operation）；選一份以 `helm get ...` 取回，在 YAML popup 顯示。Space menu 留在 YAML 底下（tdp F4），連續看幾份文件不必重開。panel 3 以 `History` tab 取代 Events —— 每個 revision 的表格（REV / STATUS / DATE / CHART / DESCRIPTION），目前部署的 rev 標 `●`。History 的 Space menu 有 `Roll back to this revision`（目前部署的那一列上變暗）；confirm 顯示確切的 `helm rollback` 指令、非同步執行，結果以 toast 顯示。helm 管理的 K8s 物件（label `app.kubernetes.io/managed-by: Helm` 或 annotation `meta.helm.sh/release-name`）在 panel 2 標 `` glyph；它的 Space menu 照樣列出 `[E]dit` / `[D]elete` 但變暗，`E` / `D` 熱鍵也不作用（tdp M6）—— 請改用 `helm upgrade` / `rollback` / `uninstall`。在任何非 Releases 清單按 `.` 隱藏所有 helm 管理的物件（panel 2 下框左側永遠顯示 `.:helm` hint）
-- **YAML popup（`Y`）**：選取資源的原始 `kubectl get -o yaml`，popup 的高度跟著 YAML 的長度（tdp F7），以 **vim 風格 buffer** 運作：`h/j/k/l` 移動 cursor（自動捲動保持可見）、`w/b/e` 單字移動、`0/$` 行首 / 行尾、`gg/G` buffer 頭尾、`u/d` 半頁。按 `v` 進入字元 visual 模式（anchor 在 cursor，`h/j/k/l` 延伸選取）；visual 模式下 `y` 複製選取的子字串，visual 模式外 `y` 複製整份 YAML。`/` 搜尋，`n/N` 逐一跳（整列高亮，cursor 跳到每個符合處），`E` 跟 panel 上的 `E` 同一個 confirm（tdp F6：要 confirm 的動作每次都 confirm；confirm 疊在 YAML 上，`Esc` 回到 YAML），panel 的 Edit 列變暗或不列的地方（helm 管理的物件、kbu 不 edit 的種類、Helm release 的文件）`E` 不作用：helm 管理的物件 `?` 列出 `E`、變暗（M6：鍵存在、現在不能按，`HasEdit()` 為真、`CanEdit()` 為假），下框 hint 不列；kbu 不 edit 的種類與 Helm release 的文件沒有 `E`，兩邊都不列，`Esc` 先退出 visual、再關閉。visual 是模式（tdp K11）：`Space` 不作用、`?` 列出選取的鍵、`Tab` 回一個 toast「先 `Esc`」，下框 hint 換成 `?:keys h/j/k/l:select y:copy v/Esc:leave`，框與標題從層色換成 Yellow（`theme.Yellow`，D2 的模式色），上框右側寫 `┤Visual├`（tdp K11，單線框用單線接頭；標題太長時截斷標題，模式名不讓位），離開就換回 —— hint 只放鍵（M5），模式靠框看出來（2026-09-29 user 實機看過後要 Yellow，tdp v0.1.18 的 K11 再加上右上角的模式名）。YAML 放在 popup 不放在 detail panel，直式版面就不會把長 YAML 行折得很難看
+- **YAML popup（`Y`）**：選取資源的原始 `kubectl get -o yaml`，popup 的高度跟著 YAML 的長度（tdp F7），以 **vim 風格 buffer** 運作：`h/j/k/l` 移動 cursor（自動捲動保持可見）、`w/b/e` 單字移動、`0/$` 行首 / 行尾、`gg/G` buffer 頭尾、`u/d` 半頁。按 `v` 進入字元 visual 模式（anchor 在 cursor，`h/j/k/l` 延伸選取）；visual 模式下 `y` 複製選取的子字串，visual 模式外 `y` 複製整份 YAML。`/` 搜尋，`n/N` 逐一跳（整列高亮，cursor 跳到每個符合處），`E` 跟 panel 上的 `E` 同一個 confirm（tdp F6：要 confirm 的動作每次都 confirm；confirm 疊在 YAML 上，`Esc` 回到 YAML），panel 的 Edit 列變暗或不列的地方（helm 管理的物件、kbu 不 edit 的種類、Helm release 的文件）`E` 不作用：helm 管理的物件 `?` 列出 `E`、變暗（M6：鍵存在、現在不能按，`HasEdit()` 為真、`CanEdit()` 為假），下框 hint 不列；kbu 不 edit 的種類與 Helm release 的文件沒有 `E`，兩邊都不列，`Esc` 先退出 visual、再關閉。visual 是模式（tdp K11）：`Space` 不作用、`?` 列出選取的鍵（D5 給選取模式的 vim 移動全部都在：`h/j/k/l`、`w/b/e`、`0/$`、`gg/G`、`u/d`，這些鍵在選取模式內外是同一段程式；`gg/G`、`u/d` 原本漏列，v0.1.21 對照時補上）、`Tab` 回一個 toast「先 `Esc`」，下框 hint 換成 `?:keys h/j/k/l:select y:copy v/Esc:leave`，框與標題從層色換成 Yellow（`theme.Yellow`，D2 的模式色），上框右側寫 `┤Visual├`（tdp K11，單線框用單線接頭；標題太長時截斷標題，模式名不讓位），離開就換回 —— hint 只放鍵（M5），模式靠框看出來（2026-09-29 user 實機看過後要 Yellow，tdp v0.1.18 的 K11 再加上右上角的模式名）。YAML 放在 popup 不放在 detail panel，直式版面就不會把長 YAML 行折得很難看
 - **Pod log 串流與自動追尾**：多 container 支援，格式 `<container>|<log>`；Logs tab 預設黏在尾端。Logs tab 標籤帶一個 Nerd Font glyph 顯示追尾狀態 —— 自動追尾時 `▶`（live，U+F0753），使用者往上捲之後 `⏸`（paused，U+F0754）。不論 tab 是否 active，glyph 都留在 tab 上，切 tab 時 panel 3 的 tab 列寬度不變。往上捲（`k/↑/u/gg`）暫停、讀歷史；按 `G` 追上並恢復追尾。panel 3 下框左側顯示 `u/d:page gg:top G:live` 當作隨手的小抄
 - **所有 workload 種類的彙總 log**：選到 workload 列時，它管理的**每個 Pod** 的 log 串進同一個 Logs tab。每行加上前綴 `<pod-hash>│<container>│<text>`，每段有自己穩定的顏色，rollout 時不必 drill-down 就一眼看出哪個 pod 在噴錯。涵蓋 Deployment（目前的 ReplicaSet，RBAC 不足時退回用 selector）、StatefulSet、DaemonSet、Job、ReplicaSet、CronJob（跨所有保留的 Job）。Pod 汰換：串流在選列當下取快照；重新選列才會刷新
 - **workload 種類的子 events 彙總**：workload 列的 Events tab 合併 workload 本身與它的子 Pods 的 events，最新的在前。Object 欄（「`Pod/web-abc-xyz`」對「`Deployment/web`」）寫出每筆 event 的來源，整條鏈就地可見。CronJob 是三層：CronJob 自己的 events + 它擁有的每個 Job 的 events + 每個 Pod 的 events，所以「昨晚的 cron 為什麼失敗」在一個 tab 讀完，不必 `kubectl describe` × N
@@ -123,6 +123,16 @@ kbu 的 popup 標題、列標記、helm 標記、loading icon、splash 的像素
 - **context-shift target 清掉 source**（tdp T1）。`txPty`（kubectl edit / exec，分鐘級的 subprocess）、`shellPty`（Alterm）、`enterDrillDown`（panel 2 換欄位與列）不是 inline 動作：從它們回來時，浮在已換掉的畫面上的舊 source 是 stale 的。規則：context-shift target 的 **entry handler** 在最前面呼叫 `AppModel.closeAllBlockingPopups()`（關掉所有 blocking popup，排除 PTY 自己與 toast；沒有東西開著時回 `nil`），由 target 關、不由 caller 關，每個叫出它的地方自動拿到正確行為。目前的 entry point：`app.go` 的 `startEditMsg`、`startShellExecMsg`、`Alt-t` handler、`enterDrillDown()`。新增 context-shift target（例如日後的 port-forward viewer）時一併補上。
 - **Logs 失焦不變暗**（tdp T2）。panel 3 失焦時，Events / Conditions / Relatives / History 暗到 overlay1，Logs 不暗、保留 pod / container 的顏色。Events 也是串流（有 live / paused 追尾），但照樣變暗 —— 這是刻意的偏離，見「偏離 tdp」。業界前例：Lens、k9s 的串流 log 都不變暗。
 
+### 環境變數
+
+照 tdp D6 的家族命名 `KBU__<名稱>`（app 名後兩個底線、名稱全大寫、單字之間一個底線），自己讀的都照這個寫，測試用的也是
+（`KBU__TEST_K8S`）。`KBU__CONFIG` 是設定**目錄**（`ConfigDir()` 第一順位）：`config.yaml`、`theme.yaml`、`logs/`，以及沒設
+`KBU__STATE` 時的 `state.yaml` 都跟著它 —— 以前的 `KBU__CONFIGPATH` 是設定檔路徑、刻意不動 theme，改成目錄之後全部跟著走才一致。
+`KBU__STATE` 是狀態目錄（`state.yaml` 放在裡面）。兩個都先 TrimSpace。v0.1.21 改名時不留舊名（user 2026-09-29 裁定）：
+`KBU__CONFIGPATH`、`KBU__STATEPATH` 與 km8 時期的 `KM8__*` 都不再讀，`EnvDeprecations()` 與它每次啟動的 App Log 提醒一起拿掉；km8 → kbu
+的設定**目錄**遷移（`MigrateLegacyConfigDir()`）不是環境變數，保留。測試的 `TestMain` 除了隔離 `XDG_CONFIG_HOME`，也清掉
+`KBU__CONFIG` / `KBU__STATE`（它們排在 XDG 前面）；會存檔的測試自己設 `KBU__CONFIG` 到暫存目錄。
+
 ### PTY 裡的鍵
 
 tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由 app 決定、跟出口鍵一樣常駐揭露（v0.1.2 的 K10 只准出口鍵，
@@ -168,8 +178,9 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 
 兩輪對照留下的（清單都已刪）：2026-09-28 照 `kbu-terminu-fix.md`（對照 tdp v0.1.13，28 條）修完、再拿 v0.1.13 全文逐條對一次；
 2026-09-29 照第二份清單（對照 v0.1.14–v0.1.17 的改動，6 條）修完、再拿 v0.1.17 全文對一次；同日第三份清單（對照 v0.1.17 →
-v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 做完，對照 v0.1.20 時照搬完成（見「Nerd Font 的渲染」），清單刪除。
-下次對照不必重查的，以及由 user 逐題裁定的。
+v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 做完，對照 v0.1.20 時照搬完成（見「Nerd Font 的渲染」），清單刪除；
+第五份清單（對照 v0.1.21，1 條：環境變數命名，見「環境變數」）修完，全文對照時另補選取模式 `?` 漏列的 `u/d`、`gg/G`。下次對照不必重查的，
+以及由 user 逐題裁定的。
 
 **已經符合、不用修的**
 
@@ -238,6 +249,9 @@ v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 
   confirm，`q` / `Ctrl-C` 走離開流程。
 - **K10（v0.1.19）：子程序還沒準備好時可以不轉送**：這是「可以」。kbu 的三個 PTY 都是本機子程序，`Start()` 同步拿到 `ptmx`，
   按鍵從開啟動畫的第一格就轉送；`kubectl exec` 連線中的鍵由 kubectl 自己收著。出口鍵在 `PtyView.Update()` 裡排在轉送之前。
+- **D6 疊 popup 不 panic（v0.1.21）**：`compositeDisp()` 在 popup 比畫面寬或高時起點取 0、超出切掉（`TestD6_CompositeDisp`）——
+  v0.1.21 就是照 kbu 照搬時補的這一段寫的。
+- **D5 選取模式的移動（v0.1.21）**：YAML viewer 的選取模式照 vim 的 `h/j/k/l`、`w/b/e`、`0/$`、`gg/G`、`u/d` 移動（跟一般模式同一段程式）。
 - **F7 以外的等待文字**：panel 裡的「Waiting for logs...」、YAML 的「(no YAML — resource may still be loading)」是內容裡的文字，不是
   loading 中的 popup，不用 D3 的 icon。
 - **術語「模式」：zoom 不是模式（K4、K11）。** `z` 放大之後每個鍵的意思都不變，所以不是模式；`Esc` 的「上一層」照 app 定義：搜尋
@@ -291,7 +305,7 @@ v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 
 
 ## 設計文件導讀
 
-kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.20/principle)。
+kbu 沒有另外的設計文件；每個功能的理由在本文件的「運作方式」與「設計決定」，每個版本改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，popup 與按鍵的規則照 [tdp](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle)。
 
 | 檔案 | 內容 |
 |---|---|
