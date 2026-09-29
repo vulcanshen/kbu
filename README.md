@@ -305,7 +305,7 @@ Override the corresponding config slot for one-shot runs without editing the YAM
 | `KBU__ALTERM_SHELL` | Use this binary as the Alterm shell. Bare names are looked up on `$PATH` at popup-open time (Go `exec.Command` semantics); absolute paths run verbatim. Leading / trailing whitespace is trimmed. | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
 | `KBU__ALTERM_LOGIN_SHELL` | Force the Alterm shell into login mode (`-l`) or out of it. Truthy values: `true` / `1` / `yes` (and uppercase). Any other value disables login mode. Use when launched from a non-login parent and your PATH is set in `.zprofile`. | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
 | `KBU__ICON_WIDTH` | How many cells a Nerd Font icon takes on your terminal: `1` or `2`. Overrides the check kbu runs at start; on Windows, where there is no check, it is the only way to say `2`. Other values are ignored. | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > checked at start > `1` |
-| `TERMINU__ICON_WIDTH` | The same, shared by every app of the terminu family. An app of the family sets it for what runs in its terminal, so kbu run there draws icons as wide as the app around it does; kbu sets it for what runs in Alterm and the `kubectl edit` / `exec` terminals. | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > checked at start > `1` |
+| `TERMINU__ICON_WIDTH` | The same, shared by every app of the terminu family. An app of the family sets it for what runs in its terminal, so kbu run there draws icons as wide as the app around it does; kbu sets it for what runs in Alterm and in `kubectl edit`, the editor included (a Pod reached with `kubectl exec` does not get it). | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > checked at start > `1` |
 
 Example:
 

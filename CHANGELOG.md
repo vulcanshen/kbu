@@ -187,9 +187,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   The width check at start is answered by the app's terminal there, which
   counts an icon as one cell; kbu now takes `KBU__ICON_WIDTH`, then the
   family's `TERMINU__ICON_WIDTH`, then the check. The other way round, what
-  runs in Alterm and the `kubectl edit` / `exec` terminals gets
+  runs in Alterm and in `kubectl edit` (the editor included) gets
   `TERMINU__ICON_WIDTH` set to the width kbu uses, so a family app run there
-  lines up too.
+  lines up too; a Pod reached with `kubectl exec` does not get it.
 - **A popup larger than the window is cut at its edge.** In the frame after
   the window shrinks, a popup drawn at the old size, such as a full-screen
   Alterm, spilled past the window instead of being cut to it.

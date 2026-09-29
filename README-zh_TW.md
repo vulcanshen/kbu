@@ -299,7 +299,7 @@ resource_kind_config:
 | `KBU__ALTERM_SHELL` | 改用這個 binary 作為 Alterm 的 shell。純名字會在 popup 開啟時走 `$PATH` 查找（Go `exec.Command` 語意）、絕對路徑直接 exec。前後空白會被 trim。 | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
 | `KBU__ALTERM_LOGIN_SHELL` | 強制 Alterm shell 進入或退出 login mode（`-l`）。Truthy 值：`true` / `1` / `yes`（大小寫都接受）。其他值關閉 login mode。當從非 login 父 shell 啟動而 PATH 在 `.zprofile` 時使用。 | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
 | `KBU__ICON_WIDTH` | Nerd Font 的 icon 在你的終端機上佔幾格：`1` 或 `2`。蓋過 kbu 啟動時的檢查；Windows 沒有檢查，要 `2` 只能靠它。其他值不理會。 | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > 啟動時檢查的結果 > `1` |
-| `TERMINU__ICON_WIDTH` | 同上，terminu 家族每個 app 共用。家族的 app 會替在它終端機裡執行的程式設好，所以在那裡跑 kbu，icon 的寬度跟外面那個 app 一致；kbu 也會替在 Alterm 與 `kubectl edit` / `exec` 終端機裡執行的程式設好。 | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > 啟動時檢查的結果 > `1` |
+| `TERMINU__ICON_WIDTH` | 同上，terminu 家族每個 app 共用。家族的 app 會替在它終端機裡執行的程式設好，所以在那裡跑 kbu，icon 的寬度跟外面那個 app 一致；kbu 也會替在 Alterm 與 `kubectl edit`（含它開的 editor）裡執行的程式設好（`kubectl exec` 進去的 Pod 拿不到）。 | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > 啟動時檢查的結果 > `1` |
 
 範例：
 
