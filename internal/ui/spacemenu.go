@@ -418,7 +418,7 @@ func panel2ItemOps(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool,
 	}
 	yaml := menuItem{label: "YAML", key: "Y", hint: "view resource manifest", opens: true}
 	if !rt.SupportsDrillDown() && rt != k8s.ResourceContexts {
-		yaml.hint = "view resource manifest (also Enter)"
+		yaml.hint = "view resource manifest (also [Enter])"
 	}
 	items = append(items, yaml)
 	if resourceAllowsEdit(rt) {

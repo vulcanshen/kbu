@@ -182,8 +182,8 @@ func filterPickerRows(enter string, loading bool) []helpRow {
 // it, dimmed where it can't run right now (hasEdit, canEdit: tdp M6).
 func yamlRows(hasEdit, canEdit bool) []helpRow {
 	rows := []helpRow{
-		{key: "/", desc: "search; n / N next / previous match"},
-		{key: "v", desc: "select characters (a mode — ? there lists its keys)"},
+		{key: "/", desc: "search; [n]/[N] next / previous match"},
+		{key: "v", desc: "select characters (a mode — [?] there lists its keys)"},
 		{key: "y", desc: "copy the whole YAML"},
 	}
 	if hasEdit {
@@ -287,17 +287,17 @@ func (m *AppModel) enterDesc() string {
 	switch m.activePanel {
 	case TablePanel:
 		if m.drillDownPod != nil {
-			return "shell into the container (same as S)"
+			return "shell into the container (same as [S])"
 		}
 		if len(m.items) > 0 && !m.currentResource.SupportsDrillDown() && m.currentResource != k8s.ResourceContexts {
-			return "open the YAML (same as Y)"
+			return "open the YAML (same as [Y])"
 		}
 	case DetailPanel:
 		switch m.detail.ActiveTabName() {
 		case "Relatives", "History":
 			return ""
 		}
-		return "full-screen this panel (same as z)"
+		return "full-screen this panel (same as [z])"
 	}
 	return ""
 }

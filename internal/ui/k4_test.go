@@ -40,7 +40,7 @@ func TestK4_EscTakesTheToastBeforeAPopup(t *testing.T) {
 }
 
 // tdp K4: popups — the toast included — close before a mode ends. The
-// drag mode's own Tab toast says "Esc leaves drag mode first": that Esc
+// drag mode's own Tab toast says "[Esc] leaves drag mode first": that Esc
 // takes the toast, the next one leaves the mode.
 func TestK4_EscTakesTheToastBeforeAMode(t *testing.T) {
 	m := dragApp(t)
