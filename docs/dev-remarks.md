@@ -272,13 +272,15 @@ user 逐題裁定的。
 - loading 中打開的 `?` 不在清單到了時重算（重開才亮）。user：維持。
 - 重開 picker 多排的 tick 原本不擋（只多重畫、不會轉快）。user：照 filu 加旗標（`loadingTicking`、`keepLoading()`）。
 
-**第三輪自己下的判斷**（清單說是實作細節、不必問；2026-09-29 修完時還沒實機看過）
+**第三輪自己下的判斷**（清單說是實作細節、不必問；2026-09-29 修完後逐項跟 user 實機看過）
 
 - 模式名用一個詞：拖曳寫 `Drag`、YAML 選取寫 `Visual`（user 叫它 visual mode，hint 是 `v:visual`）。`Drag mode` 在 24 欄寬的
   panel 1 上框放不下（`[1] Kinds` 膠囊佔 11 格，右上角只剩 10 格），放不下時 `renderPanelWithScroll()` 會整個不畫。user：`Drag`
   維持；模式名改成嵌在兩個框線接頭之間（`╡Drag╞`、`┤Visual├`，原本是 ` Drag═`），user 認為這個做法要回饋給 tdp。
 - 拖曳時 `[1] Kinds` 膠囊跟著外框換成 Yellow（tdp 只說外框；膠囊是上框的一部分，一起換才讀得出「這個框在模式裡」）。user：維持。
-- panel 邊框的 hint 也照 D3 從尾端整組捨（D3 講 popup 的下框，panel 邊框清單交給 kbu 決定）；捲動指示器留著。
+- panel 邊框的 hint 也照 D3 從尾端整組捨（D3 講 popup 的下框，panel 邊框清單交給 kbu 決定）；捲動指示器留著。user：維持。
+- 照 tdp 改、推翻上一輪樣子的兩處 —— finder 篩選列改成灰色（原本淡化）、Alterm 下框改成 `Alt-Esc:end Alt-t:hide`（出口鍵排第一）——
+  user 也實機看過，維持。
 
 ## 設計文件導讀
 
