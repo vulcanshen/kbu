@@ -128,7 +128,7 @@ func TestK6_QuestionMarkWhileTypingIsACharacter(t *testing.T) {
 func TestM1_FooterShowsTheEntryKeys(t *testing.T) {
 	m := stackTestApp(t)
 	footer := m.statusLine.layoutLine()
-	for _, want := range []string{"? help", "Space menu", "Esc back"} {
+	for _, want := range []string{"?:help", "Space:menu", "Esc:back"} {
 		if !strings.Contains(footer, want) {
 			t.Errorf("the footer must show %q, got %q", want, footer)
 		}

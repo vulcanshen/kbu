@@ -46,7 +46,7 @@ func TestCompareYamlPopup_LSwitchesLayout(t *testing.T) {
 	if m.Layout() != CompareLayoutUnified {
 		t.Errorf("L again: layout = %v, want unified", m.Layout())
 	}
-	if !strings.Contains(m.renderFrame(), "L: layout") {
+	if !strings.Contains(m.renderFrame(), "L:layout") {
 		t.Error("the bottom hint must name L")
 	}
 }

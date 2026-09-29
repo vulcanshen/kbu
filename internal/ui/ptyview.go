@@ -672,7 +672,7 @@ func (p *PtyView) RenderPopup() string {
 	}
 	trailDashes := strings.Repeat("─", trailLen)
 	top := borderStyle.Render("╭"+leadDashes) + titleStyle.Render(title) + borderStyle.Render(trailDashes+"╮")
-	bottom := p.renderBottomBorder(cols, borderStyle, titleStyle)
+	bottom := p.renderBottomBorder(cols, borderStyle)
 	vbar := borderStyle.Render("│")
 
 	var out strings.Builder
@@ -698,20 +698,19 @@ func (p *PtyView) RenderPopup() string {
 // when the PTY isn't in alt-screen mode. Edit/Exec popups still get the
 // scrollback hint; Shell gets both. If the available width is too narrow to
 // fit any hint, falls back to plain dashes.
-func (p *PtyView) renderBottomBorder(cols int, borderStyle, hintStyle lipgloss.Style) string {
-	hint := ""
+func (p *PtyView) renderBottomBorder(cols int, borderStyle lipgloss.Style) string {
 	altScreen := p.term != nil && p.term.Mode()&vt10x.ModeAltScreen != 0
 	// The exit key is always shown, alt-screen or not (tdp K10); the
 	// scroll keys only while kbu takes them (not in alt-screen).
-	exit := " Alt-Esc:leave "
+	hints := []keyHint{{"Alt-Esc", "leave"}}
 	if p.kind == PtyKindShell {
-		exit = " Alt-t:hide  Alt-Esc:end "
+		hints = []keyHint{{"Alt-t", "hide"}, {"Alt-Esc", "end"}}
 	}
-	hint = exit
 	if !altScreen {
-		hint = exit + " PgUp/Home:scroll "
+		hints = append(hints, keyHint{"PgUp/Home", "scroll"})
 	}
-	if hint == "" || lipgloss.Width(hint)+4 > cols {
+	hint := popupHint(hints...)
+	if lipgloss.Width(hint)+4 > cols {
 		return borderStyle.Render("╰" + strings.Repeat("─", cols) + "╯")
 	}
 	hintW := lipgloss.Width(hint)
@@ -719,7 +718,7 @@ func (p *PtyView) renderBottomBorder(cols int, borderStyle, hintStyle lipgloss.S
 	if trail < 0 {
 		trail = 0
 	}
-	return borderStyle.Render("╰─") + hintStyle.Render(hint) + borderStyle.Render(strings.Repeat("─", trail)+"╯")
+	return borderStyle.Render("╰─") + hint + borderStyle.Render(strings.Repeat("─", trail)+"╯")
 }
 
 // vt10x attr bit positions (package-private constants in state.go; values

@@ -178,7 +178,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
 
 	title := "󰦕 Confirm"
-	hint := " Enter " + confirmVerb(m.action) + " · Esc cancel "
+	hint := popupHint(keyHint{"Enter", confirmVerb(m.action)}, keyHint{"Esc", "cancel"}) // tdp D3
 
 	// tdp F7: one width for every popup, whatever it shows.
 	innerW := popupInnerWidth(m.screenW)
@@ -218,11 +218,11 @@ func (m ConfirmModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	bottomDashes := innerW - lipgloss.Width(hint) - 1 // display cells: "·" is 2 bytes
+	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 
 	return b.String()
 }

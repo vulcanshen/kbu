@@ -112,14 +112,15 @@ func TestK7_OpeningHotkeyDoesNotClose(t *testing.T) {
 	}
 }
 
-// tdp F6 + D3: the confirm's hint says what Enter will do, not "OK".
+// tdp F6 + D3: the confirm's hint says what Enter will do, not "OK",
+// written key:description (Enter:delete Esc:cancel, M5).
 func TestConfirm_HintNamesTheAction(t *testing.T) {
 	cases := map[ConfirmAction]string{
-		ConfirmDelete:    " Enter delete · Esc cancel ",
-		ConfirmEdit:      " Enter edit · Esc cancel ",
-		ConfirmShellExec: " Enter exec · Esc cancel ",
-		ConfirmRollback:  " Enter rollback · Esc cancel ",
-		ConfirmSwitch:    " Enter switch · Esc cancel ",
+		ConfirmDelete:    " Enter:delete Esc:cancel ",
+		ConfirmEdit:      " Enter:edit Esc:cancel ",
+		ConfirmShellExec: " Enter:exec Esc:cancel ",
+		ConfirmRollback:  " Enter:rollback Esc:cancel ",
+		ConfirmSwitch:    " Enter:switch Esc:cancel ",
 	}
 	for action, want := range cases {
 		m := stackTestApp(t)

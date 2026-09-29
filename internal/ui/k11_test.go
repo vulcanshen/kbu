@@ -66,11 +66,15 @@ func TestK11_DragTabAnswersWithAToast(t *testing.T) {
 }
 
 // tdp K11, M1: the footer shows ? and the mode's keys while the mode is
-// on; the sticky toast that carried them is gone.
+// on; the sticky toast that carried them is gone. Keys only, written
+// key:description (M5).
 func TestK11_DragFooterListsTheModesKeys(t *testing.T) {
 	m := dragApp(t)
 	footer := m.statusLine.layoutLine()
-	for _, want := range []string{"? keys", "j/k move", "Enter drop", "Esc cancel"} {
+	if want := " ?:keys j/k:move Enter:drop Esc:cancel"; footer != want {
+		t.Errorf("the drag footer is %q, want %q", footer, want)
+	}
+	for _, want := range []string{"?:keys", "j/k:move", "Enter:drop", "Esc:cancel"} {
 		if !strings.Contains(footer, want) {
 			t.Errorf("the drag footer must show %q, got %q", want, footer)
 		}

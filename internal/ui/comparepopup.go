@@ -660,7 +660,6 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	borderColor := m.borderColor
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 	titleStyle := lipgloss.NewStyle().Foreground(borderColor).Bold(true)
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	title := fmt.Sprintf(" \U000f08aa %s vs %s ",
 		m.leftLabel, m.rightLabel)
@@ -709,7 +708,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 		bodyRows[i] = vbar + row + vbar
 	}
 
-	hint := " L: layout  j/k: scroll  Esc: close "
+	hint := popupHint(keyHint{"L", "layout"}, keyHint{"j/k", "scroll"}, keyHint{"Esc", "close"})
 	hintW := lipgloss.Width(hint)
 	// Bottom border target width = innerW + 2 (matches top: ╭ + innerW
 	// dashes-or-title + ╮). The earlier "╰─" lead consumed 2 chars but
@@ -721,7 +720,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	if trailDashes < 1 {
 		trailDashes = 1
 	}
-	bot := borderStyle.Render("╰") + hintStyle.Render(hint) +
+	bot := borderStyle.Render("╰") + hint +
 		borderStyle.Render(strings.Repeat("─", trailDashes)+"╯")
 
 	parts := []string{top}
