@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.17/principle) (tdp v0.1.17).
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle) (tdp v0.1.19).
 
 - **A click lands on the popup you see on top.** A confirm, sort picker or
   YAML viewer opened from a `Space` menu sits centred over the menu; a click
@@ -62,8 +62,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   namespace, or switches to the context) instead of only leaving the typing
   line; `Tab` moves between the typing line and the list; `Esc` closes the
   picker from either (it used to clear the filter first). Only the part with
-  focus is lit: on the list, the typing line dims and the cursor row takes the
-  popup's colour.
+  focus is lit: on the list, the typing line turns grey and the cursor row
+  takes the popup's colour.
 - **The key that opened a popup no longer closes it.** `N` on the namespace
   picker, `C` on the context picker, `!` on the App log and `>` on Settings
   used to work as a second `Esc` there, and nowhere else. `Esc` closes them.
