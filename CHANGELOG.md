@@ -183,6 +183,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   borders, popup frames, the helm mark's column, popups laid over the screen,
   the splash. Set `KBU__ICON_WIDTH=1` or `2` when the check gets it wrong, and
   on Windows, which has no check; `kbu iconwidth` prints what kbu detects.
+- **Inside another terminu app, kbu draws icons as wide as that app does.**
+  The width check at start is answered by the app's terminal there, which
+  counts an icon as one cell; kbu now takes `KBU__ICON_WIDTH`, then the
+  family's `TERMINU__ICON_WIDTH`, then the check.
 - **A popup larger than the window is cut at its edge.** In the frame after
   the window shrinks, a popup drawn at the old size, such as a full-screen
   Alterm, spilled past the window instead of being cut to it.

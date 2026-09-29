@@ -290,7 +290,7 @@ resource_kind_config:
 
 這些變數會 override 對應的 config 欄位，用於不改 YAML 的一次性執行 — 適合 CI、demo 腳本、臨時試另一個 shell 的場合。
 
-> 名稱照 terminu 家族的 `KBU__<名稱>`。舊名稱不再讀取，改名的對照見 [CHANGELOG](CHANGELOG.md)。
+> 名稱照 terminu 家族的 `KBU__<名稱>`；`TERMINU__ICON_WIDTH` 是全家族共用的那一個。舊名稱不再讀取，改名的對照見 [CHANGELOG](CHANGELOG.md)。
 
 | 變數 | 作用 | 優先順序 |
 |---|---|---|
@@ -298,7 +298,8 @@ resource_kind_config:
 | `KBU__STATE` | 把 session state（`state.yaml`）放在這個目錄，而不是設定目錄。適合想讓每次執行各有獨立 state、又不想動到真正 state 的沙盒 / 測試場合。 | `KBU__STATE` > 設定目錄 |
 | `KBU__ALTERM_SHELL` | 改用這個 binary 作為 Alterm 的 shell。純名字會在 popup 開啟時走 `$PATH` 查找（Go `exec.Command` 語意）、絕對路徑直接 exec。前後空白會被 trim。 | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
 | `KBU__ALTERM_LOGIN_SHELL` | 強制 Alterm shell 進入或退出 login mode（`-l`）。Truthy 值：`true` / `1` / `yes`（大小寫都接受）。其他值關閉 login mode。當從非 login 父 shell 啟動而 PATH 在 `.zprofile` 時使用。 | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
-| `KBU__ICON_WIDTH` | Nerd Font 的 icon 在你的終端機上佔幾格：`1` 或 `2`。蓋過 kbu 啟動時的檢查；Windows 沒有檢查，要 `2` 只能靠它。其他值不理會。 | `KBU__ICON_WIDTH` > 啟動時檢查的結果 > `1` |
+| `KBU__ICON_WIDTH` | Nerd Font 的 icon 在你的終端機上佔幾格：`1` 或 `2`。蓋過 kbu 啟動時的檢查；Windows 沒有檢查，要 `2` 只能靠它。其他值不理會。 | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > 啟動時檢查的結果 > `1` |
+| `TERMINU__ICON_WIDTH` | 同上，terminu 家族每個 app 共用。家族的 app 會替在它終端機裡執行的程式設好，所以在那裡跑 kbu，icon 的寬度跟外面那個 app 一致。 | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > 啟動時檢查的結果 > `1` |
 
 範例：
 
@@ -360,7 +361,7 @@ status:
 
 ## 限制
 
-- **框線還是偏 1 格時**，是 kbu 啟動時的檢查（畫一個 icon、問終端機游標停在哪）沒得到回應或回應不對。`kbu iconwidth` 會印出 kbu 量到的格數；icon 畫成兩格寬就設 `KBU__ICON_WIDTH=2`，否則設 `KBU__ICON_WIDTH=1`。Windows 沒有這個檢查：字型把 icon 畫成兩格寬時要自己設。
+- **框線還是偏 1 格時**，是 kbu 啟動時的檢查（畫一個 icon、問終端機游標停在哪）沒得到回應或回應不對。`kbu iconwidth` 會印出 kbu 量到的格數；icon 畫成兩格寬就設 `KBU__ICON_WIDTH=2`，否則設 `KBU__ICON_WIDTH=1`。Windows 沒有這個檢查：字型把 icon 畫成兩格寬時要自己設。在 terminu 家族其他 app 的終端機裡，回答檢查的是那個 app 而不是你的終端機；這時 kbu 改用那個 app 傳下來的 `TERMINU__ICON_WIDTH`。
 - **Helm 需要 `helm` CLI。** `helm` 在 `PATH` 上時才會出現 Helm 分類，release 列表每 3 秒更新一次（Helm 沒有 watch API）。
 - **workload 的 log 跟的是選到那一列當下存在的 Pod。** rollout 之後，重新選一次那一列才會接上新的 Pod。
 - **有些刪除與編輯被擋下。** Events 與 Nodes 不能從 kbu 刪除；helm-managed 物件不能編輯或刪除 —— 請用 `helm upgrade` / `rollback` / `uninstall`。

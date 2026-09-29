@@ -411,9 +411,41 @@ func TestD6_IconWidthOverride(t *testing.T) {
 		n    int
 		isOK bool
 	}{{"2", 2, true}, {" 1 ", 1, true}, {"3", 0, false}, {"", 0, false}, {"x", 0, false}} {
+		t.Setenv("TERMINU__ICON_WIDTH", "") // not what an outer family PTY may have set
 		t.Setenv("KBU__ICON_WIDTH", c.v)
 		if n, ok := iconWidthOverride(); n != c.n || ok != c.isOK {
 			t.Errorf("KBU__ICON_WIDTH=%q: got (%d, %v), want (%d, %v)", c.v, n, ok, c.n, c.isOK)
+		}
+	}
+}
+
+// tdp D6 (v0.1.22): the icon width comes from KBU__ICON_WIDTH, then
+// TERMINU__ICON_WIDTH (set by a family app for what runs in its PTY), then the
+// probe; only 1 or 2 count. Tests run without a terminal, so the probe leaves
+// the width as it was (1 here).
+func TestD6_IconWidthSources(t *testing.T) {
+	defer restoreIconCells(iconCells)
+	for _, c := range []struct {
+		name        string
+		own, family string
+		want        int
+	}{
+		{"both set: kbu's own wins", "1", "2", 1},
+		{"both set, the other way round", "2", "1", 2},
+		{"only the family one", "", "2", 2},
+		{"only the family one, spaced", "", " 2 ", 2},
+		{"own not a width: the family one", "x", "2", 2},
+		{"own out of range: the family one", "3", "2", 2},
+		{"family not a width: ignored", "", "3", 1},
+		{"family not a number: ignored", "", "wide", 1},
+		{"neither: the probe", "", "", 1},
+	} {
+		iconCells = 1
+		t.Setenv("KBU__ICON_WIDTH", c.own)
+		t.Setenv("TERMINU__ICON_WIDTH", c.family)
+		DetectIconWidth()
+		if iconCells != c.want {
+			t.Errorf("%s: %d cells, want %d", c.name, iconCells, c.want)
 		}
 	}
 }
