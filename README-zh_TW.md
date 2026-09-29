@@ -40,7 +40,7 @@
 - **Logs** — 自動追最新一行，往上捲就暫停，按 `G` 回到 live。選到 workload 時，它底下**每個 Pod** 的 log 會匯流到同一個畫面，每個 Pod 和 container 各有自己的顏色 — rollout 時一眼就看得出是哪個在出錯。
 - **Events** — 在 workload 上，會把它自己的 events 和底下 Pods 的 events 合併（CronJob 連 Jobs 的也一起），最新的排最前面。
 - **Conditions** — 以表格呈現 `.status.conditions`，就是 `kubectl describe` 裡那一段。events 過期之後特別有用。
-- **YAML 檢視（`Y`）** — vim 風格的 buffer：`hjkl` / `w` / `b` 移動、`/` 搜尋、`v` 選取、`y` 複製。
+- **YAML 檢視（`Y`）** — vim 風格的 buffer：`h/j/k/l`、`w/b` 移動、`/` 搜尋、`v` 選取、`y` 複製。
 - **比對（`C`）** — 比對同一種 kind 的兩個 resource，可選 unified 或左右並排（`L` 切換，下次打開沿用你的選擇）。status 和伺服器管理的欄位都會先拿掉，你看到的只有真正寫進去的內容。
 - **有問題的一眼就看到** — status 欄只替需要注意的值上色：黃色是 pending 或降級、紅色是失敗。健康的 row 維持原色。
 - **Helm releases** — `helm` 在 `PATH` 上時，release 有專屬的檢視：manifest、values、notes、hooks；revision 歷史，一鍵 rollback。chart 管理的物件會被標記、擋掉誤編輯，也可以按 `.` 隱藏。
@@ -121,7 +121,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 | 鍵 | 行為 |
 |---|---|
-| **`Tab`** | 切換 panel 焦點（也可以直接按 `1` / `2` / `3` 跳轉）|
+| **`Tab`** | 切換 panel 焦點（也可以直接按 `1–3` 跳轉）|
 | **`Enter`** | 對選到的東西做最直觀的事：鑽入（workload → 它的 pods）、打開不能鑽入的種類的 YAML、切換到 kubeconfig context、shell 進 container、rollback 到 Helm 版本。在 panel 1 把那個種類顯示到 panel 2；在 Logs / Events / Conditions tab 把 panel 放到全螢幕 |
 | **`Space`** | *這裡能幹嘛？* — 列出這個 panel 或 tab 能做的每一件事，最後一列 **Global operation** 是全域動作（namespace、context、Alterm、settings、app log、離開）|
 | **`Esc`** | 退回 — 回上一層 / 關閉 popup |
@@ -132,14 +132,14 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 
 ## Key Bindings
 
-`h` / `l`（或 `[` / `]`）切換 panel 3 的 tab。
+`h/l`（或 `[`/`]`）切換 panel 3 的 tab。
 
 ### 快速鍵
 
 以下每一項在 `Space` menu 裡都找得到 — 快速鍵只是更快。
 
 ```
- cursor    j k         u d         gg G        / (在當前 panel 內搜尋)
+ cursor    j/k         u/d         gg/G        / (在當前 panel 內搜尋)
  trigger   Y YAML      E edit      N namespace
  panel 1   P pin       S sort      D drag-and-drop pinned (modal)    C context
  panel 2   S shell     Alt-S sort          D delete    C compare anchor
@@ -171,7 +171,7 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 | **左鍵** 點 panel row | 切焦點到該 panel + cursor 移到該列 |
 | **雙擊** | 在 panel 2、3 等同 `Enter`；在 panel 1 只選列 |
 | **右鍵** 點 row | 等同 `Space`（開那一列的 `Space` menu）|
-| **滾輪** 上 / 下 | 等同 `u` / `d`（半頁移動）。方向可在 Settings popup 切換 `scroll_direction: natural | reverse` |
+| **滾輪** 上 / 下 | 等同 `u/d`（半頁移動）。方向可在 Settings popup 切換 `scroll_direction: natural | reverse` |
 | **左鍵** 點 list popup 的列 | 選定該列（等同 cursor + `Enter`）|
 | **右鍵** 點任何 popup | 關閉它（等同 `Esc`）|
 
@@ -191,8 +191,8 @@ kbu 會連到當前 kubeconfig 的 context。按 `Enter` 鑽入、`Space` 叫出
 |---|---|
 | `Alt-t` | Alterm：隱藏（shell 繼續跑）|
 | `Alt-Esc` | 關閉 terminal —— 先問，再結束那個 session：Alterm 的 shell 與裡面跑的東西會停掉；還沒存的 `kubectl edit` 會丟掉 |
-| `PgUp` / `PgDn` | 歷史以一頁為單位捲動 |
-| `Home` / `End` | 跳到歷史頂端 / 回到 live |
+| `PgUp/PgDn` | 歷史以一頁為單位捲動 |
+| `Home/End` | 跳到歷史頂端 / 回到 live |
 | 其他任何鍵 | 跳回 live、按鍵轉發給 subprocess |
 
 當 full-screen app（vim、less、htop）透過 alt-screen 接管 PTY 時，scrollback 會停用 — 那些按鍵會轉發給 app，讓 app 自己處理翻頁。

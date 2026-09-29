@@ -84,7 +84,7 @@ func m6Cases() []m6Case {
 		{"panel 1 drag with one pinned kind", pinned, []string{"D"}},
 		{"panel 2 edit and delete on a helm-managed row", helm, []string{"E", "D"}},
 		{"panel 2 compare anchor on the only row", oneRow, []string{"C"}},
-		{"panel 3 tab keys with one tab", oneTab, []string{"l", "h l"}},
+		{"panel 3 tab keys with one tab", oneTab, []string{"l", "h/[", "l/]"}},
 		{"Space menu edit and delete on a helm-managed row", spaceMenu, []string{"E", "D"}},
 	}
 }

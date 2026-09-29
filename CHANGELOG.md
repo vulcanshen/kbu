@@ -137,7 +137,10 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **Keys are written one way everywhere.** The menus and the status bar said
   `Alt-t` and `Alt-S`; the key reference and the terminal's bottom hint said
   `Alt+t`, `Alt+Shift+S` and `Ctrl+C`. They all say `Alt-t`, `Alt-S`, `Ctrl-C`,
-  `Shift-Tab` now, and so does the README.
+  `Shift-Tab` now, and so does the README. Keys that do the same thing are
+  joined with `/` and a range with `–` (`j/k`, `gg/G`, `1–3`): `?` shows
+  `Enter/y` and `Esc/n` on a confirm, `h/[` and `l/]` for panel 3's tabs, and
+  `Tab` and `Shift-Tab` on rows of their own.
 - **Hints read `key:description`, in two colours.** Every popup's bottom
   border, the terminals', the panel borders and the footer now write
   `j/k:move Enter:run Esc:close`: the key in blue, the colon and what it does
