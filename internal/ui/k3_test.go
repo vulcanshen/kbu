@@ -74,8 +74,8 @@ func TestK3_Panel2EnterOnAContextConfirmsTheSwitch(t *testing.T) {
 	if !strings.Contains(got.confirm.message, "prod") {
 		t.Errorf("the confirm must name the context, got %q", got.confirm.message)
 	}
-	if !strings.Contains(got.confirm.renderFullPopup(), "Enter switch") {
-		t.Error("the confirm hint must read Enter switch")
+	if !strings.Contains(got.confirm.renderFullPopup(), "Enter:switch") {
+		t.Error("the confirm hint must read Enter:switch")
 	}
 	for _, msg := range drainCmd(got.confirm.onConfirm) {
 		if c, ok := msg.(ContextChangedMsg); !ok || c.Context != "prod" {

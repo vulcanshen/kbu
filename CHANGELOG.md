@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle) (tdp v0.1.13).
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.17/principle) (tdp v0.1.17).
 
 - **A click lands on the popup you see on top.** A confirm, sort picker or
   YAML viewer opened from a `Space` menu sits centred over the menu; a click
@@ -30,7 +30,7 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   YAML or Compare viewer, the App Log, Settings or the key reference it no
   longer closes the popup — `Esc` does. A confirm in particular can no longer
   be cancelled by a stray `Space`; its hint now names what `Enter` will do
-  (`Enter delete · Esc cancel`).
+  (`Enter:delete Esc:cancel`).
 - **`Space` opens the same kind of menu on every panel and every tab.** It
   lists everything that can be done there — first what the cursor's item can
   do, then what the panel or tab can do — and always ends with **Global
@@ -46,7 +46,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   Delete on a helm-managed object, Mark as Compare anchor on a one-row list,
   Drag with a single pinned kind, and rollback on the deployed revision are
   listed dimmed; pressing their hotkey does nothing. `E` / `D` on a
-  helm-managed row no longer pop a "Helm-managed (read-only)" toast.
+  helm-managed row no longer pop a "Helm-managed (read-only)" toast. `?`
+  lists their keys dimmed too, as it does the tab keys on a one-tab panel and,
+  while the namespace picker is still loading, every picker key but `Esc`.
 - **Opening a picker from a menu keeps the menu.** Sort from panel 1's
   `Space` menu now stacks over the menu (`Esc` returns to it), like every
   other popup a menu opens.
@@ -73,7 +75,7 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   the core keys; over a menu, popup or confirm it lists only that popup's
   keys, stacked on top (`Esc` returns to the popup). It used to be one fixed
   cheatsheet that left out the panel keys and did nothing over a popup. The
-  footer's `Esc exit` now reads `Esc back` — `Esc` never leaves kbu.
+  footer's `Esc exit` now reads `Esc:back` — `Esc` never leaves kbu.
 - **Modes answer the core keys the same way.** In the pinned-kind drag and the
   YAML viewer's selection, `Space` does nothing (the drag used to open a
   one-row "Drop" menu), `?` lists the mode's keys, and `Tab` stays put with a
@@ -126,8 +128,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **`E` in the YAML viewer asks first, like `E` everywhere else.** It used to
   start `kubectl edit` straight away — even on a helm-managed object, whose
   Edit is otherwise off. It now shows the same confirm (`Esc` goes back to the
-  YAML), does nothing where Edit is unavailable, and the viewer's hint and `?`
-  only list `E` where it works.
+  YAML) and does nothing where Edit is unavailable. The viewer's hint lists `E`
+  only where it works; `?` lists it dimmed on a helm-managed object.
 - **`Esc` takes a toast down first.** With a toast showing over a popup, a
   search you're typing or the pin drag, `Esc` used to close what was under the
   toast and leave the toast to time out. It now closes the toast, one layer at
@@ -135,7 +137,24 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **Keys are written one way everywhere.** The menus and the status bar said
   `Alt-t` and `Alt-S`; the key reference and the terminal's bottom hint said
   `Alt+t`, `Alt+Shift+S` and `Ctrl+C`. They all say `Alt-t`, `Alt-S`, `Ctrl-C`,
-  `Shift-Tab` now, and so does the README.
+  `Shift-Tab` now, and so does the README. Keys that do the same thing are
+  joined with `/` and a range with `–` (`j/k`, `gg/G`, `1–3`): `?` shows
+  `Enter/y` and `Esc/n` on a confirm, `h/[` and `l/]` for panel 3's tabs, and
+  `Tab` and `Shift-Tab` on rows of their own. A key named in a sentence — a
+  toast, an empty state, a menu description — is in brackets:
+  `[Esc] leaves drag mode first`, `see App Log [!]`, `(also [Enter])`.
+- **Hints read `key:description`, in two colours.** Every popup's bottom
+  border, the terminals', the panel borders and the footer now write
+  `j/k:move Enter:run Esc:close`: the key in blue, the colon and what it does
+  in grey, one space between entries. They used to mix `j/k: move`,
+  `Enter:select`, `Enter delete · Esc cancel`, `enter: drill` and bare keys,
+  each in a single colour. The namespace and context pickers show `/` and
+  `Tab` as the two things they are (`/:new filter Tab:filter`), and the
+  footer's panel entry reads `Tab/1–3:panels`.
+- **The namespace picker's loading icon is the family's.** While the list is
+  on its way, the title shows a circle filling one slice at a time instead of
+  a braille spinner; it turns at the same pace however often the screen
+  redraws.
 - **The confirm's bottom border lines up again.** Its right corner sat one
   cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a

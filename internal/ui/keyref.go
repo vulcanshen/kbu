@@ -40,40 +40,38 @@ func (m *AppModel) keyRef() (string, []helpRow) {
 	case &m.breadcrumbPopup:
 		return "Breadcrumb keys", pickerRows("switch panels 1 and 2 to that resource", "close the breadcrumb")
 	case &m.namespacePicker:
-		return "Namespace picker keys", filterPickerRows("check / uncheck the highlighted namespace")
+		return "Namespace picker keys", filterPickerRows("check / uncheck the highlighted namespace", m.namespacePicker.loading)
 	case &m.contextPicker:
-		return "Context picker keys", filterPickerRows("switch to the highlighted context")
+		return "Context picker keys", filterPickerRows("switch to the highlighted context", false)
 	case &m.appLog:
 		return "App log keys", []helpRow{
 			{key: "y", desc: "copy the whole log"},
 			{key: "D", desc: "clear the log"},
 			{header: true, desc: "keys"},
-			{key: "j k", desc: "scroll a line"},
-			{key: "u d", desc: "scroll half a page"},
-			{key: "g G", desc: "newest / oldest"},
+			{key: "j/k", desc: "scroll a line"},
+			{key: "u/d", desc: "scroll half a page"},
+			{key: "g/G", desc: "newest / oldest"},
 			{key: "Esc", desc: "close the log"},
 		}
 	case &m.yamlPopup:
 		if m.yamlPopup.visualMode {
 			return "Selection keys", yamlVisualRows()
 		}
-		return "YAML keys", yamlRows(m.yamlPopup.CanEdit())
+		return "YAML keys", yamlRows(m.yamlPopup.HasEdit(), m.yamlPopup.CanEdit())
 	case &m.comparePopup:
 		return "Compare keys", []helpRow{
 			{key: "L", desc: "switch layout: unified / side by side"},
 			{header: true, desc: "keys"},
-			{key: "j k", desc: "scroll a line"},
-			{key: "u d", desc: "scroll half a page"},
-			{key: "gg G", desc: "top / bottom"},
+			{key: "j/k", desc: "scroll a line"},
+			{key: "u/d", desc: "scroll half a page"},
+			{key: "gg/G", desc: "top / bottom"},
 			{key: "Esc", desc: "close the diff"},
 		}
 	case &m.confirm:
 		verb := confirmVerb(m.confirm.action)
 		return "Confirm keys", []helpRow{
-			{key: "Enter", desc: verb},
-			{key: "y", desc: "same as Enter"},
-			{key: "Esc", desc: "cancel"},
-			{key: "n", desc: "same as Esc"},
+			{key: "Enter/y", desc: verb},
+			{key: "Esc/n", desc: "cancel"},
 		}
 	case nil:
 		if m.activePanel == SidebarPanel && m.sidebar.IsDragging() {
@@ -86,7 +84,8 @@ func (m *AppModel) keyRef() (string, []helpRow) {
 
 // keyName is how a hotkey is written in the reference — the way the
 // menus, the footer and the hints write it (tdp M5: one notation, the
-// key as pressed; Alt-S is Alt with a capital S).
+// key as pressed; Alt-S is Alt with a capital S). Keys that do the same
+// thing share a row, joined with / (j/k), a range with – (1–3).
 func keyName(k string) string {
 	switch k {
 	case "alt+S":
@@ -104,8 +103,8 @@ func keyName(k string) string {
 // menuRows turns menu rows into key-reference rows: every row with a key
 // the user can press, under the region header it sits in. Rows without
 // one (the Global operation row, the Helm documents) and regions left
-// empty are dropped. Dimmed rows stay: the key exists, it just can't run
-// right now.
+// empty are dropped. Dimmed rows stay, dimmed here too: the key exists,
+// it just can't run right now (tdp M6).
 func menuRows(items []menuItem) []helpRow {
 	var rows []helpRow
 	var pending *helpRow // a region header, written once a row under it is
@@ -128,7 +127,7 @@ func menuRows(items []menuItem) []helpRow {
 		if it.hint != "" {
 			desc += " — " + it.hint
 		}
-		rows = append(rows, helpRow{key: keyName(it.key), desc: desc})
+		rows = append(rows, helpRow{key: keyName(it.key), desc: desc, dim: it.disabled})
 	}
 	return rows
 }
@@ -137,7 +136,7 @@ func menuRows(items []menuItem) []helpRow {
 func menuMoveRows(enter, esc string, spaceCloses bool) []helpRow {
 	rows := []helpRow{
 		{header: true, desc: "keys"},
-		{key: "j k", desc: "move the cursor"},
+		{key: "j/k", desc: "move the cursor"},
 		{key: "Enter", desc: enter},
 		{key: "Esc", desc: esc},
 	}
@@ -150,48 +149,53 @@ func menuMoveRows(enter, esc string, spaceCloses bool) []helpRow {
 // pickerRows are the keys of a pick-one list.
 func pickerRows(enter, esc string) []helpRow {
 	return []helpRow{
-		{key: "j k", desc: "move the cursor"},
-		{key: "g G", desc: "first / last row"},
+		{key: "j/k", desc: "move the cursor"},
+		{key: "g/G", desc: "first / last row"},
 		{key: "Enter", desc: enter},
 		{key: "Esc", desc: esc},
 	}
 }
 
 // filterPickerRows are the keys of the namespace / context pickers, list
-// phase (while typing, every key but these is a character).
-func filterPickerRows(enter string) []helpRow {
+// phase (while typing, every key but these is a character). loading: the
+// picker is open but its list hasn't arrived — only Esc works, the rest
+// are dimmed (tdp M6). The "while typing" section describes another
+// surface (? there is a character), so it stays bright.
+func filterPickerRows(enter string, loading bool) []helpRow {
 	return []helpRow{
-		{key: "j k", desc: "move the cursor"},
-		{key: "u d", desc: "half a page"},
-		{key: "gg G", desc: "first / last row"},
-		{key: "Enter", desc: enter},
-		{key: "/", desc: "type to filter (a new filter)"},
-		{key: "Tab", desc: "back to typing, keeping the filter"},
+		{key: "j/k", desc: "move the cursor", dim: loading},
+		{key: "u/d", desc: "half a page", dim: loading},
+		{key: "gg/G", desc: "first / last row", dim: loading},
+		{key: "Enter", desc: enter, dim: loading},
+		{key: "/", desc: "type to filter (a new filter)", dim: loading},
+		{key: "Tab", desc: "back to typing, keeping the filter", dim: loading},
 		{key: "Esc", desc: "close the picker"},
 		{header: true, desc: "while typing"},
-		{key: "↑ ↓", desc: "move the cursor"},
+		{key: "↑/↓", desc: "move the cursor"},
 		{key: "Enter", desc: enter},
 		{key: "Tab", desc: "to the list, keeping the filter"},
 		{key: "Esc", desc: "close the picker"},
 	}
 }
 
-func yamlRows(canEdit bool) []helpRow {
+// yamlRows are the YAML viewer's keys. E is listed where the viewer has
+// it, dimmed where it can't run right now (hasEdit, canEdit: tdp M6).
+func yamlRows(hasEdit, canEdit bool) []helpRow {
 	rows := []helpRow{
-		{key: "/", desc: "search; n / N next / previous match"},
-		{key: "v", desc: "select characters (a mode — ? there lists its keys)"},
+		{key: "/", desc: "search; [n]/[N] next / previous match"},
+		{key: "v", desc: "select characters (a mode — [?] there lists its keys)"},
 		{key: "y", desc: "copy the whole YAML"},
 	}
-	if canEdit {
-		rows = append(rows, helpRow{key: "E", desc: "kubectl edit this resource (asks first)"})
+	if hasEdit {
+		rows = append(rows, helpRow{key: "E", desc: "kubectl edit this resource (asks first)", dim: !canEdit})
 	}
 	return append(rows, []helpRow{
 		{header: true, desc: "move"},
-		{key: "h j k l", desc: "cursor left / down / up / right"},
-		{key: "w b e", desc: "next word / previous word / word end"},
-		{key: "0 $", desc: "line start / end"},
-		{key: "u d", desc: "half a page"},
-		{key: "gg G", desc: "top / bottom"},
+		{key: "h/j/k/l", desc: "cursor left / down / up / right"},
+		{key: "w/b/e", desc: "next word / previous word / word end"},
+		{key: "0/$", desc: "line start / end"},
+		{key: "u/d", desc: "half a page"},
+		{key: "gg/G", desc: "top / bottom"},
 		{key: "Esc", desc: "clear the search, then close"},
 	}...)
 }
@@ -200,12 +204,12 @@ func yamlRows(canEdit bool) []helpRow {
 // K11: a mode has no Space menu; its keys live here and in the hint).
 func yamlVisualRows() []helpRow {
 	return []helpRow{
-		{key: "h j k l", desc: "extend the selection"},
-		{key: "w b e", desc: "extend by word"},
-		{key: "0 $", desc: "extend to line start / end"},
+		{key: "h/j/k/l", desc: "extend the selection"},
+		{key: "w/b/e", desc: "extend by word"},
+		{key: "0/$", desc: "extend to line start / end"},
 		{key: "y", desc: "copy the selection and leave"},
-		{key: "v Esc", desc: "leave the selection"},
-		{key: "q Ctrl-C", desc: "quit kbu"},
+		{key: "v/Esc", desc: "leave the selection"},
+		{key: "q/Ctrl-C", desc: "quit kbu"},
 	}
 }
 
@@ -226,21 +230,24 @@ func (m *AppModel) panelKeyRef() (string, []helpRow) {
 	rows := menuRows(items)
 	rows = append(rows, helpRow{header: true, desc: "move"})
 	if m.activePanel == DetailPanel {
+		oneTab := m.detail.TabCount() < 2 // like Switch tab (tdp M6)
 		rows = append(rows,
-			helpRow{key: "j k", desc: "scroll a line (on Relatives / History: move the cursor)"},
-			helpRow{key: "u d", desc: "half a page"},
-			helpRow{key: "gg G", desc: "top / bottom"},
-			helpRow{key: "h l", desc: "previous / next tab (also [ ])"})
+			helpRow{key: "j/k", desc: "scroll a line (on Relatives / History: move the cursor)"},
+			helpRow{key: "u/d", desc: "half a page"},
+			helpRow{key: "gg/G", desc: "top / bottom"},
+			helpRow{key: "h/[", desc: "previous tab", dim: oneTab},
+			helpRow{key: "l/]", desc: "next tab", dim: oneTab})
 	} else {
 		rows = append(rows,
-			helpRow{key: "j k", desc: "move the cursor"},
-			helpRow{key: "u d", desc: "half a page"},
-			helpRow{key: "gg G", desc: "first / last row"})
+			helpRow{key: "j/k", desc: "move the cursor"},
+			helpRow{key: "u/d", desc: "half a page"},
+			helpRow{key: "gg/G", desc: "first / last row"})
 	}
 	rows = append(rows,
 		helpRow{header: true, desc: "panels"},
-		helpRow{key: "Tab", desc: "next panel (Shift-Tab: previous)"},
-		helpRow{key: "1 2 3", desc: "go to a panel"})
+		helpRow{key: "Tab", desc: "next panel"},
+		helpRow{key: "Shift-Tab", desc: "previous panel"},
+		helpRow{key: "1–3", desc: "go to a panel"})
 	rows = append(rows, helpRow{header: true, desc: "core keys"})
 	if d := m.enterDesc(); d != "" && !hasKey(items, "enter") {
 		rows = append(rows, helpRow{key: "Enter", desc: d})
@@ -280,17 +287,17 @@ func (m *AppModel) enterDesc() string {
 	switch m.activePanel {
 	case TablePanel:
 		if m.drillDownPod != nil {
-			return "shell into the container (same as S)"
+			return "shell into the container (same as [S])"
 		}
 		if len(m.items) > 0 && !m.currentResource.SupportsDrillDown() && m.currentResource != k8s.ResourceContexts {
-			return "open the YAML (same as Y)"
+			return "open the YAML (same as [Y])"
 		}
 	case DetailPanel:
 		switch m.detail.ActiveTabName() {
 		case "Relatives", "History":
 			return ""
 		}
-		return "full-screen this panel (same as z)"
+		return "full-screen this panel (same as [z])"
 	}
 	return ""
 }
@@ -316,10 +323,10 @@ func (m *AppModel) escDesc() string {
 // keys are read).
 func dragKeyRef() (string, []helpRow) {
 	return "Drag mode keys", []helpRow{
-		{key: "j k", desc: "move the kind down / up among the pinned"},
-		{key: "Enter D", desc: "drop it here (keep the new order)"},
+		{key: "j/k", desc: "move the kind down / up among the pinned"},
+		{key: "Enter/D", desc: "drop it here (keep the new order)"},
 		{key: "Esc", desc: "cancel — back to the old order"},
 		{key: "?", desc: "these keys"},
-		{key: "q Ctrl-C", desc: "quit kbu (the drag is not kept)"},
+		{key: "q/Ctrl-C", desc: "quit kbu (the drag is not kept)"},
 	}
 }

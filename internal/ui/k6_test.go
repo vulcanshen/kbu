@@ -60,12 +60,12 @@ func TestK6_PopupKeyReferenceListsOnlyThePopupsKeys(t *testing.T) {
 
 	got := pressQuestion(t, m)
 	keys := refKeys(got.help.rows)
-	for _, want := range []string{"Enter", "y", "Esc", "n"} {
+	for _, want := range []string{"Enter/y", "Esc/n"} {
 		if !contains(keys, want) {
 			t.Errorf("the confirm's key reference is missing %q (tdp F6)", want)
 		}
 	}
-	for _, panelKey := range []string{"Tab", "Space", "1 2 3"} {
+	for _, panelKey := range []string{"Tab", "Space", "1–3"} {
 		if contains(keys, panelKey) {
 			t.Errorf("the confirm's key reference must not list the panel key %q", panelKey)
 		}
@@ -128,7 +128,7 @@ func TestK6_QuestionMarkWhileTypingIsACharacter(t *testing.T) {
 func TestM1_FooterShowsTheEntryKeys(t *testing.T) {
 	m := stackTestApp(t)
 	footer := m.statusLine.layoutLine()
-	for _, want := range []string{"? help", "Space menu", "Esc back"} {
+	for _, want := range []string{"?:help", "Space:menu", "Esc:back"} {
 		if !strings.Contains(footer, want) {
 			t.Errorf("the footer must show %q, got %q", want, footer)
 		}

@@ -199,7 +199,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	currentMarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending)).Bold(true)
 
 	title := "󰍒 Breadcrumb"
-	hint := " j/k: move  Enter: switch  Esc: close "
+	hint := popupHint(keyHint{"j/k", "move"}, keyHint{"Enter", "switch"}, keyHint{"Esc", "close"})
 
 	// tdp F7: one width for every popup, whatever it shows.
 	innerW := popupInnerWidth(m.screenW)
@@ -237,11 +237,11 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow)
 
-	bottomDashes := innerW - len(hint) - 1
+	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 
 	return b.String()
 }

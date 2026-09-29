@@ -27,11 +27,13 @@ type HelpModel struct {
 }
 
 // helpRow is one line of a key reference: a key and what it does, or a
-// section header.
+// section header. dim: the key exists but can't be pressed right now —
+// listed, drawn dimmed, like the menu row it comes from (tdp M6).
 type helpRow struct {
 	header bool
 	key    string
 	desc   string
+	dim    bool
 }
 
 // helpTitleGlyph marks the key reference's title (tdp D3: glyph + text).
@@ -165,6 +167,7 @@ func (m HelpModel) renderFullPopup() string {
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	keyStyle := m.theme.DetailLabelStyle()
 	descStyle := m.theme.DetailValueStyle()
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay0))
 
 	keyW := 0
 	for _, r := range m.rows {
@@ -181,7 +184,11 @@ func (m HelpModel) renderFullPopup() string {
 			lines = append(lines, " "+headerStyle.Render(r.desc))
 			continue
 		}
-		lines = append(lines, "   "+keyStyle.Render(padRight(r.key, keyW))+"  "+descStyle.Render(r.desc))
+		ks, ds := keyStyle, descStyle
+		if r.dim {
+			ks, ds = dimStyle, dimStyle
+		}
+		lines = append(lines, "   "+ks.Render(padRight(r.key, keyW))+"  "+ds.Render(r.desc))
 	}
 
 	title := " " + helpTitleGlyph + " " + m.title + " "
@@ -199,9 +206,9 @@ func (m HelpModel) renderFullPopup() string {
 		b.WriteString(left + padRight(line, innerW) + right + "\n")
 	}
 	b.WriteString(padRow)
-	hint := " j/k: scroll  ?/Esc: close "
+	hint := popupHint(keyHint{"j/k", "scroll"}, keyHint{"?/Esc", "close"})
 	bottomDashes := max(innerW-lipgloss.Width(hint)-1, 0)
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 	return b.String()
 }
 

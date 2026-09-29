@@ -454,16 +454,16 @@ func (m AppLogModel) renderFullPopup() string {
 		b.WriteString("\n")
 	}
 	b.WriteString(padRow) // bottom padding row
-	hint := " Esc:close j/k u/d y:copy D:clear "
+	hint := popupHint(keyHint{"j/k", "scroll"}, keyHint{"u/d", "page"}, keyHint{"y", "copy"}, keyHint{"D", "clear"}, keyHint{"Esc", "close"})
 	indicator := ""
 	if totalLines := len(allLines); totalLines > 0 {
 		indicator = fmt.Sprintf(" %d of %d ", m.scrollOffset+1, totalLines)
 	}
-	bottomDashes := innerW - len(hint) - len(indicator) - 1
+	bottomDashes := innerW - lipgloss.Width(hint) - lipgloss.Width(indicator) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+indicator+"╯"))
+	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+indicator+"╯"))
 
 	return b.String()
 }
