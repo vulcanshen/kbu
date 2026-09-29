@@ -169,6 +169,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   borders, popup frames, the helm mark's column, popups laid over the screen,
   the splash. Set `KBU__ICON_WIDTH=1` or `2` when the check gets it wrong, and
   on Windows, which has no check; `kbu iconwidth` prints what kbu detects.
+- **The YAML viewer's cursor lands on the right character in Chinese text.**
+  On a line with CJK characters the cursor and the selection were drawn on
+  the wrong character, repeating a letter and shifting the rest of the line.
 - **The confirm's bottom border lines up again.** Its right corner sat one
   cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a

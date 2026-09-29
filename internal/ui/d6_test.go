@@ -345,6 +345,40 @@ func TestD6_TableColumnsLineUpPastTheHelmMark(t *testing.T) {
 	}
 }
 
+// tdp L4, D6: in the YAML viewer the cursor and the selection land on the
+// right characters when a line holds wide (CJK) characters: the text is
+// drawn as it is, and the marked cells are the ones asked for.
+func TestD6_YamlCursorOnWideCharacters(t *testing.T) {
+	truecolor(t)
+	mark := lipgloss.NewStyle().Reverse(true)
+	sel := lipgloss.NewStyle().Underline(true)
+	for _, c := range []struct {
+		name, line string
+		marked     string // the character wearing the cursor
+		selS, selE int    // selection runes, -1 for a cursor alone
+		cursorAt   int
+	}{
+		{"cursor after CJK", "中文abc", "a", -1, -1, 2},
+		{"cursor between CJK", "a中b", "b", -1, -1, 2},
+		{"cursor on the last CJK", "中文", "文", -1, -1, 1},
+		{"selection after CJK", "中文abc", "b", 2, 3, 3},
+		{"selection over CJK", "x中文y", "文", 1, 2, 2},
+	} {
+		var got string
+		if c.selS < 0 {
+			got = overlayCursorOnStyledLine(c.line, c.line, c.cursorAt, mark)
+		} else {
+			got = overlaySelectionOnStyledLine(c.line, c.line, c.selS, c.selE, true, c.cursorAt, sel, mark)
+		}
+		if plain := ansi.Strip(got); plain != c.line {
+			t.Errorf("%s: drawn as %q, want %q", c.name, plain, c.line)
+		}
+		if want := mark.Render(c.marked); !strings.Contains(got, want) {
+			t.Errorf("%s: the cursor should be on %q: %q", c.name, c.marked, got)
+		}
+	}
+}
+
 // isWideIcon: Nerd Font icons count, powerline caps and box drawing do not.
 func TestD6_IsWideIcon(t *testing.T) {
 	for _, c := range []struct {
