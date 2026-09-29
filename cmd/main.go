@@ -23,6 +23,11 @@ func main() {
 		fmt.Println("kbu " + version.Display())
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "iconwidth" {
+		ui.DetectIconWidth() // probe + report how many cells a Nerd Font icon takes
+		fmt.Println(ui.IconCells())
+		return
+	}
 	// Suppress k8s client-go / klog output that would corrupt the TUI.
 	// logr.Discard() is a true no-op; klog.NewKlogr() would route back through
 	// klog itself and risk infinite recursion on certain error paths.
@@ -93,6 +98,11 @@ func main() {
 
 	// Optional Helm Releases category — only registered when `helm` is on PATH.
 	k8s.RegisterHelmIfAvailable()
+
+	// How many cells a Nerd Font icon takes on this terminal (tdp D6): probed
+	// before the model is built and Bubble Tea takes the screen, so every
+	// width can count it.
+	ui.DetectIconWidth()
 
 	app := ui.NewAppModel(t, client, cfg, state, stateErr, migrateNotice)
 

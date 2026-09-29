@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // popupRowAt is the common hit-test for centered popups. Given a
@@ -41,7 +40,7 @@ func popupContains(popup string, msg tea.MouseMsg, screenW, screenH int) bool {
 	if h == 0 {
 		return false
 	}
-	w := lipgloss.Width(lines[0])
+	w := dispWidth(lines[0])
 	px, py := popupOrigin(w, h, screenW, screenH)
 	return msg.X >= px && msg.X < px+w && msg.Y >= py && msg.Y < py+h
 }
@@ -55,7 +54,7 @@ func popupRowAt(popup string, msg tea.MouseMsg, screenW, screenH, itemsStartLine
 	if h == 0 {
 		return -1
 	}
-	w := lipgloss.Width(lines[0])
+	w := dispWidth(lines[0])
 	px, py := popupOrigin(w, h, screenW, screenH)
 	if msg.X < px || msg.X >= px+w || msg.Y < py || msg.Y >= py+h {
 		return -1
@@ -69,7 +68,7 @@ func popupRowAt(popup string, msg tea.MouseMsg, screenW, screenH, itemsStartLine
 
 // popupOrigin is where a w×h popup's top-left corner lands on a screenW ×
 // screenH screen when composited centered — the same arithmetic
-// overlay.Composite uses (half the screen minus half the popup, each
+// compositeDisp uses (half the screen minus half the popup, each
 // halved on its own), so a click hits the row that is drawn there. The
 // shorter (screen − popup) / 2 is off by one when the two sizes differ in
 // parity.

@@ -426,7 +426,7 @@ func renderSplitDiff(left, right, leftLabel, rightLabel string, width int, t *th
 	// (e.g. last-applied-configuration JSON, base64 cert blobs) used to
 	// blow past the column and the separator vanished.
 	fit := func(s string) string {
-		if lipgloss.Width(s) > colW {
+		if dispWidth(s) > colW {
 			s = ansiTruncate(s, colW)
 		}
 		return padRight(s, colW)
@@ -623,7 +623,7 @@ func alignSplitDiff(leftLines, rightLines []string) []splitPair {
 func centerNoDiff(width int, t *theme.Theme) string {
 	msg := "(identical — no config diff)"
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
-	pad := (width - lipgloss.Width(msg)) / 2
+	pad := (width - dispWidth(msg)) / 2
 	if pad < 0 {
 		pad = 0
 	}
@@ -663,7 +663,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 
 	title := fmt.Sprintf(" \U000f08aa %s vs %s ",
 		m.leftLabel, m.rightLabel)
-	titleW := lipgloss.Width(title)
+	titleW := dispWidth(title)
 	innerW := popupW - 2
 	if innerW < 10 {
 		innerW = 10
@@ -699,7 +699,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	vbar := borderStyle.Render("│")
 	bodyRows := strings.Split(body, "\n")
 	for i, row := range bodyRows {
-		visible := lipgloss.Width(row)
+		visible := dispWidth(row)
 		if visible < innerW {
 			row = row + strings.Repeat(" ", innerW-visible)
 		} else if visible > innerW {
@@ -709,7 +709,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 	}
 
 	hint := fitPopupHint(innerW-1, keyHint{"L", "layout"}, keyHint{"j/k", "scroll"}, keyHint{"Esc", "close"})
-	hintW := lipgloss.Width(hint)
+	hintW := dispWidth(hint)
 	// Bottom border target width = innerW + 2 (matches top: ╭ + innerW
 	// dashes-or-title + ╮). The earlier "╰─" lead consumed 2 chars but
 	// the trailing-dash count subtracted 2 from innerW, leaving the

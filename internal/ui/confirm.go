@@ -196,7 +196,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	}
 	body := strings.Join(lines, "\n")
 
-	dashesAfter := innerW - 1 - lipgloss.Width(title)
+	dashesAfter := innerW - 1 - dispWidth(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -209,7 +209,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
 	b.WriteString(padRow) // top padding row
 	for _, line := range strings.Split(body, "\n") {
-		lw := lipgloss.Width(line)
+		lw := dispWidth(line)
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
@@ -218,7 +218,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	bottomDashes := innerW - lipgloss.Width(hint) - 1
+	bottomDashes := innerW - dispWidth(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}

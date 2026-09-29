@@ -5,7 +5,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/kbu/internal/theme"
 )
 
@@ -172,7 +171,7 @@ func (m HelpModel) renderFullPopup() string {
 	keyW := 0
 	for _, r := range m.rows {
 		if !r.header {
-			keyW = max(keyW, lipgloss.Width(r.key))
+			keyW = max(keyW, dispWidth(r.key))
 		}
 	}
 	keyW = min(keyW, 18)
@@ -192,7 +191,7 @@ func (m HelpModel) renderFullPopup() string {
 	}
 
 	title := " " + helpTitleGlyph + " " + m.title + " "
-	dashesAfter := max(innerW-1-lipgloss.Width(title), 0)
+	dashesAfter := max(innerW-1-dispWidth(title), 0)
 	var b strings.Builder
 	b.WriteString(bStyle.Render("╭─") + tStyle.Render(title) + bStyle.Render(strings.Repeat("─", dashesAfter)+"╮") + "\n")
 	left := bStyle.Render("│")
@@ -200,14 +199,14 @@ func (m HelpModel) renderFullPopup() string {
 	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
 	b.WriteString(padRow)
 	for _, line := range lines {
-		if lipgloss.Width(line) > innerW {
-			line = ansi.Truncate(line, innerW, "")
+		if dispWidth(line) > innerW {
+			line = dispClip(line, innerW)
 		}
 		b.WriteString(left + padRight(line, innerW) + right + "\n")
 	}
 	b.WriteString(padRow)
 	hint := fitPopupHint(innerW-1, keyHint{"j/k", "scroll"}, keyHint{"?/Esc", "close"})
-	bottomDashes := max(innerW-lipgloss.Width(hint)-1, 0)
+	bottomDashes := max(innerW-dispWidth(hint)-1, 0)
 	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 	return b.String()
 }
@@ -234,9 +233,9 @@ func min(a, b int) int {
 }
 
 // padRight extends a styled string with trailing spaces so its visual width
-// equals width. ANSI escapes are ignored via lipgloss.Width.
+// equals width. ANSI escapes are ignored via dispWidth.
 func padRight(s string, width int) string {
-	w := lipgloss.Width(s)
+	w := dispWidth(s)
 	if w >= width {
 		return s
 	}

@@ -338,7 +338,7 @@ func (m ListPickerModel) renderFullPopup() string {
 			hintPart = "    " + it.Hint
 		}
 		bodyPlain := bodyLeft + hintPart
-		padW := innerW - 1 - lipgloss.Width(bodyPlain)
+		padW := innerW - 1 - dispWidth(bodyPlain)
 		if padW < 0 {
 			padW = 0
 		}
@@ -367,7 +367,7 @@ func (m ListPickerModel) renderFullPopup() string {
 		rows = append(rows, styledLine+pad)
 	}
 
-	dashesAfter := innerW - 1 - lipgloss.Width(title)
+	dashesAfter := innerW - 1 - dispWidth(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -379,7 +379,7 @@ func (m ListPickerModel) renderFullPopup() string {
 	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
 	b.WriteString(padRow)
 	for _, line := range rows {
-		lw := lipgloss.Width(line)
+		lw := dispWidth(line)
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
@@ -387,7 +387,7 @@ func (m ListPickerModel) renderFullPopup() string {
 		b.WriteString(left + line + pad + right + "\n")
 	}
 	b.WriteString(padRow)
-	bottomDashes := innerW - lipgloss.Width(bottomHint) - 1
+	bottomDashes := innerW - dispWidth(bottomHint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}

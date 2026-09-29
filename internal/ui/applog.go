@@ -299,8 +299,8 @@ func (m AppLogModel) renderAllLines() []string {
 		default:
 			levelStyle = infoStyle
 		}
-		prefix := dimStyle.Render(ts) + " " + levelStyle.Width(5).Render(level) + " "
-		prefixW := lipgloss.Width(prefix)
+		prefix := dimStyle.Render(ts) + " " + levelStyle.Render(padDisp(level, 5)) + " "
+		prefixW := dispWidth(prefix)
 		msgW := innerW - prefixW
 		if msgW < 4 {
 			msgW = 4
@@ -311,7 +311,7 @@ func (m AppLogModel) renderAllLines() []string {
 		for len(remaining) > 0 {
 			w, cut := 0, 0
 			for cut < len(remaining) {
-				rw := lipgloss.Width(string(remaining[cut]))
+				rw := dispWidth(string(remaining[cut]))
 				if w+rw > msgW {
 					break
 				}
@@ -376,9 +376,7 @@ func (m AppLogModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int) (AppLog
 }
 
 func (m AppLogModel) View() string {
-	return lipgloss.Place(m.width, m.height,
-		lipgloss.Center, lipgloss.Center,
-		m.RenderPopup())
+	return centerDisp(m.width, m.height, m.RenderPopup())
 }
 
 func (m AppLogModel) RenderPopup() string {
@@ -417,7 +415,7 @@ func (m AppLogModel) renderFullPopup() string {
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 
 	title := " App Log"
-	dashes := innerW - 1 - lipgloss.Width(title)
+	dashes := innerW - 1 - dispWidth(title)
 	if dashes < 0 {
 		dashes = 0
 	}
@@ -437,10 +435,10 @@ func (m AppLogModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // top padding row
 	for _, line := range contentLines[:contentH] {
-		lw := lipgloss.Width(line)
+		lw := dispWidth(line)
 		if lw > innerW {
 			line = ansiTruncate(line, innerW)
-			lw = lipgloss.Width(line)
+			lw = dispWidth(line)
 		}
 		pad := ""
 		if lw < innerW {
@@ -461,11 +459,11 @@ func (m AppLogModel) renderFullPopup() string {
 	}
 	// When the border is narrow the position indicator goes first, then
 	// hint entries drop whole from the end (tdp D3), as in the YAML viewer.
-	if lipgloss.Width(popupHint(hints...))+lipgloss.Width(indicator) > innerW-1 {
+	if dispWidth(popupHint(hints...))+dispWidth(indicator) > innerW-1 {
 		indicator = ""
 	}
 	hint := fitPopupHint(innerW-1, hints...)
-	bottomDashes := innerW - lipgloss.Width(hint) - lipgloss.Width(indicator) - 1
+	bottomDashes := innerW - dispWidth(hint) - dispWidth(indicator) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}

@@ -245,7 +245,7 @@ func renderRelativeEntries(entries []relativeEntry, cursor int, width int, t *th
 			labelText = labelText + strings.Repeat(" ", labelW-len(labelText))
 		}
 		labelPrefix := "  " + labelText + " "
-		labelPrefixW := lipgloss.Width(labelPrefix)
+		labelPrefixW := dispWidth(labelPrefix)
 		// Wrap the value alone — DON'T glue the arrow on first. Pre-wrap
 		// concat ("value ↘") had wrapPlain trim the space at the break,
 		// producing a bare "↘" chunk that lost its drillStyle because
@@ -254,7 +254,7 @@ func renderRelativeEntries(entries []relativeEntry, cursor int, width int, t *th
 		// trailing arrow flush + properly styled.
 		arrowReserve := 0
 		if hasArrow {
-			arrowReserve = lipgloss.Width(arrowSuffix)
+			arrowReserve = dispWidth(arrowSuffix)
 		}
 		valueBudget := rowWidth - labelPrefixW - arrowReserve
 		if valueBudget < 10 {
@@ -282,7 +282,7 @@ func renderRelativeEntries(entries []relativeEntry, cursor int, width int, t *th
 				if withArrow {
 					plain += arrowSuffix
 				}
-				if w := lipgloss.Width(plain); w < rowWidth {
+				if w := dispWidth(plain); w < rowWidth {
 					plain = plain + strings.Repeat(" ", rowWidth-w)
 				}
 				lines = append(lines, cursorRowStyle.Render(plain))
@@ -319,7 +319,7 @@ func renderNestedDrillEntry(
 	// Label line: outer indent + e.label (which already has its own "  ").
 	labelLinePlain := outerIndent + e.label
 	// Value indent: outer + label's internal "  " + one more level "  ".
-	valueIndentW := lipgloss.Width(outerIndent) + 2 + 2
+	valueIndentW := dispWidth(outerIndent) + 2 + 2
 	valueIndent := strings.Repeat(" ", valueIndentW)
 
 	valueAndArrow := e.value + arrowSuffix
@@ -346,7 +346,7 @@ func renderNestedDrillEntry(
 	if isCursor {
 		line0 = 0
 		plain := labelLinePlain
-		if w := lipgloss.Width(plain); w < rowWidth {
+		if w := dispWidth(plain); w < rowWidth {
 			plain += strings.Repeat(" ", rowWidth-w)
 		}
 		lines = append(lines, cursorRowStyle.Render(plain))
@@ -362,7 +362,7 @@ func renderNestedDrillEntry(
 			if withArrow {
 				plain += arrowSuffix
 			}
-			if w := lipgloss.Width(plain); w < rowWidth {
+			if w := dispWidth(plain); w < rowWidth {
 				plain += strings.Repeat(" ", rowWidth-w)
 			}
 			lines = append(lines, cursorRowStyle.Render(plain))
