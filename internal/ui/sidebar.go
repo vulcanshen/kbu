@@ -871,13 +871,6 @@ func (m SidebarModel) View() string {
 			label := item.label
 			if item.categoryIndex == pinnedCategoryIndex {
 				style = pinnedCategoryStyle
-				if m.dragActive {
-					// The mode names itself on the Pinned header — the
-					// footer holds keys only (tdp M5) — with D, the key
-					// that ends it keeping the new order. Zero extra
-					// rows; gone on commit/cancel.
-					label = item.label + " [D]rag mode"
-				}
 			}
 			// Unfocused → dim every category header (Pinned + system)
 			// down to the same overlay0 grey as the dimmed item rows.
@@ -903,6 +896,7 @@ func (m SidebarModel) View() string {
 			case m.dragActive && item.resourceType == m.draggedKind:
 				// The drag handle takes the first cell of the row's
 				// leading gap: same width, the moving row is marked.
+				// (The mode itself is named on panel 1's frame, tdp K11.)
 				line = dragRowStyle.Width(m.width).Render(dragHandleGlyph + label[1:])
 			case isCursor && m.focused:
 				line = selectedStyle.Width(m.width).Render(label)

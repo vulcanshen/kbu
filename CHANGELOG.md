@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.17/principle) (tdp v0.1.17).
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle) (tdp v0.1.19).
 
 - **A click lands on the popup you see on top.** A confirm, sort picker or
   YAML viewer opened from a `Space` menu sits centred over the menu; a click
@@ -62,8 +62,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   namespace, or switches to the context) instead of only leaving the typing
   line; `Tab` moves between the typing line and the list; `Esc` closes the
   picker from either (it used to clear the filter first). Only the part with
-  focus is lit: on the list, the typing line dims and the cursor row takes the
-  popup's colour.
+  focus is lit: on the list, the typing line turns grey and the cursor row
+  takes the popup's colour.
 - **The key that opened a popup no longer closes it.** `N` on the namespace
   picker, `C` on the context picker, `!` on the App log and `>` on Settings
   used to work as a second `Esc` there, and nowhere else. `Esc` closes them.
@@ -83,10 +83,11 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   one-row "Drop" menu), `?` lists the mode's keys, and `Tab` stays put with a
   toast saying `Esc` leaves the mode first. The drag's keys now sit in the
   footer while it lasts, replacing the toast that stayed on screen; the
-  selection's keys, `h/j/k/l` included, sit in the viewer's bottom hint, and
-  the viewer's frame turns yellow while it selects. While dragging, the
-  Pinned title reads `[D]rag mode` and the drag handle sits at the start of
-  the row being moved.
+  selection's keys, `h/j/k/l` included, sit in the viewer's bottom hint.
+  A mode names itself in the top-right corner of its frame, which turns
+  yellow: `Visual` on the YAML viewer while it selects, `Drag` on panel 1
+  while you drag, where the drag handle also sits at the start of the row
+  being moved.
 - **Search lines take spaces.** The sidebar, panel 2, the YAML viewer and the
   namespace / context filters dropped the space bar, so a YAML search like
   `image: nginx` couldn't be typed.
@@ -155,7 +156,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   `Enter:select`, `Enter delete · Esc cancel`, `enter: drill` and bare keys,
   each in a single colour. The namespace and context pickers show `/` and
   `Tab` as the two things they are (`/:new filter Tab:filter`), and the
-  footer's panel entry reads `Tab/1–3:panels`.
+  footer's panel entry reads `Tab/1–3:panels`. On a narrow terminal a hint
+  drops whole entries from the end instead of running past its border; a
+  terminal's `Alt-Esc` comes first, so it is the last to go.
 - **The namespace picker's loading icon is the family's.** While the list is
   on its way, the title shows a circle filling one slice at a time instead of
   a braille spinner; it turns at the same pace however often the screen

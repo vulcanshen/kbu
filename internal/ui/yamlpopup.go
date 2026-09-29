@@ -1047,19 +1047,27 @@ func (m YamlPopupModel) renderFullPopup() string {
 	if m.item.Namespace != "" {
 		title += " (" + m.item.Namespace + ")"
 	}
+	// tdp K11: the selection mode names itself top right, " Visual ─"
+	// before the corner; the title gives way to it, never the other way.
+	mode := ""
+	modeW := 0
+	if m.visualMode {
+		mode = " Visual "
+		modeW = lipgloss.Width(mode) + 1 // + the dash before the corner
+	}
 	truncated := false
-	if lipgloss.Width(title) > innerW-1 {
+	if lipgloss.Width(title) > innerW-1-modeW {
 		// Reserve 1 cell for "…" — mirrors the comparepopup fix so
 		// narrow-terminal title cuts read as cut, not as a literal
 		// trailing fragment.
-		title = ansiTruncate(title, innerW-2)
+		title = ansiTruncate(title, innerW-2-modeW)
 		truncated = true
 	}
 	titleVisualW := lipgloss.Width(title)
 	if truncated {
 		titleVisualW++ // the "…" we'll append
 	}
-	dashesAfter := innerW - 1 - titleVisualW
+	dashesAfter := innerW - 1 - titleVisualW - modeW
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -1073,7 +1081,11 @@ func (m YamlPopupModel) renderFullPopup() string {
 		// it to the default fg color.
 		b.WriteString(tStyle.Render("…"))
 	}
-	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter) + "╮"))
+	b.WriteString(bStyle.Render(strings.Repeat("─", dashesAfter)))
+	if mode != "" {
+		b.WriteString(tStyle.Render(mode) + bStyle.Render("─"))
+	}
+	b.WriteString(bStyle.Render("╮"))
 	b.WriteString("\n")
 
 	leftBorder := bStyle.Render("│")

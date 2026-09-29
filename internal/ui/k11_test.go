@@ -29,9 +29,34 @@ func TestK11_YamlSelectionFrameIsYellow(t *testing.T) {
 	if !near(row[at].fg, hexRGB(theme.Yellow)) {
 		t.Errorf("in the selection mode the title is %v, want Yellow", row[at].fg)
 	}
+	top := screenCells(m.yamlPopup.renderFullPopup())[0]
+	vis := strings.Index(rowText(top), " Visual ─╮")
+	if vis < 0 {
+		t.Fatalf("the selection mode must name itself top right: %q", rowText(top))
+	}
+	if name := top[len([]rune(rowText(top)[:vis]))+1]; !near(name.fg, hexRGB(theme.Yellow)) {
+		t.Errorf("the mode name is %v, want Yellow", name.fg)
+	}
 	m.yamlPopup, _ = m.yamlPopup.Update(key("esc"))
 	if got := corner(); !near(got, layer) {
 		t.Errorf("after the selection the frame is %v, want the layer colour back", got)
+	}
+	if strings.Contains(rowText(screenCells(m.yamlPopup.renderFullPopup())[0]), "Visual") {
+		t.Error("after the selection the mode name must go")
+	}
+
+	// A long name gives way to the mode name — including names that would
+	// fit the top border on their own but not beside the mode name.
+	for n := 60; n <= 130; n++ {
+		long := yamlOpenFor(t, k8s.ResourcePods, k8s.ResourceItem{Name: strings.Repeat("n", n), Namespace: "default"})
+		long.yamlPopup, _ = long.yamlPopup.Update(key("v"))
+		lines := strings.Split(ansi.Strip(long.yamlPopup.renderFullPopup()), "\n")
+		if !strings.HasSuffix(lines[0], " Visual ─╮") {
+			t.Errorf("a %d-letter name pushed the mode name out: %q", n, lines[0])
+		}
+		if w, box := ansi.StringWidth(lines[0]), ansi.StringWidth(lines[1]); w != box {
+			t.Errorf("a %d-letter name: the top border is %d wide, the box %d", n, w, box)
+		}
 	}
 }
 
@@ -47,43 +72,87 @@ func sidebarLine(t *testing.T, view, text string) string {
 	return ""
 }
 
-// The drag mode names itself in panel 1, since the footer holds keys only
-// (tdp M5): the Pinned title reads [D]rag mode and the drag handle takes
-// the first cell of the dragged row. Both go when the drag ends; every
-// row stays the panel's width.
+// panel1Top is the top row of panel 1 in the app's view, and where its
+// corner is.
+func panel1Top(t *testing.T, m AppModel) ([]cell, int) {
+	t.Helper()
+	for _, row := range screenCells(m.View()) {
+		for x, c := range row {
+			if c.r == '╔' || c.r == '╭' {
+				return row, x
+			}
+		}
+	}
+	t.Fatal("panel 1 has no top border")
+	return nil, 0
+}
+
+// rowText is a row of cells as text.
+func rowText(row []cell) string {
+	rs := make([]rune, len(row))
+	for i, c := range row {
+		rs[i] = c.r
+	}
+	return string(rs)
+}
+
+// tdp K11 + D2: the drag names itself on panel 1's frame — Drag top right,
+// frame and chip Yellow — and keeps the focus line style (L5). The Pinned
+// title carries no mode name; the drag handle still marks the moving row.
+// All of it goes when the drag ends, kept or cancelled; it fits at 80
+// columns too (L1).
 func TestK11_DragModeShowsInPanel1(t *testing.T) {
-	m := dragApp(t)
-	m.sidebar.SetSize(30, 20)
-	view := m.sidebar.View()
-	if got := sidebarLine(t, view, "Pinned"); !strings.HasPrefix(got, "Pinned [D]rag mode") || strings.Contains(got, dragHandleGlyph) {
-		t.Errorf("the dragging Pinned title is %q, want Pinned [D]rag mode", got)
-	}
-	if got := sidebarLine(t, view, "Pods"); !strings.HasPrefix(got, dragHandleGlyph+" Pods") {
-		t.Errorf("the dragged row is %q, want the drag handle in its first cell", got)
-	}
-	if got := sidebarLine(t, view, "Deployments"); !strings.HasPrefix(got, "  Deployments") {
-		t.Errorf("a row not being dragged is %q, want its plain gap", got)
-	}
-	for _, l := range strings.Split(ansi.Strip(view), "\n") {
-		if w := ansi.StringWidth(l); w != 30 {
-			t.Errorf("row %q is %d wide, want 30", l, w)
+	truecolor(t)
+	for _, width := range []int{120, 80} {
+		m := dragApp(t)
+		m.width = width
+		row, x := panel1Top(t, m)
+		if row[x].r != '╔' || !near(row[x].fg, hexRGB(theme.Yellow)) {
+			t.Errorf("%d cols, dragging: panel 1's corner %q is %v, want a Yellow ╔", width, row[x].r, row[x].fg)
+		}
+		if chip := row[x+3]; chip.r != '[' || !near(chip.bg, hexRGB(theme.Yellow)) {
+			t.Errorf("%d cols, dragging: the [1] chip %q is %v, want Yellow", width, chip.r, chip.bg)
+		}
+		top := rowText(row[:x+panelSidebarWidth])
+		at := strings.Index(top, " Drag═╗")
+		if at < 0 {
+			t.Fatalf("%d cols, dragging: panel 1's top %q does not name the mode", width, top)
+		}
+		if name := row[len([]rune(top[:at]))+1]; name.r != 'D' || !near(name.fg, hexRGB(theme.Yellow)) {
+			t.Errorf("%d cols, dragging: the mode name is %v, want Yellow", width, name.fg)
+		}
+		m.sidebar.SetSize(panelSidebarWidth-2, 20) // View() sized a copy
+		view := m.sidebar.View()
+		if got := sidebarLine(t, view, "Pinned"); strings.TrimSpace(ansi.Strip(got)) != "Pinned" {
+			t.Errorf("the Pinned title is %q: the mode is named on the frame, not here", got)
+		}
+		if got := sidebarLine(t, view, "Pods"); !strings.HasPrefix(got, dragHandleGlyph+" Pods") {
+			t.Errorf("the dragged row is %q, want the drag handle in its first cell", got)
 		}
 	}
 
-	updated, _ := m.Update(key("esc"))
-	view = updated.(AppModel).sidebar.View()
-	if got := sidebarLine(t, view, "Pinned"); strings.TrimSpace(got) != "Pinned" {
-		t.Errorf("after the drag the title is %q, want Pinned", got)
-	}
-	if strings.Contains(view, dragHandleGlyph) {
-		t.Error("the drag handle must go when the drag ends")
+	for _, end := range []string{"enter", "esc"} {
+		m := dragApp(t)
+		updated, _ := m.Update(key(end))
+		m = updated.(AppModel)
+		row, x := panel1Top(t, m)
+		if row[x].r != '╔' || !near(row[x].fg, hexRGB(m.theme.Sidebar.CategoryFg)) {
+			t.Errorf("after %s: panel 1's corner %q is %v, want the focus Blue ╔", end, row[x].r, row[x].fg)
+		}
+		if strings.Contains(rowText(row), " Drag═") {
+			t.Errorf("after %s: the mode name must go", end)
+		}
+		m.sidebar.SetSize(panelSidebarWidth-2, 20)
+		if strings.Contains(m.sidebar.View(), dragHandleGlyph) {
+			t.Errorf("after %s: the drag handle must go", end)
+		}
 	}
 }
 
 // dragApp is an app in the pinned-kind drag mode on panel 1.
 func dragApp(t *testing.T) AppModel {
 	t.Helper()
-	m := menuFixture(t, nil, 0)
+	m := stackTestApp(t)
 	m.activePanel = SidebarPanel
 	m.sidebar.SetPinned([]k8s.ResourceType{k8s.ResourcePods, k8s.ResourceDeployments})
 	m.sidebar.SnapCursorToKind(k8s.ResourcePods)

@@ -708,7 +708,7 @@ func (m CompareYamlPopupModel) renderFrame() string {
 		bodyRows[i] = vbar + row + vbar
 	}
 
-	hint := popupHint(keyHint{"L", "layout"}, keyHint{"j/k", "scroll"}, keyHint{"Esc", "close"})
+	hint := fitPopupHint(innerW-1, keyHint{"L", "layout"}, keyHint{"j/k", "scroll"}, keyHint{"Esc", "close"})
 	hintW := lipgloss.Width(hint)
 	// Bottom border target width = innerW + 2 (matches top: ╭ + innerW
 	// dashes-or-title + ╮). The earlier "╰─" lead consumed 2 chars but

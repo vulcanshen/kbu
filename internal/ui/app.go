@@ -2822,7 +2822,7 @@ func (m AppModel) View() string {
 		panelH := m.height - 1 - m.statusLine.LineCount()
 		panelW := m.width - 2*panelHMargin
 		m.detail.SetSize(panelW-2, panelH-2)
-		fullPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, true)+m.detail.TabTitle(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		fullPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, true)+m.detail.TabTitle(), panelW, panelH, true, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint(), "")
 		hMargin := blankColumn(panelHMargin, panelH)
 		middle := lipgloss.JoinHorizontal(lipgloss.Top, hMargin, fullPanel, hMargin)
 		mainView = lipgloss.JoinVertical(lipgloss.Left, statusBar, middle, statusLine)
@@ -2831,8 +2831,8 @@ func (m AppModel) View() string {
 		panelW := m.width - 2*panelHMargin
 		m.table.SetSize(panelW-2, upperH-2)
 		m.detail.SetSize(panelW-2, detailH-2)
-		tablePanel := renderPanelWithScroll(m.table.View(), focusedPanelTitle("[2]", m.breadcrumb(), m.theme, m.activePanel == TablePanel), panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
-		detailPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, m.activePanel == DetailPanel)+m.detail.TabTitle(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		tablePanel := renderPanelWithScroll(m.table.View(), focusedPanelTitle("[2]", m.breadcrumb(), m.theme, m.activePanel == TablePanel), panelW, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft(), "")
+		detailPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, m.activePanel == DetailPanel)+m.detail.TabTitle(), panelW, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint(), "")
 		middle := joinTableAndDetail(tablePanel, detailPanel, panelW)
 		fullH := upperH + panelVSpace + detailH
 		hMargin := blankColumn(panelHMargin, fullH)
@@ -2845,9 +2845,15 @@ func (m AppModel) View() string {
 		m.table.SetSize(rw-2, upperH-2)
 		m.detail.SetSize(rw-2, detailH-2)
 
-		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), focusedPanelTitle("[1]", "Kinds", m.theme, m.activePanel == SidebarPanel), sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", nil)
-		tablePanel := renderPanelWithScroll(m.table.View(), focusedPanelTitle("[2]", m.breadcrumb(), m.theme, m.activePanel == TablePanel), rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
-		detailPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, m.activePanel == DetailPanel)+m.detail.TabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
+		// The pin drag is a mode (tdp K11): panel 1 names it top right
+		// and its frame and chip turn Yellow while it lasts.
+		sidebarTitle, sidebarMode := focusedPanelTitle("[1]", "Kinds", m.theme, m.activePanel == SidebarPanel), ""
+		if m.sidebar.IsDragging() {
+			sidebarTitle, sidebarMode = panelChip("[1] Kinds", lipgloss.Color(theme.Yellow)), "Drag"
+		}
+		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), sidebarTitle, sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", nil, sidebarMode)
+		tablePanel := renderPanelWithScroll(m.table.View(), focusedPanelTitle("[2]", m.breadcrumb(), m.theme, m.activePanel == TablePanel), rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft(), "")
+		detailPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, m.activePanel == DetailPanel)+m.detail.TabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint(), "")
 
 		rightSide := joinTableAndDetail(tablePanel, detailPanel, rw)
 
@@ -3758,14 +3764,18 @@ func focusedPanelTitle(prefix, body string, t *theme.Theme, focused bool) string
 	if focused {
 		borderHex = t.Sidebar.CategoryFg
 	}
-	bc := lipgloss.Color(borderHex)
+	return panelChip(prefix+" "+body, lipgloss.Color(borderHex))
+}
+
+// panelChip is a panel's title capsule — round caps around text — in bc.
+func panelChip(text string, bc lipgloss.Color) string {
 	capStyle := lipgloss.NewStyle().Foreground(bc)
 	chipStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#1e1e2e")).
 		Background(bc).
 		Bold(true)
 	return capStyle.Render("\uE0B6") +
-		chipStyle.Render(prefix+" "+body) +
+		chipStyle.Render(text) +
 		capStyle.Render("\uE0B4")
 }
 
@@ -3792,10 +3802,14 @@ func plainTitlePrefix(prefix string, t *theme.Theme, focused bool) string {
 }
 
 func renderPanel(content, title string, width, height int, focused bool, t *theme.Theme) string {
-	return renderPanelWithScroll(content, title, width, height, focused, t, nil, "", nil)
+	return renderPanelWithScroll(content, title, width, height, focused, t, nil, "", nil, "")
 }
 
-func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo, topRight string, bottomLeft []keyHint) string {
+// renderPanelWithScroll draws a panel's frame around content. mode is the
+// mode the panel is in ("" = none): it is written top right and the frame
+// turns Yellow while it lasts (tdp K11, D2); the line style stays the focus
+// one (L5), so focus still shows.
+func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo, topRight string, bottomLeft []keyHint, mode string) string {
 	if width < 4 || height < 3 {
 		return content
 	}
@@ -3803,6 +3817,10 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	borderColor := t.Detail.BorderColor
 	if focused {
 		borderColor = t.Sidebar.CategoryFg
+	}
+	if mode != "" {
+		borderColor = theme.Yellow
+		topRight = mode
 	}
 	bc := lipgloss.Color(borderColor)
 	bStyle := lipgloss.NewStyle().Foreground(bc)
@@ -3879,8 +3897,13 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	// Bottom-left optional hint (panel 2's `.:helm`, panel 3's tab keys),
 	// with a single dash either side as separator. Two colours like every
 	// hint (tdp M5): the family pair on the focused panel, a darker pair
-	// that recedes with an unfocused one. Kept short by callers; if it
-	// doesn't fit alongside the scroll indicator we drop it silently.
+	// that recedes with an unfocused one. Entries that don't fit beside the
+	// scroll indicator drop whole from the end (D3); the indicator stays.
+	indicator := ""
+	if scroll != nil && scroll.Total > 0 {
+		indicator = fmt.Sprintf(" %d of %d ", scroll.Position, scroll.Total)
+	}
+	bottomLeft = fitHints(bottomLeft, innerW-2-len(indicator))
 	leftHintRendered := ""
 	leftHintVis := 0
 	if len(bottomLeft) > 0 {
@@ -3892,29 +3915,8 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 		leftHintRendered = bStyle.Render(horiz) + renderHints(bottomLeft, colours) + bStyle.Render(horiz)
 	}
 
-	if scroll != nil && scroll.Total > 0 {
-		indicator := fmt.Sprintf(" %d of %d ", scroll.Position, scroll.Total)
-		dashes := innerW - len(indicator) - leftHintVis
-		if dashes < 0 {
-			dashes = 0
-			// Indicator + leftHint overflowed innerW. Drop the hint
-			// rather than truncating the more-useful scroll indicator.
-			leftHintRendered = ""
-			dashes = innerW - len(indicator)
-			if dashes < 0 {
-				dashes = 0
-			}
-		}
-		b.WriteString(bStyle.Render(bl) + leftHintRendered + bStyle.Render(strings.Repeat(horiz, dashes)+indicator+br))
-	} else {
-		dashes := innerW - leftHintVis
-		if dashes < 0 {
-			dashes = 0
-			leftHintRendered = ""
-			dashes = innerW
-		}
-		b.WriteString(bStyle.Render(bl) + leftHintRendered + bStyle.Render(strings.Repeat(horiz, dashes)+br))
-	}
+	dashes := max(innerW-len(indicator)-leftHintVis, 0)
+	b.WriteString(bStyle.Render(bl) + leftHintRendered + bStyle.Render(strings.Repeat(horiz, dashes)+indicator+br))
 
 	return b.String()
 }
