@@ -73,6 +73,13 @@ func popupHint(hs ...keyHint) string {
 	return " " + renderHints(hs, brightHint()) + " "
 }
 
+// fitPopupHint is a popup's bottom-border hint fitted to room cells, its
+// spaces included: entries that don't fit drop whole from the end, never
+// half of one (tdp D3). "" when not even the first fits.
+func fitPopupHint(room int, hs ...keyHint) string {
+	return popupHint(fitHints(hs, room-2)...)
+}
+
 // fitHints drops entries from the end until the line fits in w cells —
 // a whole entry at a time, never half of one (tdp D1).
 func fitHints(hs []keyHint, w int) []keyHint {

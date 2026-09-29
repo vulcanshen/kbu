@@ -156,7 +156,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   `Enter:select`, `Enter delete · Esc cancel`, `enter: drill` and bare keys,
   each in a single colour. The namespace and context pickers show `/` and
   `Tab` as the two things they are (`/:new filter Tab:filter`), and the
-  footer's panel entry reads `Tab/1–3:panels`.
+  footer's panel entry reads `Tab/1–3:panels`. On a narrow terminal a hint
+  drops whole entries from the end instead of running past its border; a
+  terminal's `Alt-Esc` comes first, so it is the last to go.
 - **The namespace picker's loading icon is the family's.** While the list is
   on its way, the title shows a circle filling one slice at a time instead of
   a braille spinner; it turns at the same pace however often the screen

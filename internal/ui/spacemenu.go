@@ -303,7 +303,7 @@ func (m MenuPopupModel) renderFullPopup() string {
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	title := m.title // the builder already put the glyph in (menuTitle)
-	hint := popupHint(keyHint{"j/k", "move"}, keyHint{"Enter", "run"}, keyHint{"Esc", "close"})
+	hint := fitPopupHint(popupInnerWidth(m.screenW)-1, keyHint{"j/k", "move"}, keyHint{"Enter", "run"}, keyHint{"Esc", "close"})
 
 	// tdp F7: one width for every popup, whatever it shows.
 	innerW := popupInnerWidth(m.screenW)
