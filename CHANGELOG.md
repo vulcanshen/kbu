@@ -30,7 +30,7 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   YAML or Compare viewer, the App Log, Settings or the key reference it no
   longer closes the popup — `Esc` does. A confirm in particular can no longer
   be cancelled by a stray `Space`; its hint now names what `Enter` will do
-  (`Enter delete · Esc cancel`).
+  (`Enter:delete Esc:cancel`).
 - **`Space` opens the same kind of menu on every panel and every tab.** It
   lists everything that can be done there — first what the cursor's item can
   do, then what the panel or tab can do — and always ends with **Global
@@ -75,7 +75,7 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   the core keys; over a menu, popup or confirm it lists only that popup's
   keys, stacked on top (`Esc` returns to the popup). It used to be one fixed
   cheatsheet that left out the panel keys and did nothing over a popup. The
-  footer's `Esc exit` now reads `Esc back` — `Esc` never leaves kbu.
+  footer's `Esc exit` now reads `Esc:back` — `Esc` never leaves kbu.
 - **Modes answer the core keys the same way.** In the pinned-kind drag and the
   YAML viewer's selection, `Space` does nothing (the drag used to open a
   one-row "Drop" menu), `?` lists the mode's keys, and `Tab` stays put with a
@@ -138,6 +138,14 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   `Alt-t` and `Alt-S`; the key reference and the terminal's bottom hint said
   `Alt+t`, `Alt+Shift+S` and `Ctrl+C`. They all say `Alt-t`, `Alt-S`, `Ctrl-C`,
   `Shift-Tab` now, and so does the README.
+- **Hints read `key:description`, in two colours.** Every popup's bottom
+  border, the terminals', the panel borders and the footer now write
+  `j/k:move Enter:run Esc:close`: the key in blue, the colon and what it does
+  in grey, one space between entries. They used to mix `j/k: move`,
+  `Enter:select`, `Enter delete · Esc cancel`, `enter: drill` and bare keys,
+  each in a single colour. The namespace and context pickers show `/` and
+  `Tab` as the two things they are (`/:new filter Tab:filter`), and the
+  footer's panel entry reads `Tab/1–3:panels`.
 - **The confirm's bottom border lines up again.** Its right corner sat one
   cell short since the hint gained a `·`.
 - **A click hits the row you see.** On some terminal sizes a click on a

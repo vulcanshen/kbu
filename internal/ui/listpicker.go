@@ -301,7 +301,7 @@ func (m ListPickerModel) renderFullPopup() string {
 	dimCursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Background(lipgloss.Color("#45475a"))
 
 	title := " " + m.title + " "
-	bottomHint := " j/k: move  Enter: pick  Esc: cancel "
+	bottomHint := popupHint(keyHint{"j/k", "move"}, keyHint{"Enter", "pick"}, keyHint{"Esc", "cancel"})
 
 	// tdp F7: one width for every popup, whatever it shows.
 	innerW := popupInnerWidth(m.screenW)
@@ -391,6 +391,6 @@ func (m ListPickerModel) renderFullPopup() string {
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(bottomHint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+	b.WriteString(bStyle.Render("╰─") + bottomHint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 	return b.String()
 }

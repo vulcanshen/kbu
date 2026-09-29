@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/kbu/internal/theme"
@@ -46,11 +44,6 @@ func (m *StatusLineModel) SetWidth(width int) {
 	m.width = width
 }
 
-type hint struct {
-	key  string
-	desc string
-}
-
 // hints returns the keys surfaced on the status line. v1.7+ mental model:
 // only the universal cross-panel gestures live here — `?` for the full
 // reference, `Esc` / `Space` / `Enter` / `Tab` as the four core gestures
@@ -60,72 +53,49 @@ type hint struct {
 // letters Y/E/S/D, sort hotkeys, ...) lives in the statusbar labels
 // (`[C]ontext:` / `[N]amespace:`) or the per-row Space menus / popups
 // that self-document — duplicating them here was noisy.
-func (m StatusLineModel) hints() []hint {
+func (m StatusLineModel) hints() []keyHint {
 	if m.dragMode {
 		// tdp K11, M1: in a mode the footer still shows ?, then the
 		// mode's own keys. Space does nothing in a mode, so it isn't
-		// listed.
-		return []hint{
+		// listed. The mode shows itself in panel 1 (the dragged row, the
+		// Pinned title's [D]rop), not as a word here: the footer holds
+		// keys only (M5).
+		return []keyHint{
 			{"?", "keys"},
 			{"j/k", "move"},
 			{"Enter", "drop"},
 			{"Esc", "cancel"},
-			{"drag mode", ""},
 		}
 	}
-	return []hint{
+	return []keyHint{
 		{"?", "help"},
 		{"Esc", "back"},
 		{"Space", "menu"},
 		{"Enter", "commit/into"},
-		{"Tab", "cycle panel"},
+		{"Tab/1–3", "panels"}, // tdp D1
 		{"Alt-t", "Alterm"},
 		{">", "settings"},
 	}
 }
 
-func (m StatusLineModel) renderedHints() []string {
-	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.StatusLine.Foreground)).
-		Bold(true)
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7f849c"))
-
-	var out []string
-	for _, h := range m.hints() {
-		out = append(out, keyStyle.Render(h.key)+" "+descStyle.Render(h.desc))
-	}
-	return out
-}
-
-// layoutLine packs all hints into a single row. If the total width exceeds
-// the terminal, trailing hints are dropped (silent truncation — they're
-// still in the help popup).
+// layoutLine packs the hints into a single row, key:description one space
+// apart (tdp M5). If the total width exceeds the terminal, trailing
+// entries are dropped whole (D1) — they're still in the key reference.
+// The key keeps the theme's footer colour; the colon and description are
+// Overlay0 (D2).
 func (m StatusLineModel) layoutLine() string {
-	hints := m.renderedHints()
+	hints := m.hints()
+	if m.width > 0 {
+		hints = fitHints(hints, m.width-2) // a space at either end
+	}
 	if len(hints) == 0 {
 		return " "
 	}
-
-	var b strings.Builder
-	b.WriteString(" ")
-	current := 1
-	for i, h := range hints {
-		sep := "  "
-		sepW := 2
-		if i == 0 {
-			sep = ""
-			sepW = 0
-		}
-		hw := lipgloss.Width(h)
-		if m.width > 0 && current+sepW+hw+1 > m.width {
-			break
-		}
-		b.WriteString(sep)
-		b.WriteString(h)
-		current += sepW + hw
-	}
-	return b.String()
+	colours := brightHint()
+	colours.key = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.StatusLine.Foreground)).
+		Bold(true)
+	return " " + renderHints(hints, colours)
 }
 
 // LineCount returns the fixed status line height. Kept as a method so

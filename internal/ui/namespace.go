@@ -492,15 +492,17 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := " Enter:toggle  /,Tab:search  Esc:close "
+	// / and Tab both lead to typing but not the same way (/ starts a
+	// new filter, Tab keeps it), so they are two entries.
+	hint := popupHint(keyHint{"Enter", "toggle"}, keyHint{"/", "new filter"}, keyHint{"Tab", "filter"}, keyHint{"Esc", "close"})
 	if m.searching {
-		hint = " ↑↓ Enter:toggle  Tab:list  Esc:close "
+		hint = popupHint(keyHint{"↑/↓", "move"}, keyHint{"Enter", "toggle"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
 	}
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 
 	return b.String()
 }

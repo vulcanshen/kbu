@@ -1871,20 +1871,20 @@ func TestDetailModel_BorderBottomLeftHint_RelativesDrillDepth(t *testing.T) {
 	m.SetDetail(sampleDetail(), nil)
 	m = m.switchToTab(1) // Relatives — hint logic gates on ActiveTabName()=="Relatives"
 
-	// depth=1 on Relatives → only "enter: drill" (no chain to walk
-	// back up yet, so esc has its app-wide dismiss default and is
-	// suppressed from the hint).
-	if got := m.BorderBottomLeftHint(); got != "enter: drill" {
-		t.Errorf("depth=1: expected %q, got %q", "enter: drill", got)
+	// depth=1 on Relatives → only "Enter:drill" (no chain to walk
+	// back up yet, so Esc has its app-wide dismiss default and is
+	// suppressed from the hint). Written key:description (tdp M5).
+	if got := hintText(m.BorderBottomLeftHint()); got != "Enter:drill" {
+		t.Errorf("depth=1: expected %q, got %q", "Enter:drill", got)
 	}
 
-	// Push a fake drill frame → depth becomes 2 → esc: back composes on.
+	// Push a fake drill frame → depth becomes 2 → Esc:back composes on.
 	m.drillStack = append(m.drillStack, drillFrame{
 		ref:  k8s.RefTarget{Type: k8s.ResourcePods, Name: "x"},
 		item: k8s.ResourceItem{Name: "x"},
 	})
-	want := "enter: drill  esc: back"
-	if got := m.BorderBottomLeftHint(); got != want {
+	want := "Enter:drill Esc:back"
+	if got := hintText(m.BorderBottomLeftHint()); got != want {
 		t.Errorf("depth>1: expected %q, got %q", want, got)
 	}
 
@@ -1906,8 +1906,8 @@ func TestDetailModel_BorderBottomLeftHint_RelativesDrillDepth(t *testing.T) {
 		t.Fatalf("expected HPA to have a Conditions tab; got tabs %v", m.tabs)
 	}
 	m = m.switchToTab(DetailTab(condIdx))
-	if got := m.BorderBottomLeftHint(); got != "" {
-		t.Errorf("Conditions tab: expected empty hint, got %q", got)
+	if got := m.BorderBottomLeftHint(); len(got) != 0 {
+		t.Errorf("Conditions tab: expected no hint, got %q", hintText(got))
 	}
 }
 
@@ -1922,10 +1922,10 @@ func TestDetailModel_BorderBottomLeftHint_StreamingTabs(t *testing.T) {
 	m.SetResourceType(k8s.ResourcePods) // tabs = [Logs, Relatives, Events]
 	m.SetDetail(sampleDetail(), nil)
 
-	want := "u/d: page  gg: top  G: live"
+	want := "u/d:page gg:top G:live"
 
 	m = m.switchToTab(0) // Logs
-	if got := m.BorderBottomLeftHint(); got != want {
+	if got := hintText(m.BorderBottomLeftHint()); got != want {
 		t.Errorf("Logs tab: expected %q, got %q", want, got)
 	}
 
@@ -1941,7 +1941,7 @@ func TestDetailModel_BorderBottomLeftHint_StreamingTabs(t *testing.T) {
 		t.Fatalf("expected Pods to have an Events tab; got tabs %v", m.tabs)
 	}
 	m = m.switchToTab(DetailTab(evtIdx))
-	if got := m.BorderBottomLeftHint(); got != want {
+	if got := hintText(m.BorderBottomLeftHint()); got != want {
 		t.Errorf("Events tab: expected %q, got %q", want, got)
 	}
 }

@@ -2843,7 +2843,7 @@ func (m AppModel) View() string {
 		m.table.SetSize(rw-2, upperH-2)
 		m.detail.SetSize(rw-2, detailH-2)
 
-		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), focusedPanelTitle("[1]", "Kinds", m.theme, m.activePanel == SidebarPanel), sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", "")
+		sidebarPanel := renderPanelWithScroll(m.sidebar.View(), focusedPanelTitle("[1]", "Kinds", m.theme, m.activePanel == SidebarPanel), sw, fullH, m.activePanel == SidebarPanel, m.theme, m.sidebar.ScrollInfo(), "", nil)
 		tablePanel := renderPanelWithScroll(m.table.View(), focusedPanelTitle("[2]", m.breadcrumb(), m.theme, m.activePanel == TablePanel), rw, upperH, m.activePanel == TablePanel, m.theme, m.table.ScrollInfo(), "", m.tablePanelBottomLeft())
 		detailPanel := renderPanelWithScroll(m.detail.View(), plainTitlePrefix("[3]", m.theme, m.activePanel == DetailPanel)+m.detail.TabTitle(), rw, detailH, m.activePanel == DetailPanel, m.theme, m.detail.ScrollInfo(), m.detail.BorderTopRightHint(), m.detail.BorderBottomLeftHint())
 
@@ -3553,19 +3553,19 @@ func (m AppModel) focusedPanelContent() string {
 // Composes two hotkey hints:
 //   - `.` to toggle helm-managed visibility (hidden in Releases since
 //     the entire list is helm-managed there)
-//   - `esc` to exit compare mode (only when a compare anchor is set,
+//   - `Esc` to exit compare mode (only when a compare anchor is set,
 //     since Esc otherwise has its standard back-out semantics elsewhere
 //     — the hint is the discoverable affordance that "Exit compare
 //     mode" used to live in the Space menu)
-func (m *AppModel) tablePanelBottomLeft() string {
-	var parts []string
+func (m *AppModel) tablePanelBottomLeft() []keyHint {
+	var hints []keyHint
 	if m.currentResource != k8s.ResourceReleases {
-		parts = append(parts, ".: helm")
+		hints = append(hints, keyHint{".", "helm"})
 	}
 	if m.inCompareMode() {
-		parts = append(parts, "esc: exit compare")
+		hints = append(hints, keyHint{"Esc", "exit compare"})
 	}
-	return strings.Join(parts, "  ")
+	return hints
 }
 
 // filterHelmIfHidden drops helm-managed items (and, for Secrets, also helm
@@ -3790,10 +3790,10 @@ func plainTitlePrefix(prefix string, t *theme.Theme, focused bool) string {
 }
 
 func renderPanel(content, title string, width, height int, focused bool, t *theme.Theme) string {
-	return renderPanelWithScroll(content, title, width, height, focused, t, nil, "", "")
+	return renderPanelWithScroll(content, title, width, height, focused, t, nil, "", nil)
 }
 
-func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo, topRight, bottomLeft string) string {
+func renderPanelWithScroll(content, title string, width, height int, focused bool, t *theme.Theme, scroll *ScrollInfo, topRight string, bottomLeft []keyHint) string {
 	if width < 4 || height < 3 {
 		return content
 	}
@@ -3874,15 +3874,20 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 		b.WriteString("\n")
 	}
 
-	// Bottom-left optional marker (used by panel 2 for `.helm` filter
-	// hint). Style matches the title — same color + bold, with a
-	// single dash either side as separator. Kept short by callers; if
-	// it doesn't fit alongside the scroll indicator we drop it silently.
+	// Bottom-left optional hint (panel 2's `.:helm`, panel 3's tab keys),
+	// with a single dash either side as separator. Two colours like every
+	// hint (tdp M5): the family pair on the focused panel, a darker pair
+	// that recedes with an unfocused one. Kept short by callers; if it
+	// doesn't fit alongside the scroll indicator we drop it silently.
 	leftHintRendered := ""
 	leftHintVis := 0
-	if bottomLeft != "" {
-		leftHintVis = lipgloss.Width(bottomLeft) + 2 // dash + content + dash
-		leftHintRendered = bStyle.Render(horiz) + tStyle.Render(bottomLeft) + bStyle.Render(horiz)
+	if len(bottomLeft) > 0 {
+		colours := recededHint()
+		if focused {
+			colours = brightHint()
+		}
+		leftHintVis = lipgloss.Width(hintText(bottomLeft)) + 2 // dash + content + dash
+		leftHintRendered = bStyle.Render(horiz) + renderHints(bottomLeft, colours) + bStyle.Render(horiz)
 	}
 
 	if scroll != nil && scroll.Total > 0 {

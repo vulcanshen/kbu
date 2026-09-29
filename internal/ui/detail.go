@@ -1002,7 +1002,7 @@ func (m DetailModel) BorderTopRightHint() string {
 }
 
 // BorderBottomLeftHint returns a short hotkey hint for the bottom-left of
-// panel 3's border, or "" when no hint applies.
+// panel 3's border, or nil when no hint applies.
 //
 // Convention: the border hint surfaces TAB-CONTEXTUAL keys only — keys
 // whose meaning is specific to the current tab. Core-keys (Tab / Space /
@@ -1013,27 +1013,27 @@ func (m DetailModel) BorderTopRightHint() string {
 // level — distinct from the app-wide "dismiss popup" default).
 //
 // Surfaces:
-//   - "enter: drill" on Relatives always; "esc: back" composes on top
+//   - "Enter:drill" on Relatives always; "Esc:back" composes on top
 //     once depth > 1 (there's a chain to walk back up).
-//   - "u/d: page  gg: top  G: live" on Logs so users discover the scroll
+//   - "u/d:page gg:top G:live" on Logs so users discover the scroll
 //     keys at hand. `G` says "live" rather than "bottom" because
 //     scrollToBottom on Logs also re-attaches the live tail
 //     (followTail flips true) — losing that nuance would mislead.
-//   - Same "u/d: page  gg: top  G: live" hint on Events, and for the
+//   - Same "u/d:page gg:top G:live" hint on Events, and for the
 //     same rule-satisfying reason: G on Events re-attaches the events
 //     watcher tail (followEventsTail flips true), so its behavior is
 //     non-default and the border hint is justified.
-func (m DetailModel) BorderBottomLeftHint() string {
+func (m DetailModel) BorderBottomLeftHint() []keyHint {
 	switch m.ActiveTabName() {
 	case "Relatives":
 		if m.Depth() > 1 {
-			return "enter: drill  esc: back"
+			return []keyHint{{"Enter", "drill"}, {"Esc", "back"}}
 		}
-		return "enter: drill"
+		return []keyHint{{"Enter", "drill"}}
 	case "Logs", "Events":
-		return "u/d: page  gg: top  G: live"
+		return []keyHint{{"u/d", "page"}, {"gg", "top"}, {"G", "live"}}
 	}
-	return ""
+	return nil
 }
 
 // ClearDetail clears the detail data and tears down the Relatives drill chain.

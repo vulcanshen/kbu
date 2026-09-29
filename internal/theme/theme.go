@@ -29,9 +29,17 @@ const (
 	Sapphire     = "#74c7ec" // L4 ceiling — catppuccin Mocha sapphire
 )
 
-// Overlay0 is catppuccin Mocha overlay0: a row that exists but can't run
-// right now, in a menu, a picker or the key reference (tdp M6, D2).
-const Overlay0 = "#6c7086"
+// Catppuccin Mocha stops the key hints use (tdp D2).
+const (
+	// Blue is a key in a hint, the footer or the key reference.
+	Blue = "#89b4fa"
+	// Overlay0 is a hint's colon and description, and a row that exists
+	// but can't run right now in a menu, a picker or the key reference
+	// (tdp M6).
+	Overlay0 = "#6c7086"
+	// Surface2 is an unfocused panel's border.
+	Surface2 = "#585b70"
+)
 
 // PopupLayerColor maps a popup's 1-based nesting depth to its
 // border + animator stroke color. Layer 0/1 → Lavenphire25, layer
