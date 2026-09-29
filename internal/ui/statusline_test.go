@@ -23,7 +23,7 @@ func newTestStatusLine() StatusLineModel {
 func TestStatusLineModel_Hints_Universal(t *testing.T) {
 	// The five core gestures + help + Alterm + settings — present on
 	// every panel, independent of activePanel state.
-	want := []string{"?", "Esc", "Space", "Enter", "Tab", "Alt-t", ">"}
+	want := []string{"?", "Esc", "Space", "Enter", "Tab/1–3", "Alt-t", ">"}
 	for _, p := range []Panel{SidebarPanel, TablePanel, DetailPanel} {
 		m := newTestStatusLine()
 		m.SetActivePanel(p)
@@ -109,7 +109,7 @@ func TestStatusLineModel_ViewWithNotice_NoNotice(t *testing.T) {
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-func hintKeys(hints []hint) []string {
+func hintKeys(hints []keyHint) []string {
 	keys := make([]string, len(hints))
 	for i, h := range hints {
 		keys[i] = h.key

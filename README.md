@@ -40,7 +40,7 @@
 - **Logs** -- follows the tail, pauses when you scroll up, `G` to go live again. Select a workload and the logs of **every Pod** it runs stream into one view, each Pod and container in its own color, so during a rollout you can see which one is failing.
 - **Events** -- on a workload, its own events are merged with its Pods' events (a CronJob also includes its Jobs), newest first.
 - **Conditions** -- `.status.conditions` as a table, the same thing `kubectl describe` shows. Useful after events have expired.
-- **YAML viewer (`Y`)** -- a vim-style buffer: move with `hjkl` / `w` / `b`, search with `/`, select with `v`, copy with `y`.
+- **YAML viewer (`Y`)** -- a vim-style buffer: move with `h/j/k/l`, `w/b`, search with `/`, select with `v`, copy with `y`.
 - **Compare (`C`)** -- diff two resources of the same kind, unified or side by side (`L` switches, and kbu keeps your choice for next time). Status and server-managed fields are stripped so you only see what was authored.
 - **Problems stand out** -- status columns color only what needs attention: yellow for pending or degraded, red for failures. Healthy rows stay plain.
 - **Helm releases** -- when `helm` is on your `PATH`, releases get their own view: manifest, values, notes, and hooks; a revision history with one-key rollback. Objects a chart manages are marked, protected from accidental edits, and can be hidden with `.`.
@@ -121,25 +121,25 @@ Connects to your current kubeconfig context. Press `Enter` to drill, `Space` for
 
 | Key | Behavior |
 |---|---|
-| **`Tab`** | Switch panel focus (or `1` / `2` / `3` directly) |
+| **`Tab`** | Switch panel focus (or `1–3` directly) |
 | **`Enter`** | The obvious action for what's selected: drill in (a workload → its pods), open the YAML of a kind that doesn't drill, switch to a kubeconfig context, shell into a container, roll back to a Helm revision. On panel 1 it shows the kind in panel 2; on a Logs / Events / Conditions tab it full-screens the panel |
 | **`Space`** | *What can I do here?* — the menu of everything this panel or tab can do, ending with **Global operation** (namespace, context, Alterm, settings, app log, quit) |
 | **`Esc`** | Back out — pop one drill level / close any popup |
 
-When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt-S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also a row of the `Space` menu (the app-wide ones under its **Global operation** row), so nothing's required to memorize unless you want it. A row that can't run right now is shown dimmed rather than hidden. When a popup opens over another, only the one you're in is bright; everything beneath it dims.
+When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt-S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also a row of the `Space` menu (the app-wide ones under its **Global operation** row), so nothing's required to memorize unless you want it. A row that can't run right now is shown dimmed rather than hidden, in the menu and in `?` alike. When a popup opens over another, only the one you're in is bright; everything beneath it dims.
 
 **Mouse works too**: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `>` to open the Settings popup if you want to flip mouse off and stay keyboard-only.
 
 ## Key Bindings
 
-`h` / `l` (or `[` / `]`) switch between panel 3's tabs.
+`h/l` (or `[`/`]`) switch between panel 3's tabs.
 
 ### Shortcuts
 
 Everything below is also in the `Space` menu -- these are just faster.
 
 ```
- cursor    j k         u d         gg G        / (search inside current panel)
+ cursor    j/k         u/d         gg/G        / (search inside current panel)
  trigger   Y YAML      E edit      N namespace
  panel 1   P pin       S sort      D drag-and-drop pinned (modal)    C context
  panel 2   S shell     Alt-S sort          D delete    C compare anchor
@@ -171,7 +171,7 @@ Everything below is also in the `Space` menu -- these are just faster.
 | **Left-click** on a panel row | Focus that panel + move the cursor to the clicked row |
 | **Double-click** | Synthesizes `Enter` on panels 2 and 3; on panel 1 it only selects |
 | **Right-click** on a row | Synthesizes `Space` (opens the `Space` menu for that row) |
-| **Wheel up / down** | Synthesizes `u` / `d` (half-page move). Direction can be flipped via Settings popup (`scroll_direction: natural | reverse`) |
+| **Wheel up / down** | Synthesizes `u/d` (half-page move). Direction can be flipped via Settings popup (`scroll_direction: natural | reverse`) |
 | **Left-click** inside a list popup | Commits that row (same as cursor + `Enter`) |
 | **Right-click** inside any popup | Closes it (same as `Esc`) |
 
@@ -191,8 +191,8 @@ Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-
 |---|---|
 | `Alt-t` | Alterm: hide it (the shell keeps running) |
 | `Alt-Esc` | Close the terminal — asks, then ends the session: Alterm's shell and anything running in it stop; an unsaved `kubectl edit` is dropped |
-| `PgUp` / `PgDn` | Scroll history by one page |
-| `Home` / `End` | Jump to top of history / back to live |
+| `PgUp/PgDn` | Scroll history by one page |
+| `Home/End` | Jump to top of history / back to live |
 | Any other key | Snap back to live, key forwards to subprocess |
 
 Scrollback is disabled when a full-screen app (vim, less, htop) takes over the PTY via alt-screen; those keys forward to the app instead so it keeps its own paging.
@@ -378,7 +378,7 @@ status:
 
 ## terminu family
 
-kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.13/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
+kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.17/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
 
 ## License
 

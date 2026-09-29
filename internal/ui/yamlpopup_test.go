@@ -350,7 +350,8 @@ func TestYamlPopup_BottomBarFitsInAvailableWidth(t *testing.T) {
 
 	cases := []int{20, 30, 40, 60, 100}
 	for _, available := range cases {
-		hint, indicator := m.bottomBarStrings(m.contentHeight(), available)
+		hints, indicator := m.bottomBarStrings(m.contentHeight(), available)
+		hint := popupHint(hints...)
 		w := lipgloss.Width(hint) + lipgloss.Width(indicator)
 		if w > available {
 			t.Errorf("bottomBarStrings overflowed at available=%d: hint=%q indicator=%q (w=%d)",

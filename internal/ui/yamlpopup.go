@@ -137,10 +137,18 @@ func (m *YamlPopupModel) Open(yaml string, rt k8s.ResourceType, item k8s.Resourc
 // Close begins the close animation.
 func (m *YamlPopupModel) Close() tea.Cmd { return m.animator.Close() }
 
-// CanEdit reports whether E edits what this viewer shows — the same test
-// as the panel's Edit row. Only then do the hint and ? list E.
+// HasEdit reports whether E is a key of this viewer at all: it shows one
+// object of a kind kbu edits. A Helm release document or an Events row
+// has none, so neither the hint nor ? lists it (tdp M6).
+func (m YamlPopupModel) HasEdit() bool {
+	return m.item.Name != "" && resourceAllowsEdit(m.resource)
+}
+
+// CanEdit reports whether E edits what this viewer shows right now — the
+// same test as the panel's Edit row. A helm-managed object has E but
+// can't use it (Rule A): ? lists it dimmed, the hint leaves it out.
 func (m YamlPopupModel) CanEdit() bool {
-	return m.item.Name != "" && resourceAllowsEdit(m.resource) && !k8s.IsHelmManaged(m.item)
+	return m.HasEdit() && !k8s.IsHelmManaged(m.item)
 }
 
 // yamlEditRequestMsg asks the app to confirm and run kubectl edit on the
@@ -1201,13 +1209,14 @@ func (m YamlPopupModel) renderFullPopup() string {
 		b.WriteString("\n")
 	}
 
-	hint, indicator := m.bottomBarStrings(contentH, innerW-1)
+	hints, indicator := m.bottomBarStrings(contentH, innerW-1)
+	hint := popupHint(hints...)
 	bottomDashes := innerW - lipgloss.Width(hint) - lipgloss.Width(indicator) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
 	b.WriteString(bStyle.Render("╰─"))
-	b.WriteString(tStyle.Render(hint))
+	b.WriteString(hint)
 	b.WriteString(bStyle.Render(strings.Repeat("─", bottomDashes) + indicator + "╯"))
 
 	return b.String()
@@ -1287,29 +1296,26 @@ func overlayCursorOnStyledLine(styled, plain string, cursorCol int, cursorStyle 
 	return before + cursorStyle.Render(cell) + after
 }
 
-// bottomBarStrings produces the bottom-border hint + indicator pair that fits
-// in `available` columns. Vim conventions (j/k u/d gg/G n/N) are intentionally
-// omitted — they apply everywhere in kbu and don't need to live in the local
-// hint. Falls back to a short hint and finally drops the indicator if the
-// popup width is too tight.
-func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicator string) {
+// bottomBarStrings produces the bottom-border hint entries + indicator that
+// fit in `available` columns. Vim conventions (j/k u/d gg/G n/N) are
+// intentionally omitted — they apply everywhere in kbu and don't need to
+// live in the local hint. When the popup is too narrow the indicator
+// shrinks, then goes, then hint entries drop from the end (tdp D1).
+func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hints []keyHint, indicator string) {
 	// v enters visual mode (character-wise); y copies selection when
 	// visual is active, else the full YAML. hjkl/w/b/e/0/$ move the
-	// cursor. Full hint spells it out; short falls back to letter
-	// tags when the popup is narrow.
-	hintFull := " v:visual  y:copy  E:edit  /:search  Esc:close "
-	hintShort := " v  y  E  /  Esc "
-	if !m.CanEdit() {
-		hintFull = " v:visual  y:copy  /:search  Esc:close "
-		hintShort = " v  y  /  Esc "
+	// cursor. E only where it works (tdp M6 lets the hint list only
+	// what can run).
+	hints = []keyHint{{"v", "visual"}, {"y", "copy"}}
+	if m.CanEdit() {
+		hints = append(hints, keyHint{"E", "edit"})
 	}
+	hints = append(hints, keyHint{"/", "search"}, keyHint{"Esc", "close"})
 	if m.visualMode {
 		// tdp K11: in the selection mode the hint lists the mode's
 		// keys, starting with ? for the full list.
-		hintFull = " selecting  ?:keys  y:copy  v/Esc:leave "
-		hintShort = " ?  y  v  Esc "
+		hints = []keyHint{{"?", "keys"}, {"y", "copy"}, {"v/Esc", "leave"}}
 	}
-	hint = hintFull
 
 	total := len(m.contentLines)
 	if total > 0 {
@@ -1324,12 +1330,8 @@ func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicat
 	}
 
 	fits := func() bool {
-		return lipgloss.Width(hint)+lipgloss.Width(indicator) <= available
+		return lipgloss.Width(popupHint(hints...))+lipgloss.Width(indicator) <= available
 	}
-	if fits() {
-		return
-	}
-	hint = hintShort
 	if fits() {
 		return
 	}
@@ -1345,5 +1347,6 @@ func (m YamlPopupModel) bottomBarStrings(contentH, available int) (hint, indicat
 		return
 	}
 	indicator = ""
+	hints = fitHints(hints, available-2) // the hint's space either side
 	return
 }

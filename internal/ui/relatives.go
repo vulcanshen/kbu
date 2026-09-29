@@ -112,7 +112,7 @@ func buildServiceRelativeEntries(detail k8s.ResourceDetail) []relativeEntry {
 // buildGenericRelativeEntries converts the generic detail.Relatives payload
 // (populated by per-kind detailXxx + EnrichRelatives in the k8s layer) into
 // relativeEntry rows. Empty input returns nil so the renderer falls back to
-// the "no relatives — press Y" placeholder.
+// the "no relatives — press [Y]" placeholder.
 func buildGenericRelativeEntries(detail k8s.ResourceDetail) []relativeEntry {
 	if len(detail.Relatives) == 0 {
 		return nil
@@ -146,7 +146,7 @@ func relativesApplicable(rt k8s.ResourceType) bool {
 // drill into right now. Every non-Namespace kind has a Relatives builder, so
 // this is the only placeholder users will see — empty means "this
 // instance genuinely has nothing", not "we haven't written the code yet."
-const relativesPlaceholderEmpty = "(no relatives to show — press Y for full YAML)"
+const relativesPlaceholderEmpty = "(no relatives to show — press [Y] for full YAML)"
 
 func ownerDisplay(ref k8s.RefTarget) string {
 	// Short kind label + name. Use the registry display name when available,

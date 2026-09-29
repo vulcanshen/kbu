@@ -2,7 +2,6 @@ package ui
 
 import (
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -42,8 +41,7 @@ type NamespacePickerModel struct {
 	// list-mutating keys in this state (j/k/Enter/search) so the
 	// user can't act on an empty list. Flipped to false by
 	// SetNamespaces once the real list arrives.
-	loading      bool
-	spinnerFrame int
+	loading bool
 
 	layer       int
 	borderColor lipgloss.Color
@@ -52,28 +50,6 @@ type NamespacePickerModel struct {
 
 // SetSize records the screen width the popup's width derives from.
 func (m *NamespacePickerModel) SetSize(w, _ int) { m.screenW = w }
-
-// namespaceSpinnerTickMsg drives the braille-spinner cycle in the
-// title slot while loading. Independent of PopupAnimator's
-// AnimTickMsg because the spinner runs at its own ~80ms cadence and
-// has no opening / expand state machine — it just cycles frames
-// until loading=false.
-type namespaceSpinnerTickMsg struct{}
-
-// namespaceSpinnerInterval picks 80ms — fast enough to read as
-// "alive / working", slow enough not to flicker. 10 frames @ 80ms =
-// 800ms full cycle.
-const namespaceSpinnerInterval = 80 * time.Millisecond
-
-// namespaceSpinnerFrames is the standard 10-frame braille spinner
-// (dots-cycle pattern). Each frame is a single Unicode codepoint in
-// the Braille Patterns block (U+2800–U+28FF) — all single-cell wide
-// in monospaced terminals, so the title slot's width stays constant
-// across frames.
-var namespaceSpinnerFrames = []string{
-	"⠋", "⠙", "⠹", "⠸", "⠼",
-	"⠴", "⠦", "⠧", "⠇", "⠏",
-}
 
 func NewNamespacePickerModel(t *theme.Theme) NamespacePickerModel {
 	bc := theme.PopupLayerColor(1)
@@ -117,25 +93,20 @@ func (m *NamespacePickerModel) OpenLoading() tea.Cmd {
 	m.searchQuery = ""
 	m.pendingG = false
 	m.loading = true
-	m.spinnerFrame = 0
-	return tea.Batch(m.animator.Open(), m.spinnerTickCmd())
+	return tea.Batch(m.animator.Open(), loadingTick())
 }
 
-func (m NamespacePickerModel) spinnerTickCmd() tea.Cmd {
-	return tea.Tick(namespaceSpinnerInterval, func(time.Time) tea.Msg {
-		return namespaceSpinnerTickMsg{}
-	})
-}
-
-// HandleSpinnerTick advances the spinner frame and schedules the next
-// tick. Returns nil once loading flips false (SetNamespaces fired),
-// terminating the spinner loop naturally without a separate stop msg.
-func (m *NamespacePickerModel) HandleSpinnerTick(_ namespaceSpinnerTickMsg) tea.Cmd {
+// HandleLoadingTick keeps the loading icon turning: the next tick while
+// the list is still loading, nil once SetNamespaces has it (tdp D3: the
+// tick runs only while something loads). The clock picks the frame, so
+// the tick only asks for a redraw; a second chain from closing and
+// reopening before the list arrives redraws twice as often but turns
+// no faster.
+func (m *NamespacePickerModel) HandleLoadingTick() tea.Cmd {
 	if !m.loading {
 		return nil
 	}
-	m.spinnerFrame = (m.spinnerFrame + 1) % len(namespaceSpinnerFrames)
-	return m.spinnerTickCmd()
+	return loadingTick()
 }
 
 // SetNamespaces fills in the real list. Safe to call whether or not
@@ -422,7 +393,7 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	var lines []string
 	switch {
 	case m.loading:
-		// Loading state: spinner in title carries the signal; body
+		// Loading state: the loading icon in the title carries the signal; body
 		// shows a single empty row so the popup has visible interior
 		// instead of collapsing to top + padRows + bottom. When data
 		// arrives the empty row gets replaced by items.
@@ -453,16 +424,15 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 	body := strings.Join(lines, "\n")
 
-	// Title reserves a fixed-width spinner slot so trailing dashes
-	// stay constant across loading↔loaded. Loaded: slot is a single
-	// space. Loading: slot carries one frame of the braille spinner.
-	// All braille spinner chars are 1-cell wide → lipgloss.Width(title)
-	// never changes → no border shake.
-	spinner := " "
+	// Title reserves a one-cell slot after the name so trailing dashes
+	// stay constant across loading↔loaded (tdp F7, D3): the loading icon
+	// while the list is on its way, a space once it is in. The icon's
+	// frames are one cell wide like the space → no border shake.
+	slot := " "
 	if m.loading {
-		spinner = namespaceSpinnerFrames[m.spinnerFrame]
+		slot = loadingIcon()
 	}
-	title := " Namespaces " + spinner
+	title := " Namespaces " + slot
 	dashesAfter := innerW - 1 - lipgloss.Width(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
@@ -492,15 +462,17 @@ func (m NamespacePickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := " Enter:toggle  /,Tab:search  Esc:close "
+	// / and Tab both lead to typing but not the same way (/ starts a
+	// new filter, Tab keeps it), so they are two entries.
+	hint := popupHint(keyHint{"Enter", "toggle"}, keyHint{"/", "new filter"}, keyHint{"Tab", "filter"}, keyHint{"Esc", "close"})
 	if m.searching {
-		hint = " ↑↓ Enter:toggle  Tab:list  Esc:close "
+		hint = popupHint(keyHint{"↑/↓", "move"}, keyHint{"Enter", "toggle"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
 	}
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 
 	return b.String()
 }

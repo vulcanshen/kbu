@@ -297,13 +297,13 @@ func (m MenuPopupModel) renderFullPopup() string {
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay0))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
 	dimCursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c")).Background(lipgloss.Color("#45475a"))
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	title := m.title // the builder already put the glyph in (menuTitle)
-	hint := " j/k: move  Enter: run  Esc: close "
+	hint := popupHint(keyHint{"j/k", "move"}, keyHint{"Enter", "run"}, keyHint{"Esc", "close"})
 
 	// tdp F7: one width for every popup, whatever it shows.
 	innerW := popupInnerWidth(m.screenW)
@@ -376,7 +376,7 @@ func (m MenuPopupModel) renderFullPopup() string {
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 	return b.String()
 }
 
@@ -418,7 +418,7 @@ func panel2ItemOps(rt k8s.ResourceType, item k8s.ResourceItem, helmManaged bool,
 	}
 	yaml := menuItem{label: "YAML", key: "Y", hint: "view resource manifest", opens: true}
 	if !rt.SupportsDrillDown() && rt != k8s.ResourceContexts {
-		yaml.hint = "view resource manifest (also Enter)"
+		yaml.hint = "view resource manifest (also [Enter])"
 	}
 	items = append(items, yaml)
 	if resourceAllowsEdit(rt) {

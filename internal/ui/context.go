@@ -311,15 +311,15 @@ func (m ContextPickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := " Enter:select  /,Tab:search  Esc:close "
+	hint := popupHint(keyHint{"Enter", "select"}, keyHint{"/", "new filter"}, keyHint{"Tab", "filter"}, keyHint{"Esc", "close"})
 	if m.searching {
-		hint = " ↑↓ Enter:select  Tab:list  Esc:close "
+		hint = popupHint(keyHint{"↑/↓", "move"}, keyHint{"Enter", "select"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
 	}
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
-	b.WriteString(bStyle.Render("╰─") + tStyle.Render(hint) + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
+	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 
 	return b.String()
 }
