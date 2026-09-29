@@ -137,10 +137,18 @@ func (m *YamlPopupModel) Open(yaml string, rt k8s.ResourceType, item k8s.Resourc
 // Close begins the close animation.
 func (m *YamlPopupModel) Close() tea.Cmd { return m.animator.Close() }
 
-// CanEdit reports whether E edits what this viewer shows — the same test
-// as the panel's Edit row. Only then do the hint and ? list E.
+// HasEdit reports whether E is a key of this viewer at all: it shows one
+// object of a kind kbu edits. A Helm release document or an Events row
+// has none, so neither the hint nor ? lists it (tdp M6).
+func (m YamlPopupModel) HasEdit() bool {
+	return m.item.Name != "" && resourceAllowsEdit(m.resource)
+}
+
+// CanEdit reports whether E edits what this viewer shows right now — the
+// same test as the panel's Edit row. A helm-managed object has E but
+// can't use it (Rule A): ? lists it dimmed, the hint leaves it out.
 func (m YamlPopupModel) CanEdit() bool {
-	return m.item.Name != "" && resourceAllowsEdit(m.resource) && !k8s.IsHelmManaged(m.item)
+	return m.HasEdit() && !k8s.IsHelmManaged(m.item)
 }
 
 // yamlEditRequestMsg asks the app to confirm and run kubectl edit on the

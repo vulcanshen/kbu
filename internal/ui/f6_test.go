@@ -62,8 +62,9 @@ func TestF6_YamlEditConfirmsLikeThePanel(t *testing.T) {
 }
 
 // Rule A (dev-remarks): a helm-managed object is read-only in kbu — its
-// Edit row is dimmed. E in its YAML viewer does nothing either, and the
-// hint and ? don't offer it.
+// Edit row is dimmed. E in its YAML viewer does nothing either; the hint
+// leaves it out and ? lists it dimmed (tdp M6: the key exists, it can't
+// run right now).
 func TestF6_YamlEditOffForHelmManaged(t *testing.T) {
 	item := podItem("web", map[string]string{"app.kubernetes.io/managed-by": "Helm"})
 	if !k8s.IsHelmManaged(item) {
@@ -74,23 +75,38 @@ func TestF6_YamlEditOffForHelmManaged(t *testing.T) {
 	if m.confirm.animator.Owns() {
 		t.Error("E on a helm-managed object's YAML opened a confirm")
 	}
-	assertNoEditOffered(t, m)
+	if bottom := yamlHint(m); strings.Contains(bottom, "E:edit") {
+		t.Errorf("hint offers E where it does nothing: %q", bottom)
+	}
+	_, rows := m.keyRef()
+	if e := refRowFor(t, rows, "E"); !e.dim {
+		t.Error("? must list E dimmed on a helm-managed object")
+	}
 }
 
-// A Helm release document is not a resource kubectl edit can open.
+// A Helm release document is not a resource kubectl edit can open, and
+// kbu doesn't edit Events: the viewer has no E, so neither the hint nor ?
+// lists it.
 func TestF6_YamlEditOffForReleaseDocs(t *testing.T) {
-	m := yamlOpenFor(t, k8s.ResourceReleases, k8s.ResourceItem{Name: "web", Namespace: "default"})
-	m = pressE(t, m)
-	if m.confirm.animator.Owns() {
-		t.Error("E on a Helm release document opened a confirm")
+	for _, rt := range []k8s.ResourceType{k8s.ResourceReleases, k8s.ResourceEvents} {
+		m := yamlOpenFor(t, rt, k8s.ResourceItem{Name: "web", Namespace: "default"})
+		m = pressE(t, m)
+		if m.confirm.animator.Owns() {
+			t.Errorf("E on a %s YAML opened a confirm", rt)
+		}
+		assertNoEditOffered(t, m)
 	}
-	assertNoEditOffered(t, m)
+}
+
+// yamlHint is the YAML viewer's bottom border, as drawn.
+func yamlHint(m AppModel) string {
+	lines := strings.Split(m.yamlPopup.renderFullPopup(), "\n")
+	return ansi.Strip(lines[len(lines)-1])
 }
 
 func assertNoEditOffered(t *testing.T, m AppModel) {
 	t.Helper()
-	lines := strings.Split(m.yamlPopup.renderFullPopup(), "\n")
-	if bottom := ansi.Strip(lines[len(lines)-1]); strings.Contains(bottom, "E:edit") {
+	if bottom := yamlHint(m); strings.Contains(bottom, "E:edit") {
 		t.Errorf("hint offers E where it does nothing: %q", bottom)
 	}
 	_, rows := m.keyRef()

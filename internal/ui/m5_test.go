@@ -26,7 +26,7 @@ func TestM5_OneModifierNotation(t *testing.T) {
 			shown = append(shown, r.key, r.desc)
 		}
 	}
-	for _, rows := range [][]helpRow{yamlVisualRows(), yamlRows(true), menuRows(globalActions)} {
+	for _, rows := range [][]helpRow{yamlVisualRows(), yamlRows(true, true), menuRows(globalActions)} {
 		for _, r := range rows {
 			shown = append(shown, r.key, r.desc)
 		}
