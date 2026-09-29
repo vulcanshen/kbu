@@ -71,10 +71,10 @@ func renderSearchBoxWithColor(query string, active bool, width int, t *theme.The
 		text = " \U000F0233 " + query
 	}
 
-	textW := lipgloss.Width(text)
+	textW := dispWidth(text)
 	if textW > innerW {
 		text = text[:innerW-1] + "…"
-		textW = lipgloss.Width(text)
+		textW = dispWidth(text)
 	}
 	pad := ""
 	if textW < innerW {

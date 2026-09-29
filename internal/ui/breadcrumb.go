@@ -147,7 +147,7 @@ func (m BreadcrumbPopupModel) HandleMouse(msg tea.MouseMsg, screenW, screenH int
 	// lines (label-wrap path); walk lines per entry to find the
 	// match.
 	lines := strings.Split(popup, "\n")
-	w := lipgloss.Width(lines[0])
+	w := dispWidth(lines[0])
 	py := (screenH - len(lines)) / 2
 	rowOffset := msg.Y - py - 2 // skip top border + top padding row
 	if rowOffset < 0 {
@@ -175,7 +175,7 @@ func (m BreadcrumbPopupModel) entryDisplayLines(i int, innerW int) int {
 		return 0
 	}
 	labelPrefix := fmt.Sprintf("%d. ", i+1)
-	labelPrefixW := lipgloss.Width(labelPrefix)
+	labelPrefixW := dispWidth(labelPrefix)
 	const markerW = 2
 	labelBudget := innerW - 1 - labelPrefixW - markerW
 	if labelBudget < 10 {
@@ -213,7 +213,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 		rows = append(rows, m.renderEntry(i, ref, innerW, levelStyle, cursorStyle, currentMarkStyle)...)
 	}
 
-	dashesAfter := innerW - 1 - lipgloss.Width(title)
+	dashesAfter := innerW - 1 - dispWidth(title)
 	if dashesAfter < 0 {
 		dashesAfter = 0
 	}
@@ -228,7 +228,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	padRow := left + strings.Repeat(" ", innerW) + right + "\n"
 	b.WriteString(padRow)
 	for _, line := range rows {
-		lw := lipgloss.Width(line)
+		lw := dispWidth(line)
 		pad := ""
 		if lw < innerW {
 			pad = strings.Repeat(" ", innerW-lw)
@@ -237,7 +237,7 @@ func (m BreadcrumbPopupModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow)
 
-	bottomDashes := innerW - lipgloss.Width(hint) - 1
+	bottomDashes := innerW - dispWidth(hint) - 1
 	if bottomDashes < 0 {
 		bottomDashes = 0
 	}
@@ -261,7 +261,7 @@ func (m BreadcrumbPopupModel) renderEntry(
 ) []string {
 	levelTag := fmt.Sprintf("%d.", i+1)
 	labelPrefix := levelTag + " " // "2. "  (NO leading space — that's added once at line level below)
-	labelPrefixW := lipgloss.Width(labelPrefix)
+	labelPrefixW := dispWidth(labelPrefix)
 	const markerW = 2
 	// Every row carries a marker so the visual rhythm matches the Relatives
 	// tab's drill arrow. Middle rows show the chain-step glyph (same as
@@ -293,7 +293,7 @@ func (m BreadcrumbPopupModel) renderEntry(
 		}
 		// Pad the body to fill all the way to the right border so the
 		// cursor highlight (when present) becomes a clean rectangle.
-		padW := innerW - 1 - lipgloss.Width(bodyPlain)
+		padW := innerW - 1 - dispWidth(bodyPlain)
 		if padW < 0 {
 			padW = 0
 		}

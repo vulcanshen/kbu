@@ -69,7 +69,7 @@
 - **kubectl** 在 `$PATH` 上（給 edit、delete、shell exec 用）
 - 有效的 **kubeconfig**（`~/.kube/config` 或 `$KUBECONFIG`）
 - 一個運作中的 Kubernetes cluster
-- **Nerd Font**，建議用 Mono 變體（例：JetBrains Mono Nerd Font Mono），icon 才會對齊格線。
+- **Nerd Font**。kbu 啟動時會量 icon 在你的終端機上佔幾格、照著排版，icon 畫成兩格寬的字型也對得齊。
 - **支援 truecolor（24-bit 色）的終端機**。kbu 的淡色與疊起來的 popup 之間的明暗，在 256 色下分不出來。
 
 ### Quick Install（macOS/Linux）
@@ -298,6 +298,7 @@ resource_kind_config:
 | `KBU__STATEPATH` | 改用這個檔案作為 session state file，取代 `<config-dir>/state.yaml`。適合想讓每次執行各有獨立 state、又不想動到真正 state file 的沙盒 / 測試場合。 | `KBU__STATEPATH` > 預設 layout |
 | `KBU__ALTERM_SHELL` | 改用這個 binary 作為 Alterm 的 shell。純名字會在 popup 開啟時走 `$PATH` 查找（Go `exec.Command` 語意）、絕對路徑直接 exec。前後空白會被 trim。 | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
 | `KBU__ALTERM_LOGIN_SHELL` | 強制 Alterm shell 進入或退出 login mode（`-l`）。Truthy 值：`true` / `1` / `yes`（大小寫都接受）。其他值關閉 login mode。當從非 login 父 shell 啟動而 PATH 在 `.zprofile` 時使用。 | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
+| `KBU__ICON_WIDTH` | Nerd Font 的 icon 在你的終端機上佔幾格：`1` 或 `2`。蓋過 kbu 啟動時的檢查；Windows 沒有檢查，要 `2` 只能靠它。其他值不理會。 | `KBU__ICON_WIDTH` > 啟動時檢查的結果 > `1` |
 
 範例：
 
@@ -359,7 +360,7 @@ status:
 
 ## 限制
 
-- **Nerd Font 請用 Mono 變體。** 用比例寬度的變體、或終端機設成 East-Asian-Ambiguous=double（部分 tmux + iTerm2 的 CJK 設定）時，helm-managed 的列與 popup 上框可能偏離格線 1 格。換成 Mono 變體，或把 ambiguous-width 設成 single。
+- **框線還是偏 1 格時**，是 kbu 啟動時的檢查（畫一個 icon、問終端機游標停在哪）沒得到回應或回應不對。`kbu iconwidth` 會印出 kbu 量到的格數；icon 畫成兩格寬就設 `KBU__ICON_WIDTH=2`，否則設 `KBU__ICON_WIDTH=1`。Windows 沒有這個檢查：字型把 icon 畫成兩格寬時要自己設。
 - **Helm 需要 `helm` CLI。** `helm` 在 `PATH` 上時才會出現 Helm 分類，release 列表每 3 秒更新一次（Helm 沒有 watch API）。
 - **workload 的 log 跟的是選到那一列當下存在的 Pod。** rollout 之後，重新選一次那一列才會接上新的 Pod。
 - **有些刪除與編輯被擋下。** Events 與 Nodes 不能從 kbu 刪除；helm-managed 物件不能編輯或刪除 —— 請用 `helm upgrade` / `rollback` / `uninstall`。
@@ -372,7 +373,7 @@ status:
 
 ## terminu family
 
-kbu 遵循 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.19/principle)：跟家族其他成員一樣的按鍵、一樣的 menu —— [filu](https://github.com/vulcanshen/filu)（檔案）、[sshu](https://github.com/vulcanshen/sshu)（ssh）、[webu](https://github.com/vulcanshen/webu)（網頁）、[locku](https://github.com/vulcanshen/locku)（螢幕鎖）。
+kbu 遵循 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.20/principle)：跟家族其他成員一樣的按鍵、一樣的 menu —— [filu](https://github.com/vulcanshen/filu)（檔案）、[sshu](https://github.com/vulcanshen/sshu)（ssh）、[webu](https://github.com/vulcanshen/webu)（網頁）、[locku](https://github.com/vulcanshen/locku)（螢幕鎖）。
 
 ## License
 

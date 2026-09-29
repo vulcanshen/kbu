@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/x/ansi"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vulcanshen/kbu/internal/theme"
@@ -189,9 +187,9 @@ func (m ToastModel) RenderPopup() string {
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
 
 	title := fmt.Sprintf(" %s %s ", glyph, toastTitleText)
-	titleW := lipgloss.Width(title)
+	titleW := dispWidth(title)
 	hint := m.toastHint()
-	hintW := lipgloss.Width(hint)
+	hintW := dispWidth(hint)
 
 	// tdp F7: the toast takes the same width as every popup; a message
 	// longer than that is cut.
@@ -211,10 +209,10 @@ func (m ToastModel) RenderPopup() string {
 	padRow := left + strings.Repeat(" ", innerW) + right
 
 	bodyText := " " + m.message + " "
-	if lipgloss.Width(bodyText) > innerW {
-		bodyText = ansi.Truncate(bodyText, innerW-1, "") + "…"
+	if dispWidth(bodyText) > innerW {
+		bodyText = dispClip(bodyText, innerW-1) + "…"
 	}
-	bw := lipgloss.Width(bodyText)
+	bw := dispWidth(bodyText)
 	if bw < innerW {
 		bodyText += strings.Repeat(" ", innerW-bw)
 	}

@@ -544,7 +544,7 @@ func (p *PtyView) SetSize(hostW, hostH int) {
 }
 
 // ptyDims returns the PTY content dimensions inside the popup. Margins are
-// fixed (preserving host parity so overlay.Composite centers symmetrically)
+// fixed (preserving host parity so compositeDisp centers symmetrically)
 // and asymmetric: horizontal margin is wider than vertical because terminals
 // are typically much wider than tall.
 func (p *PtyView) ptyDims() (cols, rows int) {
@@ -570,7 +570,7 @@ func (p *PtyView) ptyDims() (cols, rows int) {
 func (p *PtyView) View() string { return "" }
 
 // RenderPopup builds the title bar + bordered PTY grid as a single string
-// ready for overlay.Composite over the main view. Returns empty when the
+// ready for compositeDisp over the main view. Returns empty when the
 // popup should not be drawn — either no subprocess alive, or the subprocess
 // is alive but hidden (Alt+T from a Shell-kind PtyView).
 func (p *PtyView) RenderPopup() string {
@@ -605,11 +605,11 @@ func (p *PtyView) RenderPopup() string {
 		}
 		for _, l := range p.scrollback[start:end] {
 			// Lines hold raw output (with ANSI color codes preserved).
-			// Use visual-width (ansi.StringWidth) for layout math — len()
+			// Use display width (dispWidth) for layout math — len()
 			// would count escape bytes and break the popup grid.
-			w := ansi.StringWidth(l)
+			w := dispWidth(l)
 			if w > cols {
-				l = ansi.Truncate(l, cols, "")
+				l = dispClip(l, cols)
 			} else if w < cols {
 				l = l + strings.Repeat(" ", cols-w)
 			}
@@ -659,10 +659,10 @@ func (p *PtyView) RenderPopup() string {
 	// other popup overlays (toast / confirm / namespace / context).
 	// Note: `─` is 3 bytes in UTF-8 so we must NOT use len() for visual widths.
 	title := " " + titleText + " "
-	titleW := lipgloss.Width(title)
+	titleW := dispWidth(title)
 	if titleW > cols-2 {
 		title = " "
-		titleW = lipgloss.Width(title)
+		titleW = dispWidth(title)
 	}
 	const leadDashCount = 2
 	leadDashes := strings.Repeat("─", leadDashCount)
@@ -715,7 +715,7 @@ func (p *PtyView) renderBottomBorder(cols int, borderStyle lipgloss.Style) strin
 	if hint == "" {
 		return borderStyle.Render("╰" + strings.Repeat("─", cols) + "╯")
 	}
-	hintW := lipgloss.Width(hint)
+	hintW := dispWidth(hint)
 	trail := cols - hintW - 1
 	if trail < 0 {
 		trail = 0

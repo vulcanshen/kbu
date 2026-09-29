@@ -880,7 +880,7 @@ func (m SidebarModel) View() string {
 			if !m.focused {
 				style = dimRowStyle.Bold(true)
 			}
-			line = style.Width(m.width).Render(truncateSidebarLabel(label, m.width))
+			line = style.Render(padDisp(truncateSidebarLabel(label, m.width), m.width))
 		} else {
 			label := "  " + truncateSidebarLabel(item.label, m.width-2)
 			unfocusedSelStyle := m.theme.SidebarUnfocusedSelectedStyle()
@@ -897,15 +897,15 @@ func (m SidebarModel) View() string {
 				// The drag handle takes the first cell of the row's
 				// leading gap: same width, the moving row is marked.
 				// (The mode itself is named on panel 1's frame, tdp K11.)
-				line = dragRowStyle.Width(m.width).Render(dragHandleGlyph + label[1:])
+				line = dragRowStyle.Render(padDisp(dragHandleGlyph+label[1:], m.width))
 			case isCursor && m.focused:
-				line = selectedStyle.Width(m.width).Render(label)
+				line = selectedStyle.Render(padDisp(label, m.width))
 			case isCursor:
-				line = unfocusedSelStyle.Width(m.width).Render(label)
+				line = unfocusedSelStyle.Render(padDisp(label, m.width))
 			case item.resourceType == m.selected && m.focused:
-				line = unfocusedSelStyle.Width(m.width).Render(label)
+				line = unfocusedSelStyle.Render(padDisp(label, m.width))
 			default:
-				line = rowStyle.Width(m.width).Render(label)
+				line = rowStyle.Render(padDisp(label, m.width))
 			}
 		}
 		lines = append(lines, line)
@@ -1127,13 +1127,7 @@ func truncateSidebarLabel(label string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return ""
 	}
-	if len(label) <= maxWidth {
-		return label
-	}
-	if maxWidth == 1 {
-		return "…"
-	}
-	return label[:maxWidth-1] + "…"
+	return truncate(label, maxWidth)
 }
 
 // ScrollInfo returns the current cursor position among resources (non-category items).

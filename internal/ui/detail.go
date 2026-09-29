@@ -537,7 +537,7 @@ func (m DetailModel) View() string {
 	// "no resource selected" case and each tab's own empty message.
 	if msg := m.activeTabEmptyMessage(); msg != "" {
 		dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#7f849c"))
-		return lipgloss.Place(m.width, contentHeight, lipgloss.Center, lipgloss.Center, dim.Render(msg))
+		return centerDisp(m.width, contentHeight, dim.Render(msg))
 	}
 
 	displayLines := m.contentLines
@@ -1360,7 +1360,7 @@ func (m DetailModel) buildInfoLines() []string {
 	}
 	labelW := 0
 	for _, f := range m.detail.Fields {
-		if w := lipgloss.Width(f.Label); w > labelW {
+		if w := dispWidth(f.Label); w > labelW {
 			labelW = w
 		}
 	}
@@ -1907,7 +1907,7 @@ func (m DetailModel) buildLogLines() []string {
 		// returns the line UNWRAPPED — a second overflow route). Floor at 1
 		// so a prefix wider than the panel still wraps instead of emitting
 		// a full-length line.
-		prefixCols := lipgloss.Width(plainPrefix)
+		prefixCols := dispWidth(plainPrefix)
 		textW := m.width - prefixCols
 		if textW < 1 {
 			textW = 1
@@ -1929,11 +1929,11 @@ func (m DetailModel) buildLogLines() []string {
 	// Final guard: no log line may exceed the panel width. wrapPlain keeps
 	// the text within budget, but an over-long prefix (or a wide char at the
 	// wrap boundary) can still push a line past m.width, and one over-width
-	// line shatters the fixed-width panel composition in app.go. ansi.Truncate
+	// line shatters the fixed-width panel composition in app.go. dispClip
 	// is escape-aware, so it clamps without splitting the styled prefix.
 	for i, l := range lines {
-		if lipgloss.Width(l) > m.width {
-			lines[i] = ansi.Truncate(l, m.width, "")
+		if dispWidth(l) > m.width {
+			lines[i] = dispClip(l, m.width)
 		}
 	}
 	return lines
