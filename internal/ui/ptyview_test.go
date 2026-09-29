@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"os/exec"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +12,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hinshun/vt10x"
+
+	"github.com/vulcanshen/kbu/internal/k8s"
 )
 
 func TestPtyView_Initial_Inactive(t *testing.T) {
@@ -685,5 +689,78 @@ func TestPtyView_BottomBorderShowsTheExitKeyForEdit(t *testing.T) {
 	_, _ = p.term.Write([]byte("\x1b[?1049h")) // enter alt-screen, like the editor
 	if out := p.RenderPopup(); !strings.Contains(out, "Alt-Esc:leave") {
 		t.Error("the exit key must stay shown in alt-screen")
+	}
+}
+
+// tdp D6 (v0.1.22): what runs in a PTY is told the icon width kbu uses, as
+// TERMINU__ICON_WIDTH — one entry, replacing any it inherited, the rest of its
+// environment kept — and it really sees it. kubectl edit's cleaned-up
+// environment gets it too, so the editor it opens does.
+func TestD6_PtyHandsDownTheIconWidth(t *testing.T) {
+	defer restoreIconCells(iconCells)
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("no true binary on PATH")
+	}
+	countWidth := func(env []string) (n int, last string) {
+		for _, kv := range env {
+			if strings.HasPrefix(kv, "TERMINU__ICON_WIDTH=") {
+				n, last = n+1, kv
+			}
+		}
+		return n, last
+	}
+	// Stop only after the child exits: readLoop picks up p.cmd when its
+	// goroutine runs, and Stop clears it.
+	waitDone := func(v *PtyView) {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) && !v.done.Load() {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if !v.done.Load() {
+			t.Fatal("the child should have exited")
+		}
+	}
+	for _, cells := range []int{1, 2} {
+		iconCells = cells
+		want := "TERMINU__ICON_WIDTH=" + strconv.Itoa(cells)
+
+		// An environment of its own, holding a stale width.
+		cmd := exec.Command(truePath)
+		cmd.Env = []string{"KEEP=1", "TERMINU__ICON_WIDTH=9"}
+		v := NewPtyView("ptyview_test")
+		v.Start(cmd, "true", 80, 24, PtyKindExec)
+		if n, got := countWidth(cmd.Env); n != 1 || got != want || !slices.Contains(cmd.Env, "KEEP=1") {
+			t.Errorf("cells %d: want one %s and the rest kept, got %q", cells, want, cmd.Env)
+		}
+		waitDone(v)
+		v.Stop()
+
+		// kubectl edit: sanitizeEditorEnv's environment, the width added.
+		cmd = buildKubectlEditCmd(k8s.ResourcePods, k8s.ResourceItem{Name: "a", Namespace: "ns"}, "", "vi")
+		cmd.Path, cmd.Args, cmd.Err = truePath, []string{"true"}, nil // never run kubectl
+		v = NewPtyView("ptyview_test")
+		v.Start(cmd, "edit", 80, 24, PtyKindEdit)
+		if n, got := countWidth(cmd.Env); n != 1 || got != want ||
+			!slices.Contains(cmd.Env, "TERM=xterm-256color") || !slices.Contains(cmd.Env, "KUBE_EDITOR=vi") {
+			t.Errorf("cells %d: kubectl edit should keep its environment and get %s, got %q", cells, want, cmd.Env)
+		}
+		waitDone(v)
+		v.Stop()
+
+		// End to end: a shell in the PTY prints what it was handed, and still
+		// has kbu's own environment (a command with no Env inherits it).
+		t.Setenv("KBU__TEST_MARK", "kept")
+		t.Setenv("TERMINU__ICON_WIDTH", "9") // what an outer family PTY may have set
+		v = NewPtyView("ptyview_test")
+		v.Start(exec.Command("sh", "-c", "echo W=$TERMINU__ICON_WIDTH M=$KBU__TEST_MARK"), "sh", 80, 24, PtyKindShell)
+		waitDone(v)
+		v.mu.Lock()
+		out := v.term.String()
+		v.mu.Unlock()
+		if !strings.Contains(out, "W="+strconv.Itoa(cells)+" M=kept") {
+			t.Errorf("cells %d: the shell should see TERMINU__ICON_WIDTH=%d and kbu's environment:\n%s", cells, cells, out)
+		}
+		v.Stop()
 	}
 }

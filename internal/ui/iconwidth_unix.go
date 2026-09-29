@@ -17,11 +17,12 @@ import (
 // Most fonts move it 1 cell; CJK "full-width icon" fonts can move it 2 while
 // lipgloss still measures 1 — that gap is what breaks the borders. It probes
 // with CPR: print an icon at column 1, ask the terminal where the cursor ended
-// up. KBU__ICON_WIDTH overrides the probe. Any failure (not a tty, no CPR
-// reply, timeout) leaves iconCells at its default of 1. Call once, before
-// tea.NewProgram.
+// up. KBU__ICON_WIDTH, then TERMINU__ICON_WIDTH, override the probe (see
+// iconWidthOverride); with either set no CPR is sent. Any failure (not a tty,
+// no CPR reply, timeout) leaves iconCells at its default of 1. Call once,
+// before tea.NewProgram.
 func DetectIconWidth() {
-	if n, ok := iconWidthOverride(); ok { // manual override for flaky CPR
+	if n, ok := iconWidthOverride(); ok { // manual override, or a family app's PTY
 		iconCells = n
 		return
 	}

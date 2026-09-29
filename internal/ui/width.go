@@ -27,15 +27,21 @@ func IconCells() int { return iconCells }
 // changes on a normal font.
 var iconCells = 1
 
-// iconWidthOverride reads KBU__ICON_WIDTH (1 or 2), the manual override for a
-// terminal whose CPR reply is missing or wrong, and the only way to set it
-// where the probe does not run (Windows).
+// iconWidthOverride reads the icon width from the environment, before the
+// probe (tdp D6): KBU__ICON_WIDTH, the manual override for a terminal whose CPR
+// reply is missing or wrong and the only way to set it where the probe does not
+// run (Windows); then TERMINU__ICON_WIDTH, which a family app sets for what
+// runs in its PTY — in there the probe is answered by that app's terminal
+// emulator, which counts an icon as one cell. Only 1 or 2 count; anything else
+// is as if unset.
 func iconWidthOverride() (int, bool) {
-	n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("KBU__ICON_WIDTH")))
-	if err != nil || n < 1 || n > 2 {
-		return 0, false
+	for _, name := range []string{"KBU__ICON_WIDTH", "TERMINU__ICON_WIDTH"} {
+		n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
+		if err == nil && n >= 1 && n <= 2 {
+			return n, true
+		}
 	}
-	return n, true
+	return 0, false
 }
 
 // isWideIcon reports whether r is a Nerd Font file-type glyph that a CJK icon
@@ -184,13 +190,11 @@ func compositeDisp(fg, bg string, xPos, yPos overlay.Position, xOff, yOff int) s
 	fgLines, bgLines := strings.Split(fg, "\n"), strings.Split(bg, "\n")
 	fgW, bgW := blockWidth(fgLines), blockWidth(bgLines)
 	fgH, bgH := len(fgLines), len(bgLines)
-	if fgW >= bgW && fgH >= bgH {
-		return fg
-	}
 	// A box wider or taller than the screen (drawn at the old size for the
-	// frame a resize lands in) starts at 0 and is cut at the screen's edge:
-	// clampSpan alone would give a negative start, and a negative start
-	// panics below (overlay.Composite let the row run past the screen).
+	// frame a resize lands in) starts at 0 and is cut at the screen's edge,
+	// larger both ways too: clampSpan alone would give a negative start, and a
+	// negative start panics below (overlay.Composite let the row run past the
+	// screen). A box the size of the screen (a PTY) simply covers it.
 	x := max(clampSpan(placeOffset(xPos, bgW, fgW)+xOff, bgW-fgW), 0)
 	y := max(clampSpan(placeOffset(yPos, bgH, fgH)+yOff, bgH-fgH), 0)
 	for i, line := range fgLines {

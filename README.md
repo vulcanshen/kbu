@@ -296,7 +296,7 @@ resource_kind_config:
 
 Override the corresponding config slot for one-shot runs without editing the YAML — useful for CI / scripted demos / quick "try this shell" sessions.
 
-> The names follow the terminu family's `KBU__<NAME>`. Older names are not read; the [CHANGELOG](CHANGELOG.md) lists the renames.
+> The names follow the terminu family's `KBU__<NAME>`; `TERMINU__ICON_WIDTH` is the one the whole family shares. Older names are not read; the [CHANGELOG](CHANGELOG.md) lists the renames.
 
 | Variable | Effect | Precedence |
 |---|---|---|
@@ -304,7 +304,8 @@ Override the corresponding config slot for one-shot runs without editing the YAM
 | `KBU__STATE` | Keep the session state (`state.yaml`) in this directory instead of the config directory. Handy for sandbox / test runs that want per-run state without touching the real one. | `KBU__STATE` > config directory |
 | `KBU__ALTERM_SHELL` | Use this binary as the Alterm shell. Bare names are looked up on `$PATH` at popup-open time (Go `exec.Command` semantics); absolute paths run verbatim. Leading / trailing whitespace is trimmed. | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
 | `KBU__ALTERM_LOGIN_SHELL` | Force the Alterm shell into login mode (`-l`) or out of it. Truthy values: `true` / `1` / `yes` (and uppercase). Any other value disables login mode. Use when launched from a non-login parent and your PATH is set in `.zprofile`. | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
-| `KBU__ICON_WIDTH` | How many cells a Nerd Font icon takes on your terminal: `1` or `2`. Overrides the check kbu runs at start; on Windows, where there is no check, it is the only way to say `2`. Other values are ignored. | `KBU__ICON_WIDTH` > checked at start > `1` |
+| `KBU__ICON_WIDTH` | How many cells a Nerd Font icon takes on your terminal: `1` or `2`. Overrides the check kbu runs at start; on Windows, where there is no check, it is the only way to say `2`. Other values are ignored. | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > checked at start > `1` |
+| `TERMINU__ICON_WIDTH` | The same, shared by every app of the terminu family. An app of the family sets it for what runs in its terminal, so kbu run there draws icons as wide as the app around it does; kbu sets it for what runs in Alterm and the `kubectl edit` / `exec` terminals. | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > checked at start > `1` |
 
 Example:
 
@@ -366,7 +367,7 @@ status:
 
 ## Limits
 
-- **If borders still sit a cell off the grid**, the check kbu runs at start (it draws an icon and asks the terminal where the cursor ended up) got no answer or a wrong one. `kbu iconwidth` prints what kbu detects; set `KBU__ICON_WIDTH=2` for icons two cells wide, or `KBU__ICON_WIDTH=1`. Windows has no check: set the variable there if your font draws icons two cells wide.
+- **If borders still sit a cell off the grid**, the check kbu runs at start (it draws an icon and asks the terminal where the cursor ended up) got no answer or a wrong one. `kbu iconwidth` prints what kbu detects; set `KBU__ICON_WIDTH=2` for icons two cells wide, or `KBU__ICON_WIDTH=1`. Windows has no check: set the variable there if your font draws icons two cells wide. Inside the terminal of another terminu app, the check is answered by that app, not by your terminal; kbu takes the width the app hands down in `TERMINU__ICON_WIDTH` instead.
 - **Helm needs the `helm` CLI.** The Helm category only appears when `helm` is on your `PATH`, and the release list refreshes every 3 seconds (Helm has no watch API).
 - **Workload logs follow the Pods that exist when you select the row.** After a rollout, select the row again to pick up the new Pods.
 - **Some deletes and edits are blocked.** Events and Nodes can't be deleted from kbu; helm-managed objects can't be edited or deleted — use `helm upgrade` / `rollback` / `uninstall`.
@@ -379,7 +380,7 @@ status:
 
 ## terminu family
 
-kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.21/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
+kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.22/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
 
 ## License
 

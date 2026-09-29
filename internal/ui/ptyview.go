@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -195,6 +196,11 @@ func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int, kind PtyK
 
 	cols, rows := p.ptyDims()
 	p.term = vt10x.New(vt10x.WithSize(cols, rows))
+	// A family app run in here asks this PTY where its cursor went, and vt10x
+	// counts an icon as one cell: hand it the width kbu uses (tdp D6), so it
+	// passes down however deep the nesting goes. Alterm, kubectl exec and
+	// kubectl edit (and the editor it opens) all start here.
+	cmd.Env = withEnv(cmd.Env, "TERMINU__ICON_WIDTH", strconv.Itoa(iconCells))
 
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{
 		Cols: uint16(cols),
@@ -211,6 +217,21 @@ func (p *PtyView) Start(cmd *exec.Cmd, title string, hostW, hostH int, kind PtyK
 
 	go p.readLoop()
 	return tea.Batch(p.tick(), p.animator.Open())
+}
+
+// withEnv is env with key set to val: an existing key=… entry is replaced, not
+// repeated. A nil env stands for kbu's own environment, as exec.Cmd takes it.
+func withEnv(env []string, key, val string) []string {
+	if env == nil {
+		env = os.Environ()
+	}
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if k, _, _ := strings.Cut(kv, "="); k != key {
+			out = append(out, kv)
+		}
+	}
+	return append(out, key+"="+val)
 }
 
 func (p *PtyView) tick() tea.Cmd {
