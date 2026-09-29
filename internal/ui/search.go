@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/vulcanshen/kbu/internal/theme"
 )
 
@@ -25,14 +26,20 @@ func renderSearchBox(query string, active bool, width int, t *theme.Theme) strin
 }
 
 // finderSearchBox is the typing line of a finder popup (the namespace and
-// context pickers, tdp F1): lit while typing, dimmed once Tab has moved
-// focus to the list, so only the part that takes the keys is bright.
+// context pickers, tdp F1): lit while typing; once Tab has moved focus to
+// the list, the whole line — frame, glyph, filter — is Overlay0, the dim
+// text colour, with no cursor (D3). A faded copy of its own colours is not
+// used: a faded highlight can read brighter than grey.
 func finderSearchBox(query string, typing bool, width int, t *theme.Theme) []string {
-	box := renderSearchBox(query, typing, width, t)
-	if !typing {
-		box = dimANSI(box)
+	lines := strings.Split(renderSearchBox(query, typing, width, t), "\n")
+	if typing {
+		return lines
 	}
-	return strings.Split(box, "\n")
+	grey := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay0))
+	for i, l := range lines {
+		lines[i] = grey.Render(ansi.Strip(l))
+	}
+	return lines
 }
 
 // finderCursorStyle is a finder's list cursor row: while the list has
