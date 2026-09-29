@@ -311,9 +311,9 @@ func (m ContextPickerModel) renderFullPopup() string {
 	}
 	b.WriteString(padRow) // bottom padding row
 
-	hint := popupHint(keyHint{"Enter", "select"}, keyHint{"/", "new filter"}, keyHint{"Tab", "filter"}, keyHint{"Esc", "close"})
+	hint := fitPopupHint(innerW-1, keyHint{"Enter", "select"}, keyHint{"/", "new filter"}, keyHint{"Tab", "filter"}, keyHint{"Esc", "close"})
 	if m.searching {
-		hint = popupHint(keyHint{"↑/↓", "move"}, keyHint{"Enter", "select"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
+		hint = fitPopupHint(innerW-1, keyHint{"↑/↓", "move"}, keyHint{"Enter", "select"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
 	}
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {

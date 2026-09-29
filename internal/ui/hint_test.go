@@ -17,67 +17,85 @@ func bottomHintOf(popup string) string {
 	lines := strings.Split(ansi.Strip(popup), "\n")
 	last := strings.TrimPrefix(lines[len(lines)-1], "╰")
 	last = strings.TrimPrefix(last, "─")
-	if i := strings.Index(last, "─"); i >= 0 {
+	if i := strings.IndexAny(last, "─╯"); i >= 0 {
 		last = last[:i]
 	}
 	return last
 }
 
-// popupHints draws every popup in each of its states and returns the hint
-// its bottom border shows, by name.
-func popupHints(t *testing.T) map[string]string {
+// drawnPopups draws every popup in each of its states on a w-column
+// terminal, by name.
+func drawnPopups(t *testing.T, w int) map[string]string {
 	t.Helper()
 	m := stackTestApp(t)
-	w, h := m.width, m.height
+	m.width = w
+	h := m.height
 	got := map[string]string{}
 
 	openTestSpaceMenu(&m)
-	got["menu"] = bottomHintOf(m.spaceMenu.renderFullPopup())
+	got["menu"] = m.spaceMenu.renderFullPopup()
 
 	m.listPicker.SetSize(w, h)
 	_ = m.listPicker.Open("sort", "Sort", []ListPickerItem{{Key: "name", Label: "Name"}})
-	got["sort"] = bottomHintOf(m.listPicker.renderFullPopup())
+	got["sort"] = m.listPicker.renderFullPopup()
 
 	m.settingsPopup.SetSize(w, h)
 	_ = m.settingsPopup.Open([]SettingsItem{{Key: "scroll", Label: "Scroll"}})
-	got["settings"] = bottomHintOf(m.settingsPopup.renderFullPopup())
+	got["settings"] = m.settingsPopup.renderFullPopup()
 
 	m.breadcrumbPopup.SetSize(w, h)
 	_ = m.breadcrumbPopup.Open([]k8s.RefTarget{{Type: k8s.ResourcePods, Name: "a"}, {Type: k8s.ResourcePods, Name: "b"}})
-	got["breadcrumb"] = bottomHintOf(m.breadcrumbPopup.renderFullPopup())
+	got["breadcrumb"] = m.breadcrumbPopup.renderFullPopup()
 
 	m.namespacePicker.SetSize(w, h)
 	_ = m.namespacePicker.OpenLoading()
 	m.namespacePicker.SetNamespaces([]string{"default"})
-	got["namespace list"] = bottomHintOf(m.namespacePicker.renderFullPopup())
+	got["namespace list"] = m.namespacePicker.renderFullPopup()
 	m.namespacePicker.searching = true
-	got["namespace typing"] = bottomHintOf(m.namespacePicker.renderFullPopup())
+	got["namespace typing"] = m.namespacePicker.renderFullPopup()
 
 	m.contextPicker.SetSize(w, h)
 	_ = m.contextPicker.Open([]string{"orbstack"}, "orbstack")
-	got["context list"] = bottomHintOf(m.contextPicker.renderFullPopup())
+	got["context list"] = m.contextPicker.renderFullPopup()
 	m.contextPicker.searching = true
-	got["context typing"] = bottomHintOf(m.contextPicker.renderFullPopup())
+	got["context typing"] = m.contextPicker.renderFullPopup()
 
 	m.help.SetSize(w, h)
 	_ = m.help.Open("Keys", []helpRow{{key: "y", desc: "copy"}})
-	got["key reference"] = bottomHintOf(m.help.renderFullPopup())
+	got["key reference"] = m.help.renderFullPopup()
 
 	m.appLog.SetSize(w, h)
 	m.appLog.Info("hello")
-	got["app log"] = bottomHintOf(m.appLog.renderFullPopup())
+	got["app log"] = m.appLog.renderFullPopup()
 
 	m.comparePopup.SetSize(w, h)
 	_ = m.comparePopup.Open("a: 1\n", "a: 2\n", "l", "r")
-	got["compare"] = bottomHintOf(m.comparePopup.renderFrame())
+	got["compare"] = m.comparePopup.renderFrame()
+
+	m.confirm.SetSize(w, h)
+	_ = m.confirm.Show(ConfirmDelete, "Delete pod/a?", "kubectl delete pod a", nil)
+	got["confirm"] = m.confirm.renderFullPopup()
 
 	y := yamlOpenFor(t, k8s.ResourcePods, k8s.ResourceItem{Name: "nginx", Namespace: "default"})
-	got["yaml"] = bottomHintOf(y.yamlPopup.renderFullPopup())
+	y.yamlPopup.SetSize(w, h)
+	got["yaml"] = y.yamlPopup.renderFullPopup()
 	y.yamlPopup.visualMode = true
-	got["yaml selection"] = bottomHintOf(y.yamlPopup.renderFullPopup())
+	got["yaml selection"] = y.yamlPopup.renderFullPopup()
 
 	for name, kind := range map[string]PtyKind{"alterm": PtyKindShell, "edit": PtyKindEdit, "exec": PtyKindExec} {
-		got[name] = bottomHintOf(hookedPtyView(kind).RenderPopup())
+		p := hookedPtyView(kind)
+		p.term.Resize(w-4, 20) // F7: a terminal fills W − 2, its frame takes 2 more
+		got[name] = p.RenderPopup()
+	}
+	return got
+}
+
+// popupHints is the hint each popup's bottom border shows at 120 columns.
+func popupHints(t *testing.T) map[string]string {
+	t.Helper()
+	got := map[string]string{}
+	for name, drawn := range drawnPopups(t, 120) {
+		got[name] = bottomHintOf(drawn)
 	}
 	return got
 }
@@ -101,7 +119,7 @@ func TestM5_PopupHintsAreKeyColonDescription(t *testing.T) {
 		"compare":          " L:layout j/k:scroll Esc:close ",
 		"yaml":             " v:visual y:copy E:edit /:search Esc:close ",
 		"yaml selection":   " ?:keys h/j/k/l:select y:copy v/Esc:leave ",
-		"alterm":           " Alt-t:hide Alt-Esc:end PgUp/Home:scroll ",
+		"alterm":           " Alt-Esc:end Alt-t:hide PgUp/Home:scroll ",
 		"edit":             " Alt-Esc:leave PgUp/Home:scroll ",
 		"exec":             " Alt-Esc:leave PgUp/Home:scroll ",
 	}
@@ -148,6 +166,49 @@ func TestM5_NoHintInTheOldShape(t *testing.T) {
 		case lowerKeyName.MatchString(s):
 			t.Errorf("%q: key caps are written Esc, Enter, Tab, Space", s)
 		}
+	}
+}
+
+// tdp D3: a bottom-border hint that doesn't fit drops whole entries from
+// the end — never half of one — and the border stays the box's width (L4).
+// At 26 columns every popup is at its narrowest and no hint fits whole. A
+// terminal's exit key comes first, so it is the last to go (K10).
+func TestD3_NarrowHintsDropWholeEntries(t *testing.T) {
+	full := popupHints(t)
+	for _, w := range []int{40, 26} {
+		for name, drawn := range drawnPopups(t, w) {
+			lines := strings.Split(ansi.Strip(drawn), "\n")
+			top, bottom := lines[0], lines[len(lines)-1]
+			if ansi.StringWidth(bottom) != ansi.StringWidth(top) {
+				t.Errorf("%d cols, %s: the bottom border is %d wide, the box %d: %q", w, name, ansi.StringWidth(bottom), ansi.StringWidth(top), bottom)
+			}
+			got, want := strings.TrimSpace(bottomHintOf(drawn)), strings.TrimSpace(full[name])
+			switch {
+			case got == "":
+				t.Errorf("%d cols, %s: no hint entry fits at all", w, name)
+			case !strings.HasPrefix(want, got) || (len(got) < len(want) && want[len(got)] != ' '):
+				t.Errorf("%d cols, %s: %q is not whole entries of %q", w, name, got, want)
+			case w == 26 && got == want:
+				t.Errorf("%d cols, %s: %q fits whole; the test no longer measures dropping", w, name, got)
+			case (name == "alterm" || name == "edit" || name == "exec") && !strings.HasPrefix(got, "Alt-Esc:"):
+				t.Errorf("%d cols, %s: the exit key must stay, got %q", w, name, got)
+			}
+		}
+	}
+}
+
+// Panel borders too: entries that don't fit beside the scroll indicator
+// drop whole from the end; the indicator stays and the row keeps its width.
+func TestD3_PanelHintDropsBesideTheIndicator(t *testing.T) {
+	hints := []keyHint{{"u/d", "page"}, {"gg", "top"}, {"G", "live"}}
+	drawn := renderPanelWithScroll("x", "t", 30, 5, true, theme.DefaultTheme(), &ScrollInfo{Position: 5, Total: 27}, "", hints, "")
+	lines := strings.Split(ansi.Strip(drawn), "\n")
+	bottom := lines[len(lines)-1]
+	if ansi.StringWidth(bottom) != 30 {
+		t.Errorf("the bottom border is %d wide, want 30: %q", ansi.StringWidth(bottom), bottom)
+	}
+	if !strings.Contains(bottom, "u/d:page gg:top") || strings.Contains(bottom, "G:") || !strings.Contains(bottom, " 5 of 27 ") {
+		t.Errorf("want whole entries up to gg:top beside the indicator, got %q", bottom)
 	}
 }
 

@@ -206,7 +206,7 @@ func (m HelpModel) renderFullPopup() string {
 		b.WriteString(left + padRight(line, innerW) + right + "\n")
 	}
 	b.WriteString(padRow)
-	hint := popupHint(keyHint{"j/k", "scroll"}, keyHint{"?/Esc", "close"})
+	hint := fitPopupHint(innerW-1, keyHint{"j/k", "scroll"}, keyHint{"?/Esc", "close"})
 	bottomDashes := max(innerW-lipgloss.Width(hint)-1, 0)
 	b.WriteString(bStyle.Render("╰─") + hint + bStyle.Render(strings.Repeat("─", bottomDashes)+"╯"))
 	return b.String()

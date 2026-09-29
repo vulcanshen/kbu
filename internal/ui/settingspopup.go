@@ -190,7 +190,7 @@ func (m SettingsPopupModel) renderFullPopup() string {
 	// icon shared across most TUI / GUI apps. Leading + trailing space
 	// keep it from butting against the border corner.
 	title := "  Settings "
-	bottomHint := popupHint(keyHint{"j/k", "move"}, keyHint{"Enter", "toggle"}, keyHint{"Esc", "close"})
+	bottomHint := fitPopupHint(popupInnerWidth(m.screenW)-1, keyHint{"j/k", "move"}, keyHint{"Enter", "toggle"}, keyHint{"Esc", "close"})
 
 	// tdp F7: one width for every popup, whatever it shows.
 	innerW := popupInnerWidth(m.screenW)

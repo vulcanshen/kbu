@@ -702,15 +702,17 @@ func (p *PtyView) renderBottomBorder(cols int, borderStyle lipgloss.Style) strin
 	altScreen := p.term != nil && p.term.Mode()&vt10x.ModeAltScreen != 0
 	// The exit key is always shown, alt-screen or not (tdp K10); the
 	// scroll keys only while kbu takes them (not in alt-screen).
+	// The exit key comes first, so a narrow border drops the others before
+	// it (tdp K10: the exit key is always shown; D3: drop from the end).
 	hints := []keyHint{{"Alt-Esc", "leave"}}
 	if p.kind == PtyKindShell {
-		hints = []keyHint{{"Alt-t", "hide"}, {"Alt-Esc", "end"}}
+		hints = []keyHint{{"Alt-Esc", "end"}, {"Alt-t", "hide"}}
 	}
 	if !altScreen {
 		hints = append(hints, keyHint{"PgUp/Home", "scroll"})
 	}
-	hint := popupHint(hints...)
-	if lipgloss.Width(hint)+4 > cols {
+	hint := fitPopupHint(cols-1, hints...)
+	if hint == "" {
 		return borderStyle.Render("╰" + strings.Repeat("─", cols) + "╯")
 	}
 	hintW := lipgloss.Width(hint)

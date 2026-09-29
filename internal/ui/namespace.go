@@ -452,9 +452,9 @@ func (m NamespacePickerModel) renderFullPopup() string {
 
 	// / and Tab both lead to typing but not the same way (/ starts a
 	// new filter, Tab keeps it), so they are two entries.
-	hint := popupHint(keyHint{"Enter", "toggle"}, keyHint{"/", "new filter"}, keyHint{"Tab", "filter"}, keyHint{"Esc", "close"})
+	hint := fitPopupHint(innerW-1, keyHint{"Enter", "toggle"}, keyHint{"/", "new filter"}, keyHint{"Tab", "filter"}, keyHint{"Esc", "close"})
 	if m.searching {
-		hint = popupHint(keyHint{"↑/↓", "move"}, keyHint{"Enter", "toggle"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
+		hint = fitPopupHint(innerW-1, keyHint{"↑/↓", "move"}, keyHint{"Enter", "toggle"}, keyHint{"Tab", "list"}, keyHint{"Esc", "close"})
 	}
 	bottomDashes := innerW - lipgloss.Width(hint) - 1
 	if bottomDashes < 0 {

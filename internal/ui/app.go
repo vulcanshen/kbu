@@ -3897,8 +3897,13 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 	// Bottom-left optional hint (panel 2's `.:helm`, panel 3's tab keys),
 	// with a single dash either side as separator. Two colours like every
 	// hint (tdp M5): the family pair on the focused panel, a darker pair
-	// that recedes with an unfocused one. Kept short by callers; if it
-	// doesn't fit alongside the scroll indicator we drop it silently.
+	// that recedes with an unfocused one. Entries that don't fit beside the
+	// scroll indicator drop whole from the end (D3); the indicator stays.
+	indicator := ""
+	if scroll != nil && scroll.Total > 0 {
+		indicator = fmt.Sprintf(" %d of %d ", scroll.Position, scroll.Total)
+	}
+	bottomLeft = fitHints(bottomLeft, innerW-2-len(indicator))
 	leftHintRendered := ""
 	leftHintVis := 0
 	if len(bottomLeft) > 0 {
@@ -3910,29 +3915,8 @@ func renderPanelWithScroll(content, title string, width, height int, focused boo
 		leftHintRendered = bStyle.Render(horiz) + renderHints(bottomLeft, colours) + bStyle.Render(horiz)
 	}
 
-	if scroll != nil && scroll.Total > 0 {
-		indicator := fmt.Sprintf(" %d of %d ", scroll.Position, scroll.Total)
-		dashes := innerW - len(indicator) - leftHintVis
-		if dashes < 0 {
-			dashes = 0
-			// Indicator + leftHint overflowed innerW. Drop the hint
-			// rather than truncating the more-useful scroll indicator.
-			leftHintRendered = ""
-			dashes = innerW - len(indicator)
-			if dashes < 0 {
-				dashes = 0
-			}
-		}
-		b.WriteString(bStyle.Render(bl) + leftHintRendered + bStyle.Render(strings.Repeat(horiz, dashes)+indicator+br))
-	} else {
-		dashes := innerW - leftHintVis
-		if dashes < 0 {
-			dashes = 0
-			leftHintRendered = ""
-			dashes = innerW
-		}
-		b.WriteString(bStyle.Render(bl) + leftHintRendered + bStyle.Render(strings.Repeat(horiz, dashes)+br))
-	}
+	dashes := max(innerW-len(indicator)-leftHintVis, 0)
+	b.WriteString(bStyle.Render(bl) + leftHintRendered + bStyle.Render(strings.Repeat(horiz, dashes)+indicator+br))
 
 	return b.String()
 }

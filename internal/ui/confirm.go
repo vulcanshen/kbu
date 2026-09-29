@@ -178,7 +178,7 @@ func (m ConfirmModel) renderFullPopup() string {
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Status.Pending))
 
 	title := "󰦕 Confirm"
-	hint := popupHint(keyHint{"Enter", confirmVerb(m.action)}, keyHint{"Esc", "cancel"}) // tdp D3
+	hint := fitPopupHint(popupInnerWidth(m.screenW)-1, keyHint{"Enter", confirmVerb(m.action)}, keyHint{"Esc", "cancel"}) // tdp D3
 
 	// tdp F7: one width for every popup, whatever it shows.
 	innerW := popupInnerWidth(m.screenW)
