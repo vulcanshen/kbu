@@ -61,7 +61,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   typing, `Enter` acts on the highlighted row right away (checks the
   namespace, or switches to the context) instead of only leaving the typing
   line; `Tab` moves between the typing line and the list; `Esc` closes the
-  picker from either (it used to clear the filter first).
+  picker from either (it used to clear the filter first). Only the part with
+  focus is lit: on the list, the typing line dims and the cursor row takes the
+  popup's colour.
 - **The key that opened a popup no longer closes it.** `N` on the namespace
   picker, `C` on the context picker, `!` on the App log and `>` on Settings
   used to work as a second `Esc` there, and nowhere else. `Esc` closes them.

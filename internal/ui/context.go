@@ -245,7 +245,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 	bc := m.borderColor
 	bStyle := lipgloss.NewStyle().Foreground(bc)
 	tStyle := lipgloss.NewStyle().Foreground(bc).Bold(true)
-	selectedStyle := m.theme.SidebarSelectedStyle()
+	selectedStyle := finderCursorStyle(m.searching, bc, m.theme)
 	normalStyle := m.theme.SidebarStyle()
 
 	innerW := popupInnerWidth(m.screenW) // tdp F7
@@ -296,7 +296,7 @@ func (m ContextPickerModel) renderFullPopup() string {
 
 	var contentLines []string
 	if m.searching || m.searchQuery != "" {
-		contentLines = append(contentLines, strings.Split(renderSearchBox(m.searchQuery, m.searching, innerW, m.theme), "\n")...)
+		contentLines = append(contentLines, finderSearchBox(m.searchQuery, m.searching, innerW, m.theme)...)
 	}
 	contentLines = append(contentLines, strings.Split(body, "\n")...)
 

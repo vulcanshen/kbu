@@ -24,6 +24,27 @@ func renderSearchBox(query string, active bool, width int, t *theme.Theme) strin
 	return renderSearchBoxWithColor(query, active, width, t, color)
 }
 
+// finderSearchBox is the typing line of a finder popup (the namespace and
+// context pickers, tdp F1): lit while typing, dimmed once Tab has moved
+// focus to the list, so only the part that takes the keys is bright.
+func finderSearchBox(query string, typing bool, width int, t *theme.Theme) []string {
+	box := renderSearchBox(query, typing, width, t)
+	if !typing {
+		box = dimANSI(box)
+	}
+	return strings.Split(box, "\n")
+}
+
+// finderCursorStyle is a finder's list cursor row: while the list has
+// focus it takes the popup's own colour, like a menu's cursor row; while
+// typing (↑/↓ still move it) it keeps the quieter highlight.
+func finderCursorStyle(typing bool, bc lipgloss.Color, t *theme.Theme) lipgloss.Style {
+	if typing {
+		return t.SidebarSelectedStyle()
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#1e1e2e")).Background(bc).Bold(true)
+}
+
 // renderSearchBoxWithColor renders the search box with a caller-supplied
 // border color override. Use when the default active/locked color logic in
 // renderSearchBox isn't right for a specific call site.
