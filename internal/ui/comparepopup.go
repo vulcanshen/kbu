@@ -333,11 +333,11 @@ func truncationBanner(truncL, truncR bool, width int) string {
 	var msg string
 	switch {
 	case truncL && truncR:
-		msg = fmt.Sprintf(" ⚠ both sides truncated to first %d lines (diff cap; Esc + Y on the row for full YAML)", splitDiffLineLimit)
+		msg = fmt.Sprintf(" ⚠ both sides truncated to first %d lines (diff cap; [Esc], then [Y] on the row, for the full YAML)", splitDiffLineLimit)
 	case truncL:
-		msg = fmt.Sprintf(" ⚠ left truncated to first %d lines (diff cap; Esc + Y on the row for full YAML)", splitDiffLineLimit)
+		msg = fmt.Sprintf(" ⚠ left truncated to first %d lines (diff cap; [Esc], then [Y] on the row, for the full YAML)", splitDiffLineLimit)
 	default:
-		msg = fmt.Sprintf(" ⚠ right truncated to first %d lines (diff cap; Esc + Y on the row for full YAML)", splitDiffLineLimit)
+		msg = fmt.Sprintf(" ⚠ right truncated to first %d lines (diff cap; [Esc], then [Y] on the row, for the full YAML)", splitDiffLineLimit)
 	}
 	return warnStyle.Render(ansiTruncate(msg, width))
 }

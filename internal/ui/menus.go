@@ -131,7 +131,7 @@ func (m *AppModel) tableMenu() (string, []menuItem, k8s.ResourceType, k8s.Resour
 		if idx := m.table.SelectedRow(); idx >= 0 && idx < len(m.drillDownContainers) {
 			title = menuTitle(menuTitleGlyph, "[2] container/"+m.drillDownContainers[idx].Name)
 			itemOps = []menuItem{
-				{label: "Shell", key: "S", hint: "kubectl exec -it into this container (also Enter)", opens: true},
+				{label: "Shell", key: "S", hint: "kubectl exec -it into this container (also [Enter])", opens: true},
 				{label: "Copy", key: "y", hint: "this row, tab-separated"},
 			}
 		}
@@ -146,7 +146,7 @@ func (m *AppModel) tableMenu() (string, []menuItem, k8s.ResourceType, k8s.Resour
 	var itemOps []menuItem
 	switch m.currentResource {
 	case k8s.ResourceReleases:
-		itemOps = append(itemOps, menuItem{label: "YAML", key: "Y", hint: "the release record (also Enter)", opens: true})
+		itemOps = append(itemOps, menuItem{label: "YAML", key: "Y", hint: "the release record (also [Enter])", opens: true})
 		itemOps = append(itemOps, helmDocMenuItems()...)
 		itemOps = append(itemOps, menuItem{label: "Copy", key: "y", hint: "this row, tab-separated"})
 	case k8s.ResourceContexts:
@@ -211,9 +211,9 @@ func (m *AppModel) detailMenu() (string, []menuItem) {
 	copyAll := menuItem{label: "Copy", key: "y", hint: "everything in this tab"}
 	zoom := menuItem{label: "Zoom", key: "z", hint: "full-screen this panel"}
 	if tab := m.detail.ActiveTabName(); tab != "Relatives" && tab != "History" {
-		zoom.hint = "full-screen this panel (also Enter)"
+		zoom.hint = "full-screen this panel (also [Enter])"
 	}
-	switchTab := menuItem{label: "Switch tab", key: "l", hint: "next tab (h: the previous one)", disabled: m.detail.TabCount() < 2}
+	switchTab := menuItem{label: "Switch tab", key: "l", hint: "next tab ([h] for the previous one)", disabled: m.detail.TabCount() < 2}
 
 	var itemOps, panelOps []menuItem
 	switch tab {

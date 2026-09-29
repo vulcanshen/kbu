@@ -1523,7 +1523,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// tdp K11: in the YAML viewer's selection mode Tab is
 		// suspended, but answers.
 		if top == &m.yamlPopup && m.yamlPopup.visualMode && k.String() == "tab" {
-			return m, m.toast.Show("Esc leaves the selection first")
+			return m, m.toast.Show("[Esc] leaves the selection first")
 		}
 		if top != nil {
 			if !top.ready() {
@@ -1920,7 +1920,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resourceFetchedForDrillMsg:
 		if msg.err != nil {
 			m.appLog.Warn(fmt.Sprintf("drill %s/%s: %s", msg.ref.Type, msg.ref.Name, msg.err.Error()))
-			return m, m.toast.ShowWarn("Drill failed — see App Log (!)")
+			return m, m.toast.ShowWarn("Drill failed — see App Log [!]")
 		}
 		if msg.yaml == "" {
 			m.appLog.Warn(fmt.Sprintf("drill %s/%s: no YAML", msg.ref.Type, msg.ref.Name))
@@ -2395,7 +2395,7 @@ func (m *AppModel) panelKey(msg tea.KeyMsg) tea.Cmd {
 		// answer — the drag stays, the toast says how to leave it.
 		switch msg.String() {
 		case "tab", "shift+tab", "1", "2", "3":
-			return m.toast.Show("Esc leaves drag mode first")
+			return m.toast.Show("[Esc] leaves drag mode first")
 		}
 		sidebar, cmd := m.sidebar.Update(msg)
 		m.sidebar = sidebar

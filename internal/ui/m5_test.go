@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/vulcanshen/kbu/internal/k8s"
@@ -114,6 +116,98 @@ func TestM5_KeyReferenceJoinsKeysWithSlash(t *testing.T) {
 			if !contains(got, k) {
 				t.Errorf("%s: no %q row, got %v", surface, k, got)
 			}
+		}
+	}
+}
+
+// unbracketedKey is a key named in a sentence without its brackets:
+// "(also Enter)", "(same as Y)", "h: the previous one".
+var unbracketedKey = regexp.MustCompile(`\((also|same as) (Enter|Esc|Tab|Space|[a-zA-Z?!/.>])\)|\b[a-zA-Z]: the\b`)
+
+// tdp M5: a key named in a sentence — a toast, an empty state, a menu or
+// key reference description — is written in brackets: [Esc], see App Log
+// [!], (also [Enter]).
+func TestM5_KeysInSentencesAreBracketed(t *testing.T) {
+	toastAfter := func(m AppModel, msg tea.Msg) string {
+		updated, _ := m.Update(msg)
+		return updated.(AppModel).toast.message
+	}
+	if got := toastAfter(dragApp(t), key("tab")); got != "[Esc] leaves drag mode first" {
+		t.Errorf("drag mode Tab toast %q", got)
+	}
+	y := stackTestApp(t)
+	_ = y.yamlPopup.Open("a: 1\n", k8s.ResourcePods, k8s.ResourceItem{Name: "a"})
+	y.yamlPopup.animator.Finalize()
+	y.yamlPopup, _ = y.yamlPopup.Update(key("v"))
+	if got := toastAfter(y, key("tab")); got != "[Esc] leaves the selection first" {
+		t.Errorf("selection Tab toast %q", got)
+	}
+	failed := resourceFetchedForDrillMsg{ref: k8s.RefTarget{Type: k8s.ResourcePods, Name: "a"}, err: errors.New("forbidden")}
+	if got := toastAfter(stackTestApp(t), failed); got != "Drill failed — see App Log [!]" {
+		t.Errorf("drill failure toast %q", got)
+	}
+	if !strings.Contains(relativesPlaceholderEmpty, "press [Y]") {
+		t.Errorf("Relatives empty state %q", relativesPlaceholderEmpty)
+	}
+	for _, banner := range []string{truncationBanner(true, true, 200), truncationBanner(true, false, 200), truncationBanner(false, true, 200)} {
+		if !strings.Contains(ansi.Strip(banner), "[Esc], then [Y]") {
+			t.Errorf("Compare truncation note %q", ansi.Strip(banner))
+		}
+	}
+
+	// Menu and key reference descriptions: every panel and tab kbu has.
+	var descs []string
+	m := menuFixture(t, []k8s.ResourceItem{podItem("a", nil), podItem("b", nil)}, 0)
+	m.sidebar.SnapCursorToKind(k8s.ResourcePods)
+	_, items := m.sidebarMenu()
+	for _, rt := range []k8s.ResourceType{k8s.ResourcePods, k8s.ResourceReleases, k8s.ResourceConfigMaps} {
+		m.currentResource = rt
+		_, ops, _, _ := m.tableMenu()
+		items = append(items, ops...)
+		m.activePanel = TablePanel
+		_, rows := m.keyRef()
+		for _, r := range rows {
+			descs = append(descs, r.desc)
+		}
+	}
+	pod := podItem("a", nil)
+	m.currentResource = k8s.ResourcePods
+	m.drillDownPod = &pod
+	m.drillDownContainers = []k8s.ContainerInfo{{Name: "app"}}
+	m.table.SetRows(containerRows(m.drillDownContainers))
+	_, ops, _, _ := m.tableMenu()
+	items = append(items, ops...)
+	_, rows := m.keyRef()
+	for _, r := range rows {
+		descs = append(descs, r.desc)
+	}
+	m.drillDownPod = nil
+	m.detail.SetResourceType(k8s.ResourcePods)
+	for _, tab := range []string{"Logs", "Relatives", "Events", "Conditions"} {
+		m.detail.SwitchToTabByName(tab)
+		_, ops := m.detailMenu()
+		items = append(items, ops...)
+		m.activePanel = DetailPanel
+		_, rows := m.keyRef()
+		for _, r := range rows {
+			descs = append(descs, r.desc)
+		}
+	}
+	for _, it := range items {
+		descs = append(descs, it.hint)
+	}
+	for _, r := range yamlRows(true, true) {
+		descs = append(descs, r.desc)
+	}
+	joined := strings.Join(descs, "\n")
+	for _, want := range []string{"(also [Enter])", "(same as [S])", "(same as [Y])", "(same as [z])", "([h] for the previous one)", "[n]/[N]", "[?] there"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("no description says %q", want)
+		}
+	}
+	for _, d := range descs {
+		if unbracketedKey.MatchString(d) {
+			t.Errorf("%q names a key without brackets", d)
 		}
 	}
 }

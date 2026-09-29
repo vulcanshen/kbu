@@ -140,7 +140,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   `Shift-Tab` now, and so does the README. Keys that do the same thing are
   joined with `/` and a range with `–` (`j/k`, `gg/G`, `1–3`): `?` shows
   `Enter/y` and `Esc/n` on a confirm, `h/[` and `l/]` for panel 3's tabs, and
-  `Tab` and `Shift-Tab` on rows of their own.
+  `Tab` and `Shift-Tab` on rows of their own. A key named in a sentence — a
+  toast, an empty state, a menu description — is in brackets:
+  `[Esc] leaves drag mode first`, `see App Log [!]`, `(also [Enter])`.
 - **Hints read `key:description`, in two colours.** Every popup's bottom
   border, the terminals', the panel borders and the footer now write
   `j/k:move Enter:run Esc:close`: the key in blue, the colon and what it does
