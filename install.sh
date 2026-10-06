@@ -89,4 +89,4 @@ case ":$PATH:" in
 esac
 
 echo ""
-echo "Run 'kbu --version' to verify."
+echo "Run 'kbu version' to verify."
