@@ -635,7 +635,7 @@ func (m SidebarModel) handleSearchKey(msg tea.KeyMsg) (SidebarModel, tea.Cmd) {
 		return m.activateResource(visible)
 	case msg.Type == tea.KeyBackspace:
 		if len(m.searchQuery) > 0 {
-			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.searchQuery = dropLastRune(m.searchQuery)
 			m.resetCursorToFirstMatch()
 		}
 		return m, nil
