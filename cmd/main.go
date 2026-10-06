@@ -18,8 +18,15 @@ import (
 	"github.com/vulcanshen/kbu/internal/version"
 )
 
+// asksVersion reports whether the command line asks for the version:
+// `version`, as in the rest of the terminu family, or the older `--version`
+// / `-v`, kept so scripts that use them still work.
+func asksVersion(args []string) bool {
+	return len(args) > 0 && (args[0] == "version" || args[0] == "--version" || args[0] == "-v")
+}
+
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+	if asksVersion(os.Args[1:]) {
 		fmt.Println("kbu " + version.Display())
 		return
 	}

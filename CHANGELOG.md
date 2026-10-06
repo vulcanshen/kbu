@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+- **`kbu version` prints the version**, as in the rest of the terminu family.
+  It used to start kbu instead. `kbu --version` and `kbu -v` still work.
+
 ## [v3.0.0] - 2026-10-06
 
 - **Environment variables take the family's names; old names are no longer
