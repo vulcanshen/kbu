@@ -4,11 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
-
-- **`kbu version` prints the version**, as in the rest of the terminu family.
-  It used to start kbu instead. `kbu --version` and `kbu -v` still work.
-
 ## [v3.0.0] - 2026-10-06
 
 - **Environment variables take the family's names; old names are no longer
@@ -24,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   | `KBU__CONFIGPATH=/some/dir/config.yaml`, `KM8__CONFIGPATH=…` | `KBU__CONFIG=/some/dir` |
   | `KBU__STATEPATH=/some/dir/state.yaml`, `KM8__STATEPATH=…` | `KBU__STATE=/some/dir` |
   | `KM8__ALTERM_SHELL`, `KM8__ALTERM_LOGIN_SHELL` | `KBU__ALTERM_SHELL`, `KBU__ALTERM_LOGIN_SHELL` |
+- **`kbu version` prints the version**, as in the rest of the terminu family.
+  It used to start kbu instead. `kbu --version` and `kbu -v` still work.
 
 Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.23/principle) (tdp v0.1.23).
 
