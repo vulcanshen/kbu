@@ -6,8 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [v3.0.0] - 2026-10-06
 
-Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.23/principle) (tdp v0.1.23).
-
 - **Environment variables take the family's names; old names are no longer
   read.** `KBU__CONFIGPATH` (a file) is now `KBU__CONFIG`, a directory:
   `config.yaml` goes in it, and so do `theme.yaml`, the session state and crash
@@ -21,6 +19,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   | `KBU__CONFIGPATH=/some/dir/config.yaml`, `KM8__CONFIGPATH=…` | `KBU__CONFIG=/some/dir` |
   | `KBU__STATEPATH=/some/dir/state.yaml`, `KM8__STATEPATH=…` | `KBU__STATE=/some/dir` |
   | `KM8__ALTERM_SHELL`, `KM8__ALTERM_LOGIN_SHELL` | `KBU__ALTERM_SHELL`, `KBU__ALTERM_LOGIN_SHELL` |
+
+Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.23/principle) (tdp v0.1.23).
+
 - **A click lands on the popup you see on top.** A confirm, sort picker or
   YAML viewer opened from a `Space` menu sits centred over the menu; a click
   on it used to reach the menu first and run whichever menu row happened to
