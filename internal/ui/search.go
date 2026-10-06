@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -123,6 +124,14 @@ func searchLineText(query string, active bool, w int, t *theme.Theme) string {
 		used++
 	}
 	return b.String() + strings.Repeat(" ", max(w-used, 0))
+}
+
+// dropLastRune is a search line's Backspace (Alt-Backspace too): the last
+// character goes whole. Cutting a byte took a CJK character (3 bytes) or a
+// Nerd Font icon (4) off one byte at a time, drawing a broken one between.
+func dropLastRune(s string) string {
+	_, n := utf8.DecodeLastRuneInString(s)
+	return s[:len(s)-n]
 }
 
 // typedRunes is what a key types into a search line (tdp K8: while

@@ -888,7 +888,7 @@ func (m YamlPopupModel) handleSearchKey(msg tea.KeyMsg) (YamlPopupModel, tea.Cmd
 		return m, nil
 	case msg.Type == tea.KeyBackspace:
 		if len(m.searchQuery) > 0 {
-			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.searchQuery = dropLastRune(m.searchQuery)
 		}
 		return m, nil
 	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
