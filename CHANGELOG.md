@@ -207,6 +207,15 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **A popup on its way out hands the next key to the one beneath.** Pressing
   `Esc` twice quickly closes two layers instead of losing the second press to
   a popup (or a toast) already running its close animation.
+- **Pasting a line break into a search no longer breaks its box.** In the
+  sidebar, panel 2, the YAML viewer and the namespace / context filters, a
+  pasted line break split the search box across rows. A line break or tab
+  now stays in the search and shows as a red `\n` or `\t`; other control
+  characters in a paste, such as an escape, are dropped.
+- **A long search is cut at a whole character.** A search wider than its box
+  was cut by byte: a Chinese character or an icon at the cut became a broken
+  character, and the box's right edge came early. It is now cut by width,
+  with `…` and the box filled out to its border.
 
 ## [v2.2.2] - 2026-09-04
 
