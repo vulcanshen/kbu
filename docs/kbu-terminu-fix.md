@@ -16,15 +16,6 @@ tdp 版本不變，連結不用改。這份清單由 terminu session 寫好留�
   terminu `.local/family-fix/kbu/README.md`。
 
 
-## 2. `Backspace` 一次刪一個 byte
-
-**現況**：五個 `handleSearchKey()`（`sidebar.go:614`、`table.go:368`、`namespace.go:226`、`context.go:140`、
-`yamlpopup.go:876`）各寫一份 `s[:len(s)-1]`，`Alt-Backspace` 也一樣：CJK 一個字要按 3 次，中間兩次畫出 `�`；Nerd Font
-icon（4 bytes）要按 4 次。
-
-**怎麼改**：一次刪最後一個 rune，跟 filu、sshu、webu 一樣。五份一起改；要不要抽成一個 helper 由 kbu 定。
-
-
 ## 4. 註解把「CJK icon 字型」當成「icon 佔兩格」
 
 **現況**：tdp D7（v0.1.23）不拿「一定佔兩格」的字型當例子（filu 實測：Maple Mono NF CN 的 icon 看起來兩格，游標只前進一格）。

@@ -216,6 +216,9 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   was cut by byte: a Chinese character or an icon at the cut became a broken
   character, and the box's right edge came early. It is now cut by width,
   with `…` and the box filled out to its border.
+- **`Backspace` in a search takes off a whole character.** It took off one
+  byte, so a Chinese character took three presses and an icon four, with a
+  broken character drawn in between. `Alt-Backspace` the same.
 
 ## [v2.2.2] - 2026-09-04
 

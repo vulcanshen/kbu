@@ -74,6 +74,25 @@ func TestSearchLine_PasteKeepsBreaksAndTabs(t *testing.T) {
 	}
 }
 
+// Backspace — and Alt-Backspace, the same key to Bubble Tea — takes off
+// the last character whole: a pasted line break, a Nerd Font icon (4
+// bytes), a CJK character (3 bytes), never a byte of one. Each of the five
+// search lines.
+func TestSearchLine_BackspaceTakesOffACharacter(t *testing.T) {
+	for _, l := range openSearchLines(t) {
+		l.send(key("a中\U000F0233"))
+		l.send(paste("\r\n"))
+		for i, want := range []string{"a中\U000F0233", "a中", "a", ""} {
+			bs := tea.KeyMsg{Type: tea.KeyBackspace, Alt: i%2 == 1}
+			l.send(bs)
+			if got := l.value(); got != want {
+				t.Errorf("%s: after %d Backspace (alt %v) the value is %q, want %q", l.name, i+1, bs.Alt, got, want)
+				break
+			}
+		}
+	}
+}
+
 // boxMid is the search box's value row with its styles stripped.
 func boxMid(t *testing.T, box string) string {
 	t.Helper()
