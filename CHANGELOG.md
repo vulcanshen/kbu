@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [v3.0.0] - 2026-10-06
 
 Following the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.23/principle) (tdp v0.1.23).
 
