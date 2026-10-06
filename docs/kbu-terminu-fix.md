@@ -16,17 +16,6 @@ tdp 版本不變，連結不用改。這份清單由 terminu session 寫好留�
   terminu `.local/family-fix/kbu/README.md`。
 
 
-## 4. 註解把「CJK icon 字型」當成「icon 佔兩格」
-
-**現況**：tdp D7（v0.1.23）不拿「一定佔兩格」的字型當例子（filu 實測：Maple Mono NF CN 的 icon 看起來兩格，游標只前進一格）。
-kbu 有幾處註解把「CJK icon 字型」當成「icon 佔兩格」的代稱：`internal/ui/width.go:47`（`a CJK icon font draws wide`）、`:56`
-（`single-width even on CJK icon fonts`）、`:78`（`each file-type icon eats on a CJK icon font`）、`internal/ui/iconwidth_unix_test.go:14`
-（`icon consumed 2 cells (CJK font)`）。CHANGELOG `[Unreleased]` 沒有這個問題。webu、filu 都找到同一類並改了。
-
-**怎麼改**：照 filu 整類 grep：當代稱用的改成「icon 佔兩格的字型」（佔幾格看字型與終端機，啟動時量）。不說死的寫法可以留，
-例：`width.go:22`、`iconwidth_unix.go:17`、`docs/dev-remarks.md:80`（「有些字型（CJK 的『全寬 icon』字型）」）；要不要順手改由 kbu 定。
-
-
 ## 這一輪不修
 
 - 值太長時截哪一邊、水平捲動。

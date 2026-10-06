@@ -19,12 +19,12 @@ import (
 func IconCells() int { return iconCells }
 
 // iconCells is how many cells the cursor actually moves past a Nerd Font
-// icon. On a normal Nerd Font it is 1; some fonts (CJK "full-width icon"
-// fonts) move it 2, while lipgloss/x-ansi still measure 1 — that mismatch is
-// what breaks the borders. A font that draws the icon wider but moves the
-// cursor one cell (the glyph overflows) is 1. DetectIconWidth (CPR probe,
-// startup) sets this; the default of 1 means "no adjustment", so nothing
-// changes on a normal font.
+// icon. On a normal Nerd Font it is 1; some fonts move it 2, while
+// lipgloss/x-ansi still measure 1 — that mismatch is what breaks the
+// borders. A font that draws the icon wider but moves the cursor one cell
+// (the glyph overflows) is 1. DetectIconWidth (CPR probe, startup) sets
+// this; the default of 1 means "no adjustment", so nothing changes on a
+// normal font.
 var iconCells = 1
 
 // iconWidthOverride reads the icon width from the environment, before the
@@ -44,16 +44,16 @@ func iconWidthOverride() (int, bool) {
 	return 0, false
 }
 
-// isWideIcon reports whether r is a Nerd Font file-type glyph that a CJK icon
-// font renders double-width. The powerline caps (U+E0A0–E0D7, the tab-bar
-// triangles/rounds) live in the PUA too but render single-width, so they are
-// excluded — only file-type icons get the +1 treatment.
+// isWideIcon reports whether r is a Nerd Font file-type glyph, which takes two
+// cells where icons are two cells wide. The powerline caps (U+E0A0–E0D7, the
+// tab-bar triangles/rounds) live in the PUA too but render single-width, so
+// they are excluded — only file-type icons get the +1 treatment.
 func isWideIcon(r rune) bool {
 	if r >= 0x2160 && r <= 0x2164 {
-		return true // Ⅰ..Ⅴ tab numerals: ambiguous width, drawn wide on CJK fonts
+		return true // Ⅰ..Ⅴ tab numerals: ambiguous width, counted wide with the icons
 	}
 	if r >= 0xe0a0 && r <= 0xe0d7 {
-		return false // powerline caps — single-width even on CJK icon fonts
+		return false // powerline caps — single-width even where icons are two cells
 	}
 	// BMP Private Use Area + supplementary PUA-A (Material Design icons).
 	return (r >= 0xe000 && r <= 0xf8ff) || (r >= 0xf0000 && r <= 0xffffd)
@@ -75,7 +75,7 @@ func iconCount(s string) int {
 }
 
 // dispWidth is the on-screen width of s: the measured width plus the extra cell
-// each file-type icon eats on a CJK icon font.
+// each file-type icon takes where icons are two cells wide.
 func dispWidth(s string) int {
 	return ansi.StringWidth(s) + iconCount(s)*(iconCells-1)
 }
