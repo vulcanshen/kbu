@@ -350,6 +350,7 @@ cd kbu
 go build -o kbu ./cmd/
 ./kbu
 ./kbu iconwidth   # 啟動時的 icon 寬度探測量到幾格（tdp D6）
+./kbu version     # 版號，跟家族其他 app 一樣；舊的 --version、-v 留著當別名
 ```
 
 `make`（或 `make help`）列出所有 target：`make build`（`CGO_ENABLED=0` 靜態、`-trimpath`、strip、注入版本）、`make run`、`make test`、`make test-race`（每次 release 前跑一次）、`make vet`、`make fmt`。`go install` 裝出來的版本字串不經 ldflags 注入。
