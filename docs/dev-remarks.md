@@ -159,6 +159,8 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - **Helm 沒有 watch API**：release 清單每 3 秒 poll 一次 `helm list -A`。
 - **非 Mono 的 Nerd Font**：helm-managed 列與 popup 上框可能偏 1 格（見「運作方式」的 Nerd Font 渲染）。
 - **未做**：`:` command palette（舊的熱鍵表列為 future）。
+- **搜尋框只在尾端打字與 `Backspace`**：游標移動與其他編輯鍵（`←` / `→`、`Home` / `End`、`Ctrl-U`、`Ctrl-W`……）、值太長時截哪一邊
+  （現在保留開頭，看不到正在打的字）與水平捲動，等 tdp components 的 input 檔定案再做（2026-10-06 input 盤點時列為這一輪不修）。
 
 ## 偏離 tdp
 
@@ -187,7 +189,9 @@ v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 
 第五份清單（對照 v0.1.21，1 條：環境變數命名，見「環境變數」）修完，全文對照時另補選取模式 `?` 漏列的 `u/d`、`gg/G`；
 第六份清單（對照 v0.1.22，3 條，都在 D6：疊 popup 寬高都大也切、讀 `TERMINU__ICON_WIDTH`、開 PTY 時設給子程序，見「Nerd Font 的渲染」）
 修完，全文對照沒有新的；第七份清單（對照 v0.1.23，D7：README 寫出兩個 icon 寬度變數）沒有要修的 —— D7 那一段就是照 kbu 的
-環境變數表寫的。下次對照不必重查的，以及由 user 逐題裁定的。
+環境變數表寫的。2026-10-06 的第八份清單不是 tdp 改版，是 input 盤點翻出的 4 個 bug（五個搜尋框收貼上的換行與控制字元、
+`Backspace` 切 byte、太長時切 byte、註解拿 CJK icon 字型當「icon 佔兩格」的代稱），修完刪除（見「搜尋 / 過濾」）。下次對照不必
+重查的，以及由 user 逐題裁定的。
 
 **已經符合、不用修的**
 
