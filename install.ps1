@@ -56,4 +56,4 @@ if ($userPath -notlike "*$installDir*") {
 
 Write-Host ""
 Write-Host "kbu $version installed successfully!" -ForegroundColor Green
-Write-Host "Run 'kbu --version' to verify." -ForegroundColor Cyan
+Write-Host "Run 'kbu version' to verify." -ForegroundColor Cyan
