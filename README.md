@@ -32,7 +32,7 @@
 - **28 built-in resource types plus your CRDs** -- Custom Resources are discovered at startup, and every list updates live through the Kubernetes Watch API.
 - **Multi-namespace view** -- check any set of namespaces in the `N` picker, or pick "All Namespaces". kbu remembers the selection.
 - **Pin and sort** -- pin the resource kinds you use most to the top of the sidebar and drag them into order; sort any list by one or more columns. Both are saved per kind.
-- **Search** -- `/` filters the sidebar, the resource list, and the namespace / context pickers.
+- **Search** -- `/` filters the sidebar, the resource list, and the namespace / context pickers. A line break or tab you paste stays in the search and shows as a red `\n` or `\t`.
 - **Picks up where you left off** -- quit and relaunch, and you're back on the same context, namespace, resource, row, panel, and tab.
 
 ### Look closer

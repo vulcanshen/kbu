@@ -388,7 +388,7 @@ func (m TableModel) handleSearchKey(msg tea.KeyMsg) (TableModel, tea.Cmd) {
 
 	case msg.Type == tea.KeyBackspace:
 		if len(m.searchQuery) > 0 {
-			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.searchQuery = dropLastRune(m.searchQuery)
 			m.filterRows()
 		}
 		return m, nil

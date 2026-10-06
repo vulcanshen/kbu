@@ -14,7 +14,7 @@ import (
 
 // DetectIconWidth measures how many cells the cursor moves past a Nerd Font
 // icon and sets iconCells so the layout reserves the right space (tdp D6).
-// Most fonts move it 1 cell; CJK "full-width icon" fonts can move it 2 while
+// Most fonts move it 1 cell; some move it 2 while
 // lipgloss still measures 1 — that gap is what breaks the borders. It probes
 // with CPR: print an icon at column 1, ask the terminal where the cursor ended
 // up. KBU__ICON_WIDTH, then TERMINU__ICON_WIDTH, override the probe (see

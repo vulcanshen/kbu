@@ -39,7 +39,7 @@
 - **PTY scrollback**：所有 PTY popup（Alterm、shell exec、edit）有 10k 行歷史。`PgUp` / `PgDn` 翻頁，`Home` / `End` 跳到頂 / 回到 live。alt-screen 的程式（vim、less、htop）停用，讓它們保有自己的翻頁
 - **per-container 上色的 log 標籤**：多 container 的 pod 可以逐行分辨；每個 container 名稱有穩定的顏色
 - **刪除資源**：`D`（大寫，熱鍵與 `Space` menu 都是）附確認對話框。刪 namespace 帶更強的警告（`!!! Delete namespace "X"? This will remove ALL resources inside it.`），因為它會連鎖刪掉 namespace 裡每個 workload，是 kbu 開放的最危險的刪除。Events / Nodes 直接擋掉 —— Events 是系統產生的不可變紀錄，Nodes 是管理員的基礎設施動作，不在 kbu 這種偵察工具的受眾範圍
-- **搜尋 / 過濾**：`/` 在 sidebar 與表格 panel、以及 namespace / context picker popup 裡搜尋。sidebar 搜尋也比對分類名（例如 "cluster" 會展開 Cluster 分類）。focus 移到別的 panel 時搜尋自動清掉 —— 選取保留，過濾不保留
+- **搜尋 / 過濾**：`/` 在 sidebar 與表格 panel、以及 namespace / context picker popup 裡搜尋。sidebar 搜尋也比對分類名（例如 "cluster" 會展開 Cluster 分類）。focus 移到別的 panel 時搜尋自動清掉 —— 選取保留，過濾不保留。五個搜尋框（panel 1、2、namespace / context picker 的篩選、YAML 的 `/`）收字都經過 `typedRunes()`、畫都經過 `renderSearchBoxWithColor()`（`search.go`）。貼上（bracketed paste）是一整個 `KeyRunes`：換行與 Tab 留在值裡（`\r\n` 存成一個 `\n`，單獨的 `\r` 原樣留），其他控制字元（其餘的 C0、DEL、C1，例如 ESC）丟掉；按下去的 `Tab`、`Enter` 是別的 key type，照舊做它們的事。`searchLineText()` 依 grapheme 排：換行畫成 `\n`、Tab 畫成 `\t`，`Status.Error` 的紅色、2 格、不切開，跟手打的 `\`、`n` 靠顏色分；太長時依顯示寬度在字元或記號的邊界截、保留開頭、最後一格是 `…`、補白到右框（以前用 byte 截，CJK 與 icon 被切成 `�`、框右邊空一段）。篩選列灰掉時整列 strip 後一次上色，`\n` 也跟著灰。`Backspace`（`Alt-Backspace` 對 Bubble Tea 是同一個鍵）刪最後一個 rune（`dropLastRune()`，五個框共用；以前各自切一個 byte，CJK 字要按 3 次、icon 4 次，中間畫出 `�`）；換行存成一個 rune，所以一次刪掉。五個都是搜尋或篩選，`Enter` 不擋；值裡的換行照原字元比對（自然找不到）。這套是 2026-10-06 input 盤點後家族五個 app 一起定的（之後寫進 tdp components 的 input 檔）
 - **複製到剪貼簿（`y`）**：透過 OSC 52 複製 focus 元素的內容（tmux / SSH 都通，不需要 `xclip` / `pbcopy`）。語意跟著 focus：focus 目標有 cursor 時（sidebar 種類、panel 2 的列、panel 3 Relatives / History 的列、visual 模式下的 YAML popup），`y` 只複製那一列 / 選取 —— cursor 列是 tab 分隔的原始值，可直接餵 `awk` / `cut`，YAML visual 選取是原樣子字串。沒有 cursor 時（panel 3 Logs / Events / Conditions、App Log popup、非 visual 模式的 YAML popup），`y` 複製整個 focus 內容
 - **分級的 toast 通知**（畫面下方、footer 之上，寬度跟其他 popup 一樣，訊息太長截尾）：info 級（1 秒、popup layer 邊框 + `󰵅 kbu` 標題、hint 寫 `auto-dismiss`）用於「Copied!」之類的確認；warning 級（2 秒、Catppuccin Peach + `󰀦 kbu` 標題）用於被擋下的動作，例如 Relatives 循環偵測或 drill 失敗
 - **多 namespace 選取（v2.1）**：`N` 打開勾選框 picker。`Enter` 切換 cursor 所在的 namespace 並立即套用（panel 2 馬上重抓）；popup 保持開著，可以連續勾好幾個，勾選的 namespace 顯示綠色。`j/k` 移動（`u/d` 翻頁、`gg/G` 跳），`Esc` 關閉（`Space` 只開關 Space menu，在 picker 上不作用，tdp K5）。`/` 進入打字：打字時是附候選清單的 input（tdp F1），可列印的鍵都是字元、方向鍵在候選之間移動，`Enter` 勾選反白的那一個、繼續打字；`Tab` 在打字與清單之間切換、篩選留著，focus 在哪一邊哪一邊亮：打字時篩選列亮、清單的 cursor 列是淡的反白（Subtext1），`Tab` 到清單後篩選列整列（框、放大鏡、篩選字）畫成 Overlay0 灰色、不畫游標與背景，cursor 列換成 popup 的層色底加深色粗體字，跟 menu 的 cursor 列一樣（`finderSearchBox()`、`finderCursorStyle()`，`search.go`；2026-09-29 user 實機看過後定案，tdp v0.1.18 寫進 F1 / D3）。篩選列原本用 F8 的 `dimANSI()` 淡化自己的顏色，D3 定成灰色：有篩選字時框是 Peach，淡化後的反白有時反而比灰色亮；任何階段按 `Esc` 都關掉整個 picker（篩選是階段、不是一層，K4）。context picker 同一套，打字時 `Enter` 直接切換並關閉。「All Namespaces」與個別 namespace 互斥 —— 勾任一個個別的會清掉 All，取消最後一個會回到 All。個別選取時每個 namespace 分開 list（client-go 的 namespaced List，依名稱順序，每個回來就漸進渲染）；「All Namespaces」維持單一的全叢集 list —— 不做先全抓再過濾。namespaced 資源的清單多一個開頭的 Namespace 欄（第一欄，在 Name 之前；跟 Name 一樣中間截斷），statusbar 顯示單一 namespace、「All Namespaces」或「N selected」。選取重啟後保留，啟動時跟仍存在的 namespace 對帳 —— 刪掉的丟棄，全部都不在就退回 All。`C` 切換 context（大寫 —— 觸發鍵用大寫，避免打搜尋字時誤觸）
@@ -77,11 +77,11 @@
 
 ### Nerd Font 的渲染
 
-kbu 的 popup 標題、列標記、helm 標記、loading icon、splash 的像素都是 Nerd Font 的 PUA glyph。有些字型（CJK 的「全寬 icon」字型）讓游標跨過一個 icon 前進兩格，lipgloss / x-ansi 卻量成一格，框線就歪（tdp D6）。
+kbu 的 popup 標題、列標記、helm 標記、loading icon、splash 的像素都是 Nerd Font 的 PUA glyph。有些字型讓游標跨過一個 icon 前進兩格，lipgloss / x-ansi 卻量成一格，框線就歪（tdp D6）。
 
 - **量寬度一律走 `width.go`**（照搬 filu 的參考實作）：`dispWidth()`（量到的寬度加上每個 icon 多佔的格數）、`dispClip()`、`padDisp()`、`truncate()`、`dispCutLeft()`、`centerDisp()`（取代 `lipgloss.Place`）、`joinH()` / `joinV()`（取代 lipgloss 的 Join）、`compositeDisp()`（取代 `overlay.Composite`，疊 popup 與 toast）。`internal/ui` 的正式程式碼裡找不到 `lipgloss.Width`、`lipgloss.Place`、`ansi.StringWidth`、`ansi.Truncate`、lipgloss 的 Join、`overlay.Composite`；style 的 `.Width(n)` 改成先 `padDisp()` 再上色（lipgloss 的補空白也不認得寬 icon）。YAML viewer 游標與選取用的 `ansi.Cut` 切的是 YAML 內容自己的格數，例外；游標與選取存的是字元索引，先經 `cellsBefore()` 換成格數再切 —— 原本直接交給 `ansi.Cut`，中文字一個字元兩格，游標與選取落在錯的字上、還把字多畫一次（2026-09-29 照 filu `a242c9b` 修，user 同意一起修）。
 - **`iconCells`** 預設 1，這時 `dispWidth()` 就是 `ansi.StringWidth()`，一般字型的畫面完全不變（既有測試原封不動通過）。`isWideIcon()`：BMP 與補充 PUA 算，powerline 端點（U+E0A0–E0D7，panel 膠囊的圓角）不算。
-- **探測**（`iconwidth_unix.go` 的 `DetectIconWidth()`，`cmd/main.go` 在建 model、進 Bubble Tea 之前呼叫）：raw mode 下印一個 icon、送 CPR（`ESC[6n`），讀游標停在第幾欄，200ms 內沒回應就維持 1。量的是游標實際前進幾格：icon 看起來比一格寬、游標只前進一格的字型（glyph 溢出）是 1。探測之前先看兩個變數（`iconWidthOverride()`，tdp D6 v0.1.22）：`KBU__ICON_WIDTH`（手動覆寫）→ `TERMINU__ICON_WIDTH`（家族 app 在自己的 PTY 裡設給子程序的 —— 在別的 app 的 PTY 裡，探測由外層 app 的終端模擬器回答，它把 icon 一律當一格）；只收 `1`、`2`（前後空白先 trim），其他值當沒設；有一個有值就不送 CPR。Windows（`iconwidth_other.go`）沒有探測，只讀這兩個變數。`kbu iconwidth` 印出量到的值，給使用者自己查。2026-09-29 user 的終端機量到 1（畫面跟以前一樣）；CJK icon 字型沒有實機看，user 決定等收到 issue 再說。
+- **探測**（`iconwidth_unix.go` 的 `DetectIconWidth()`，`cmd/main.go` 在建 model、進 Bubble Tea 之前呼叫）：raw mode 下印一個 icon、送 CPR（`ESC[6n`），讀游標停在第幾欄，200ms 內沒回應就維持 1。量的是游標實際前進幾格：icon 看起來比一格寬、游標只前進一格的字型（glyph 溢出）是 1。探測之前先看兩個變數（`iconWidthOverride()`，tdp D6 v0.1.22）：`KBU__ICON_WIDTH`（手動覆寫）→ `TERMINU__ICON_WIDTH`（家族 app 在自己的 PTY 裡設給子程序的 —— 在別的 app 的 PTY 裡，探測由外層 app 的終端模擬器回答，它把 icon 一律當一格）；只收 `1`、`2`（前後空白先 trim），其他值當沒設；有一個有值就不送 CPR。Windows（`iconwidth_other.go`）沒有探測，只讀這兩個變數。`kbu iconwidth` 印出量到的值，給使用者自己查。2026-09-29 user 的終端機量到 1（畫面跟以前一樣）；icon 佔兩格的字型沒有實機看，user 決定等收到 issue 再說。
 - **傳給 PTY 裡的程式**：`PtyView.Start()`（Alterm、`kubectl exec`、`kubectl edit` 都從這裡開）在子程序的環境設 `TERMINU__ICON_WIDTH=<iconCells>`（`withEnv()`：已有同名的就取代、不重複，其他環境照留；`cmd.Env` 是 nil 時從 kbu 自己的環境開始）。kbu 的 PTY 是 vt10x，把 icon 當一格回答 CPR；在裡面跑的家族 app 改讀這個值，跟 kbu 用同一個寬度，巢狀幾層都傳得下去（tdp D6 v0.1.22，照 filu `1ab4b18`）。`kubectl edit` 的環境先經 `sanitizeEditorEnv()` 清過，再加上這一個，它開的 editor 一樣拿得到。
 - **疊 popup 比畫面大**：`compositeDisp()` 在 popup 比畫面寬或高時（resize 那一格用舊尺寸畫的框）從 0 開始、超出的部分切掉；寬、高兩邊都比畫面大時也一樣切 —— 從 `overlay.Composite` 帶過來的「寬高都不小於畫面就把框原樣交出去」特例在 tdp v0.1.22 拿掉，跟畫面一樣大的框（PTY 用滿）照樣整個蓋上。filu 的參考實作原本 x、y 會是負的，`strings.Repeat` 或索引直接 panic（`overlay.Composite` 原本是讓那一列超出畫面）；kbu 照搬時補上，filu 在 `b2436f3` 跟上。
 - **跟 filu 不同的地方**：kbu 另有 Windows 版，所以多一個非 unix 的探測檔。splash 的像素照 filu：icon 佔兩格時只畫 glyph，不補空白。helm 欄的 `MinWidth: 2` 保留，一般字型上的欄位位置不變。
@@ -159,6 +159,8 @@ tdp v0.1.4 起，K10 只要求 PTY 至少有一個出口鍵，其他組合鍵由
 - **Helm 沒有 watch API**：release 清單每 3 秒 poll 一次 `helm list -A`。
 - **非 Mono 的 Nerd Font**：helm-managed 列與 popup 上框可能偏 1 格（見「運作方式」的 Nerd Font 渲染）。
 - **未做**：`:` command palette（舊的熱鍵表列為 future）。
+- **搜尋框只在尾端打字與 `Backspace`**：游標移動與其他編輯鍵（`←` / `→`、`Home` / `End`、`Ctrl-U`、`Ctrl-W`……）、值太長時截哪一邊
+  （現在保留開頭，看不到正在打的字）與水平捲動，等 tdp components 的 input 檔定案再做（2026-10-06 input 盤點時列為這一輪不修）。
 
 ## 偏離 tdp
 
@@ -187,7 +189,9 @@ v0.1.19，4 條）修完第 1–3 條；第 4 條（icon 寬度，D6）等 filu 
 第五份清單（對照 v0.1.21，1 條：環境變數命名，見「環境變數」）修完，全文對照時另補選取模式 `?` 漏列的 `u/d`、`gg/G`；
 第六份清單（對照 v0.1.22，3 條，都在 D6：疊 popup 寬高都大也切、讀 `TERMINU__ICON_WIDTH`、開 PTY 時設給子程序，見「Nerd Font 的渲染」）
 修完，全文對照沒有新的；第七份清單（對照 v0.1.23，D7：README 寫出兩個 icon 寬度變數）沒有要修的 —— D7 那一段就是照 kbu 的
-環境變數表寫的。下次對照不必重查的，以及由 user 逐題裁定的。
+環境變數表寫的。2026-10-06 的第八份清單不是 tdp 改版，是 input 盤點翻出的 4 個 bug（五個搜尋框收貼上的換行與控制字元、
+`Backspace` 切 byte、太長時切 byte、註解拿 CJK icon 字型當「icon 佔兩格」的代稱），修完刪除（見「搜尋 / 過濾」）。下次對照不必
+重查的，以及由 user 逐題裁定的。
 
 **已經符合、不用修的**
 
