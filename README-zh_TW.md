@@ -32,7 +32,7 @@
 - **內建 28 種 resource，外加你的 CRD** — Custom Resource 啟動時自動探索，所有列表透過 Kubernetes Watch API 即時更新。
 - **多 namespace 檢視** — 在 `N` picker 勾選任意幾個 namespace，或選「All Namespaces」。kbu 會記住你的選擇。
 - **Pin 與排序** — 把最常用的 resource kind 釘到 sidebar 最上面、拖曳排好順序；任何列表都能依一欄或多欄排序。兩者都按 kind 分別保存。
-- **搜尋** — `/` 可以過濾 sidebar、resource 列表，以及 namespace / context picker。
+- **搜尋** — `/` 可以過濾 sidebar、resource 列表，以及 namespace / context picker。貼上的換行或 Tab 會留在搜尋字裡，畫成紅色的 `\n` 或 `\t`。
 - **從上次離開的地方繼續** — 關掉再開，會回到同一個 context、namespace、resource、row、panel 和 tab。
 
 ### 看仔細一點
