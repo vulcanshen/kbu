@@ -11,25 +11,21 @@ import (
 	"github.com/vulcanshen/kbu/internal/k8s"
 )
 
-// The namespace picker's checks: All, some, back to All.
+// The namespace picker's checks mean what the popup shows in Green.
 func TestPickedSelection(t *testing.T) {
 	names := []string{"a", "b", "c"}
-	all := k8s.AllNamespaces()
-	some := k8s.SelectedNamespaces("a")
 	cases := []struct {
 		name string
-		was  k8s.NamespaceSelection
 		now  []bool
 		want []string // nil for All
 	}{
-		{"All, then a checked", all, []bool{true, true, false, false}, []string{"a"}},
-		{"All unchecked, nothing else", all, []bool{false, false, false, false}, nil},
-		{"a, then b too", some, []bool{false, true, true, false}, []string{"a", "b"}},
-		{"a, then All checked again", some, []bool{true, true, false, false}, nil},
-		{"a, then unchecked", some, []bool{false, false, false, false}, nil},
+		{"All checked, a too", []bool{true, true, false, false}, nil},
+		{"only a", []bool{false, true, false, false}, []string{"a"}},
+		{"a and b", []bool{false, true, true, false}, []string{"a", "b"}},
+		{"nothing checked", []bool{false, false, false, false}, nil},
 	}
 	for _, c := range cases {
-		got := pickedSelection(c.was, names, c.now)
+		got := pickedSelection(names, c.now)
 		if c.want == nil {
 			if !got.IsAll() {
 				t.Errorf("%s: %v, want All", c.name, got.List())

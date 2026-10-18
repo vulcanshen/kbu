@@ -216,7 +216,7 @@ func ToggleHelmHideManaged() bool {
 // to the other popup icons. NF is already kbu's baseline icon
 // design, so falling back to standard Unicode for one popup didn't
 // buy any portability the rest of the surface didn't already lack.
-func HelmIcon() string { return "󰠳" }
+func HelmIcon() string { return "\U000F0833" }
 
 // HelmRowMark returns the panel 2 row marker for helm-managed items.
 // Same glyph as HelmIcon so the helm-managed signal stays visually
@@ -224,7 +224,7 @@ func HelmIcon() string { return "󰠳" }
 // already kbu's baseline icon design — a row-marker fallback box on
 // non-NF terminals is no worse than the kind icons already broken
 // in those same terminals.
-func HelmRowMark() string { return "󰠳" }
+func HelmRowMark() string { return "\U000F0833" }
 
 // MarkHelm returns the helm row marker when the item is helm-managed
 // (either by label/annotation, or — for Secrets — as a helm storage

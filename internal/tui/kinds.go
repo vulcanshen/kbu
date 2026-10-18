@@ -24,7 +24,7 @@ type dragState struct {
 }
 
 func (m *Model) buildKinds() {
-	m.kinds = &terminu.List{Draggable: true, EmptyFact: "No kinds match"}
+	m.kinds = &terminu.List{Draggable: true, EmptyFact: "No kinds match", EmptyHint: "Press [Esc] to clear the filter"}
 	m.kinds.OnMove = func(r terminu.Row) tea.Cmd {
 		m.kindAt = k8s.ResourceType(r.ID)
 		m.setKindActions()
@@ -65,22 +65,22 @@ func (m *Model) setKindActions() {
 	if pinned {
 		pin.Label, pin.Desc = "Unpin "+name, "move it back to its category"
 	}
+	// Sorting a kind's list is panel 2's (Alt-S there): only it shows the
+	// list (Principle P3).
 	m.kindsP.Actions = []terminu.Action{
 		pin,
-		{Key: "S", Label: "Sort panel 2 list", Desc: "order the " + name + " list by a column", Scope: terminu.ItemScope,
-			Hidden: func() bool { return len(columnsOf(m.kindAt)) == 0 },
-			Do:     func() tea.Cmd { return m.openSort(m.kindAt) }},
 		{Key: "Enter", Label: "Show in panel 2", Desc: "focus panel 2 on this kind", Scope: terminu.ItemScope, Hint: "open",
 			ToDetails: func() bool { return true },
 			Do:        func() tea.Cmd { return m.selectKind(m.kindAt, false) }},
-		{Key: "y", Label: "Copy", Desc: "the kind's kubectl name", Scope: terminu.ItemScope,
-			Do: func() tea.Cmd { return copyText(m.kindAt.KubectlName()) }},
-		{Key: "D", Label: "Drag to reorder pinned kinds", Desc: "move this kind among the pinned ones", Scope: terminu.PanelScope,
+		{Key: "D", Label: "Drag to reorder pinned kinds", Desc: "move this kind among the pinned ones", Scope: terminu.ItemScope,
 			Hidden:   func() bool { return !m.isPinned(m.kindAt) },
 			Disabled: func() bool { return len(m.pinned) < 2 },
 			Do:       m.startDrag},
+		{Key: "y", Label: "Copy", Desc: "the kind's kubectl name", Scope: terminu.ItemScope,
+			Do: func() tea.Cmd { return copyText(m.kindAt.KubectlName()) }},
 		{Key: "/", Label: "Search", Desc: "filter the kinds by name", Scope: terminu.PanelScope,
 			Do: func() tea.Cmd { m.kinds.OpenFilter(); return nil }},
+		{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom},
 	}
 }
 

@@ -14,22 +14,40 @@ import (
 )
 
 // Rules L4: every row is exactly as wide as the terminal, at every size, with
-// icons one cell or two (tdp E5), the popups opened.
+// icons and powerline symbols one cell or two (tdp E5), each kind of popup
+// kbu opens on top — menus, the key reference, a confirm, the viewers —
+// including screens smaller than the popup in width, in height, in both.
 func TestL4EveryRowIsTheTerminalWidth(t *testing.T) {
+	popups := [][]string{
+		nil,                     // the panels alone
+		{"Space"},               // the Space menu
+		{"Space", "G", "Enter"}, // the global operation popup over it
+		{"?"},                   // the key reference
+		{"Tab", "Y"},            // the YAML viewer
+		{"Tab", "Alt-S"},        // the sort menu
+		{"Tab", "D"},            // a confirm
+		{"Tab", "C", "j", "C"},  // the compare viewer
+		{"!"},                   // the App Log
+	}
+	sizes := [][2]int{{120, 40}, {80, 40}, {59, 20}, {200, 60}, {24, 40}, {200, 7}, {16, 6}}
 	for _, widths := range [][2]int{{1, 1}, {2, 1}, {2, 2}} {
-		for _, size := range [][2]int{{80, 40}, {120, 40}, {59, 20}, {200, 60}, {40, 12}} {
+		for _, open := range popups {
 			m := newTestModel(t)
 			terminu.SetIconWidth(widths[0], widths[1])
-			m.size(size[0], size[1])
 			m.feed(pod("demo", "web-1"), pod("demo", "web-2"))
-			for _, open := range [][]string{nil, {"Space"}, {"?"}, {"Tab", "Y"}} {
-				m.press(open...)
-				for i, line := range m.app.Frame() {
+			m.press(open...)
+			// The popup stays open while the terminal changes size under it.
+			for _, size := range sizes {
+				m.size(size[0], size[1])
+				frame := m.app.Frame()
+				if len(frame) != size[1] {
+					t.Fatalf("icon %v, %dx%d, after %v: %d rows, want %d", widths, size[0], size[1], open, len(frame), size[1])
+				}
+				for i, line := range frame {
 					if w := terminu.Width(line); w != size[0] {
 						t.Fatalf("icon %v, %dx%d, after %v: row %d is %d cells, want %d:\n%s", widths, size[0], size[1], open, i, w, size[0], line)
 					}
 				}
-				m.press("Esc")
 			}
 		}
 	}

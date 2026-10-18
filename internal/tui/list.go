@@ -146,7 +146,7 @@ func (m *Model) onWatchData(msg watchDataMsg) tea.Cmd {
 	}
 	if m.anchor != nil && indexOfKey(m.rootItems, m.anchor.key) < 0 {
 		m.anchor = nil
-		cmds = append(cmds, m.app.Toast(terminu.Info, "compare: locked item gone"))
+		cmds = append(cmds, m.toastWarn("compare: locked item gone"))
 	}
 	m.setListRows()
 	if p := m.pendingSel; p != nil && p.Type == m.current {
@@ -324,7 +324,10 @@ func (m *Model) setListRows() {
 		rows[i] = terminu.Row{ID: itemKey(it), Cells: cells, Sort: sortVals}
 	}
 	m.list.EmptyFact = "No " + strings.ToLower(rt.String())
-	m.list.EmptyHint = ""
+	m.list.EmptyHint = "Press [N] to pick other namespaces, or [Space] to see what you can do here"
+	if def := k8s.DefaultRegistry.Get(rt); def != nil && def.ClusterScoped {
+		m.list.EmptyHint = "Press [Space] to see what you can do here"
+	}
 	m.list.SortBy()
 	m.list.SetRows(rows)
 	m.list.SortBy(m.sortKeys(rt, cols)...)
@@ -400,12 +403,9 @@ func statusColor(status, pending, failed string) string {
 	return ""
 }
 
-func capRunes(s string, n int) string {
-	if r := []rune(s); len(r) > n {
-		return string(r[:n-1]) + "…"
-	}
-	return s
-}
+// capRunes fits s in n cells, cutting its end (tdp E5: by the display
+// width).
+func capRunes(s string, n int) string { return terminu.Truncate(s, n) }
 
 // listEsc is Esc on panel 2, one level at a time (Rules K4): the compare
 // anchor, then the drill.
@@ -520,7 +520,7 @@ func (m *Model) setListActions() {
 		{Key: "Alt-S", Label: "Sort panel 2 list", Desc: "order the rows by a column", Scope: terminu.PanelScope,
 			Hidden: func() bool { return m.atContainers() || len(columnsOf(m.shownKind())) == 0 },
 			Do:     func() tea.Cmd { return m.openSort(m.shownKind()) }},
-		{Key: "/", Label: "Search", Desc: "filter the rows by name", Scope: terminu.PanelScope,
+		{Key: "/", Label: "Search", Desc: "narrow the rows as you type", Scope: terminu.PanelScope,
 			Do: func() tea.Cmd { m.list.OpenFilter(); return nil }},
 		{Key: ".", Label: "Helm-managed rows", Desc: "show / hide rows a Helm chart manages", Scope: terminu.PanelScope, Hint: "helm",
 			Hidden: func() bool {
@@ -585,7 +585,7 @@ func (m *Model) drillIn() tea.Cmd {
 // F5: a failure is seen at once; an empty result is not an ignored Enter).
 func (m *Model) onChildren(msg childrenMsg) tea.Cmd {
 	if msg.err != nil {
-		return m.toastWarn(fmt.Sprintf("drill failed: %v", msg.err))
+		return m.toastErr(fmt.Sprintf("drill failed: %v", msg.err))
 	}
 	if len(msg.children) == 0 {
 		what := "children"

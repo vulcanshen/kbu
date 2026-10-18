@@ -87,7 +87,7 @@ func splitDiff(left, right, ll, rl string, w int) []string {
 	l, r, cutL, cutR := capLines(left, right)
 	fit := func(s string) string { return terminu.Fit(s, col) }
 	sep := terminu.Fg(terminu.Overlay0)
-	head := terminu.Fg(terminu.Blue).Bolded()
+	head := terminu.Fg(terminu.Blue) // bold is only for what components/color lists
 	out := []string{head.Render(fit(ll)) + sep.Render(" │ ") + head.Render(fit(rl)),
 		sep.Render(terminu.Repeat("─", col) + "─┼─" + terminu.Repeat("─", col))}
 	if n := cutNote(cutL, cutR); n != "" {

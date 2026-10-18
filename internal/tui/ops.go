@@ -203,7 +203,9 @@ func (m *Model) shellHere() tea.Cmd {
 func (m *Model) txExited(what string) func(error) tea.Cmd {
 	return func(err error) tea.Cmd {
 		if err != nil {
-			m.log.warn(what + ": " + err.Error())
+			// The popup closes with the program: what failed is said at
+			// once (Rules F5) and kept in the App Log.
+			return m.toastErr(what + " ended: " + err.Error())
 		}
 		return nil
 	}

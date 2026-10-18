@@ -26,13 +26,13 @@ func (m *Model) newAlterm() *terminu.Terminal {
 	// line and back to live, as before.
 	t := &terminu.Terminal{Title: "Alterm", Subject: hostname(), Command: altermCommand(m.cfg.AltermShell, m.cfg.AltermLoginShell),
 		Ends: true, History: true}
-	hide := func() tea.Cmd { return t.Hide(m.app) }
-	// Ctrl-T hides it too: VHS, which records the README's demo, cannot
-	// send an Alt key.
-	t.Keys = []terminu.TerminalKey{{Key: "Alt-t", Desc: "hide", Do: hide}, {Key: "Ctrl-T", Desc: "hide", Do: hide}}
+	// Alt-t hides it, as it shows it on a panel. (The Ctrl-T an older kbu
+	// also took, for VHS, which cannot send Alt, is gone: on a panel it did
+	// not show Alterm, a half alias, Rules K7.)
+	t.Keys = []terminu.TerminalKey{{Key: "Alt-t", Desc: "hide", Do: func() tea.Cmd { return t.Hide(m.app) }}}
 	t.OnExit = func(err error) tea.Cmd {
 		if err != nil {
-			m.log.warn("Alterm: " + err.Error())
+			return m.toastErr("Alterm ended: " + err.Error()) // Rules F5
 		}
 		return nil
 	}

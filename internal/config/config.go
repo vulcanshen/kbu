@@ -50,6 +50,11 @@ type Config struct {
 	// stripped PATH that can't find brew/asdf/mise binaries.
 	AltermLoginShell bool `yaml:"alterm_login_shell"`
 
+	// InputTabWidth is the terminu family's input_tab_width (tdp E3): how
+	// many cells a Tab takes in the viewers (YAML, logs). 0 means the
+	// family's default, 4.
+	InputTabWidth int `yaml:"input_tab_width,omitempty"`
+
 	// Compare carries settings for the YAML compare popup.
 	Compare CompareConfig `yaml:"compare"`
 

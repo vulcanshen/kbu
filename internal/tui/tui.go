@@ -109,6 +109,7 @@ func New(o Options) *Model {
 	a := terminu.New("kbu")
 	a.QuitDesc = "leave kbu"
 	a.ShiftTab = true
+	a.InputTabWidth = m.cfg.InputTabWidth // the family's input_tab_width (tdp E3)
 	a.Status = m.statusbar
 	a.OnMsg = m.onMsg
 	a.Start = m.start
@@ -253,7 +254,8 @@ func (m *Model) statusbar(w int) string {
 	left := " " + ctxKey.Render("[C]") + grey.Render("ontext: ") + value.Render(capMiddle(ctx, 24)) +
 		"  " + lit.Render("[N]") + grey.Render("amespace: ") + value.Render(capMiddle(ns, 16))
 	if m.alterm != nil && m.alterm.Running() {
-		left += "  " + lit.Render("[Alt-t]") + grey.Render("erm")
+		// A live session is in effect (components/color: Green).
+		left += "  " + lit.Render("[Alt-t]") + terminu.Fg(terminu.Green).Render("erm")
 	}
 	if m.anchor != nil {
 		cmpKey := unlit
@@ -286,14 +288,14 @@ func plural(n int, what string) string {
 // capMiddle shortens s to at most w cells by cutting its middle, so both ends
 // of a long context name stay readable.
 func capMiddle(s string, w int) string {
-	if terminu.Width(s) <= w || w < 3 {
+	n := terminu.Width(s)
+	if n <= w || w < 3 {
 		return s
 	}
-	r := []rune(s)
-	keep := w - 1
-	head := keep / 2
-	tail := keep - head
-	return string(r[:head]) + "…" + string(r[len(r)-tail:])
+	head := (w - 1) / 2
+	tail := w - 1 - head
+	// Cells, not runes (tdp E5): a wide character cut in half is a space.
+	return terminu.StripStyles(terminu.Cut(s, 0, head)) + "…" + terminu.StripStyles(terminu.Cut(s, n-tail, n))
 }
 
 // runCommand runs a program to its end; its output is what it printed on

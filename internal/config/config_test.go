@@ -54,8 +54,8 @@ func TestConfigPath(t *testing.T) {
 	}
 }
 
-// tdp D6: $KBU__CONFIG is the config directory — config.yaml, theme.yaml
-// and logs/ all move with it — trimmed of surrounding whitespace.
+// tdp E2: $KBU__CONFIG is the config directory — config.yaml and theme.yaml
+// move with it — trimmed of surrounding whitespace.
 func TestConfigDir_KBUConfigIsTheDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "kbu-cfg")
 	for _, v := range []string{dir, "  " + dir + "\t"} {
@@ -64,12 +64,26 @@ func TestConfigDir_KBUConfigIsTheDirectory(t *testing.T) {
 			t.Errorf("KBU__CONFIG=%q: ConfigDir() = %q, want %q", v, got, dir)
 		}
 		for name, got := range map[string]string{
-			"config.yaml": ConfigPath(), "theme.yaml": ThemePath(), "logs": LogDir(),
+			"config.yaml": ConfigPath(), "theme.yaml": ThemePath(),
 		} {
 			if want := filepath.Join(dir, name); got != want {
 				t.Errorf("KBU__CONFIG=%q: %s at %q, want %q", v, name, got, want)
 			}
 		}
+	}
+}
+
+// tdp E3: the logs are kbu's data, in ~/.kbu/logs; $KBU__DATA moves them.
+func TestLogDirIsTheData(t *testing.T) {
+	home := isolateHome(t)
+	t.Setenv("KBU__DATA", "")
+	if got, want := LogDir(), filepath.Join(home, ".kbu", "logs"); got != want {
+		t.Errorf("LogDir() = %q, want %q", got, want)
+	}
+	dir := filepath.Join(t.TempDir(), "data")
+	t.Setenv("KBU__DATA", " "+dir+" ")
+	if got, want := LogDir(), filepath.Join(dir, "logs"); got != want {
+		t.Errorf("with KBU__DATA: LogDir() = %q, want %q", got, want)
 	}
 }
 

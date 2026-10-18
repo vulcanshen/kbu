@@ -73,7 +73,10 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 	s := &yamlSearch{v: v}
 	v.Keys = []terminu.ViewerKey{
 		{Key: "/", Desc: "search", Do: func() tea.Cmd {
+			// TODO(lib KB11): a search's typing row only draws a pasted
+			// control character, it does not refuse it (components/input/README).
 			return m.app.Text(terminu.TextInput{Title: "Search", Subject: subject(rt, item), Glyph: glyphSearch,
+				Name:   "The text to find",
 				Prompt: "Find in the YAML; [n] and [N] go to the next and the previous", Verb: "search",
 				Done: func(q string) tea.Cmd {
 					if s.find(q); len(s.matches) == 0 {
@@ -108,7 +111,7 @@ func (m *Model) compareHere() tea.Cmd {
 	if i := indexOfKey(m.shownItems(), m.anchor.key); i >= 0 {
 		anchor = m.shownItems()[i]
 	} else {
-		return m.app.Toast(terminu.Info, "compare: anchor item gone")
+		return m.toastWarn("compare: anchor item gone")
 	}
 	left, right := k8s.MarshalItemYAMLForCompare(anchor), k8s.MarshalItemYAMLForCompare(item)
 	ll, rl := diffLabel(anchor), diffLabel(item)
@@ -198,21 +201,24 @@ func (m *Model) namespacePicker(names []string) tea.Cmd {
 		checked[i+1] = !sel.IsAll() && sel.Contains(n)
 	}
 	return m.app.Checks(terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Options: opts, Checked: checked,
-		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(sel, names, now)) }})
+		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(names, now)) }})
 }
 
-// pickedSelection is what the namespace picker's checks mean: All
-// Namespaces, unless some namespaces are checked — checking a namespace
-// while All is checked means just the ones checked; checking All again
-// while some were picked means all; nothing checked is all too.
-func pickedSelection(was k8s.NamespaceSelection, names []string, now []bool) k8s.NamespaceSelection {
+// pickedSelection is what the namespace picker's checks mean, as the
+// popup shows them in Green (components/input/finder: Green is what Enter
+// gives): All Namespaces checked is all of them; otherwise the namespaces
+// checked; nothing checked shows all, there being nothing else to show.
+func pickedSelection(names []string, now []bool) k8s.NamespaceSelection {
+	if now[0] {
+		return k8s.AllNamespaces()
+	}
 	var picked []string
 	for i, c := range now[1:] {
 		if c {
 			picked = append(picked, names[i])
 		}
 	}
-	if len(picked) == 0 || (now[0] && !was.IsAll()) {
+	if len(picked) == 0 {
 		return k8s.AllNamespaces()
 	}
 	return k8s.SelectedNamespaces(picked...)
@@ -248,6 +254,7 @@ func (m *Model) openContexts() tea.Cmd {
 		return nil
 	}
 	names := m.client.ListContexts()
+	slices.SortFunc(names, func(a, b string) int { return strings.Compare(strings.ToLower(a), strings.ToLower(b)) })
 	cur := slices.Index(names, m.client.ContextName())
 	return m.app.Select(terminu.Select{Title: "Contexts", Glyph: glyphCtx, Options: names, Selected: cur,
 		Done: func(i int) tea.Cmd { return m.switchContext(names[i]) }})
@@ -361,14 +368,16 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 			text += " in " + ref.Namespace
 		}
 		desc := "switch panels 1 and 2 to it"
+		label := fmt.Sprintf("%d. %s", i+1, text)
 		if i == len(refs)-1 {
-			desc = "where the tab is now"
+			// Where the user is: their footprint's colour (components/color).
+			desc, label = "where the tab is now", terminu.Fg(terminu.Lavender).Render(label)
 		}
 		details := []string{ref.Type.KubectlName() + "/" + ref.Name}
 		if ref.Namespace != "" {
 			details[0] += "  namespace: " + ref.Namespace
 		}
-		rows = append(rows, terminu.Action{Label: fmt.Sprintf("%d. %s", i+1, text), Desc: desc,
+		rows = append(rows, terminu.Action{Label: label, Desc: desc,
 			Ask: &terminu.Ask{Title: "Switch", Subject: ref.Name, Details: details,
 				Question: "Switch panel 1 + 2 to this resource?", Verb: "switch"},
 			Do: func() tea.Cmd { return m.switchTo(ref) }})

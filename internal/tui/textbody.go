@@ -16,10 +16,12 @@ import (
 // It runs again only when the width or the content changes (version).
 type textBody struct {
 	render func(w int) (header, rows []string)
-	empty  string // what it says with nothing to show
-	follow bool   // it follows the end when it was at the end
-	live   bool   // following now: at the end, not scrolled away
-	onLive func() // runs when live changes (the tab's live / paused glyph)
+	// empty and hint are what it says with nothing to show: a fact and a
+	// hint naming a key (components/layout/screen, empty states).
+	empty, hint string
+	follow      bool   // it follows the end when it was at the end
+	live        bool   // following now: at the end, not scrolled away
+	onLive      func() // runs when live changes (the tab's live / paused glyph)
 
 	version int // bumped by changed()
 	cacheW  int
@@ -32,7 +34,8 @@ type textBody struct {
 }
 
 func newTextBody(render func(w int) (header, rows []string), empty string, follow bool) *textBody {
-	return &textBody{render: render, empty: empty, follow: follow, live: follow, cacheW: -1}
+	return &textBody{render: render, empty: empty, hint: "Press [Space] to see what you can do here",
+		follow: follow, live: follow, cacheW: -1}
 }
 
 // changed says the content changed: it is laid out again at the next Draw.
@@ -75,7 +78,7 @@ func (b *textBody) Draw(w, h int, focused bool) []string {
 				out = append(out, " "+terminu.Pad(l, w-1))
 			}
 		}
-		return append(out, terminu.EmptyState(w, h-len(out), b.empty, "")...)
+		return append(out, terminu.EmptyState(w, h-len(out), b.empty, b.hint)...)
 	}
 	out := make([]string, 0, h)
 	for _, l := range b.header {

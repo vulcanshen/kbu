@@ -133,7 +133,7 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		return m.onRelative(msg)
 	case refYAMLMsg:
 		if msg.err != nil {
-			return m.toastWarn(fmt.Sprintf("YAML of %s/%s: %v", msg.ref.Type.KubectlName(), msg.ref.Name, msg.err))
+			return m.toastErr(fmt.Sprintf("YAML of %s/%s: %v", msg.ref.Type.KubectlName(), msg.ref.Name, msg.err))
 		}
 		return m.openYAML(msg.ref.Type, msg.item, k8s.MarshalItemYAML(msg.item))
 	case helmDocMsg:
@@ -142,7 +142,7 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		return m.onCommandDone(msg)
 	case copiedMsg:
 		if msg.err != nil {
-			return m.toastWarn("copy: " + msg.err.Error())
+			return m.toastErr("copy: " + msg.err.Error())
 		}
 		m.log.info(fmt.Sprintf("copied %s", plural(msg.lines, "line")))
 		return m.app.Toast(0, "Copied!")

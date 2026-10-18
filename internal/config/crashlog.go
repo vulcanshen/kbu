@@ -5,12 +5,24 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
-// LogDir returns the path to the kbu logs directory.
+// DataDir is where kbu keeps what it writes down for the user, its logs
+// (tdp E3): $KBU__DATA, else ~/.kbu (on Windows %USERPROFILE%\.kbu).
+// TODO(tdp KB2): E3 has no place for logs; data is the nearest.
+func DataDir() string {
+	if d := strings.TrimSpace(os.Getenv("KBU__DATA")); d != "" {
+		return d
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "."+appName)
+}
+
+// LogDir is the logs directory: the audit log and the crash logs.
 func LogDir() string {
-	return filepath.Join(ConfigDir(), "logs")
+	return filepath.Join(DataDir(), "logs")
 }
 
 // WriteCrashLog writes a panic message and stack trace to a crash log file.

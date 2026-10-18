@@ -65,7 +65,8 @@ func (m *Model) buildDetail() {
 	m.relList = &terminu.List{Columns: []terminu.Column{{Title: "Name"}, {Title: "Target", Flex: true}},
 		EmptyFact: "No relatives to show", EmptyHint: "Press [Y] for the full YAML"}
 	m.histList = &terminu.List{Columns: []terminu.Column{{Title: ""}, {Title: "Rev", Number: true}, {Title: "Status"},
-		{Title: "Date"}, {Title: "Chart"}, {Title: "Description", Flex: true}}, EmptyFact: "No revision history"}
+		{Title: "Date"}, {Title: "Chart"}, {Title: "Description", Flex: true}}, EmptyFact: "No revision history",
+		EmptyHint: "Press [Space] to see what you can do here"}
 	m.detailP = &terminu.Panel{Label: "Relatives", OnEsc: m.detailEsc}
 	m.detailP.OnTab = func(int) tea.Cmd { m.showTab(); return nil }
 	m.resetDetail(k8s.ResourcePods)
@@ -418,11 +419,11 @@ func podTag(name string) string {
 func (m *Model) renderLogs(w int) (header, rows []string) {
 	sep := terminu.Fg(terminu.Overlay0)
 	for _, l := range m.det.logs {
-		ctr := terminu.Fg(paletteColor(l.container)).Bolded().Render(l.container)
+		ctr := terminu.Fg(paletteColor(l.container)).Render(l.container)
 		plain := l.container
 		if l.pod != "" {
 			tag := podTag(l.pod)
-			ctr += sep.Render("@") + terminu.Fg(paletteColor(l.pod)).Bolded().Render(tag)
+			ctr += sep.Render("@") + terminu.Fg(paletteColor(l.pod)).Render(tag)
 			plain += "@" + tag
 		}
 		prefix := ctr + sep.Render(" │ ")
@@ -677,7 +678,7 @@ func (m *Model) onRelative(msg relativeMsg) tea.Cmd {
 		return nil // the user moved on
 	}
 	if msg.err != nil {
-		return m.toastWarn(fmt.Sprintf("drill failed: %v", msg.err))
+		return m.toastErr(fmt.Sprintf("drill failed: %v", msg.err))
 	}
 	m.det.chain = append(m.det.chain, relFrame{ref: msg.ref, item: msg.item, detail: msg.detail})
 	m.refreshRelatives()
