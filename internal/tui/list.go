@@ -112,7 +112,8 @@ func (m *Model) selectKind(rt k8s.ResourceType, debounce bool) tea.Cmd {
 	}
 	m.list.ClearFilter()
 	m.setListRows()
-	m.listP.Loading = m.client != nil
+	m.listP.Loading, m.listP.Fail = m.client != nil, nil
+	m.listP.LoadingText = "loading " + strings.ToLower(rt.String()) + "…"
 	m.resetDetail(rt)
 	m.kindSeq++
 	if !debounce {
@@ -136,7 +137,7 @@ func (m *Model) onWatchData(msg watchDataMsg) tea.Cmd {
 	if msg.kind != m.current {
 		return nil // a list from before the kind changed; its watch is gone
 	}
-	m.listP.Loading = false
+	m.listP.Loading, m.listP.Fail = false, nil
 	m.rootItems = filterHelm(msg.items, msg.kind)
 	sortDefault(m.rootItems)
 	cmds := []tea.Cmd{m.waitWatch()}

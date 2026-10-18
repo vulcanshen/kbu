@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	terminu "github.com/vulcanshen/terminu-go"
 
 	"github.com/vulcanshen/kbu/internal/config"
 	"github.com/vulcanshen/kbu/internal/k8s"
@@ -101,8 +103,7 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 	case watchDataMsg:
 		return m.onWatchData(msg)
 	case watchErrMsg:
-		m.log.err(msg.err.Error())
-		return m.waitWatch()
+		return m.onWatchErr(msg.err)
 	case rowTickMsg:
 		if msg.seq != m.rowSeq {
 			return nil
@@ -170,6 +171,21 @@ func (m *Model) waitWatch() tea.Cmd {
 			return watchErrMsg{err: e.Err}
 		}
 	}
+}
+
+// onWatchErr is the watch failing: the App Log keeps it; the first time, a
+// toast says it (Rules F5), and an empty panel 2 says why it is empty
+// (components/layout/panel, errors). The watcher tries again on its own.
+func (m *Model) onWatchErr(err error) tea.Cmd {
+	m.log.err(err.Error())
+	cmds := []tea.Cmd{m.waitWatch()}
+	if m.listP.Fail == nil {
+		fact, _, _ := strings.Cut(err.Error(), "\n")
+		m.listP.Loading = false
+		m.listP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu tries again on its own; [!] shows the App Log"}
+		cmds = append(cmds, m.app.Toast(terminu.Error, fact))
+	}
+	return tea.Batch(cmds...)
 }
 
 // fetchDetail fetches what panel 3 shows of item: its details, its relatives
