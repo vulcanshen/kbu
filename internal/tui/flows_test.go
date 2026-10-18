@@ -67,11 +67,11 @@ func TestSortTwoSteps(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "Alt-S")
-	if !strings.Contains(m.screen_(), "SORT PODS BY") {
+	if !strings.Contains(m.screen_(), "SORT BY: PODS") {
 		t.Fatalf("Alt-S opened no sort menu:\n%s", m.screen_())
 	}
 	m.press("Enter") // Namespace, the first column
-	if !strings.Contains(m.screen_(), "SORT PODS BY NAMESPACE") {
+	if !strings.Contains(m.screen_(), "DIRECTION: NAMESPACE") {
 		t.Fatalf("no direction step:\n%s", m.screen_())
 	}
 	m.press("j", "Enter") // Descending

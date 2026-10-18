@@ -128,34 +128,42 @@ func (m *Model) yamlOfRelative() tea.Cmd {
 }
 
 // --- edit and shell --------------------------------------------------------
+//
+// Each asks first (Rules F6). Its question is built for the row under the
+// cursor when panel 2's actions are laid out (Action.Ask), so that from the
+// Space menu Esc on it goes back to the menu (Rules F4) and Enter clears the
+// stack for the long session (Rules T1).
 
-func (m *Model) editHere() tea.Cmd {
-	item, ok := m.currentItem()
-	if !ok || !allowsEdit(m.shownKind()) || k8s.IsHelmManaged(item) {
-		return nil
-	}
-	return m.confirmEdit(m.shownKind(), item)
+func (m *Model) editArgs(rt k8s.ResourceType, item k8s.ResourceItem) []string {
+	return m.kubectlArgs(namespaced([]string{"edit", rt.KubectlName() + "/" + item.Name}, item.Namespace)...)
 }
 
-// confirmEdit asks, then runs kubectl edit in a terminal popup.
+func (m *Model) editAsk(rt k8s.ResourceType, item k8s.ResourceItem) *terminu.Ask {
+	target := rt.KubectlName() + "/" + item.Name
+	return &terminu.Ask{Title: "Edit", Subject: target, Details: []string{"kubectl " + strings.Join(m.editArgs(rt, item), " ")},
+		Question: "Edit " + target + "?", Verb: "edit"}
+}
+
+// confirmEdit asks, then edits: for the YAML viewer's E, where no Action
+// carries the question.
 func (m *Model) confirmEdit(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
-	args := m.kubectlArgs(namespaced([]string{"edit", rt.KubectlName() + "/" + item.Name}, item.Namespace)...)
-	return m.app.Confirm(terminu.Ask{Title: "Edit", Subject: rt.KubectlName() + "/" + item.Name,
-		Details: []string{"kubectl " + strings.Join(args, " ")}, Question: "Edit " + rt.KubectlName() + "/" + item.Name + "?",
-		Verb: "edit"}, func() tea.Cmd {
-		if m.tx != nil && m.tx.Running() {
-			return m.toastWarn("Close the current edit or shell first")
-		}
-		_ = config.WriteAuditEntry("edit", rt.KubectlName()+"/"+item.Name, item.Namespace, "started")
-		m.log.info("edit: " + rt.KubectlName() + "/" + item.Name)
-		var env []string
-		if m.cfg.Editor != "" {
-			env = append(env, "KUBE_EDITOR="+m.cfg.Editor)
-		}
-		m.tx = &terminu.Terminal{Title: "Edit", Subject: subject(rt, item), Command: append([]string{"kubectl"}, args...),
-			Env: env, Ends: true, History: true, OnExit: m.txExited("edit")}
-		return m.app.OpenTerminal(m.tx)
-	})
+	return m.app.Confirm(*m.editAsk(rt, item), func() tea.Cmd { return m.runEdit(rt, item) })
+}
+
+// runEdit runs kubectl edit in a terminal popup.
+func (m *Model) runEdit(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+	if m.tx != nil && m.tx.Running() {
+		return m.app.Error("Edit", "An edit or a shell is open already: close it first.")
+	}
+	_ = config.WriteAuditEntry("edit", rt.KubectlName()+"/"+item.Name, item.Namespace, "started")
+	m.log.info("edit: " + rt.KubectlName() + "/" + item.Name)
+	var env []string
+	if m.cfg.Editor != "" {
+		env = append(env, "KUBE_EDITOR="+m.cfg.Editor)
+	}
+	m.tx = &terminu.Terminal{Title: "Edit", Subject: subject(rt, item), Command: append([]string{"kubectl"}, m.editArgs(rt, item)...),
+		Env: env, Ends: true, History: true, OnExit: m.txExited("edit")}
+	return m.app.OpenTerminal(m.tx)
 }
 
 func namespaced(args []string, ns string) []string {
@@ -165,38 +173,52 @@ func namespaced(args []string, ns string) []string {
 	return args
 }
 
-// shellHere asks, then runs kubectl exec into the pod's first container, or
-// the container under the cursor.
-func (m *Model) shellHere() tea.Cmd {
-	var pod k8s.ResourceItem
-	var container string
+// shellTarget is the container a shell goes into: the one under the cursor
+// at a pod's containers, or a pod's first.
+func (m *Model) shellTarget() (k8s.ResourceItem, string, bool) {
 	if c, p, ok := m.currentContainer(); ok {
-		pod, container = p, c.Name
-	} else if item, ok := m.currentItem(); ok && m.shownKind() == k8s.ResourcePods {
-		names := k8s.ContainerNames(item.Raw)
-		if len(names) == 0 {
-			return nil
+		return p, c.Name, true
+	}
+	if item, ok := m.currentItem(); ok && m.shownKind() == k8s.ResourcePods {
+		if names := k8s.ContainerNames(item.Raw); len(names) > 0 {
+			return item, names[0], true
 		}
-		pod, container = item, names[0]
-	} else {
+	}
+	return k8s.ResourceItem{}, "", false
+}
+
+// shellArgs is the kubectl exec: bash when the image has it, sh otherwise;
+// the probe's output is silenced, the shell's own is not (bash writes its
+// prompt on stderr).
+func (m *Model) shellArgs(pod k8s.ResourceItem, container string) []string {
+	args := m.kubectlArgs("exec", "-it", pod.Name, "-n", pod.Namespace, "-c", container)
+	return append(args, "--", "/bin/sh", "-c", "if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi")
+}
+
+func (m *Model) shellAsk() *terminu.Ask {
+	pod, container, ok := m.shellTarget()
+	if !ok {
 		return nil
 	}
-	shown := fmt.Sprintf("kubectl exec -it %s -n %s -c %s", pod.Name, pod.Namespace, container)
-	return m.app.Confirm(terminu.Ask{Title: "Shell", Subject: "pod/" + pod.Name, Details: []string{shown},
-		Question: "Exec into " + container + "?", Verb: "exec"}, func() tea.Cmd {
-		if m.tx != nil && m.tx.Running() {
-			return m.toastWarn("Close the current edit or shell first")
-		}
-		m.log.info("exec shell: " + shown)
-		args := m.kubectlArgs("exec", "-it", pod.Name, "-n", pod.Namespace, "-c", container)
-		// bash when the image has it, sh otherwise; the probe's output is
-		// silenced, the shell's own is not (bash writes its prompt on
-		// stderr).
-		args = append(args, "--", "/bin/sh", "-c", "if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi")
-		m.tx = &terminu.Terminal{Title: "Shell", Subject: "pod/" + pod.Name + " → " + container,
-			Command: append([]string{"kubectl"}, args...), Ends: true, History: true, OnExit: m.txExited("shell")}
-		return m.app.OpenTerminal(m.tx)
-	})
+	return &terminu.Ask{Title: "Shell", Subject: "pod/" + pod.Name,
+		Details:  []string{"kubectl " + strings.Join(m.shellArgs(pod, container), " ")},
+		Question: "Exec into " + container + "?", Verb: "exec"}
+}
+
+// runShell runs kubectl exec in a terminal popup.
+func (m *Model) runShell() tea.Cmd {
+	pod, container, ok := m.shellTarget()
+	if !ok {
+		return nil
+	}
+	if m.tx != nil && m.tx.Running() {
+		return m.app.Error("Shell", "An edit or a shell is open already: close it first.")
+	}
+	args := m.shellArgs(pod, container)
+	m.log.info("exec shell: kubectl " + strings.Join(args, " "))
+	m.tx = &terminu.Terminal{Title: "Shell", Subject: "pod/" + pod.Name + " → " + container,
+		Command: append([]string{"kubectl"}, args...), Ends: true, History: true, OnExit: m.txExited("shell")}
+	return m.app.OpenTerminal(m.tx)
 }
 
 // txExited is what an edit's or a shell's end says when it failed.
@@ -213,15 +235,15 @@ func (m *Model) txExited(what string) func(error) tea.Cmd {
 
 // --- delete ----------------------------------------------------------------
 
-func (m *Model) deleteHere() tea.Cmd {
-	item, ok := m.currentItem()
-	rt := m.shownKind()
-	if !ok || !allowsDelete(rt) || k8s.IsHelmManaged(item) {
-		return nil
-	}
-	args := m.kubectlArgs(namespaced([]string{"delete", rt.KubectlName(), item.Name}, item.Namespace)...)
-	details := []string{"kubectl " + strings.Join(args, " ")}
-	warn := []int{}
+func (m *Model) deleteArgs(rt k8s.ResourceType, item k8s.ResourceItem) []string {
+	return m.kubectlArgs(namespaced([]string{"delete", rt.KubectlName(), item.Name}, item.Namespace)...)
+}
+
+// deleteAsk is the delete's question: the exact command, and that it cannot
+// be undone; a namespace's also that everything in it goes (in Peach).
+func (m *Model) deleteAsk(rt k8s.ResourceType, item k8s.ResourceItem) *terminu.Ask {
+	details := []string{"kubectl " + strings.Join(m.deleteArgs(rt, item), " ")}
+	var warn []int
 	if rt == k8s.ResourceNamespaces {
 		details = append(details, "This removes ALL resources inside it.")
 		warn = append(warn, len(details)-1)
@@ -229,14 +251,21 @@ func (m *Model) deleteHere() tea.Cmd {
 	details = append(details, "This cannot be undone.")
 	warn = append(warn, len(details)-1)
 	target := rt.KubectlName() + "/" + item.Name
-	return m.app.Confirm(terminu.Ask{Title: "Delete", Subject: target, Details: details, Warn: warn,
-		Question: "Delete " + target + "?", Verb: "delete"}, func() tea.Cmd {
-		ns := item.Namespace
-		return func() tea.Msg {
-			out, err := m.run("kubectl", args...)
-			return commandDoneMsg{what: "delete", target: target + "\x00" + ns, out: out, err: err}
-		}
-	})
+	return &terminu.Ask{Title: "Delete", Subject: target, Details: details, Warn: warn,
+		Question: "Delete " + target + "?", Verb: "delete"}
+}
+
+// runDelete runs kubectl delete off the update loop.
+func (m *Model) runDelete(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+	if !allowsDelete(rt) || k8s.IsHelmManaged(item) {
+		return nil
+	}
+	args := m.deleteArgs(rt, item)
+	target := rt.KubectlName() + "/" + item.Name
+	return func() tea.Msg {
+		out, err := m.run("kubectl", args...)
+		return commandDoneMsg{what: "delete", target: target + "\x00" + item.Namespace, out: out, err: err}
+	}
 }
 
 // onCommandDone says how a delete or a rollback went.
@@ -304,39 +333,44 @@ func (m *Model) onHelmDoc(msg helmDocMsg) tea.Cmd {
 		Select: m.selection()})
 }
 
-// confirmRollback asks, then rolls the release back to the revision under
-// the History tab's cursor.
-func (m *Model) confirmRollback() tea.Cmd {
+// rollbackAsk is the rollback's question for the revision under the
+// History tab's cursor: the exact helm command. Nil for no revision.
+func (m *Model) rollbackAsk() *terminu.Ask {
+	rev, ok := m.revisionAt()
+	item, ok2 := m.currentItem()
+	if !ok || !ok2 {
+		return nil
+	}
+	return &terminu.Ask{Title: "Rollback", Subject: item.Name,
+		Details:  []string{k8s.RollbackCommandString(item.Name, item.Namespace, rev.Revision)},
+		Question: fmt.Sprintf("Roll %s back to revision %d?", item.Name, rev.Revision), Verb: "roll back"}
+}
+
+// runRollback rolls the release back to the revision under the cursor, off
+// the update loop.
+func (m *Model) runRollback() tea.Cmd {
 	rev, ok := m.revisionAt()
 	item, ok2 := m.currentItem()
 	if !ok || !ok2 || rev.Revision == currentRevision(m.det.detail.ReleaseHistory) {
 		return nil
 	}
-	return m.app.Confirm(terminu.Ask{Title: "Rollback", Subject: item.Name,
-		Details:  []string{k8s.RollbackCommandString(item.Name, item.Namespace, rev.Revision)},
-		Question: fmt.Sprintf("Roll %s back to revision %d?", item.Name, rev.Revision), Verb: "roll back"}, func() tea.Cmd {
-		target := fmt.Sprintf("%s to revision %d", item.Name, rev.Revision)
-		return func() tea.Msg {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			out, err := k8s.RollbackRelease(ctx, item.Name, item.Namespace, rev.Revision)
-			return commandDoneMsg{what: "rollback", target: target, out: out, err: err}
-		}
-	})
+	target := fmt.Sprintf("%s to revision %d", item.Name, rev.Revision)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		out, err := k8s.RollbackRelease(ctx, item.Name, item.Namespace, rev.Revision)
+		return commandDoneMsg{what: "rollback", target: target, out: out, err: err}
+	}
 }
 
 // --- contexts ----------------------------------------------------------------
 
-// confirmContextHere asks, then switches kbu to the context under the
+// contextAsk is the question before switching to the context under the
 // cursor of the Contexts list.
-func (m *Model) confirmContextHere() tea.Cmd {
-	item, ok := m.currentItem()
-	if !ok || m.client == nil || item.Name == m.client.ContextName() {
-		return nil
-	}
-	return m.app.Confirm(terminu.Ask{Title: "Switch context", Subject: item.Name,
+func contextAsk(item k8s.ResourceItem) *terminu.Ask {
+	return &terminu.Ask{Title: "Switch context", Subject: item.Name,
 		Details: []string{"~/.kube/config is not changed"}, Question: "Switch kbu to context " + item.Name + "?",
-		Verb: "switch"}, func() tea.Cmd { return m.switchContext(item.Name) })
+		Verb: "switch"}
 }
 
 // switchContext points kbu at another context of the kubeconfig — kbu only;

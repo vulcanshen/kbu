@@ -42,6 +42,7 @@ type (
 		uid    string
 		detail k8s.ResourceDetail
 		events []k8s.EventItem
+		err    error // the events could not be had
 	}
 	logLineMsg struct{ line k8s.LogLine }
 	podsMsg    struct {
@@ -114,6 +115,13 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		m.setDetail(msg.detail, msg.events)
+		if msg.err != nil {
+			// An empty tab says why it is empty (components/layout/panel,
+			// errors); the App Log keeps it.
+			fact, _, _ := strings.Cut(msg.err.Error(), "\n")
+			m.log.warn("details: " + fact)
+			m.detailP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu asks again with the next change; [!] shows the App Log"}
+		}
 		return nil
 	case logLineMsg:
 		if m.logs == nil || msg.line.StreamID != m.logs.CurrentStreamID() {
@@ -142,7 +150,10 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		return m.onCommandDone(msg)
 	case copiedMsg:
 		if msg.err != nil {
-			return m.toastErr("copy: " + msg.err.Error())
+			// Copying is done from a panel or a viewer: what failed is shown
+			// in full (Rules F5, F7: an action's failure is an error popup).
+			m.log.err("copy: " + msg.err.Error())
+			return m.app.Error("Copy failed", msg.err.Error())
 		}
 		m.log.info(fmt.Sprintf("copied %s", plural(msg.lines, "line")))
 		return m.app.Toast(0, "Copied!")
@@ -205,8 +216,8 @@ func fetchDetail(client *k8s.Client, kind k8s.ResourceType, item k8s.ResourceIte
 		d.YAML = k8s.MarshalItemYAML(item)
 		k8s.EnrichRelatives(ctx, client.Clientset(), kind, item, &d)
 		d.Conditions = k8s.ExtractConditions(item)
-		events, _ := k8s.FetchResourceEventsAggregated(ctx, client.Clientset(), item)
-		return detailMsg{uid: itemKey(item), detail: d, events: events}
+		events, err := k8s.FetchResourceEventsAggregated(ctx, client.Clientset(), item)
+		return detailMsg{uid: itemKey(item), detail: d, events: events, err: err}
 	}
 }
 

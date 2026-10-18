@@ -12,10 +12,12 @@ import (
 // header that does not scroll, and — when it follows — the view sticking to
 // the end while new lines come in, until the user scrolls up.
 //
-// render lays the content out for a width: the header rows, then the rows.
-// It runs again only when the width or the content changes (version).
+// render lays the content out for a width: the header rows, the rows, and
+// for each row the line it belongs to (a long line folds onto several rows;
+// nil when every row is a line of its own). It runs again only when the
+// width or the content changes (version).
 type textBody struct {
-	render func(w int) (header, rows []string)
+	render func(w int) (header, rows []string, line []int)
 	// empty and hint are what it says with nothing to show: a fact and a
 	// hint naming a key (components/layout/screen, empty states).
 	empty, hint string
@@ -28,12 +30,14 @@ type textBody struct {
 	cacheV  int
 	header  []string
 	rows    []string
+	line    []int // the line of each row
+	lines   int   // how many lines
 	top     int
 	height  int // rows of content the last Draw had room for
 	scroll  string
 }
 
-func newTextBody(render func(w int) (header, rows []string), empty string, follow bool) *textBody {
+func newTextBody(render func(w int) (header, rows []string, line []int), empty string, follow bool) *textBody {
 	return &textBody{render: render, empty: empty, hint: "Press [Space] to see what you can do here",
 		follow: follow, live: follow, cacheW: -1}
 }
@@ -62,7 +66,17 @@ func (b *textBody) layout(w int) {
 	if w == b.cacheW && b.version == b.cacheV {
 		return
 	}
-	b.header, b.rows = b.render(w)
+	b.header, b.rows, b.line = b.render(w)
+	if b.line == nil {
+		b.line = make([]int, len(b.rows))
+		for i := range b.line {
+			b.line[i] = i
+		}
+	}
+	b.lines = 0
+	if n := len(b.line); n > 0 {
+		b.lines = b.line[n-1] + 1
+	}
 	b.cacheW, b.cacheV = w, b.version
 }
 
@@ -100,10 +114,12 @@ func (b *textBody) Draw(w, h int, focused bool) []string {
 			out = append(out, terminu.Repeat(" ", w))
 		}
 	}
+	// The lines seen, not the rows: a folded line counts once
+	// (components/layout/popup, the scroll position's units).
 	b.scroll = ""
 	if len(b.rows) > rows && rows > 0 {
-		last := min(b.top+rows, len(b.rows))
-		b.scroll = fmt.Sprintf("%d-%d of %d", b.top+1, last, len(b.rows))
+		last := min(b.top+rows, len(b.rows)) - 1
+		b.scroll = fmt.Sprintf("%d-%d of %d", b.line[b.top]+1, b.line[last]+1, b.lines)
 	}
 	return out
 }
@@ -132,6 +148,10 @@ func (b *textBody) Key(key string, _ tea.KeyMsg) (bool, tea.Cmd) {
 	b.setLive(b.follow && b.top >= maxTop)
 	return true, nil
 }
+
+// Empty reports nothing to show, so the panel draws its loading or its
+// failure in the middle instead (components/layout/panel).
+func (b *textBody) Empty() bool { return len(b.rows) == 0 }
 
 // HasItem: a text has no items; Enter works on the whole panel (Rules K3).
 func (b *textBody) HasItem() bool { return false }

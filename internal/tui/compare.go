@@ -51,7 +51,7 @@ func cutNote(cutL, cutR bool) string {
 
 const identical = "(identical — no config diff)"
 
-// unifiedDiff is the diff with - and + lines.
+// unifiedDiff is the diff with - and + lines, uncoloured.
 func unifiedDiff(left, right, ll, rl string, w int) []string {
 	l, r, cutL, cutR := capLines(left, right)
 	var out []string
@@ -62,21 +62,8 @@ func unifiedDiff(left, right, ll, rl string, w int) []string {
 	if diff == "" {
 		return append(out, terminu.Fg(terminu.Overlay0).Render(identical))
 	}
-	for _, line := range strings.Split(strings.TrimRight(diff, "\n"), "\n") {
-		switch {
-		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
-			out = append(out, terminu.Fg(terminu.Overlay0).Render(line))
-		case strings.HasPrefix(line, "@@"):
-			out = append(out, terminu.Fg(terminu.Blue).Render(line))
-		case strings.HasPrefix(line, "+"):
-			out = append(out, terminu.Fg(terminu.Green).Render(line))
-		case strings.HasPrefix(line, "-"):
-			out = append(out, terminu.Fg(terminu.Red).Render(line))
-		default:
-			out = append(out, line)
-		}
-	}
-	return out
+	// Plain: the viewer colours a diff itself (Lang "diff", components/dialog/note).
+	return append(out, strings.Split(strings.TrimRight(diff, "\n"), "\n")...)
 }
 
 // splitDiff puts the two sides next to each other, line by line: a changed

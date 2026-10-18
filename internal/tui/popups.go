@@ -85,8 +85,8 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 					return nil
 				}})
 		}},
-		{Key: "n", Desc: "next match", Do: func() tea.Cmd { return s.go_(1) }},
-		{Key: "N", Desc: "previous match", Do: func() tea.Cmd { return s.go_(-1) }},
+		{Key: "n", Desc: "next", Do: func() tea.Cmd { return s.go_(1) }},
+		{Key: "N", Desc: "previous", Do: func() tea.Cmd { return s.go_(-1) }},
 		{Key: "y", Desc: "copy", Do: func() tea.Cmd { return copyText(yaml) }},
 	}
 	if allowsEdit(rt) && item.Name != "" && !k8s.IsHelmManaged(item) {
@@ -121,9 +121,9 @@ func (m *Model) compareHere() tea.Cmd {
 		w, _ := m.app.Size()
 		inner := max(min(w-2, 120)-4-5, 20) // the frame, its margins, the line numbers
 		if split {
-			v.Lines = splitDiff(left, right, ll, rl, inner)
+			v.Lines, v.Lang = splitDiff(left, right, ll, rl, inner), ""
 		} else {
-			v.Lines = unifiedDiff(left, right, ll, rl, inner)
+			v.Lines, v.Lang = unifiedDiff(left, right, ll, rl, inner), "diff"
 		}
 	}
 	fill()
@@ -135,7 +135,9 @@ func (m *Model) compareHere() tea.Cmd {
 			m.cfg.Compare.Layout = "split"
 		}
 		if err := m.cfg.Save(); err != nil {
-			return m.toastErr("compare layout save failed: " + err.Error())
+			// A popup's action failed: an error popup over it (Rules F7).
+			m.log.err("compare layout save failed: " + err.Error())
+			return m.app.Error("Save failed", "The layout could not be saved to config.yaml: "+err.Error())
 		}
 		return nil
 	}}}
@@ -164,11 +166,6 @@ func (m *Model) openAppLog() tea.Cmd {
 				b.WriteString(terminu.StripStyles(l) + "\n")
 			}
 			return copyText(b.String())
-		}},
-		{Key: "D", Desc: "clear", Do: func() tea.Cmd {
-			m.log.entries = nil
-			v.Lines = []string{terminu.Fg(terminu.Overlay0).Render("No log entries")}
-			return nil
 		}},
 	}
 	m.log.viewer = v
@@ -286,7 +283,9 @@ func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {
 			m.cfg.ResetSort(rt.KubectlName())
 			return m.sortSaved(rt)
 		}}
-	return m.app.Menu("Sort "+rt.String()+" by", terminu.MenuSection{Title: "fields", Actions: fields},
+	// What the menu acts on goes after ": " (components/layout/popup, the
+	// title). TODO(lib KB13): the lib writes it in capitals.
+	return m.app.Menu("Sort by: "+rt.String(), terminu.MenuSection{Title: "fields", Actions: fields},
 		terminu.MenuSection{Title: "all", Actions: []terminu.Action{reset}})
 }
 
@@ -321,7 +320,7 @@ func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 			return m.sortSaved(rt)
 		}})
 	}
-	return m.app.Menu("Sort "+rt.String()+" by "+column, terminu.MenuSection{Actions: rows})
+	return m.app.Menu("Direction: "+column, terminu.MenuSection{Actions: rows})
 }
 
 // sortSaved writes the sort down and shows it, when panel 2 shows that kind.

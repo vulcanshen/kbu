@@ -248,20 +248,72 @@ func rowCells(rt k8s.ResourceType, item k8s.ResourceItem) []string {
 // numberColumns are the columns that hold a count (or an age): right-aligned
 // and sorted by value (components/layout/panel).
 var numberColumns = map[string]bool{"Restarts": true, "Desired": true, "Current": true, "Up-to-date": true,
-	"Available": true, "Active": true, "Rev": true, "Age": true, "Updated": true}
+	"Available": true, "Active": true, "Rev": true, "Age": true, "Updated": true, "Data": true, "Secrets": true,
+	"Min": true, "Max": true, "Replicas": true, "Allowed": true}
 
 // keptColumns keep their width on a narrow panel: what a row is and how it
-// is doing. The others give up room first (an IP, a node, an image).
+// is doing. The others give up room first (an IP, a node, an image), and on
+// a panel too narrow for every column they are left out (Rules L1).
 var keptColumns = map[string]bool{"Namespace": true, "Name": true, "": true, "Ready": true, "Status": true,
 	"Restarts": true, "Age": true, "Type": true, "Reason": true}
 
-// listColumns are the lib's columns for panel 2's kind.
-func listColumns(cols []k8s.Column) []terminu.Column {
+// listColumns are the lib's columns for panel 2's kind. A sorted column
+// keeps its width: its sort arrow must stay in sight (components/layout/panel).
+// Namespace gives up room before Name.
+func listColumns(cols []k8s.Column, sorted map[string]bool) []terminu.Column {
 	out := make([]terminu.Column, len(cols))
 	for i, c := range cols {
-		out[i] = terminu.Column{Title: c.Title, Number: numberColumns[c.Title], Flex: !keptColumns[c.Title]}
+		flex := (!keptColumns[c.Title] || c.Title == "Namespace") && !sorted[c.Title]
+		out[i] = terminu.Column{Title: c.Title, Number: numberColumns[c.Title], Flex: flex}
 	}
 	return out
+}
+
+// listWidth is how many cells panel 2's rows have now.
+func (m *Model) listWidth() int {
+	w, h := m.app.Size()
+	if w == 0 {
+		return 0
+	}
+	if m.app.ForceNarrow || w < m.screen.NarrowBelow {
+		return w - 4
+	}
+	return layout(w, h)[1].W - 4
+}
+
+// fitColumns leaves out the columns that give up room first, from the
+// right, while the natural widths do not fit in w: a list of eight columns
+// cut to three cells each says nothing (Rules L1). A sorted column stays.
+func fitColumns(cols []k8s.Column, cells [][]string, w int, sorted map[string]bool) []int {
+	keep := make([]int, len(cols))
+	for i := range keep {
+		keep[i] = i
+	}
+	if w <= 0 {
+		return keep
+	}
+	natural := func(i int) int {
+		n := terminu.Width(terminu.Upper(cols[i].Title)) + 4 // room for a sort arrow
+		for _, r := range cells {
+			if i < len(r) {
+				n = max(n, terminu.Width(r[i]))
+			}
+		}
+		return n
+	}
+	total := func() int {
+		t := 2 * (len(keep) - 1)
+		for _, i := range keep {
+			t += natural(i)
+		}
+		return t
+	}
+	for k := len(keep) - 1; k >= 0 && total() > w; k-- {
+		if c := cols[keep[k]].Title; !keptColumns[c] && !sorted[c] {
+			keep = append(keep[:k], keep[k+1:]...)
+		}
+	}
+	return keep
 }
 
 // setListRows lays panel 2 out for what it shows now: its label, columns,
@@ -290,16 +342,34 @@ func (m *Model) setListRows() {
 	if n := len(m.drill); n > 0 {
 		m.listP.Label = capRunes(m.drill[n-1].parent.Name, 20) + " > " + rt.String()
 	}
-	cols := columnsOf(rt)
-	m.list.Columns = listColumns(cols)
+	all := columnsOf(rt)
+	sorted := map[string]bool{}
+	for _, t := range m.cfg.GetSort(rt.KubectlName()) {
+		sorted[t.Column] = true
+	}
 	items := m.shownItems()
+	allCells := make([][]string, len(items))
+	for i, it := range items {
+		allCells[i] = rowCells(rt, it)
+	}
+	keep := fitColumns(all, allCells, m.listWidth(), sorted)
+	cols := make([]k8s.Column, len(keep))
+	for i, c := range keep {
+		cols[i] = all[c]
+	}
+	m.list.Columns = listColumns(cols, sorted)
 	rows := make([]terminu.Row, len(items))
 	current := ""
 	if rt == k8s.ResourceContexts && m.client != nil {
 		current = m.client.ContextName()
 	}
 	for i, it := range items {
-		cells := rowCells(rt, it)
+		cells := make([]string, len(keep))
+		for j, c := range keep {
+			if c < len(allCells[i]) {
+				cells[j] = allCells[i][c]
+			}
+		}
 		sortVals := make([]string, len(cells))
 		for c := range cells {
 			title := ""
@@ -443,6 +513,7 @@ func allowsDelete(rt k8s.ResourceType) bool {
 // the names and descriptions say what they do to the row.
 func (m *Model) setListActions() {
 	rt := m.shownKind()
+	cur, hasCur := m.currentItem()
 	helmManaged := func() bool {
 		it, ok := m.currentItem()
 		return ok && k8s.IsHelmManaged(it)
@@ -450,10 +521,11 @@ func (m *Model) setListActions() {
 	var item []terminu.Action
 	switch {
 	case m.atContainers():
+		shell := m.shellAsk()
 		item = []terminu.Action{
-			{Key: "Enter", Label: "Shell", Desc: "kubectl exec -it into this container", Scope: terminu.ItemScope, Hint: "shell",
-				Do: m.shellHere},
-			{Key: "S", Label: "Shell", Desc: "kubectl exec -it into this container", Scope: terminu.ItemScope, Do: m.shellHere},
+			{Key: "Enter", Label: "Open a shell", Desc: "kubectl exec -it into this container, as [S] does", Scope: terminu.ItemScope,
+				Hint: "shell", Ask: shell, Do: m.runShell},
+			{Key: "S", Label: "Shell", Desc: "kubectl exec -it into this container", Scope: terminu.ItemScope, Ask: shell, Do: m.runShell},
 			{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
 		}
 	case rt == k8s.ResourceReleases:
@@ -470,12 +542,12 @@ func (m *Model) setListActions() {
 	default:
 		if rt == k8s.ResourceContexts {
 			item = append(item, terminu.Action{Key: "Enter", Label: "Switch to this context", Desc: "kbu only; ~/.kube/config is not changed",
-				Scope: terminu.ItemScope, Hint: "switch",
+				Scope: terminu.ItemScope, Hint: "switch", Ask: contextAsk(cur),
 				Disabled: func() bool {
 					it, ok := m.currentItem()
 					return !ok || m.client == nil || it.Name == m.client.ContextName()
 				},
-				Do: m.confirmContextHere})
+				Do: func() tea.Cmd { return m.switchContext(cur.Name) }})
 		}
 		item = append(item,
 			terminu.Action{Key: "C", Label: "Compare to anchor", Desc: "open the YAML diff popup", Scope: terminu.ItemScope,
@@ -483,7 +555,6 @@ func (m *Model) setListActions() {
 		)
 		switch {
 		case rt.SupportsDrillDown():
-			cur, _ := m.currentItem()
 			item = append(item, terminu.Action{Key: "Enter", Label: "Drill in", Desc: "into its " + drillLabel(rt, cur),
 				Scope: terminu.ItemScope, Hint: "drill", Do: m.drillIn})
 		case rt != k8s.ResourceContexts:
@@ -491,16 +562,17 @@ func (m *Model) setListActions() {
 				Hint: "yaml", Do: m.yamlHere})
 		}
 		item = append(item, terminu.Action{Key: "Y", Label: "YAML", Desc: "view resource manifest", Scope: terminu.ItemScope, Do: m.yamlHere})
-		if allowsEdit(rt) {
+		if allowsEdit(rt) && hasCur {
 			item = append(item, terminu.Action{Key: "E", Label: "Edit", Desc: "kubectl edit", Scope: terminu.ItemScope,
-				Disabled: helmManaged, Do: m.editHere})
+				Disabled: helmManaged, Ask: m.editAsk(rt, cur), Do: func() tea.Cmd { return m.runEdit(rt, cur) }})
 		}
-		if rt == k8s.ResourcePods {
-			item = append(item, terminu.Action{Key: "S", Label: "Shell", Desc: "kubectl exec -it", Scope: terminu.ItemScope, Do: m.shellHere})
+		if rt == k8s.ResourcePods && hasCur {
+			item = append(item, terminu.Action{Key: "S", Label: "Shell", Desc: "kubectl exec -it", Scope: terminu.ItemScope,
+				Hidden: func() bool { return m.shellAsk() == nil }, Ask: m.shellAsk(), Do: m.runShell})
 		}
-		if allowsDelete(rt) {
+		if allowsDelete(rt) && hasCur {
 			item = append(item, terminu.Action{Key: "D", Label: "Delete", Desc: "kubectl delete", Scope: terminu.ItemScope,
-				Disabled: helmManaged, Do: m.deleteHere})
+				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
 		item = append(item,
 			terminu.Action{Key: "C", Label: "Unmark Compare anchor", Desc: "cancel anchor, exit compare mode", Scope: terminu.ItemScope,
@@ -520,7 +592,7 @@ func (m *Model) setListActions() {
 		{Key: "Alt-S", Label: "Sort panel 2 list", Desc: "order the rows by a column", Scope: terminu.PanelScope,
 			Hidden: func() bool { return m.atContainers() || len(columnsOf(m.shownKind())) == 0 },
 			Do:     func() tea.Cmd { return m.openSort(m.shownKind()) }},
-		{Key: "/", Label: "Search", Desc: "narrow the rows as you type", Scope: terminu.PanelScope,
+		{Key: "/", Label: "Search", Desc: "narrow the rows as you type", Scope: terminu.PanelScope, Hint: "search",
 			Do: func() tea.Cmd { m.list.OpenFilter(); return nil }},
 		{Key: ".", Label: "Helm-managed rows", Desc: "show / hide rows a Helm chart manages", Scope: terminu.PanelScope, Hint: "helm",
 			Hidden: func() bool {
@@ -530,6 +602,12 @@ func (m *Model) setListActions() {
 		{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom},
 	}
 	m.listP.Actions = append(item, panel...)
+	// Esc is one level up only when there is one (Rules K4): the anchor,
+	// then the drill; otherwise ? does not list it.
+	m.listP.OnEsc = nil
+	if m.anchor != nil || len(m.drill) > 0 {
+		m.listP.OnEsc = m.listEsc
+	}
 }
 
 // drillLabel is what Enter drills item into, for the menu: an HPA into its
@@ -676,5 +754,6 @@ func (m *Model) toggleHelm() tea.Cmd {
 // the three back. It is a change of layout, not a mode: z puts it back.
 func (m *Model) toggleZoom() tea.Cmd {
 	m.app.ForceNarrow = !m.app.ForceNarrow
+	m.setListRows() // panel 2's width changed: which columns fit
 	return nil
 }

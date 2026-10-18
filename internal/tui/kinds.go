@@ -78,7 +78,7 @@ func (m *Model) setKindActions() {
 			Do:       m.startDrag},
 		{Key: "y", Label: "Copy", Desc: "the kind's kubectl name", Scope: terminu.ItemScope,
 			Do: func() tea.Cmd { return copyText(m.kindAt.KubectlName()) }},
-		{Key: "/", Label: "Search", Desc: "filter the kinds by name", Scope: terminu.PanelScope,
+		{Key: "/", Label: "Search", Desc: "filter the kinds by name", Scope: terminu.PanelScope, Hint: "search",
 			Do: func() tea.Cmd { m.kinds.OpenFilter(); return nil }},
 		{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom},
 	}

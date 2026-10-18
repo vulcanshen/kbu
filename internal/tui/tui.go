@@ -180,7 +180,7 @@ func (m *Model) App() *terminu.App { return m.app }
 // right, panel 3 under panel 2 (tdp leaves the arrangement to the app,
 // Rules L1).
 func layout(w, h int) []terminu.Rect {
-	left := min(24, w/3)
+	left := min(26, w/3) // the kinds' names and the hint Enter:open beside the scroll position
 	bottom := min(14, h/2)
 	if h-bottom < 4 {
 		bottom = h / 2
@@ -200,6 +200,10 @@ func (m *Model) globalActions() []terminu.Action {
 		{Key: "C", Label: "Context", Desc: "switch the kubeconfig context", Scope: terminu.GlobalScope, Do: m.openContexts},
 		{Key: "Alt-t", Label: "term", Desc: "show the embedded shell (Alterm)", Scope: terminu.GlobalScope, Do: m.showAlterm},
 		{Key: "!", Label: "App log", Desc: "what kbu has done and what failed", Scope: terminu.GlobalScope, Do: m.openAppLog},
+		// Not a key of the App Log viewer: a note only shows (Rules F1).
+		{Label: "Clear the App log", Desc: "forget what it has kept", Scope: terminu.GlobalScope,
+			Disabled: func() bool { return len(m.log.entries) == 0 },
+			Do:       func() tea.Cmd { m.log.entries = nil; m.log.seen(); return nil }},
 	}
 }
 
@@ -234,8 +238,11 @@ func (m *Model) statusbar(w int) string {
 	grey, value := terminu.Fg(terminu.Overlay0), terminu.Fg(terminu.Lavender)
 	lit, unlit := terminu.Fg(terminu.Blue), terminu.Fg(terminu.Surface2)
 	onList := m.screen.Focused() == m.listP
+	// panel 2's C is compare where it has a row to compare: there [C]ontext
+	// does not fire (Rules M9).
+	compareC := onList && !m.atContainers() && m.list.HasItem()
 	ctxKey := lit
-	if onList {
+	if compareC {
 		ctxKey = unlit
 	}
 	ctx, ns := "", "All Namespaces"
@@ -259,23 +266,29 @@ func (m *Model) statusbar(w int) string {
 	}
 	if m.anchor != nil {
 		cmpKey := unlit
-		if onList {
+		if compareC {
 			cmpKey = lit
 		}
 		left += "  " + cmpKey.Render("[C]") + grey.Render("ompare")
 	}
 	right := ""
+	// The count keeps its width as it grows (Rules L2).
 	switch {
 	case m.log.unseenErrors > 0:
-		right = terminu.Fg(terminu.Red).Render(plural(m.log.unseenErrors, "error")) + grey.Render(" in the App Log [!] ")
+		right = terminu.Fg(terminu.Red).Render(countText(m.log.unseenErrors, "error")) + grey.Render(" in the App Log [!] ")
 	case m.log.unseenWarns > 0:
-		right = terminu.Fg(terminu.Peach).Render(plural(m.log.unseenWarns, "warning")) + grey.Render(" in the App Log [!] ")
+		right = terminu.Fg(terminu.Peach).Render(countText(m.log.unseenWarns, "warning")) + grey.Render(" in the App Log [!] ")
 	}
 	room := w - terminu.Width(right)
 	if room < terminu.Width(left) {
 		right, room = "", w
 	}
 	return terminu.Pad(terminu.Truncate(left, room), room) + right
+}
+
+// countText is a count for the statusbar, always as wide: "  3 errors  ".
+func countText(n int, what string) string {
+	return fmt.Sprintf("%3d %-8s", min(n, 999), plural(n, what)[len(fmt.Sprint(n))+1:])
 }
 
 func plural(n int, what string) string {

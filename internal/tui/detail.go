@@ -67,7 +67,8 @@ func (m *Model) buildDetail() {
 	m.histList = &terminu.List{Columns: []terminu.Column{{Title: ""}, {Title: "Rev", Number: true}, {Title: "Status"},
 		{Title: "Date"}, {Title: "Chart"}, {Title: "Description", Flex: true}}, EmptyFact: "No revision history",
 		EmptyHint: "Press [Space] to see what you can do here"}
-	m.detailP = &terminu.Panel{Label: "Relatives", OnEsc: m.detailEsc}
+	m.histList.OnMove = func(terminu.Row) tea.Cmd { m.setDetailActions(); return nil } // the rollback asks about this row
+	m.detailP = &terminu.Panel{Label: "Relatives", OnEsc: m.detailEsc, LoadingText: "loading details…"}
 	m.detailP.OnTab = func(int) tea.Cmd { m.showTab(); return nil }
 	m.resetDetail(k8s.ResourcePods)
 }
@@ -176,9 +177,9 @@ func (m *Model) setTabLabels() {
 		case "Events":
 			names[i] += " " + liveGlyph(d.eventBody.live)
 		case "Relatives":
-			if n := len(d.chain); n > 0 {
-				names[i] += " " + glyphLink + strconv.Itoa(n+1)
-			}
+			// How deep the chain is, from 1: always there, so the tabs
+			// after it do not move when it changes (Rules L2).
+			names[i] += " " + glyphLink + strconv.Itoa(len(d.chain)+1)
 		}
 	}
 	if len(names) == 0 {
@@ -219,6 +220,7 @@ func (m *Model) rowMoved(key string) tea.Cmd {
 	}
 	m.det.uid, m.det.loaded = key, false
 	m.det.nextRetry = time.Time{}
+	m.detailP.Loading, m.detailP.Fail = m.client != nil && key != "", nil
 	m.setListActions() // the descriptions name the row's own (an HPA's target)
 	m.rowSeq++
 	seq := m.rowSeq
@@ -327,6 +329,7 @@ func (m *Model) appendLog(l k8s.LogLine) {
 // setDetail shows a row's fetched details.
 func (m *Model) setDetail(d k8s.ResourceDetail, events []k8s.EventItem) {
 	m.det.detail, m.det.events = d, events
+	m.detailP.Loading = false
 	for _, b := range []*textBody{m.det.eventBody, m.det.condBody, m.det.infoBody} {
 		b.changed()
 	}
@@ -416,9 +419,9 @@ func podTag(name string) string {
 // renderLogs lays the log lines out: `container │ text`, or
 // `container@pod │ text` in a merged stream, a long line folding under its
 // text.
-func (m *Model) renderLogs(w int) (header, rows []string) {
+func (m *Model) renderLogs(w int) (header, rows []string, line []int) {
 	sep := terminu.Fg(terminu.Overlay0)
-	for _, l := range m.det.logs {
+	for n, l := range m.det.logs {
 		ctr := terminu.Fg(paletteColor(l.container)).Render(l.container)
 		plain := l.container
 		if l.pod != "" {
@@ -432,17 +435,17 @@ func (m *Model) renderLogs(w int) (header, rows []string) {
 		if len(text) == 0 {
 			text = []string{""}
 		}
-		rows = append(rows, prefix+text[0])
+		rows, line = append(rows, prefix+text[0]), append(line, n)
 		for _, t := range text[1:] {
-			rows = append(rows, terminu.Repeat(" ", pw-2)+sep.Render("│ ")+t)
+			rows, line = append(rows, terminu.Repeat(" ", pw-2)+sep.Render("│ ")+t), append(line, n)
 		}
 	}
-	return nil, rows
+	return nil, rows, line
 }
 
 // table lays out a table whose last-but-one column (a message) folds: the
 // header in Blue, the rows in red when bad says so.
-func table(w int, titles []string, rows [][]string, bad func(i int) bool) (header, out []string) {
+func table(w int, titles []string, rows [][]string, bad func(i int) bool) (header, out []string, lineOf []int) {
 	n := len(titles)
 	ws := make([]int, n)
 	for c, t := range titles {
@@ -474,6 +477,10 @@ func table(w int, titles []string, rows [][]string, bad func(i int) bool) (heade
 			if c == msg {
 				v = folded[0]
 			}
+			if c == n-1 { // the age: a number column, right-aligned (components/layout/panel)
+				parts = append(parts, terminu.PadLeft(v, ws[c]))
+				continue
+			}
 			parts = append(parts, terminu.Pad(v, ws[c]))
 		}
 		lines := []string{strings.Join(parts, "  ")}
@@ -499,29 +506,29 @@ func table(w int, titles []string, rows [][]string, bad func(i int) bool) (heade
 			style = terminu.Fg(terminu.Red)
 		}
 		for _, l := range line(cells) {
-			out = append(out, style.Render(l))
+			out, lineOf = append(out, style.Render(l)), append(lineOf, i)
 		}
 	}
-	return header, out
+	return header, out, lineOf
 }
 
-func (m *Model) renderEvents(w int) (header, rows []string) {
+func (m *Model) renderEvents(w int) (header, rows []string, line []int) {
 	ev := m.det.events
 	cells := make([][]string, len(ev))
 	for i, e := range ev {
 		cells[i] = []string{e.Type, e.Reason, e.Object, e.Message, e.Age}
 	}
 	if len(cells) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	return table(w, []string{"Type", "Reason", "Object", "Message", "Age"}, cells,
 		func(i int) bool { return ev[i].Type == "Warning" })
 }
 
-func (m *Model) renderConditions(w int) (header, rows []string) {
+func (m *Model) renderConditions(w int) (header, rows []string, line []int) {
 	cs := m.det.detail.Conditions
 	if len(cs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	cells := make([][]string, len(cs))
 	for i, c := range cs {
@@ -533,27 +540,38 @@ func (m *Model) renderConditions(w int) (header, rows []string) {
 		func(i int) bool { return cs[i].Status == "False" })
 }
 
-func (m *Model) renderInfo(w int) (header, rows []string) {
+func (m *Model) renderInfo(w int) (header, rows []string, line []int) {
 	fs := m.det.detail.Fields
 	lw := 0
 	for _, f := range fs {
 		lw = max(lw, terminu.Width(f.Label))
 	}
-	for _, f := range fs {
+	for n, f := range fs {
 		label := terminu.Fg(terminu.Blue).Render(terminu.Pad(strings.ToUpper(f.Label), lw))
 		vals := terminu.Wrap(f.Value, max(w-lw-2, 1))
 		if len(vals) == 0 {
 			vals = []string{""}
 		}
-		rows = append(rows, label+"  "+vals[0])
+		rows, line = append(rows, label+"  "+vals[0]), append(line, n)
 		for _, v := range vals[1:] {
-			rows = append(rows, terminu.Repeat(" ", lw+2)+v)
+			rows, line = append(rows, terminu.Repeat(" ", lw+2)+v), append(line, n)
 		}
 	}
-	return nil, rows
+	return nil, rows, line
 }
 
 // --- Relatives -------------------------------------------------------------
+
+// relatedGroup is the group of the relatives with no section of their own:
+// in a grouped list every row is under a title (components/layout/panel).
+const relatedGroup = "Related"
+
+func cmpOr(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
 
 // relEntry is one row of the Relatives tab.
 type relEntry struct {
@@ -576,13 +594,13 @@ func relEntries(d k8s.ResourceDetail) []relEntry {
 	var out []relEntry
 	if po := d.PodRelatives; po != nil {
 		if po.Owner != nil {
-			out = append(out, relEntry{label: "Owner", value: ownerText(*po.Owner), ref: po.Owner})
+			out = append(out, relEntry{group: relatedGroup, label: "Owner", value: ownerText(*po.Owner), ref: po.Owner})
 		}
 		if po.Node != nil {
-			out = append(out, relEntry{label: "Node", value: po.Node.Name, ref: po.Node})
+			out = append(out, relEntry{group: relatedGroup, label: "Node", value: po.Node.Name, ref: po.Node})
 		}
 		if po.ServiceAccount != nil {
-			out = append(out, relEntry{label: "ServiceAccount", value: po.ServiceAccount.Name, ref: po.ServiceAccount})
+			out = append(out, relEntry{group: relatedGroup, label: "ServiceAccount", value: po.ServiceAccount.Name, ref: po.ServiceAccount})
 		}
 		for _, v := range po.Volumes {
 			if v.Ref != nil {
@@ -602,7 +620,7 @@ func relEntries(d k8s.ResourceDetail) []relEntry {
 	for _, sec := range d.Relatives {
 		for i := range sec.Entries {
 			e := sec.Entries[i]
-			out = append(out, relEntry{group: sec.Title, label: strings.TrimSpace(e.Label), value: e.Value, ref: e.Ref})
+			out = append(out, relEntry{group: cmpOr(sec.Title, relatedGroup), label: strings.TrimSpace(e.Label), value: e.Value, ref: e.Ref})
 		}
 	}
 	return out
@@ -769,6 +787,10 @@ func (m *Model) revisionAt() (k8s.ReleaseRevision, bool) {
 func (m *Model) setDetailActions() {
 	tab := m.currentTab()
 	zoom := terminu.Action{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom}
+	// Where Enter is an item's, zoom is in the hint: an empty tab still has
+	// a key for the whole panel (components/layout/panel).
+	zoomHinted := zoom
+	zoomHinted.Hint = "zoom"
 	yaml := terminu.Action{Key: "Y", Label: "YAML", Desc: "this resource's manifest", Scope: terminu.PanelScope, Do: m.yamlOfLevel}
 	copyAll := terminu.Action{Key: "y", Label: "Copy", Desc: "everything in this tab", Scope: terminu.PanelScope, Do: m.copyTab}
 	var acts []terminu.Action
@@ -785,22 +807,23 @@ func (m *Model) setDetailActions() {
 			copyAll, yaml, zoom,
 		}
 	case "Relatives":
+		onRef := func() bool { e, ok := m.relAt(); return ok && e.ref != nil }
 		acts = []terminu.Action{
 			{Key: "Enter", Label: "Drill in", Desc: "show its relatives here", Scope: terminu.ItemScope, Hint: "drill",
-				Disabled: func() bool { e, ok := m.relAt(); return !ok || e.ref == nil }, Do: m.relDrill},
+				Disabled: func() bool { return !onRef() }, Do: m.relDrill},
+			// Y is the entry's YAML on an entry kbu can go to (an item
+			// operation), else the YAML of the level the tab is at (the
+			// panel's): one key, the object under the cursor first.
+			{Key: "Y", Label: "YAML", Desc: "this entry's manifest", Scope: terminu.ItemScope,
+				Hidden: func() bool { return !onRef() }, Do: m.yamlOfRelative},
 			{Key: "y", Label: "Copy", Desc: "this row", Scope: terminu.ItemScope, Do: m.copyRelative},
 			{Label: "Back", Desc: "up one level of the chain ([Esc])", Scope: terminu.PanelScope,
 				Hidden: func() bool { return len(m.det.chain) == 0 }, Do: m.relBack},
 			{Key: "B", Label: "Breadcrumb", Desc: "switch panels 1 and 2 to a resource up the chain", Scope: terminu.PanelScope,
 				Hidden: func() bool { return len(m.det.chain) == 0 }, Do: m.openBreadcrumb},
-			{Key: "Y", Label: "YAML", Desc: "the manifest of the entry under the cursor, or of this level", Scope: terminu.PanelScope,
-				Do: func() tea.Cmd {
-					if e, ok := m.relAt(); ok && e.ref != nil {
-						return m.yamlOfRelative()
-					}
-					return m.yamlOfLevel()
-				}},
-			zoom,
+			{Key: "Y", Label: "YAML", Desc: "the manifest of the resource this level is at", Scope: terminu.PanelScope,
+				Hidden: onRef, Do: m.yamlOfLevel},
+			zoomHinted,
 		}
 	case "History":
 		acts = []terminu.Action{
@@ -808,9 +831,9 @@ func (m *Model) setDetailActions() {
 				Disabled: func() bool {
 					rev, ok := m.revisionAt()
 					return !ok || rev.Revision == currentRevision(m.det.detail.ReleaseHistory)
-				}, Do: m.confirmRollback},
+				}, Ask: m.rollbackAsk(), Do: m.runRollback},
 			{Key: "y", Label: "Copy", Desc: "this row", Scope: terminu.ItemScope, Do: m.copyRevision},
-			yaml, zoom,
+			yaml, zoomHinted,
 		}
 	default: // Conditions, Info
 		acts = []terminu.Action{
@@ -819,4 +842,9 @@ func (m *Model) setDetailActions() {
 		}
 	}
 	m.detailP.Actions = acts
+	// Esc is one level up only on a Relatives chain (Rules K4).
+	m.detailP.OnEsc = nil
+	if tab == "Relatives" && len(m.det.chain) > 0 {
+		m.detailP.OnEsc = m.detailEsc
+	}
 }
