@@ -12,14 +12,12 @@
 
 **Language**: English · [繁體中文](README-zh_TW.md)
 
-> [!WARNING]
-> **v2.0 rename note.** kbu is the same tool previously released as **km8** (v1.7.x and earlier). Everything you know still works — the command binary is now `kbu`, and the config directory moved from `~/.config/km8/` to `~/.config/kbu/` with a one-shot auto-migration on first launch. Environment variables from the km8 days are no longer read — use the `KBU__*` names in the Environment variables table.
+**A single-pane Kubernetes workspace in your terminal.** The kinds on the left, the resources of the one you are on, and
+everything about the row under the cursor — its logs, what it is connected to, its events — live as the cluster changes.
+`Space` shows what you can do wherever you are, `?` shows the keys, `Esc` steps back. Relatives navigation, YAML compare and
+an embedded shell are built in; any other tool you trust rides along in that shell.
 
-**A single-pane Kubernetes workspace** — `Tab` / `Space` / `Enter` / `Esc` drive everything. No hotkey memorization, no setup, no learning curve. Relatives navigation, YAML compare, and an embedded persistent shell are built in; any other terminal tool you trust rides along through the shell.
-
-> _When in doubt, hit_ **`Space`**.
-
-## Demo
+> _When in doubt, press_ **`Space`**.
 
 ![basics](docs/demo-basics.gif)
 
@@ -27,64 +25,75 @@
 
 ### Find your way around
 
-- **Relatives** -- every resource lists what it is connected to: its owner, the Pods a Service selects, the workload an HPA scales, the Pods mounting a PVC, the Pods using a ConfigMap or Secret. `Enter` follows a link, `Esc` steps back, and `B` (**Breadcrumb**, also in the `Space` menu) takes you to any point in the chain you walked.
-- **Drill-down** -- Deployment / StatefulSet / DaemonSet / Job → Pods → Containers, CronJob → Jobs, HPA → its target, Helm release → every object the chart deployed.
-- **28 built-in resource types plus your CRDs** -- Custom Resources are discovered at startup, and every list updates live through the Kubernetes Watch API.
-- **Multi-namespace view** -- check any set of namespaces in the `N` picker, or pick "All Namespaces". kbu remembers the selection.
-- **Pin and sort** -- pin the resource kinds you use most to the top of the sidebar and drag them into order; sort any list by one or more columns. Both are saved per kind.
-- **Search** -- `/` filters the sidebar, the resource list, and the namespace / context pickers. A line break or tab you paste stays in the search and shows as a red `\n` or `\t`.
-- **Picks up where you left off** -- quit and relaunch, and you're back on the same context, namespace, resource, row, panel, and tab.
+- **Relatives** — every resource lists what it is connected to: its owner, the Pods a Service selects, the workload an HPA
+  scales, the Pods mounting a PVC, the Pods using a ConfigMap or Secret. `Enter` follows a link, `Esc` steps back, and
+  `[B]readcrumb` takes panels 1 and 2 to any point of the chain you walked.
+- **Drill-down** — Deployment / StatefulSet / DaemonSet / Job → Pods → Containers, CronJob → Jobs, HPA → its target, Helm
+  release → every object the chart deployed.
+- **28 built-in resource types plus your CRDs** — Custom Resources are found at start, and every list updates live through
+  the Kubernetes watch.
+- **Several namespaces at once** — check any set of namespaces in the `[N]amespace` picker, or All Namespaces. kbu remembers
+  the choice.
+- **Pin and sort** — pin the kinds you use most to the top of panel 1 and drag them into order; sort any list by one or more
+  columns. Both are kept per kind.
+- **Filter** — `/` narrows panel 1 and panel 2 as you type, and the namespace and context pickers too.
+- **Picks up where you left off** — quit and start again: the same context, namespaces, kind, row, panel and tab.
 
 ### Look closer
 
-- **Logs** -- follows the tail, pauses when you scroll up, `G` to go live again. Select a workload and the logs of **every Pod** it runs stream into one view, each Pod and container in its own color, so during a rollout you can see which one is failing.
-- **Events** -- on a workload, its own events are merged with its Pods' events (a CronJob also includes its Jobs), newest first.
-- **Conditions** -- `.status.conditions` as a table, the same thing `kubectl describe` shows. Useful after events have expired.
-- **YAML viewer (`Y`)** -- a vim-style buffer: move with `h/j/k/l`, `w/b`, search with `/`, select with `v`, copy with `y`.
-- **Compare (`C`)** -- diff two resources of the same kind, unified or side by side (`L` switches, and kbu keeps your choice for next time). Status and server-managed fields are stripped so you only see what was authored.
-- **Problems stand out** -- status columns color only what needs attention: yellow for pending or degraded, red for failures. Healthy rows stay plain.
-- **Helm releases** -- when `helm` is on your `PATH`, releases get their own view: manifest, values, notes, and hooks; a revision history with one-key rollback. Objects a chart manages are marked, protected from accidental edits, and can be hidden with `.`.
-- **KubeConfig contexts** -- a read-only view of your kubeconfig; `Enter` on a context switches kbu to it. Credentials are never shown.
+- **Logs** — follow the newest line, pause when you scroll up, `G` follows again. On a workload the logs of **every Pod** it
+  runs come in one view, each Pod and container in its own colour, so during a rollout you see which one fails.
+- **Events** — a workload's own events with its Pods' (a CronJob's with its Jobs' too), newest first.
+- **Conditions** — `.status.conditions` as a table, as `kubectl describe` shows them; still there after the events expire.
+- **YAML viewer** (`[Y]AML`) — line numbers and colours; `/` searches, `n` / `N` go to the next and the previous match, `v`
+  selects, `y` copies.
+- **Compare** — diff two resources of the same kind, unified or side by side (`L` switches, and kbu keeps your choice).
+  Status and server-managed fields are left out, so you see only what was written.
+- **Problems stand out** — a status cell is coloured only when it needs a look: pending or degraded, or failed.
+- **Helm releases** — when `helm` is on your `PATH`: each release's manifest, values, notes and hooks; its revision history
+  with a rollback. Objects a chart manages are marked, protected from edits, and hidden with `.` when you want.
+- **KubeConfig contexts** — your kubeconfig, read-only; `Enter` on a context switches kbu to it. Credentials are never shown.
 
 ### Get things done
 
-- **Edit (`E`)** -- runs the real `kubectl edit` in a terminal popup inside kbu, with your `$KUBE_EDITOR` / `$EDITOR`.
-- **Shell (`S`)** -- `kubectl exec` into a container, also inside kbu.
-- **Delete (`D`)** -- always asks first; deleting a namespace carries an extra warning.
-- **Alterm (`Alt-t`)** -- a persistent shell inside kbu. Hide it and bring it back with the same key; directory, history, and running jobs are kept. `Alt-Esc` ends it. Anything kbu doesn't do, your usual tools can do here.
-- **Copy (`y`)** -- copies the current row or the whole view to your clipboard via OSC 52, so it works over SSH and tmux too.
-- **Audit log** -- every edit and delete made from kbu is recorded.
-
-### Fits your setup
-
-- **Session-local context** -- switching context in kbu never touches `~/.kube/config`; `kubectl` in another terminal is unaffected.
-- **Mouse** -- click to focus and select, double-click to drill, right-click for the menu, wheel to scroll. Turn it off in Settings (`>`) if you prefer keyboard only.
-- **Full screen (`z`)** -- expand the list or detail panel, `z` again to restore.
-- **Themes** -- override any color with a `theme.yaml`.
+- **Edit** (`[E]dit`) — the real `kubectl edit` in a terminal inside kbu, with your editor.
+- **Shell** (`[S]hell`) — `kubectl exec` into a container, inside kbu too.
+- **Delete** (`[D]elete`) — always asks first; a namespace gets an extra warning.
+- **Alterm** (`Alt-t`) — a shell that lives inside kbu. Hide it and bring it back with the same key: its directory, history
+  and jobs stay. `Alt-Esc` ends it. What kbu does not do, your usual tools do here.
+- **Copy** (`y`) — the row, or the whole view, to your clipboard (OSC 52, so it works over ssh and in tmux).
+- **Audit log** — every edit and delete made from kbu is written down.
+- **Your context stays yours** — switching context in kbu never touches `~/.kube/config`; `kubectl` in another terminal is
+  unaffected.
+- **Full screen** (`z`) — one panel across the whole screen; `z` again for the three.
 
 ## Install
 
 ### Requirements
 
-- **kubectl** on `$PATH` (for edit, delete, and shell exec)
-- A valid **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`)
-- A running Kubernetes cluster
-- **A Nerd Font.** kbu checks at start how many cells an icon takes on your terminal and lays the screen out to match, so a font that draws icons two cells wide lines up too.
-- **A truecolor terminal** (24-bit color). kbu's soft colors and the shading between stacked popups can't be told apart in 256 colors.
+- **kubectl** on `PATH`, for edit, delete, shell and what you run in Alterm.
+- A **kubeconfig** (`~/.kube/config` or `$KUBECONFIG`) and a cluster to reach.
+- **A Nerd Font** in your terminal profile. Some fonts draw an icon two cells wide, some draw the powerline symbols (the ends
+  of the capsules on the frames) two cells wide too; kbu asks the terminal at start and lays the screen out to match. To say
+  it yourself: `KBU__ICON_WIDTH` and `KBU__POWERLINE_WIDTH` (`1` or `2`) for kbu alone, or `TERMINU__ICON_WIDTH` and
+  `TERMINU__POWERLINE_WIDTH`, shared by the whole terminu family — set them once and every family app reads them; when kbu
+  runs inside another family app's terminal, that app sets them for it.
+- **A truecolor terminal** (24-bit colour): the soft colours and the shading between stacked popups cannot be told apart in
+  256 colours.
 
-### Quick Install (macOS/Linux)
+### Quick install (macOS / Linux)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/install.sh | sh
 ```
 
-### Quick Install (Windows PowerShell)
+### Quick install (Windows PowerShell)
 
 ```powershell
 irm https://raw.githubusercontent.com/vulcanshen/kbu/main/install.ps1 | iex
 ```
 
-### Homebrew (macOS/Linux)
+### Homebrew (macOS / Linux)
 
 ```bash
 brew install vulcanshen/tap/kbu
@@ -99,288 +108,175 @@ scoop install kbu
 
 Building from source is in [`docs/dev-remarks.md`](docs/dev-remarks.md).
 
+### The first start
+
+kbu connects to your kubeconfig's current context and shows the Pods. Nothing is written until you pin, sort or quit: then
+`~/.config/kbu` is made (see [Settings and data](#settings-and-data)).
+
 ### Uninstall
 
 ```bash
-# macOS/Linux
+# macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | sh
 
 # Windows PowerShell
 irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
 ```
 
-## Quick Start
+Both ask before they remove your settings.
+
+## Quick start
 
 ```bash
 kbu
 ```
 
-Connects to your current kubeconfig context. Press `Enter` to drill, `Space` for the contextual menu, `Esc` to back out, `Tab` to move between panels.
+Move with `j` and `k`. Panel 2 follows the kind under panel 1's cursor, panel 3 the row under panel 2's. `Tab` goes to the
+next panel (or `1`–`3`), `Enter` does the obvious thing to what is under the cursor, `Space` lists everything you can do
+there, `Esc` steps back, `q` leaves.
 
-## Four keys to drive kbu
+`kbu version` prints the version, `kbu help` how to run it.
 
-| Key | Behavior |
+## Using kbu
+
+### The keys every panel shares
+
+| Key | What it does |
 |---|---|
-| **`Tab`** | Switch panel focus (or `1–3` directly) |
-| **`Enter`** | The obvious action for what's selected: drill in (a workload → its pods), open the YAML of a kind that doesn't drill, switch to a kubeconfig context, shell into a container, roll back to a Helm revision. On panel 1 it shows the kind in panel 2; on a Logs / Events / Conditions tab it full-screens the panel |
-| **`Space`** | *What can I do here?* — the menu of everything this panel or tab can do, ending with **Global operation** (namespace, context, Alterm, settings, app log, quit) |
-| **`Esc`** | Back out — pop one drill level / close any popup |
+| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, App log, quit) |
+| `?` | The keys of whatever is in front: the panel, or the popup on top. `?` again or `Esc` closes it |
+| `Tab` / `Shift-Tab`, `1`–`3` | The next panel, the previous one, a panel by its number |
+| `Enter` | The obvious action: drill in (a workload into its Pods), open a YAML, switch to a context, a shell into a container, roll back to a Helm revision. On panel 1 it takes you to panel 2; on Logs, Events, Conditions and Info it is full screen |
+| `Esc` | One step back: clear the filter, drop the compare anchor, come back up a drill. It never leaves kbu |
+| `q`, `Ctrl-C` | Leave kbu (it remembers where you were) |
+| `j` / `k`, `u` / `d`, `gg` / `G` | Down and up, half a page, the top and the end. On panel 3 `h` / `l` switch tabs |
 
-When in doubt, press `Space`. Power-user shortcuts (`P` pin / `S` sort or shell / `D` drag-pin or delete / `Alt-S` panel-2 sort / `C` compare or context / `Y` YAML / `E` edit / `N` ns / `>` settings) exist for speed — every one is also a row of the `Space` menu (the app-wide ones under its **Global operation** row), so nothing's required to memorize unless you want it. A row that can't run right now is shown dimmed rather than hidden, in the menu and in `?` alike. When a popup opens over another, only the one you're in is bright; everything beneath it dims.
+Every other key is a shortcut of a row of the `Space` menu, and the `?` of each panel lists them. The ones you will use most:
 
-**Mouse works too**: left-click focuses a panel and moves the cursor, double-click drills, right-click opens the same context menu as `Space`, and the wheel scrolls half-page. Press `>` to open the Settings popup if you want to flip mouse off and stay keyboard-only.
-
-## Key Bindings
-
-`h/l` (or `[`/`]`) switch between panel 3's tabs.
-
-### Shortcuts
-
-Everything below is also in the `Space` menu -- these are just faster.
-
-```
- cursor    j/k         u/d         gg/G        / (search inside current panel)
- trigger   Y YAML      E edit      N namespace
- panel 1   P pin       S sort      D drag-and-drop pinned (modal)    C context
- panel 2   S shell     Alt-S sort          D delete    C compare anchor
- expand    z           z toggles full-screen on current panel
- helm      .           . toggles helm-managed visibility on panel 2
- settings  >           > (Shift-.) opens the global Settings popup
-```
-
-`S`, `C`, and `D` do different things depending on the focused panel. Shortcut keys are uppercase so they don't fire while you type in a search field.
-
-### Global
-
-| Key | Action |
-|---|---|
-| `>` | Open the global Settings popup (mouse on/off, scroll direction; future settings) |
-| `Alt-t` | Toggle Alterm (spawn / show / hide; shell stays alive across hide) |
-| `y` | Copy focused element to clipboard (OSC 52) -- cursor row when the focus has one, whole content otherwise |
-| `!` | App log |
-| `?` | The keys of whatever is in front — the focused panel, or the menu, popup or mode on top. `?` again or `Esc` closes it |
-| `q` | Quit kbu (saves session state on the way out) -- from any panel, menu or popup; while you type in a search it is just a letter |
-| `Ctrl-C` | Same as `q`, and it also works while you type |
-
-`N`, `C`, `Alt-t`, `>`, `!` and `q` are also rows of the global operation popup: the last row of every `Space` menu.
-
-### Mouse
-
-| Gesture | Behavior |
-|---|---|
-| **Left-click** on a panel row | Focus that panel + move the cursor to the clicked row |
-| **Double-click** | Synthesizes `Enter` on panels 2 and 3; on panel 1 it only selects |
-| **Right-click** on a row | Synthesizes `Space` (opens the `Space` menu for that row) |
-| **Wheel up / down** | Synthesizes `u/d` (half-page move). Direction can be flipped via Settings popup (`scroll_direction: natural | reverse`) |
-| **Left-click** inside a list popup | Commits that row (same as cursor + `Enter`) |
-| **Right-click** inside any popup | Closes it (same as `Esc`) |
-
-Mouse can be disabled in the Settings popup (`>`); the popup itself stays mouse-reachable in that state so you can flip it back on.
-
-### Helm-specific
-
-| Key | Where | Action |
+| Where | Key | What it does |
 |---|---|---|
-| `Space` | Panel 2, Release row | The `Space` menu lists the release's documents next to `YAML` — `Manifest` / `Creator Notes` / `User Values` / `Merged Values` / `Hooks`; each opens over the menu, so you can read several in a row |
-| `Enter` | Panel 3, History tab | Roll back to that revision (also in the `Space` menu; nothing on the deployed revision); the confirm shows the exact `helm rollback` command |
-| `.` | Any non-Releases panel 2 list | Toggle visibility of helm-managed objects |
+| Panel 1 | `P` | Pin or unpin the kind |
+| Panel 1 | `D` | Drag the pinned kind into place: `j` / `k`, then `Enter`; `Esc` puts it back |
+| Panel 1 | `S` | Sort that kind's list |
+| Panel 2 | `Y`, `E`, `S`, `D` | YAML, edit, shell, delete |
+| Panel 2 | `C` | Mark the row as the compare anchor; on another row, compare the two |
+| Panel 2 | `Alt-S` | Sort the list by a column, then a direction |
+| Panel 2 | `.` | Show or hide what a Helm chart manages |
+| Panels 2 and 3 | `z` | Full screen |
+| Panel 3 | `B` | On Relatives, deep in a chain: the breadcrumb |
+| Anywhere on a panel | `N`, `C`, `Alt-t`, `!` | Namespaces, context (on panel 2 `C` is compare), Alterm, the App log |
 
-### PTY popups (Alterm, edit, shell exec)
+When a popup opens over another, only the one you are in is bright; everything under it dims.
 
-| Key | Action |
+### Terminals (Alterm, edit, shell)
+
+| Key | What it does |
 |---|---|
-| `Alt-t` | Alterm: hide it (the shell keeps running) |
-| `Alt-Esc` | Close the terminal — asks, then ends the session: Alterm's shell and anything running in it stop; an unsaved `kubectl edit` is dropped |
-| `PgUp/PgDn` | Scroll history by one page |
-| `Home/End` | Jump to top of history / back to live |
-| Any other key | Snap back to live, key forwards to subprocess |
+| `Alt-Esc` | End the program, asked first |
+| `Alt-t` (also `Ctrl-T`) | Alterm only: hide it; the shell keeps running |
+| `PgUp` / `PgDn` | Scroll back through what went off the top |
+| Any other key | To the program |
 
-Scrollback is disabled when a full-screen app (vim, less, htop) takes over the PTY via alt-screen; those keys forward to the app instead so it keeps its own paging.
+### Helm
 
-The terminal fills the screen, less one column and one row on each side; other popups are at most 120 columns wide.
+Panel 2's `Space` menu on a release lists its documents beside `[Y]AML`: `Manifest`, `Creator Notes`, `User Values`,
+`Merged Values`, `Hooks`. On panel 3's History tab, `Enter` rolls the release back to the revision under the cursor (not the
+one deployed); the confirm shows the exact `helm rollback`.
 
-## Editing Resources
+### Editing
 
-Pressing `E` on a resource or in its YAML viewer (or picking `Edit` from the `Space` menu) asks first, then runs **`kubectl edit <kind>/<name> -n <ns> --context <ctx>`** inside an embedded PTY popup. Behavior is identical to running the same command in a terminal: strategic merge patch, `resourceVersion` conflict detection, no `last-applied-configuration` annotation side-effect.
+`[E]dit` asks, then runs `kubectl edit <kind>/<name> -n <namespace> --context <context>` in a terminal popup: the same as in
+any terminal — a strategic merge patch, the conflict check, no `last-applied-configuration` side effect. kubectl picks the
+editor: `$KUBE_EDITOR` (kbu sets it when `editor` is in `config.yaml`), then `$EDITOR`, then `vi` (`notepad` on Windows).
+When the editor exits, the list catches up through the watch.
 
-The editor is resolved by kubectl itself in this priority order:
+If your nvim is slow to quit in the popup (plugins tearing down), `editor: "nvim --noplugin"` skips the plugins for kbu's
+edits only.
 
-1. `$KUBE_EDITOR` (kbu sets this if `editor` is configured in `config.yaml`)
-2. `$EDITOR`
-3. `vi` (Linux/macOS) or `notepad` (Windows)
+## Settings and data
 
-When the editor exits, the popup closes and the table refreshes via the resource watch — no manual reload needed.
+Everything kbu keeps is in **`~/.config/kbu`** (`$XDG_CONFIG_HOME/kbu` when that is set; on Windows
+`%USERPROFILE%\.config\kbu`). `KBU__CONFIG` points it at another directory.
 
-### Note for nvim users
-
-If your nvim setup has noticeable shutdown lag inside the popup (LSP attach/detach, plugin teardown), set `editor: "nvim --noplugin"` in `config.yaml` to skip plugin loading for the kubectl-edit session only. Your everyday `nvim` is unaffected.
-
-## Context Isolation
-
-kbu maintains its own **session-local** context. Switching context with `C` inside kbu **does not** modify `~/.kube/config` or the `KUBECONFIG` environment variable in any other terminal.
-
-All `kubectl` subprocesses spawned by kbu (edit, delete, shell exec) receive an explicit `--context <name>` flag, so they always target the cluster kbu is showing — regardless of what `kubectl`'s default context is set to.
-
-This means you can safely run kbu in one terminal while using `kubectl` in another without either session interfering with the other's context.
-
-## Configuration
-
-Config files are in the OS-appropriate config directory. Set `XDG_CONFIG_HOME` to override on any platform:
-
-| OS | Default Path |
+| File | What it is |
 |---|---|
-| Linux | `$XDG_CONFIG_HOME/kbu/` or `~/.config/kbu/` |
-| macOS | `~/Library/Application Support/kbu/` |
-| Windows | `%APPDATA%/kbu/` |
+| `config.yaml` | Your settings (below). kbu writes it when you pin, sort or switch the compare layout |
+| `state.yaml` | Where you left off; written when you quit. `KBU__STATE` keeps it in another directory |
+| `theme.yaml` | The colours of the status cells (below) |
+| `logs/` | `audit-<date>.log`, every edit and delete; `crash-<date>.log` when kbu crashes |
 
-Logs (crash and audit) are written to the `logs/` subdirectory of the config directory.
-
-kbu also keeps a `state.yaml` next to `config.yaml` to remember where you left off. It is managed automatically; edit `config.yaml` instead.
+An older kbu kept them in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows). While only that
+directory is there, kbu keeps using it and the App Log (`!`) says so; move it to `~/.config/kbu` to follow the family.
 
 ### config.yaml
 
 ```yaml
-default_context: ""      # kubeconfig context (default: current-context)
-default_namespace: ""    # namespace filter (default: all namespaces)
-editor: ""               # exposed to kubectl as $KUBE_EDITOR
-                         # (default: kubectl falls back to $EDITOR → vi / notepad)
-alterm_shell: ""         # shell launched by Alterm (default: $SHELL → /bin/sh).
-                         # Bare names are resolved via $PATH at popup-open time
-                         # (Go exec.Command semantics); absolute paths are used
-                         # verbatim. Lets you pick e.g. fish inside alterm
-                         # while keeping zsh as host shell.
-alterm_login_shell: false # true launches Alterm with `-l` so it sources
-                         # ~/.zprofile / ~/.bash_profile / /etc/profile.
-                         # Turn on if kbu starts from a launcher (Raycast,
-                         # Alfred, ...) and your PATH lives in .zprofile.
-
-# Compare popup defaults. `layout` picks the diff render —
-# "unified" (default) is a single column with -/+ markers,
-# "split" is side-by-side. Pressing `L` in the popup writes
-# your choice back here.
+default_context: ""       # the context to start on (default: the kubeconfig's current-context)
+default_namespace: ""     # the namespace to start on (default: all)
+editor: ""                # given to kubectl as $KUBE_EDITOR
+alterm_shell: ""          # Alterm's shell (default: $SHELL, then /bin/sh); a bare name is looked up on PATH
+alterm_login_shell: false # true starts Alterm's shell with -l, reading ~/.zprofile / ~/.bash_profile
 compare:
-  layout: unified
+  layout: unified         # "unified" or "split"; L in the compare popup writes it back
 
-# Mouse settings. Both fields optional; omitting either
-# falls back to the defaults below.
-mouse_opt_config:
-  enabled: true                # set false to disable click + double-click + right-click + wheel
-  scroll_direction: natural    # "natural": wheel-up = cursor up. "reverse" swaps the mapping.
-
-# Per-kind preferences. Keyed by kubectl name
-# ("pod" / "deployment" / "configmap" / ...). Each entry is
-# optional and unknown kinds are preserved across the rewrite,
-# so a CRD that briefly uninstalls won't lose its pin / sort.
-#
-# Sort is a multi-tier chain: tier 0 is the primary,
-# tier 1 the first tiebreaker, etc.
+# Per kind, by its kubectl name. A kind that is gone for a while (a CRD
+# reinstalled) keeps its pin and sort.
 resource_kind_config:
   pod:
     pinned:
-      order: 10              # sparse — increments of 10, so manual YAML
-                             # tweaks can wedge a kind between two existing pins
-    sort:
-      - column: Restarts     # column title from the kind's panel-2 columns
-        direction: desc      # "asc" or "desc"
-      - column: Name         # tier 1 — tiebreaker when Restarts is equal
-        direction: asc
-  configmap:
-    pinned:
-      order: 20
-    sort:                    # single-tier chain also valid
-      - column: Age
+      order: 10           # 10 apart, so a hand edit can put one in between
+    sort:                 # first the restarts, most first; then the name
+      - column: Restarts
         direction: desc
-```
-
-### Environment variables
-
-Override the corresponding config slot for one-shot runs without editing the YAML — useful for CI / scripted demos / quick "try this shell" sessions.
-
-> The names follow the terminu family's `KBU__<NAME>`; `TERMINU__ICON_WIDTH` is the one the whole family shares. Older names are not read; the [CHANGELOG](CHANGELOG.md) lists the renames.
-
-| Variable | Effect | Precedence |
-|---|---|---|
-| `KBU__CONFIG` | Use this directory as kbu's config directory instead of the default (`$XDG_CONFIG_HOME/kbu` etc.): `config.yaml`, `theme.yaml`, the session state (unless `KBU__STATE` is set) and crash logs are read and written there. Absolute path recommended; a relative path resolves against the current directory. Leading / trailing whitespace is trimmed. | `KBU__CONFIG` > `$XDG_CONFIG_HOME/kbu` > OS default |
-| `KBU__STATE` | Keep the session state (`state.yaml`) in this directory instead of the config directory. Handy for sandbox / test runs that want per-run state without touching the real one. | `KBU__STATE` > config directory |
-| `KBU__ALTERM_SHELL` | Use this binary as the Alterm shell. Bare names are looked up on `$PATH` at popup-open time (Go `exec.Command` semantics); absolute paths run verbatim. Leading / trailing whitespace is trimmed. | `KBU__ALTERM_SHELL` > `alterm_shell` config > `$SHELL` > `/bin/sh` |
-| `KBU__ALTERM_LOGIN_SHELL` | Force the Alterm shell into login mode (`-l`) or out of it. Truthy values: `true` / `1` / `yes` (and uppercase). Any other value disables login mode. Use when launched from a non-login parent and your PATH is set in `.zprofile`. | `KBU__ALTERM_LOGIN_SHELL` > `alterm_login_shell` config > `false` |
-| `KBU__ICON_WIDTH` | How many cells a Nerd Font icon takes on your terminal: `1` or `2`. Overrides the check kbu runs at start; on Windows, where there is no check, it is the only way to say `2`. Other values are ignored. | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > checked at start > `1` |
-| `TERMINU__ICON_WIDTH` | The same, shared by every app of the terminu family. An app of the family sets it for what runs in its terminal, so kbu run there draws icons as wide as the app around it does; kbu sets it for what runs in Alterm and in `kubectl edit`, the editor included (a Pod reached with `kubectl exec` does not get it). | `KBU__ICON_WIDTH` > `TERMINU__ICON_WIDTH` > checked at start > `1` |
-
-Example:
-
-```sh
-# Try fish in Alterm without editing config.yaml
-KBU__ALTERM_SHELL=/opt/homebrew/bin/fish kbu
-
-# Point kbu at a per-project config directory (e.g. checked into the repo)
-KBU__CONFIG="$PWD/.kbu" kbu
+      - column: Name
+        direction: asc
 ```
 
 ### theme.yaml
 
-Drop a `theme.yaml` to customize colors. Only override what you need -- unspecified fields keep defaults.
+The colours of a status cell — the rest of the screen is drawn in the terminu family's colours:
 
 ```yaml
-sidebar:
-  background: ""                       # empty = terminal transparent
-  foreground: "#cdd6f4"
-  selected_bg: "#bac2de"               # focused-panel cursor bg (reverse-video)
-  selected_fg: "#1e1e2e"
-  unfocused_selected_bg: "#353648"     # other-panel "remembered" selection bg
-  unfocused_selected_fg: "#cdd6f4"
-  category_fg: "#89b4fa"
-
-table:
-  header_bg: ""                        # empty = sits on the panel canvas, fg alone signals header
-  header_fg: "#89b4fa"
-  row_fg: "#cdd6f4"
-  selected_row_bg: "#bac2de"           # focused-panel cursor bg (reverse-video)
-  selected_row_fg: "#1e1e2e"
-  unfocused_selected_row_bg: "#b4befe" # other-panel "remembered" selection bg — Catppuccin lavender chip
-  unfocused_selected_row_fg: "#1e1e2e"
-  alternating_bg: ""
-
-detail:
-  border_color: "#585b70"
-  label_fg: "#89b4fa"
-  value_fg: "#cdd6f4"
-  tab_active_bg: "#45475a"
-  tab_active_fg: "#cdd6f4"
-  tab_inactive_fg: "#7f849c"
-
-status_bar:
-  background: ""                       # empty = terminal transparent
-  foreground: "#cdd6f4"
-  context_fg: "#89b4fa"
-
-status_line:
-  background: ""                       # empty = terminal transparent
-  foreground: "#89b4fa"
-
 status:
-  running: "#a6e3a1"
-  pending: "#f9e2af"
-  error: "#f38ba8"
-  unknown: "#7f849c"
+  pending: "#f9e2af"   # pending, creating, terminating …
+  error: "#f38ba8"     # failed, crash-looping, not ready …
 ```
+
+### Environment variables
+
+| Variable | What it does |
+|---|---|
+| `KBU__CONFIG` | The settings directory, instead of `~/.config/kbu` |
+| `KBU__STATE` | Where `state.yaml` goes, instead of the settings directory |
+| `KBU__ALTERM_SHELL` | Alterm's shell, before `alterm_shell` and `$SHELL` |
+| `KBU__ALTERM_LOGIN_SHELL` | `true` or `false`: Alterm's shell as a login shell, before `alterm_login_shell` |
+| `KBU__ICON_WIDTH`, `KBU__POWERLINE_WIDTH` | `1` or `2`: the cells an icon and a powerline symbol take (see [Requirements](#requirements)) |
+| `TERMINU__ICON_WIDTH`, `TERMINU__POWERLINE_WIDTH` | The same for every terminu app; kbu sets them for what runs in its terminals |
 
 ## Limits
 
-- **If borders still sit a cell off the grid**, the check kbu runs at start (it draws an icon and asks the terminal where the cursor ended up) got no answer or a wrong one. `kbu iconwidth` prints what kbu detects; set `KBU__ICON_WIDTH=2` for icons two cells wide, or `KBU__ICON_WIDTH=1`. Windows has no check: set the variable there if your font draws icons two cells wide. Inside the terminal of another terminu app, the check is answered by that app, not by your terminal; kbu takes the width the app hands down in `TERMINU__ICON_WIDTH` instead.
-- **Helm needs the `helm` CLI.** The Helm category only appears when `helm` is on your `PATH`, and the release list refreshes every 3 seconds (Helm has no watch API).
-- **Workload logs follow the Pods that exist when you select the row.** After a rollout, select the row again to pick up the new Pods.
-- **Some deletes and edits are blocked.** Events and Nodes can't be deleted from kbu; helm-managed objects can't be edited or deleted — use `helm upgrade` / `rollback` / `uninstall`.
-- **Panel 3 has no `/` search.** Open the YAML with `Y` and search there.
+- **The mouse does nothing for now.** Everything is on the keyboard.
+- **Alterm, edit and shell need macOS or Linux** (WSL too): on Windows kbu cannot open a terminal inside itself.
+- **If the frames are a cell off**, the check kbu runs at start got a wrong answer from your terminal: `kbu iconwidth` prints
+  what it found; set `KBU__ICON_WIDTH` and `KBU__POWERLINE_WIDTH`. On Windows there is no check: set them there when your font
+  draws icons two cells wide.
+- **Helm needs the `helm` command**: the Helm category appears only when it is on `PATH`, and the release list is read again
+  every 3 seconds (Helm has no watch).
+- **A workload's logs follow the Pods there when you chose the row.** After a rollout, choose the row again for the new ones.
+- **Some edits and deletes are not offered.** Events and nodes cannot be deleted from kbu; what a Helm chart manages is changed
+  with `helm upgrade`, `rollback` and `uninstall`.
+- **Panel 3 has no `/` filter.** Open the YAML with `Y` and search there.
 
 ## Links
 
 - [CHANGELOG.md](CHANGELOG.md) — what changed in each release
-- [`docs/dev-remarks.md`](docs/dev-remarks.md) — the developer's notes: how it works, why, building and testing
+- [`docs/dev-remarks.md`](docs/dev-remarks.md) — how it works, why, building and testing
 
 ## terminu family
 
-kbu follows the [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.1.23/principle): the same keys and the same menus as the rest of the family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh), [webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
+kbu follows the [terminu design](https://github.com/vulcanshen/terminu): the same keys and the same menus as the rest of the
+family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh),
+[webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
 
 ## License
 
