@@ -1,15 +1,17 @@
 // Package version holds the kbu build version, injected at build time via
 // goreleaser ldflags (-X github.com/vulcanshen/kbu/internal/version.Version=...).
-// Local `go build` produces a "dev" build that surfaces in --version output
-// and the splash screen tagline.
+// A local `go build` / `make build` produces a "dev" build.
+//
+// terminu family template (tdp project/version.go), copied to an app's
+// internal/version/version.go; replace kbu.
 package version
 
-// Version is the build version. Set to the goreleaser tag minus its "v"
-// prefix (e.g. "1.0.9") for tagged releases, "dev" otherwise.
+// Version is the build version. Set to the goreleaser tag minus its "v" prefix
+// (e.g. "0.1.0") for tagged releases, "dev" otherwise.
 var Version = "dev"
 
-// Display returns a human-friendly version string for UI display:
-// "dev" for local builds, "v1.0.9" for tagged releases.
+// Display returns a human-friendly version string: "dev" for local builds,
+// "v0.1.0" for tagged releases.
 func Display() string {
 	if Version == "dev" {
 		return "dev"

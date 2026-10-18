@@ -1,34 +1,24 @@
-# Binary
-kbu
-kbu.exe
-
-# IDE
+# terminu family template (tdp project/gitignore), copied to an app's
+# .gitignore; replace kbu. The app's own lines go below the last one.
+/kbu
+/dist/
+.local/
 .idea/
 .vscode/
+.DS_Store
+*.test
+*.out
+go.work
+go.work.sum
+.claude/settings.local.json
+.claude/worktrees/
+/kbu.exe
 *.swp
 *.swo
-
-# OS
-.DS_Store
 Thumbs.db
-
-# Claude Code (local only)
-.claude/
-
-# Test artifacts
-coverage.out
-*.test
-
-# Config (local dev)
 config.yaml
-
-# Local workspace (design assets, test scripts, references — not for repo)
-.local/
-/AGENTS.md
+.claude/
 /CLAUDE.md
-
-# forge — local dev state (never commit)
+/AGENTS.md
 .forge/
-
-# Session checkpoints (written by /save-checkpoint)
 .checkpoints/
