@@ -9,7 +9,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 	terminu "github.com/vulcanshen/terminu-go"
 
 	"github.com/vulcanshen/kbu/internal/k8s"
@@ -370,7 +369,7 @@ func sanitizeLog(s string) string {
 			}
 		}
 	}
-	s = ansi.Strip(s)
+	s = terminu.StripStyles(s)
 	return strings.Map(func(r rune) rune {
 		switch {
 		case r == '\t':
