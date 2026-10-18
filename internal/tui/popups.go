@@ -194,21 +194,24 @@ func (m *Model) namespacePicker(names []string) tea.Cmd {
 		checked[i+1] = !sel.IsAll() && sel.Contains(n)
 	}
 	return m.app.Checks(terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Options: opts, Checked: checked,
-		Done: func(now []bool) tea.Cmd {
-			var picked []string
-			for i, c := range now[1:] {
-				if c {
-					picked = append(picked, names[i])
-				}
-			}
-			// All, unless some are checked: checking a namespace while
-			// All is checked means just that one (and the others checked).
-			next := k8s.AllNamespaces()
-			if len(picked) > 0 && !(now[0] && !sel.IsAll()) {
-				next = k8s.SelectedNamespaces(picked...)
-			}
-			return m.setNamespaces(next)
-		}})
+		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(sel, names, now)) }})
+}
+
+// pickedSelection is what the namespace picker's checks mean: All
+// Namespaces, unless some namespaces are checked — checking a namespace
+// while All is checked means just the ones checked; checking All again
+// while some were picked means all; nothing checked is all too.
+func pickedSelection(was k8s.NamespaceSelection, names []string, now []bool) k8s.NamespaceSelection {
+	var picked []string
+	for i, c := range now[1:] {
+		if c {
+			picked = append(picked, names[i])
+		}
+	}
+	if len(picked) == 0 || (now[0] && !was.IsAll()) {
+		return k8s.AllNamespaces()
+	}
+	return k8s.SelectedNamespaces(picked...)
 }
 
 // setNamespaces shows the namespaces in sel from now on.

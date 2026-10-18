@@ -522,7 +522,10 @@ func (m *Model) setListActions() {
 		{Key: "/", Label: "Search", Desc: "filter the rows by name", Scope: terminu.PanelScope,
 			Do: func() tea.Cmd { m.list.OpenFilter(); return nil }},
 		{Key: ".", Label: "Helm-managed rows", Desc: "show / hide rows a Helm chart manages", Scope: terminu.PanelScope, Hint: "helm",
-			Hidden: func() bool { return m.atContainers() || m.shownKind() == k8s.ResourceReleases }, Do: m.toggleHelm},
+			Hidden: func() bool {
+				k := m.shownKind()
+				return m.atContainers() || k == k8s.ResourceReleases || k == k8s.ResourceContexts
+			}, Do: m.toggleHelm},
 		{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom},
 	}
 	m.listP.Actions = append(item, panel...)
