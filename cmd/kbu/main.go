@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-logr/logr"
@@ -52,6 +53,9 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error migrating legacy config dir: %v\n", err)
 		os.Exit(1)
+	}
+	if n := config.LegacyConfigNotice(); n != "" {
+		migrateNotice = strings.TrimSpace(migrateNotice + "\n" + n)
 	}
 
 	cfg, err := config.Load()

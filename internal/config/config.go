@@ -284,11 +284,16 @@ const legacyAppName = "km8"
 
 // ConfigDir returns kbu's config directory: config.yaml, theme.yaml,
 // logs/ and — unless $KBU__STATE says otherwise — state.yaml live in it.
-// Priority: $KBU__CONFIG → $XDG_CONFIG_HOME/kbu → platform default →
-// ~/.config/kbu. Platform defaults: macOS=~/Library/Application
-// Support/kbu, Linux=~/.config/kbu, Windows=%APPDATA%/kbu.
+// Priority (tdp E3): $KBU__CONFIG → $XDG_CONFIG_HOME/kbu → ~/.config/kbu,
+// the same on every platform (on Windows ~ is %USERPROFILE%).
 //
-// $KBU__CONFIG is the family's <APP>__CONFIG (tdp D6): a directory — a
+// An older kbu kept the directory where the platform keeps an app's
+// settings (macOS ~/Library/Application Support/kbu, Windows
+// %APPDATA%\kbu). While that one is there and the tdp one is not, kbu
+// keeps reading and writing it, so nothing the user had is lost.
+// TODO(tdp KB2): whether to move it, copy it or keep using it.
+//
+// $KBU__CONFIG is the family's <APP>__CONFIG (tdp E2): a directory — a
 // per-project one, a tmpfs path on CI, a sandbox for a test run. It is
 // whitespace-trimmed first: a leading space from a copy-pasted .env
 // value would otherwise create a literal-space directory.
@@ -296,30 +301,64 @@ func ConfigDir() string {
 	if d := strings.TrimSpace(os.Getenv("KBU__CONFIG")); d != "" {
 		return d
 	}
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, appName)
+	dir := familyConfigDir(appName)
+	if old := platformConfigDir(appName); old != "" && old != dir && !exists(dir) && exists(old) {
+		return old
 	}
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, ".config", appName)
-	}
-	return filepath.Join(dir, appName)
+	return dir
 }
 
-// legacyConfigDir mirrors ConfigDir but for the pre-v2.0 app name.
-// Only used by MigrateLegacyConfigDir; every other caller uses
-// ConfigDir directly.
-func legacyConfigDir() string {
+// LegacyConfigNotice says, for the App Log, that kbu is still using the
+// directory an older kbu kept its settings in; "" when it is not.
+func LegacyConfigNotice() string {
+	if strings.TrimSpace(os.Getenv("KBU__CONFIG")) != "" {
+		return ""
+	}
+	dir, got := familyConfigDir(appName), ConfigDir()
+	if got == dir {
+		return ""
+	}
+	return fmt.Sprintf("config: still using %s, where an older kbu kept its settings; kbu now looks in %s first — move the directory there to follow it.", got, dir)
+}
+
+// familyConfigDir is where tdp E3 puts an app's settings:
+// $XDG_CONFIG_HOME/<app>, falling back to ~/.config/<app>.
+func familyConfigDir(app string) string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, legacyAppName)
+		return filepath.Join(xdg, app)
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", app)
+}
+
+// platformConfigDir is where an older kbu put its settings when
+// $XDG_CONFIG_HOME was unset: the platform's own settings directory.
+// "" when $XDG_CONFIG_HOME is set (both then agree) or there is none.
+func platformConfigDir(app string) string {
+	if os.Getenv("XDG_CONFIG_HOME") != "" {
+		return ""
 	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, ".config", legacyAppName)
+		return ""
 	}
-	return filepath.Join(dir, legacyAppName)
+	return filepath.Join(dir, app)
+}
+
+// exists reports whether path is there.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// legacyConfigDir is where the pre-v2.0 km8 kept its settings: the
+// platform's settings directory, or $XDG_CONFIG_HOME when set. Only used
+// by MigrateLegacyConfigDir; every other caller uses ConfigDir directly.
+func legacyConfigDir() string {
+	if old := platformConfigDir(legacyAppName); old != "" {
+		return old
+	}
+	return familyConfigDir(legacyAppName)
 }
 
 // ConfigPath returns the full path to the kbu config file: config.yaml

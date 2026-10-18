@@ -12,6 +12,12 @@ Each release names the version of terminu design (tdp) it follows.
   points to `install.ps1`, which it always had. `uninstall.sh` also offers to
   remove the settings an older kbu kept in `~/Library/Application Support/kbu`
   on macOS.
+- **Settings live in `~/.config/kbu` on every platform** (tdp E3), or in
+  `$XDG_CONFIG_HOME/kbu`; `KBU__CONFIG` still moves them. On macOS and Windows
+  an older kbu kept them in `~/Library/Application Support/kbu` and
+  `%APPDATA%\kbu`: while only that directory is there, kbu keeps using it and
+  says so in the App Log. Move it to `~/.config/kbu` to follow the family.
+  `uninstall.ps1` asks about both directories.
 
 ## [v3.0.0] - 2026-10-06
 
