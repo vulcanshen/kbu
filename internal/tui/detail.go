@@ -218,6 +218,7 @@ func (m *Model) rowMoved(key string) tea.Cmd {
 	}
 	m.det.uid, m.det.loaded = key, false
 	m.det.nextRetry = time.Time{}
+	m.setListActions() // the descriptions name the row's own (an HPA's target)
 	m.rowSeq++
 	seq := m.rowSeq
 	return tea.Tick(rowDebounce, func(time.Time) tea.Msg { return rowTickMsg{seq: seq} })
@@ -311,11 +312,9 @@ func (m *Model) stopLogs() {
 
 // appendLog adds a line to the Logs tab, at most maxLogLines kept.
 func (m *Model) appendLog(l k8s.LogLine) {
-	pod := ""
-	if m.shownKind() != k8s.ResourcePods || m.atContainers() {
-		if m.shownKind() != k8s.ResourcePods && !m.atContainers() {
-			pod = l.Pod
-		}
+	pod := "" // a pod's own logs, or a container's: the pod goes without saying
+	if m.shownKind() != k8s.ResourcePods && !m.atContainers() {
+		pod = l.Pod // a workload's merged stream says which pod each line came from
 	}
 	m.det.logs = append(m.det.logs, logLine{pod: pod, container: l.Container, text: sanitizeLog(l.Text)})
 	if n := len(m.det.logs); n > maxLogLines {

@@ -483,7 +483,8 @@ func (m *Model) setListActions() {
 		)
 		switch {
 		case rt.SupportsDrillDown():
-			item = append(item, terminu.Action{Key: "Enter", Label: "Drill in", Desc: "into its " + drillLabel(rt),
+			cur, _ := m.currentItem()
+			item = append(item, terminu.Action{Key: "Enter", Label: "Drill in", Desc: "into its " + drillLabel(rt, cur),
 				Scope: terminu.ItemScope, Hint: "drill", Do: m.drillIn})
 		case rt != k8s.ResourceContexts:
 			item = append(item, terminu.Action{Key: "Enter", Label: "Open", Desc: "its YAML, as [Y] does", Scope: terminu.ItemScope,
@@ -531,13 +532,14 @@ func (m *Model) setListActions() {
 	m.listP.Actions = append(item, panel...)
 }
 
-// drillLabel is what Enter drills a kind into, for the menu.
-func drillLabel(rt k8s.ResourceType) string {
+// drillLabel is what Enter drills item into, for the menu: an HPA into its
+// target's kind.
+func drillLabel(rt k8s.ResourceType, item k8s.ResourceItem) string {
 	if rt == k8s.ResourcePods {
 		return "containers"
 	}
 	if def := k8s.DefaultRegistry.Get(rt); def != nil && def.DrillDown != nil {
-		if child := def.DrillDown.ChildTypeFor(k8s.ResourceItem{}); child != "" {
+		if child := def.DrillDown.ChildTypeFor(item); child != "" {
 			return child.KubectlName() + "s"
 		}
 	}
