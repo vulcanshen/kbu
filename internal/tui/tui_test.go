@@ -75,6 +75,20 @@ func TestListRowsFromTheWatch(t *testing.T) {
 	}
 }
 
+// Namespace tells same-named objects apart: while Name can give up the room
+// panel 2 lacks and keep its MinWidth, Name gives it and Namespace stays
+// whole (the old table kept Namespace at 15 cells or more).
+func TestNamespaceKeepsItsWidth(t *testing.T) {
+	for _, w := range []int{120, 100} {
+		m := newTestModel(t)
+		m.size(w, 30)
+		m.feed(pod("kube-system", "prometheus-kube-prometheus-operator-6644ffcf4d-x2b9q"), pod("demo", "web-1"))
+		if s := m.screen_(); !strings.Contains(s, "kube-system") {
+			t.Errorf("at %d columns Namespace is cut:\n%s", w, s)
+		}
+	}
+}
+
 // P pins the kind under panel 1's cursor: it moves to the Pinned group at
 // the top (it is not copied), and the order is saved. P again puts it back.
 func TestPinMovesTheKindToPinned(t *testing.T) {

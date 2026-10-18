@@ -269,6 +269,8 @@ status:
 - **Some edits and deletes are not offered.** Events and nodes cannot be deleted from kbu; what a Helm chart manages is changed
   with `helm upgrade`, `rollback` and `uninstall`.
 - **Panel 3 has no `/` filter.** Open the YAML with `Y` and search there.
+- **Long names are cut at the end**, so on a narrow panel the Pods of one Deployment can look the same: `z` shows them whole.
+- **After you resize the window**, panel 2 fits its columns to the new width when the list next changes.
 
 ## Links
 

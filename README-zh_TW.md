@@ -253,6 +253,8 @@ status:
 - **workload 的 log 跟的是你選那一列時已經有的 Pod。** rollout 之後，重新選那一列才會換成新的 Pod。
 - **有些 edit 與 delete 不提供。** Events 與 node 不能從 kbu 刪；Helm chart 管理的物件請用 `helm upgrade`、`rollback`、`uninstall` 改。
 - **panel 3 沒有 `/` 篩選。** 用 `Y` 打開 YAML，在那裡搜尋。
+- **太長的名稱從尾端截**，panel 窄的時候，同一個 Deployment 的 Pod 可能看起來一樣：按 `z` 看完整的名稱。
+- **改了視窗大小之後**，panel 2 等清單下一次變動時才照新的寬度排欄。
 
 ## 相關連結
 

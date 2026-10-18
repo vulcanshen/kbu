@@ -259,14 +259,54 @@ var keptColumns = map[string]bool{"Namespace": true, "Name": true, "": true, "Re
 
 // listColumns are the lib's columns for panel 2's kind. A sorted column
 // keeps its width: its sort arrow must stay in sight (components/layout/panel).
-// Namespace gives up room before Name.
-func listColumns(cols []k8s.Column, sorted map[string]bool) []terminu.Column {
+// Of Namespace and Name, Name gives up room when nameGives says it can,
+// else Namespace.
+func listColumns(cols []k8s.Column, sorted map[string]bool, nameGives bool) []terminu.Column {
 	out := make([]terminu.Column, len(cols))
 	for i, c := range cols {
-		flex := (!keptColumns[c.Title] || c.Title == "Namespace") && !sorted[c.Title]
+		flex := !keptColumns[c.Title]
+		if c.Title == "Namespace" || c.Title == "Name" {
+			flex = (c.Title == "Name") == nameGives
+		}
+		flex = flex && !sorted[c.Title]
 		out[i] = terminu.Column{Title: c.Title, Number: numberColumns[c.Title], Flex: flex}
 	}
 	return out
+}
+
+// nameGives is whether Name can give up all the room the columns in keep
+// lack in w and still be its MinWidth wide. Then Name gives it, and
+// Namespace, which tells same-named objects apart, keeps its width; past
+// that, Namespace gives first (TODO(lib KB17): the lib cuts the column that
+// gives to three cells at once). A sorted Name keeps its width.
+func nameGives(cols []k8s.Column, cells [][]string, keep []int, w int, sorted map[string]bool) bool {
+	total, name := 2*(len(keep)-1), -1
+	for _, i := range keep {
+		arrow := 0
+		if sorted[cols[i].Title] {
+			arrow = 4
+		}
+		total += naturalWidth(cols, cells, i, arrow)
+		if cols[i].Title == "Name" {
+			name = i
+		}
+	}
+	if name < 0 || sorted["Name"] || w <= 0 {
+		return false
+	}
+	return naturalWidth(cols, cells, name, 0)-(total-w) >= max(cols[name].MinWidth, 3)
+}
+
+// naturalWidth is column i's widest value or title, the title with arrow
+// cells for a sort arrow.
+func naturalWidth(cols []k8s.Column, cells [][]string, i, arrow int) int {
+	n := terminu.Width(terminu.Upper(cols[i].Title)) + arrow
+	for _, r := range cells {
+		if i < len(r) {
+			n = max(n, terminu.Width(r[i]))
+		}
+	}
+	return n
 }
 
 // listWidth is how many cells panel 2's rows have now.
@@ -293,15 +333,7 @@ func fitColumns(cols []k8s.Column, cells [][]string, w int, sorted map[string]bo
 	if w <= 0 {
 		return keep
 	}
-	natural := func(i int) int {
-		n := terminu.Width(terminu.Upper(cols[i].Title)) + 4 // room for a sort arrow
-		for _, r := range cells {
-			if i < len(r) {
-				n = max(n, terminu.Width(r[i]))
-			}
-		}
-		return n
-	}
+	natural := func(i int) int { return naturalWidth(cols, cells, i, 4) } // room for a sort arrow
 	total := func() int {
 		t := 2 * (len(keep) - 1)
 		for _, i := range keep {
@@ -358,7 +390,7 @@ func (m *Model) setListRows() {
 	for i, c := range keep {
 		cols[i] = all[c]
 	}
-	m.list.Columns = listColumns(cols, sorted)
+	m.list.Columns = listColumns(cols, sorted, nameGives(all, allCells, keep, m.listWidth(), sorted))
 	rows := make([]terminu.Row, len(items))
 	current := ""
 	if rt == k8s.ResourceContexts && m.client != nil {

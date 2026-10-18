@@ -95,7 +95,9 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **panel 2 的欄**：namespaced 的種類第一欄是 Namespace，接著 Name，再一個沒有標題的 helm 標記欄 —— 選了好幾個 namespace 時，
   同名的物件要靠 Namespace 分；helm 標記欄沒有標題，是因為它只是一個標記、不是值。窄的時候先讓出空間的是 IP、Node、Image 這類
   （`keptColumns` 以外的），panel 窄到所有欄的自然寬放不下時，這些欄整欄拿掉（`fitColumns`）：八欄都被擠成三格的清單分不出是哪
-  一筆（tdp L1）；排序中的欄不拿、也不讓，排序的箭頭要看得到。Namespace 比 Name 先讓。數字欄（Restarts、Age……）靠右、照數值排；Age 照建立時間排（升冪 = 舊的在前，跟
+  一筆（tdp L1）；排序中的欄不拿、也不讓，排序的箭頭要看得到。還不夠時 Name 先讓，讓到它的 MinWidth（20 格）為止，Namespace
+  保持整欄（`nameGives`）—— 舊版的 Namespace 至少 15 格；Name 讓到底還不夠，才換 Namespace 先讓（lib 一次把它截成三格，KB17）。
+  名稱從尾端截（tdp components/layout/panel），舊版從中間截、留住尾端的 pod hash，tdp 沒有這種截法（KB19）。數字欄（Restarts、Age……）靠右、照數值排；Age 照建立時間排（升冪 = 舊的在前，跟
   `kubectl --sort-by` 一樣），`N/M` 照兩個數字。沒有選排序時照 namespace、名稱。
 - **Relatives 是一般清單加分組**：組是 section 的標題，兩欄 `NAME`、`TARGET`（多欄的清單一定有表頭）；能進去的那一列尾端一個箭頭。
   沒有 ref 的列照樣停得到，`Enter` 停用。**暫定**：欄名。

@@ -35,6 +35,9 @@ Each release names the version of terminu design (tdp) it follows.
   - **A confirm opened from the `Space` menu** goes back to the menu on `Esc`.
   - **On a narrow panel 2** the columns that matter least (IP, node, image…)
     are left out, so the names stay readable; `z` shows them all.
+  - **A long name is cut at the end** (`demo-app-67f76fb666…`), no longer in
+    the middle (`demo-app…66-gm72n`), so the pods of one Deployment can look
+    the same on a narrow panel; `z` shows them whole.
 - **The logs move to `~/.kbu/logs`** (tdp E3: they are kbu's data);
   `KBU__DATA` points them elsewhere. Logs already written stay where they are.
 - **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
