@@ -4,6 +4,28 @@ Each release names the version of terminu design (tdp) it follows.
 
 ## Unreleased
 
+- **kbu's screen is drawn by terminu-go**, the terminu family's library, and
+  follows terminu design v0.7.4: the panels, the `Space` menu, `?`, the hints,
+  confirms, toasts, popups and their animation are the family's own, the same
+  as in every other family app. What changes for you:
+  - **The mouse is gone for now**, and with it the Settings popup (`>`), which
+    only held the mouse's two settings; `mouse_opt_config` in `config.yaml` is
+    still read and does nothing. The library has no mouse yet.
+  - **`theme.yaml` only sets the status colours** (`status:`). The rest of the
+    screen is drawn in the family's colours; the App Log says which sections no
+    longer take effect.
+  - **The namespace picker is a checkbox list**: `Space` checks a namespace,
+    `Enter` shows the ones checked.
+  - **Sorting** is still two steps, a column then a direction; choosing the
+    direction closes both, so a second column is a second `Alt-S`.
+  - **The App Log** lists the oldest entry first and opens at the newest.
+  - **The Events tab no longer dims** when panel 3 loses the focus: it streams,
+    like Logs.
+  - **In the terminals** (Alterm, edit, shell) `PgUp` / `PgDn` scroll back;
+    `Home` and `End` go to the program now. Leaving asks with the library's
+    question.
+  - **`kbu help`** prints how to run kbu (also `--help`, `-h`).
+  - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
 - **The repository takes the terminu family's shape** (tdp project): the
   program is built from `cmd/kbu`, so `go install` takes
   `github.com/vulcanshen/kbu/cmd/kbu@latest`; the Makefile, release workflow,

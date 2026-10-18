@@ -3,6 +3,7 @@ package theme
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/charmbracelet/lipgloss"
 	"gopkg.in/yaml.v3"
@@ -197,6 +198,29 @@ func LoadTheme(path string) (*Theme, error) {
 	}
 
 	return t, nil
+}
+
+// IgnoredSections are the sections of the theme.yaml at path that no longer
+// take effect: the screen's own colours are the terminu family's
+// (components/color); only status, the colours of a resource's status,
+// is kbu's to choose. TODO(tdp KB3): whether theme.yaml stays.
+func IgnoredSections(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var top map[string]any
+	if yaml.Unmarshal(data, &top) != nil {
+		return nil
+	}
+	var out []string
+	for k := range top {
+		if k != "status" {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // --- Style helper methods ---
