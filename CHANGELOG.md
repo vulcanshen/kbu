@@ -1,8 +1,17 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+Each release names the version of terminu design (tdp) it follows.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/).
+## Unreleased
+
+- **The repository takes the terminu family's shape** (tdp project): the
+  program is built from `cmd/kbu`, so `go install` takes
+  `github.com/vulcanshen/kbu/cmd/kbu@latest`; the Makefile, release workflow,
+  goreleaser configuration and `install.sh` / `uninstall.sh` are the family's
+  templates. `install.sh` no longer installs on Windows under Git Bash: it
+  points to `install.ps1`, which it always had. `uninstall.sh` also offers to
+  remove the settings an older kbu kept in `~/Library/Application Support/kbu`
+  on macOS.
 
 ## [v3.0.0] - 2026-10-06
 

@@ -1,18 +1,31 @@
 #!/bin/sh
-# kbu installer for macOS / Linux / Git Bash
+# kbu installer for macOS / Linux.
 # Usage: curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/install.sh | sh
+#
+# terminu family template (tdp project/install.sh). Replace kbu; set
+# WINDOWS; the blocks marked "app's own" are the app's, the rest stays as it is.
 
 set -e
 
-REPO="vulcanshen/kbu"
+APP="kbu"
+REPO="vulcanshen/$APP"
+# yes when the app ships a Windows build and an install.ps1.
+WINDOWS="yes"
 
 # Detect OS
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$OS" in
   linux*)  OS="linux" ;;
   darwin*) OS="darwin" ;;
-  mingw*|msys*|cygwin*) OS="windows" ;;
-  *) echo "Error: unsupported OS: $OS"; exit 1 ;;
+  *)
+    echo "Error: unsupported OS: $OS."
+    if [ "$WINDOWS" = "yes" ]; then
+      echo "On Windows, run in PowerShell:"
+      echo "  irm https://raw.githubusercontent.com/$REPO/main/install.ps1 | iex"
+    else
+      echo "$APP is unix-only (no Windows build — use WSL)."
+    fi
+    exit 1 ;;
 esac
 
 # Detect architecture
@@ -23,25 +36,22 @@ case "$ARCH" in
   *) echo "Error: unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
+# --- app's own: checks before the download (none by default) ---
+# --- end of the app's own ---
+
 # Get latest version
 echo "Fetching latest release..."
 VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
 echo "Latest version: $VERSION"
 
-# Set file extension and install dir
-if [ "$OS" = "windows" ]; then
-  EXT="zip"
-  INSTALL_DIR="$HOME/bin"
+# Install dir
+if [ "$(id -u)" = "0" ]; then
+  INSTALL_DIR="/usr/local/bin"
 else
-  EXT="tar.gz"
-  if [ "$(id -u)" = "0" ]; then
-    INSTALL_DIR="/usr/local/bin"
-  else
-    INSTALL_DIR="$HOME/.local/bin"
-  fi
+  INSTALL_DIR="$HOME/.local/bin"
 fi
 
-FILENAME="kbu_${VERSION}_${OS}_${ARCH}.${EXT}"
+FILENAME="${APP}_${VERSION}_${OS}_${ARCH}.tar.gz"
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/v${VERSION}/$FILENAME"
 
 # Download
@@ -51,42 +61,34 @@ curl -fsSL "$DOWNLOAD_URL" -o "$TMPDIR/$FILENAME"
 
 # Extract
 echo "Extracting..."
-if [ "$EXT" = "zip" ]; then
-  unzip -o "$TMPDIR/$FILENAME" -d "$TMPDIR" > /dev/null
-else
-  tar xzf "$TMPDIR/$FILENAME" -C "$TMPDIR"
-fi
+tar xzf "$TMPDIR/$FILENAME" -C "$TMPDIR"
 
 # Install
 mkdir -p "$INSTALL_DIR"
-if [ "$OS" = "windows" ]; then
-  cp "$TMPDIR/kbu.exe" "$INSTALL_DIR/kbu.exe"
-else
-  cp "$TMPDIR/kbu" "$INSTALL_DIR/kbu"
-  chmod +x "$INSTALL_DIR/kbu"
-fi
-
-# Cleanup
+cp "$TMPDIR/$APP" "$INSTALL_DIR/$APP"
+chmod +x "$INSTALL_DIR/$APP"
 rm -rf "$TMPDIR"
 
 echo ""
-echo "kbu $VERSION installed to $INSTALL_DIR"
+echo "$APP $VERSION installed to $INSTALL_DIR"
 
 # Check if install dir is in PATH
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
   *)
     echo ""
-    echo "WARNING: $INSTALL_DIR is not in your PATH."
-    echo "Add it by running:"
+    echo "WARNING: $INSTALL_DIR is not in your PATH. Add it by running:"
     echo ""
-    if [ "$OS" = "windows" ]; then
-      echo "  echo 'export PATH=\"\$HOME/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
-    else
-      echo "  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.$(basename "$SHELL")rc && source ~/.$(basename "$SHELL")rc"
-    fi
+    echo "  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.$(basename "$SHELL")rc && source ~/.$(basename "$SHELL")rc"
     ;;
 esac
 
+# --- app's own: what to know, and what to run first ---
 echo ""
-echo "Run 'kbu version' to verify."
+echo "NOTE: $APP draws with Nerd Font glyphs. Use a Nerd Font terminal"
+echo "      profile (https://www.nerdfonts.com) or they render as boxes."
+echo "      $APP reads your kubeconfig; edit, shell and the built-in terminal"
+echo "      also need kubectl on PATH, and Helm releases need helm."
+echo ""
+echo "Run '$APP' to start."
+# --- end of the app's own ---
