@@ -87,6 +87,9 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 		{Key: "y", Desc: "copy", Do: func() tea.Cmd { return copyText(yaml) }},
 	}
 	if allowsEdit(rt) && item.Name != "" && !k8s.IsHelmManaged(item) {
+		// TODO(lib KB10): the edit is a long session (Rules T1): the viewer
+		// should close under it, but the lib cannot close its own popups for
+		// the app.
 		v.Keys = append(v.Keys, terminu.ViewerKey{Key: "E", Desc: "edit", Do: func() tea.Cmd { return m.confirmEdit(rt, item) }})
 	}
 	return m.app.Viewer(v)
@@ -174,7 +177,8 @@ func (m *Model) openAppLog() tea.Cmd {
 // --- namespaces ----------------------------------------------------------------
 
 // openNamespaces asks the cluster for its namespaces; the picker opens when
-// they come.
+// they come. TODO(lib KB8): open it at once, loading, when the checkbox
+// popup can load.
 func (m *Model) openNamespaces() tea.Cmd {
 	if m.client == nil {
 		return nil
@@ -280,6 +284,8 @@ func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {
 }
 
 // openSortDirection is the second step: the direction, or out of the order.
+// Choosing one closes both steps. TODO(lib KB9): only this one, the columns
+// staying for a second column.
 func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 	chain := m.cfg.GetSort(rt.KubectlName())
 	cur := ""

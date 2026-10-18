@@ -22,6 +22,8 @@ func (m *Model) showAlterm() tea.Cmd {
 }
 
 func (m *Model) newAlterm() *terminu.Terminal {
+	// PgUp and PgDn scroll back. TODO(lib KB7): Home and End, the oldest
+	// line and back to live, as before.
 	t := &terminu.Terminal{Title: "Alterm", Subject: hostname(), Command: altermCommand(m.cfg.AltermShell, m.cfg.AltermLoginShell),
 		Ends: true, History: true}
 	hide := func() tea.Cmd { return t.Hide(m.app) }

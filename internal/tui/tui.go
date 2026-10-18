@@ -104,6 +104,8 @@ func New(o Options) *Model {
 		m.watcher = k8s.NewWatcher(m.client.Clientset())
 		m.logs = k8s.NewLogStreamer(m.client.Clientset())
 	}
+	// TODO(lib KB4): the mouse (click, wheel, right-click for Space) and the
+	// Settings popup that held its two settings.
 	a := terminu.New("kbu")
 	a.QuitDesc = "leave kbu"
 	a.ShiftTab = true
@@ -247,7 +249,7 @@ func (m *Model) statusbar(w int) string {
 		}
 	}
 	// The values take their own width, up to a cap (a deviation from Rules
-	// L2, docs/dev-remarks.md).
+	// L2, docs/dev-remarks.md). TODO(tdp KB6): whether it stays.
 	left := " " + ctxKey.Render("[C]") + grey.Render("ontext: ") + value.Render(capMiddle(ctx, 24)) +
 		"  " + lit.Render("[N]") + grey.Render("amespace: ") + value.Render(capMiddle(ns, 16))
 	if m.alterm != nil && m.alterm.Running() {
