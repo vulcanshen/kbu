@@ -282,7 +282,8 @@ func (m *Model) listWidth() int {
 }
 
 // fitColumns leaves out the columns that give up room first, from the
-// right, while the natural widths do not fit in w: a list of eight columns
+// right, while the natural widths do not fit in w (TODO(lib KB17): the lib
+// cuts the widest column to three cells at once): a list of eight columns
 // cut to three cells each says nothing (Rules L1). A sorted column stays.
 func fitColumns(cols []k8s.Column, cells [][]string, w int, sorted map[string]bool) []int {
 	keep := make([]int, len(cols))
