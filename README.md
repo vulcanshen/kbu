@@ -131,7 +131,7 @@ Both ask before they remove your settings.
 kbu
 ```
 
-Move with `j` and `k`. Panel 2 follows the kind under panel 1's cursor, panel 3 the row under panel 2's. `Tab` goes to the
+Move with `j|k`. Panel 2 follows the kind under panel 1's cursor, panel 3 the row under panel 2's. `Tab` goes to the
 next panel (or `1`–`3`), `Enter` does the obvious thing to what is under the cursor, `Space` lists everything you can do
 there, `Esc` steps back, `q` leaves.
 
@@ -143,26 +143,25 @@ there, `Esc` steps back, `q` leaves.
 
 | Key | What it does |
 |---|---|
-| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, App log, quit) |
+| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, the App log, quit) |
 | `?` | The keys of whatever is in front: the panel, or the popup on top. `?` again or `Esc` closes it |
-| `Tab` / `Shift-Tab`, `1`–`3` | The next panel, the previous one, a panel by its number |
+| `Tab`, `Shift-Tab`, `1–3` | The next panel, the previous one, a panel by its number |
 | `Enter` | The obvious action: drill in (a workload into its Pods), open a YAML, switch to a context, a shell into a container, roll back to a Helm revision. On panel 1 it takes you to panel 2; on Logs, Events, Conditions and Info it is full screen |
 | `Esc` | One step back: clear the filter, drop the compare anchor, come back up a drill. It never leaves kbu |
 | `q`, `Ctrl-C` | Leave kbu (it remembers where you were) |
-| `j` / `k`, `u` / `d`, `gg` / `G` | Down and up, half a page, the top and the end. On panel 3 `h` / `l` switch tabs |
+| `j\|k`, `u\|d`, `gg\|G` | Down and up, half a page, the top and the end. On panel 3 `h\|l` switch tabs |
 
 Every other key is a shortcut of a row of the `Space` menu, and the `?` of each panel lists them. The ones you will use most:
 
 | Where | Key | What it does |
 |---|---|---|
 | Panel 1 | `P` | Pin or unpin the kind |
-| Panel 1 | `D` | Drag the pinned kind into place: `j` / `k`, then `Enter`; `Esc` puts it back |
-| Panel 1 | `S` | Sort that kind's list |
+| Panel 1 | `D` | Drag the pinned kind into place: `j\|k`, then `Enter`; `Esc` puts it back |
 | Panel 2 | `Y`, `E`, `S`, `D` | YAML, edit, shell, delete |
 | Panel 2 | `C` | Mark the row as the compare anchor; on another row, compare the two |
 | Panel 2 | `Alt-S` | Sort the list by a column, then a direction |
 | Panel 2 | `.` | Show or hide what a Helm chart manages |
-| Panels 2 and 3 | `z` | Full screen |
+| Any panel | `z` | Full screen; `z` again for the three |
 | Panel 3 | `B` | On Relatives, deep in a chain: the breadcrumb |
 | Anywhere on a panel | `N`, `C`, `Alt-t`, `!` | Namespaces, context (on panel 2 `C` is compare), Alterm, the App log |
 
@@ -173,8 +172,8 @@ When a popup opens over another, only the one you are in is bright; everything u
 | Key | What it does |
 |---|---|
 | `Alt-Esc` | End the program, asked first |
-| `Alt-t` (also `Ctrl-T`) | Alterm only: hide it; the shell keeps running |
-| `PgUp` / `PgDn` | Scroll back through what went off the top |
+| `Alt-t` | Alterm only: hide it; the shell keeps running |
+| `PgUp\|PgDn` | Scroll back through what went off the top |
 | Any other key | To the program |
 
 ### Helm
@@ -203,9 +202,11 @@ Everything kbu keeps is in **`~/.config/kbu`** (`$XDG_CONFIG_HOME/kbu` when that
 | `config.yaml` | Your settings (below). kbu writes it when you pin, sort or switch the compare layout |
 | `state.yaml` | Where you left off; written when you quit. `KBU__STATE` keeps it in another directory |
 | `theme.yaml` | The colours of the status cells (below) |
-| `logs/` | `audit-<date>.log`, every edit and delete; `crash-<date>.log` when kbu crashes |
 
-An older kbu kept them in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows). While only that
+kbu's logs are in **`~/.kbu/logs`** (`KBU__DATA` points it elsewhere): `audit-<date>.log`, every edit and delete made from kbu,
+and `crash-<date>.log` when kbu crashes.
+
+An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows). While only that
 directory is there, kbu keeps using it and the App Log (`!`) says so; move it to `~/.config/kbu` to follow the family.
 
 ### config.yaml
@@ -218,6 +219,7 @@ alterm_shell: ""          # Alterm's shell (default: $SHELL, then /bin/sh); a ba
 alterm_login_shell: false # true starts Alterm's shell with -l, reading ~/.zprofile / ~/.bash_profile
 compare:
   layout: unified         # "unified" or "split"; L in the compare popup writes it back
+input_tab_width: 4        # the cells a tab takes in the viewers (YAML, logs); shared by the terminu family
 
 # Per kind, by its kubectl name. A kind that is gone for a while (a CRD
 # reinstalled) keeps its pin and sort.
@@ -248,6 +250,7 @@ status:
 |---|---|
 | `KBU__CONFIG` | The settings directory, instead of `~/.config/kbu` |
 | `KBU__STATE` | Where `state.yaml` goes, instead of the settings directory |
+| `KBU__DATA` | Where the logs go, instead of `~/.kbu` |
 | `KBU__ALTERM_SHELL` | Alterm's shell, before `alterm_shell` and `$SHELL` |
 | `KBU__ALTERM_LOGIN_SHELL` | `true` or `false`: Alterm's shell as a login shell, before `alterm_login_shell` |
 | `KBU__ICON_WIDTH`, `KBU__POWERLINE_WIDTH` | `1` or `2`: the cells an icon and a powerline symbol take (see [Requirements](#requirements)) |
@@ -276,7 +279,9 @@ status:
 
 kbu follows the [terminu design](https://github.com/vulcanshen/terminu): the same keys and the same menus as the rest of the
 family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh),
-[webu](https://github.com/vulcanshen/webu) (the web) and [locku](https://github.com/vulcanshen/locku) (screen lock).
+[webu](https://github.com/vulcanshen/webu) (the web), [locku](https://github.com/vulcanshen/locku) (screen lock),
+[kamonu](https://github.com/vulcanshen/kamonu) (the family's marks) and [ccdrawu](https://github.com/vulcanshen/ccdrawu)
+(a sidebar and a status line for Claude Code).
 
 ## License
 

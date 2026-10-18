@@ -32,6 +32,7 @@ Usage:
 Environment:
   KBU__CONFIG               the settings directory (default ~/.config/kbu)
   KBU__STATE                where the session state is kept (default: the settings directory)
+  KBU__DATA                 where the logs are kept (default ~/.kbu)
   KBU__ALTERM_SHELL         the shell Alterm runs
   KBU__ALTERM_LOGIN_SHELL   true runs Alterm's shell as a login shell
   KBU__ICON_WIDTH           1 or 2: how many cells a Nerd Font icon takes, instead of asking the terminal

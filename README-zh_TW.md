@@ -121,7 +121,7 @@ irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
 kbu
 ```
 
-用 `j`、`k` 移動。panel 2 跟著 panel 1 游標所在的種類，panel 3 跟著 panel 2 游標那一列。`Tab` 到下一個 panel（或 `1`–`3`），
+用 `j|k` 移動。panel 2 跟著 panel 1 游標所在的種類，panel 3 跟著 panel 2 游標那一列。`Tab` 到下一個 panel（或 `1`–`3`），
 `Enter` 對游標下的東西做最直觀的事，`Space` 列出這裡能做的一切，`Esc` 退一步，`q` 離開。
 
 `kbu version` 印出版號，`kbu help` 印出怎麼用。
@@ -134,24 +134,23 @@ kbu
 |---|---|
 | `Space` | 這裡能做什麼：先是這一項，再是這個 panel，最後是 `Global operation`（namespace、context、Alterm、App log、離開） |
 | `?` | 最前面那個東西的按鍵：panel，或最上層的 popup。再按 `?` 或 `Esc` 關掉 |
-| `Tab` / `Shift-Tab`、`1`–`3` | 下一個 panel、上一個、照編號跳 |
+| `Tab`、`Shift-Tab`、`1–3` | 下一個 panel、上一個、照編號跳 |
 | `Enter` | 最直觀的動作：drill 進去（workload 進它的 Pods）、打開 YAML、切到某個 context、shell 進 container、rollback 到某個 Helm revision。在 panel 1 上是到 panel 2；在 Logs、Events、Conditions、Info 上是全螢幕 |
 | `Esc` | 退一步：清掉篩選、放掉比對的基準列、從 drill 退回一層。永遠不會離開 kbu |
 | `q`、`Ctrl-C` | 離開 kbu（會記住你在哪裡） |
-| `j` / `k`、`u` / `d`、`gg` / `G` | 下、上，半頁，到頭、到尾。panel 3 上 `h` / `l` 切 tab |
+| `j\|k`、`u\|d`、`gg\|G` | 下、上，半頁，到頭、到尾。panel 3 上 `h\|l` 切 tab |
 
 其他的鍵都是 `Space` menu 裡某一列的捷徑，每個 panel 的 `?` 都列得出來。最常用的：
 
 | 在哪 | 鍵 | 做什麼 |
 |---|---|---|
 | Panel 1 | `P` | 釘選或取消釘選這個種類 |
-| Panel 1 | `D` | 把釘選的種類拖到位置：`j` / `k`，然後 `Enter`；`Esc` 放回原處 |
-| Panel 1 | `S` | 排序這個種類的清單 |
+| Panel 1 | `D` | 把釘選的種類拖到位置：`j\|k`，然後 `Enter`；`Esc` 放回原處 |
 | Panel 2 | `Y`、`E`、`S`、`D` | YAML、edit、shell、delete |
 | Panel 2 | `C` | 把這一列標成比對的基準；在另一列上按就比對兩者 |
 | Panel 2 | `Alt-S` | 依一欄、再選方向排序清單 |
 | Panel 2 | `.` | 顯示或藏起 Helm chart 管理的物件 |
-| Panel 2、3 | `z` | 全螢幕 |
+| 任何 panel | `z` | 全螢幕；再按 `z` 回到三個 |
 | Panel 3 | `B` | 在 Relatives 走深之後：breadcrumb |
 | panel 上任何地方 | `N`、`C`、`Alt-t`、`!` | namespace、context（在 panel 2 上 `C` 是 compare）、Alterm、App log |
 
@@ -162,8 +161,8 @@ popup 疊在另一個 popup 上時，只有你正在用的那一個是亮的，�
 | 鍵 | 做什麼 |
 |---|---|
 | `Alt-Esc` | 結束程式，會先問 |
-| `Alt-t`（也可以 `Ctrl-T`） | 只有 Alterm：藏起來，shell 繼續跑 |
-| `PgUp` / `PgDn` | 往回捲、看捲出畫面的內容 |
+| `Alt-t` | 只有 Alterm：藏起來，shell 繼續跑 |
+| `PgUp\|PgDn` | 往回捲、看捲出畫面的內容 |
 | 其他鍵 | 送給程式 |
 
 ### Helm
@@ -190,9 +189,11 @@ kbu 存的東西都在 **`~/.config/kbu`**（有設 `$XDG_CONFIG_HOME` 時是 `$
 | `config.yaml` | 你的設定（見下面）。釘選、排序、切換比對版面時 kbu 會寫它 |
 | `state.yaml` | 上次停在哪裡；離開時寫入。`KBU__STATE` 可以放到別的目錄 |
 | `theme.yaml` | 狀態欄的顏色（見下面） |
-| `logs/` | `audit-<日期>.log` 記每一次 edit 與 delete；`crash-<日期>.log` 是 kbu 當掉時的紀錄 |
 
-舊版的 kbu 把它們放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows）。只有那個目錄在的時候，
+kbu 的 log 在 **`~/.kbu/logs`**（`KBU__DATA` 可以改到別的目錄）：`audit-<日期>.log` 記從 kbu 做的每一次 edit 與 delete，
+`crash-<日期>.log` 是 kbu 當掉時的紀錄。
+
+舊版的 kbu 把設定放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows）。只有那個目錄在的時候，
 kbu 繼續用它，App Log（`!`）會提一句；把它搬到 `~/.config/kbu`，就跟家族其他成員一樣了。
 
 ### config.yaml
@@ -205,6 +206,7 @@ alterm_shell: ""          # Alterm 的 shell（預設：$SHELL，再來 /bin/sh�
 alterm_login_shell: false # true 時 Alterm 的 shell 加 -l，讀 ~/.zprofile / ~/.bash_profile
 compare:
   layout: unified         # "unified" 或 "split"；在比對的 popup 按 L 會寫回來
+input_tab_width: 4        # viewer（YAML、log）裡一個 tab 佔幾格；terminu 家族共用
 
 # 依種類的 kubectl 名稱分開記。暫時不在的種類（重裝中的 CRD）
 # 釘選與排序照樣留著。
@@ -235,6 +237,7 @@ status:
 |---|---|
 | `KBU__CONFIG` | 設定目錄，取代 `~/.config/kbu` |
 | `KBU__STATE` | `state.yaml` 放的目錄，取代設定目錄 |
+| `KBU__DATA` | log 放的目錄，取代 `~/.kbu` |
 | `KBU__ALTERM_SHELL` | Alterm 的 shell，排在 `alterm_shell` 與 `$SHELL` 前面 |
 | `KBU__ALTERM_LOGIN_SHELL` | `true` 或 `false`：Alterm 的 shell 是不是 login shell，排在 `alterm_login_shell` 前面 |
 | `KBU__ICON_WIDTH`、`KBU__POWERLINE_WIDTH` | `1` 或 `2`：一個 icon、一個 powerline 符號佔幾格（見[需求](#需求)） |
@@ -260,7 +263,9 @@ status:
 
 kbu 遵循 [terminu design](https://github.com/vulcanshen/terminu)：跟家族其他成員一樣的鍵、一樣的 menu ——
 [filu](https://github.com/vulcanshen/filu)（檔案）、[sshu](https://github.com/vulcanshen/sshu)（ssh）、
-[webu](https://github.com/vulcanshen/webu)（網頁）與 [locku](https://github.com/vulcanshen/locku)（鎖定螢幕）。
+[webu](https://github.com/vulcanshen/webu)（網頁）、[locku](https://github.com/vulcanshen/locku)（鎖定螢幕）、
+[kamonu](https://github.com/vulcanshen/kamonu)（家族的 mark）與 [ccdrawu](https://github.com/vulcanshen/ccdrawu)
+（Claude Code 的 sidebar 與 status line）。
 
 ## License
 

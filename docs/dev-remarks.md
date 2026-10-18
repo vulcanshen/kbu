@@ -39,7 +39,7 @@
 - **panel 2 是 panel 1 的明細、panel 3 是 panel 2 的明細**（components/layout/panel 的「明細」）：cursor 一動，下一個 panel 立刻換成
   那一筆；為了不在 `j` 一路往下時每一列都開 watch、抓 detail、開 log，換種類與換列都等 cursor 停 300ms 才真的去抓
   （`kindDebounce`、`rowDebounce`），晚到的結果用序號或 UID 丟掉。
-- **panel 1 的 `Enter`** 把 focus 送到 panel 2（Rules K3 唯一能用 `Enter` 換 panel 的地方，`Action.ToDetails`）。panel 2 的 `Enter`
+- **panel 1 的 `Enter`** 把 focus 送到 panel 2（tdp K3 唯一能用 `Enter` 換 panel 的地方，`Action.ToDetails`）。panel 2 的 `Enter`
   不換 panel：能 drill 的種類 drill、Contexts 切換 context（先問）、container 開 shell、其他打開 YAML。panel 3 的 `Enter`：Relatives
   drill、History rollback（先問），沒有項目的 tab 是 zoom。
 - **watch**：`k8s.Watcher` 對目前的種類 list 加 watch，任何事件整份重新 list；panel 2 的資料每次到，游標那一列的 detail 也重抓
@@ -55,7 +55,7 @@
 |---|---|
 | Space menu、global operation popup | lib 的（從 panel 的 `Actions` 與 `App.Global` 產生） |
 | key reference（`?`） | lib 的（從同一份登記產生） |
-| sort 的欄位與方向兩個 picker | 兩個 menu（Rules F1：一步一個 popup） |
+| sort 的欄位與方向兩個 picker | 兩個 menu（tdp F1：一步一個 popup） |
 | namespace picker | checkbox popup（`App.Checks`）；第一列是 All Namespaces |
 | context picker | select（`App.Select`） |
 | YAML、compare、helm 文件、App Log | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`、`L`、`D`） |
@@ -74,42 +74,51 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 
 ## 設計決定
 
-- **零學習曲線。** 每個動作都在 `Space` menu；熱鍵只是那一列的捷徑（Rules M3）。lib 讓 menu、`?`、hint 與按鍵出自同一份登記，
+- **零學習曲線。** 每個動作都在 `Space` menu；熱鍵只是那一列的捷徑（tdp M3）。lib 讓 menu、`?`、hint 與按鍵出自同一份登記，
   不會對不上。
 - **組合，不取代。** Alterm 讓平常要跳出 kbu 才用的工具都在裡面跑；kbu 管導覽與檢視。
 - **edit 用內嵌的 terminal 跑真的 `kubectl edit`**，不用 `tea.ExecProcess` 加 `kubectl apply`：前者讓 kubectl 的訊息留在 kbu 裡，
   語意也就是 `kubectl edit`。
 - **session 狀態與設定分檔**：`config.yaml` 是使用者的文件，`state.yaml` 每次離開都重寫。
-- **panel 2 的動作作用在游標那一列**；名稱與說明寫對什麼做什麼（Rules M5）。helm 管理的物件 Edit、Delete 列出但停用（Rules M6）：
+- **panel 2 的動作作用在游標那一列**；名稱與說明寫對什麼做什麼（tdp M5）。helm 管理的物件 Edit、Delete 列出但停用（tdp M6）：
   「由 Helm 管」是那個物件現在的狀態，不是這個種類做不到。種類本身沒有的動作不列（Events、Contexts、Releases 的 Edit，加上
   Nodes 的 Delete）。
-- **離開不先問**（Rules K9：由 app 決定）：跟舊版一樣直接離開，離開時存 state。
-- **Esc 在 panel 2 的上一層**：先放掉 compare anchor，再退出 drill（Rules K4 一次一層）。panel 3：Relatives 的鏈退一層。
-- **Logs 與 Events 是串流**（Rules T2），panel 3 失焦時不變暗；tab 名後面的 glyph 說它現在是不是跟著最新的一行（播放 / 暫停，
-  同寬，Rules L2）。舊版 Events 失焦會變暗、寫成偏離；換到 lib 之後照 T2 做，偏離拿掉。
-- **Alterm 的 `Ctrl-T`** 跟 `Alt-t` 一樣是隱藏，因為錄 demo 的 VHS 送不出 Alt。lib 把 terminal 的每一個鍵都揭露在下框 hint，
-  所以舊版「`Ctrl-T` 不揭露」的偏離也拿掉了。
+- **離開不先問**（tdp K9：由 app 決定）：跟舊版一樣直接離開，離開時存 state。
+- **Esc 在 panel 2 的上一層**：先放掉 compare anchor，再退出 drill（tdp K4 一次一層）。panel 3：Relatives 的鏈退一層。
+- **Logs 與 Events 是串流**（tdp T2），panel 3 失焦時不變暗；tab 名後面的 glyph 說它現在是不是跟著最新的一行（播放 / 暫停，
+  同寬，tdp L2）。舊版 Events 失焦會變暗、寫成偏離；換到 lib 之後照 T2 做，偏離拿掉。
+- **Alterm 的隱藏只有 `Alt-t`**：舊版另有一個不揭露的 `Ctrl-T`（錄 demo 的 VHS 送不出 Alt），但它在 panel 上不會叫出 Alterm，
+  是半套的別名（tdp K7），一起拿掉；舊版「`Ctrl-T` 不揭露」的偏離也就沒了。README 的 demo 不錄 Alterm。
 - **zoom（`z`）是 `App.ForceNarrow`**：只畫 focus 的 panel、用滿畫面；`Tab` 照樣換 panel。它是版面的切換，不是模式（術語「模式」），
   再按一次 `z` 還原。**暫定**：tdp 只說窄寬時這樣畫，zoom 要不要做成別的樣子由 app 決定。
 - **窄寬的門檻是 60 欄**（`Screen.NarrowBelow`）。**暫定**：panel 1 要 24 欄、panel 2 至少要放得下 Namespace 與 Name。
-- **panel 2 的欄**：namespaced 的種類第一欄是 Namespace，接著 Name，再一個沒有標題的 helm 標記欄。窄的時候先讓出空間的是 IP、
-  Node、Image 這類（`keptColumns` 以外的）。數字欄（Restarts、Age……）靠右、照數值排；Age 照建立時間排（升冪 = 舊的在前，跟
+- **panel 2 的欄**：namespaced 的種類第一欄是 Namespace，接著 Name，再一個沒有標題的 helm 標記欄 —— 選了好幾個 namespace 時，
+  同名的物件要靠 Namespace 分；helm 標記欄沒有標題，是因為它只是一個標記、不是值。窄的時候先讓出空間的是 IP、Node、Image 這類
+  （`keptColumns` 以外的），panel 窄到所有欄的自然寬放不下時，這些欄整欄拿掉（`fitColumns`）：八欄都被擠成三格的清單分不出是哪
+  一筆（tdp L1）；排序中的欄不拿、也不讓，排序的箭頭要看得到。Namespace 比 Name 先讓。數字欄（Restarts、Age……）靠右、照數值排；Age 照建立時間排（升冪 = 舊的在前，跟
   `kubectl --sort-by` 一樣），`N/M` 照兩個數字。沒有選排序時照 namespace、名稱。
 - **Relatives 是一般清單加分組**：組是 section 的標題，兩欄 `NAME`、`TARGET`（多欄的清單一定有表頭）；能進去的那一列尾端一個箭頭。
   沒有 ref 的列照樣停得到，`Enter` 停用。**暫定**：欄名。
-- **狀態欄的顏色是 kbu 的內容**（Principle P4）：只有需要注意的才上色，pending 與 error 兩色，從 `theme.yaml` 的 `status` 讀。
+- **狀態欄的顏色是 kbu 的內容**（tdp P4）：只有需要注意的才上色，pending 與 error 兩色，從 `theme.yaml` 的 `status` 讀。
   **暫定**：`theme.yaml` 其他段不再有作用（KB3）。
-- **namespace picker 的 All Namespaces**：勾 All 就是全部；All 本來就勾著、又勾了幾個 namespace，就是那幾個；一個都沒勾也是全部。
-- **context**：從 Contexts 清單按 `Enter` 先問；從 `[C]ontext` 的 select 選定不再問（Rules F6：經由 picker 明確選定的那一次算已確認）。
+- **namespace picker 的 All Namespaces**：All 勾著就是全部，沒勾 All 就是勾起來的那幾個，一個都沒勾也是全部。理由：checkbox popup
+  裡的 Green 讀成「按 `Enter` 就是這個值」（components/input/finder），All 跟幾個 namespace 都是 Green 時，結果只能是全部；
+  一個都沒勾時沒有東西可以看，全部最接近使用者的意思。舊版「All 勾著時再勾一個就變成只有那一個」跟畫面對不上，改掉。
+- **context**：從 Contexts 清單按 `Enter` 先問；從 `[C]ontext` 的 select 選定不再問（tdp F6：經由 picker 明確選定的那一次算已確認）。
   切換時清掉 CRD 再重新探索，正在看的種類是能 drill 的或新叢集沒有的，就回到 Pods。
-- **錯誤**：toast（Rules F5）加 App Log；statusbar 右邊寫還沒看過的錯誤、警告數（Red、Peach 的字），打開 App Log 就算看過。
+- **錯誤**：toast（tdp F5）加 App Log；statusbar 右邊寫還沒看過的錯誤、警告數（Red、Peach 的字），打開 App Log 就算看過。
   watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
-- **設定位置照 Rules E3**：`~/.config/kbu`。舊版放在系統的設定目錄（macOS `~/Library/Application Support/kbu`、Windows
-  `%APPDATA%\kbu`）；只有舊目錄在時繼續讀寫它、App Log 提一句。**暫定**（KB2）。log 目錄（crash、audit）仍在設定目錄底下。
+- **設定位置照 tdp E3**：`~/.config/kbu`。舊版放在系統的設定目錄（macOS `~/Library/Application Support/kbu`、Windows
+  `%APPDATA%\kbu`）；只有舊目錄在時繼續讀寫它、App Log 提一句。**暫定**（KB2）。
+- **log（crash、audit）放資料目錄 `~/.kbu/logs`**（`KBU__DATA`）。**暫定**（KB15）：E3 沒有 log 這一類，它是 kbu 替使用者記下來的
+  東西，最接近「資料」。舊的 log 留在原本的設定目錄，kbu 不會讀回 log，所以不搬。
+- **確認一律用 `Action.Ask`**：edit、shell、delete、rollback、切換 context 的問句在排 panel 的動作時就照游標那一筆建好（換列時重排），
+  從 Space menu 執行時 `Esc` 回到 menu（tdp F4）、`Enter` 清掉整疊（tdp T1）。只有 YAML viewer 的 `E` 用 `App.Confirm`（KB10）。
+- **App Log 的清除在 Global operation**：note 只用來讀（tdp F1），清除是對整個 app 的動作。
 
 ### 環境變數
 
-照 Rules E2：`KBU__CONFIG`（設定目錄）、`KBU__STATE`（狀態目錄）、`KBU__ALTERM_SHELL`、`KBU__ALTERM_LOGIN_SHELL`；icon 與 powerline
+照 tdp E2：`KBU__CONFIG`（設定目錄）、`KBU__STATE`（狀態目錄）、`KBU__ALTERM_SHELL`、`KBU__ALTERM_LOGIN_SHELL`；icon 與 powerline
 符號的寬度 `KBU__ICON_WIDTH`、`KBU__POWERLINE_WIDTH` 與家族共用的 `TERMINU__ICON_WIDTH`、`TERMINU__POWERLINE_WIDTH` 由 lib 讀
 （`Probe("kbu")`），lib 也替 terminal 裡的程式設好兩個 `TERMINU__`。`KBU__ALTERM_LOGIN_SHELL` 用 `strconv.ParseBool`。測試用的
 `KBU__TEST_K8S` 也照這個寫。會存檔的測試把 `KBU__CONFIG`、`KBU__STATE` 設到暫存目錄（`newTestModel`）。
@@ -134,11 +143,14 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 
 ## 偏離 tdp
 
-- **statusbar 的 context 與 namespace 依名稱長度，不是固定寬度（Rules L2）。** context 最多 24 格、namespace 最多 16 格，超過從中間
+- **statusbar 的 context 與 namespace 依名稱長度，不是固定寬度（tdp L2）。** context 最多 24 格、namespace 最多 16 格，超過從中間
   截斷（`capMiddle`，`internal/tui/tui.go` 的 `statusbar`）；換了 context 或 namespace，後面的 `[N]amespace`、`[Alt-t]erm`、
   `[C]ompare` 會跟著移。理由（user 2026-09-28 實機看過固定寬度的版本後裁定）：固定 24 格讓 `orbstack` 這種短名字後面空出一大格，
   80 欄左右還把後面的 chip 擠出畫面；切換是使用者自己按的、不常發生。改用 terminu-go 之後這一列仍是 kbu 自己畫的（`App.Status`），
   照舊保留，要不要留已回報（KB6）。
+- **split 版的 compare 截斷、不折行（components/dialog/note 的 viewer 折行）。** 左右兩欄並排，各自截到欄寬（`splitDiff`，
+  `internal/tui/compare.go`）。理由：兩欄並排的一列折下來，左右就對不齊，side-by-side 比對的意義也沒了；要看完整的一行，用 `L` 換成
+  unified（折行）或 `Y` 看那一筆的 YAML。這是 components 的偏離，也是 tdp 的缺漏：viewer 沒有並排內容的方案。
 
 ## 設計文件導讀
 
@@ -147,7 +159,8 @@ kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版�
 
 | 檔案 | 內容 |
 |---|---|
-| [`icon.svg`](icon.svg) | kbu 的 mark（Rules S5：U 框、K、B 各一段註解），README 與 splash 用 |
+| [`kbu-terminu-fix.md`](kbu-terminu-fix.md) | 還沒符合 tdp、等 lib 或規範的地方（tdp E7） |
+| [`icon.svg`](icon.svg) | kbu 的 mark（tdp S5：U 框、K、B 各一段註解），README 與 splash 用 |
 | [`km8-icon.svg`](km8-icon.svg) | 改名前（km8）的圖示 |
 | [`social-preview.png`](social-preview.png) | GitHub 的 social preview |
 | [`demo-basics.gif`](demo-basics.gif) | README 唯一的 demo |
@@ -188,7 +201,7 @@ make build        # → ./kbu（CGO_ENABLED=0 靜態、-trimpath、strip；版�
 - `internal/tui` 的測試不連叢集：`newTestModel` 建一個沒有 client 的 kbu，`feed` 餵 panel 2 的資料，`press` 照 tdp 的鍵名送鍵，`drive`
   把 lib 回傳的指令（動畫、debounce）跑完再餵回去。會存檔的測試設好暫存的 `KBU__CONFIG`、`KBU__STATE`；`Model.run` 換成會讓測試
   失敗的假的，測試絕對不會真的跑 kubectl delete。
-- 畫面測試（Rules L4）量 icon 與 powerline 符號佔一格、兩格的組合，在幾種尺寸、開幾種 popup 之後，每一列都剛好是終端機寬。
+- 畫面測試（tdp L4）量 icon 與 powerline 符號佔一格、兩格的組合，在幾種尺寸、開幾種 popup 之後，每一列都剛好是終端機寬。
 - `internal/k8s` 有些測試要連真的叢集（開發時用 OrbStack），沒有叢集時跳過。
 
 在 tmux 裡實際跑：`.local/scripts/shot.sh -s 120x40 -- Tab Space`（不進版控；照 terminu-go 的 `scripts/tmux-shot.sh`，設定與狀態放在

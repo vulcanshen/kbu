@@ -15,7 +15,8 @@ Each release names the version of terminu design (tdp) it follows.
     screen is drawn in the family's colours; the App Log says which sections no
     longer take effect.
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
-    `Enter` shows the ones checked.
+    `Enter` shows the ones checked. All Namespaces checked means all of them,
+    whatever else is checked.
   - **Sorting** is still two steps, a column then a direction; choosing the
     direction closes both, so a second column is a second `Alt-S`.
   - **The App Log** lists the oldest entry first and opens at the newest.
@@ -26,6 +27,20 @@ Each release names the version of terminu design (tdp) it follows.
     question.
   - **`kbu help`** prints how to run kbu (also `--help`, `-h`).
   - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
+  - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.
+    `z` zooms back from any panel.
+  - **Alterm hides with `Alt-t` only**; `Ctrl-T` goes to the shell.
+  - **Clearing the App Log** is a row of `Global operation`, no longer `D` in
+    the App Log.
+  - **A confirm opened from the `Space` menu** goes back to the menu on `Esc`.
+  - **On a narrow panel 2** the columns that matter least (IP, node, image…)
+    are left out, so the names stay readable; `z` shows them all.
+- **The logs move to `~/.kbu/logs`** (tdp E3: they are kbu's data);
+  `KBU__DATA` points them elsewhere. Logs already written stay where they are.
+- **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
+  many cells a tab takes in the viewers (default 4).
+- `KBU_TEST_RUN_MAIN`, a variable only kbu's tests read, is
+  `KBU__TEST_RUN_MAIN` (tdp E2).
 - **The repository takes the terminu family's shape** (tdp project): the
   program is built from `cmd/kbu`, so `go install` takes
   `github.com/vulcanshen/kbu/cmd/kbu@latest`; the Makefile, release workflow,
