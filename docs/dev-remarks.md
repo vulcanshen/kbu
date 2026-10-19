@@ -92,12 +92,15 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **zoom（`z`）是 `App.ForceNarrow`**：只畫 focus 的 panel、用滿畫面；`Tab` 照樣換 panel。它是版面的切換，不是模式（術語「模式」），
   再按一次 `z` 還原。這就是 tdp v0.8.0 的 zoom 預設（components/layout/screen：跟窄寬一樣，換到的 panel 也放大）。
 - **窄寬的門檻是 60 欄**（`Screen.NarrowBelow`）。**暫定**：panel 1 要 24 欄、panel 2 至少要放得下 Namespace 與 Name。
+- **最低尺寸是 40×15**（`App.MinWidth`、`MinHeight`，比家族預設的 80×40 低；tdp L1 允許調低）：終端機最常見的 80×24 與分割視窗
+  都要能用，窄寬版面（一次一個 panel）在 40×15 還放得下清單、Space menu 捲得動。比這個小時照 tdp L1 只畫名稱與需要的大小。
 - **panel 2 的欄**：namespaced 的種類第一欄是 Namespace，接著 Name，再一個沒有標題的 helm 標記欄 —— 選了好幾個 namespace 時，
-  同名的物件要靠 Namespace 分；helm 標記欄沒有標題，是因為它只是一個標記、不是值。窄的時候先讓出空間的是 IP、Node、Image 這類
-  （`keptColumns` 以外的），panel 窄到所有欄的自然寬放不下時，這些欄整欄拿掉（`fitColumns`）：八欄都被擠成三格的清單分不出是哪
-  一筆（tdp L1）；排序中的欄不拿、也不讓，排序的箭頭要看得到。還不夠時 Name 先讓，讓到它的 MinWidth（20 格）為止，Namespace
-  保持整欄（`nameGives`）—— 舊版的 Namespace 至少 15 格；Name 讓到底還不夠，才換 Namespace 先讓（lib 一次把它截成三格，KB17）。
-  名稱從尾端截（tdp components/layout/panel），舊版從中間截、留住尾端的 pod hash，tdp 沒有這種截法（KB19）。數字欄（Restarts、Age……）靠右、照數值排；Age 照建立時間排（升冪 = 舊的在前，跟
+  同名的物件要靠 Namespace 分；helm 標記欄沒有標題，是因為它只是一個標記、不是值。放不下時照 components/layout/panel 整欄收掉
+  （`Column.Drop`，`listColumns`）：先收 IP、Node、Image 這類次要欄（從右邊起），再依序收 Restarts、Age、Ready、Status、Type、Reason、
+  helm 標記欄、Namespace；Name 永遠不收。排序中的欄最後才收，排序的箭頭盡量留著。只選一個 namespace 時每一列的 Namespace 都一樣，
+  它第一個收。名稱從中間截（`Column.Middle`：`demo-app…66-gm72n`，前面是 workload、後面的 hash 分得出是哪一個 pod；KB19）。
+  drill 下去時 label 是種類、`Panel.Name` 是那一層的名字（`[2] PODS: nginx-7d4f`），整條路徑寫在位置列（`List.Location`，
+  `deployment/web > pods`；S16）。數字欄（Restarts、Age……）靠右、照數值排；Age 照建立時間排（升冪 = 舊的在前，跟
   `kubectl --sort-by` 一樣），`N/M` 照兩個數字。沒有選排序時照 namespace、名稱。
 - **Relatives 是一般清單加分組**：組是 section 的標題，兩欄 `NAME`、`TARGET`（多欄的清單一定有表頭）；能進去的那一列尾端一個箭頭。
   沒有 ref 的列照樣停得到，`Enter` 停用。**暫定**：欄名。

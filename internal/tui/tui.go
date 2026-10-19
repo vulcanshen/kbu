@@ -114,6 +114,10 @@ func New(o Options) *Model {
 	a := terminu.New("kbu")
 	a.QuitDesc = "leave kbu"
 	a.ShiftTab = true
+	// kbu's least size is lower than the family's 80×40 (tdp L1): it runs in
+	// a terminal's usual 80×24 and in a split pane, its narrow layout (one
+	// panel) working down to minWidth×minHeight. docs/dev-remarks.md says why.
+	a.MinWidth, a.MinHeight = minWidth, minHeight
 	a.InputTabWidth = m.cfg.InputTabWidth // the family's input_tab_width (tdp E3)
 	a.Status = m.statusbar
 	a.OnMsg = m.onMsg
@@ -180,6 +184,10 @@ func (m *Model) shutdown() {
 
 // App is the lib's app, for tests.
 func (m *Model) App() *terminu.App { return m.app }
+
+// minWidth and minHeight are kbu's least size (tdp L1): below it only its
+// name and the size it needs are drawn.
+const minWidth, minHeight = 40, 15
 
 // layout puts panel 1 on the left, 24 cells wide, and panels 2 and 3 on the
 // right, panel 3 under panel 2 (tdp leaves the arrangement to the app,
