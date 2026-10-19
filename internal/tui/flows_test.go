@@ -213,3 +213,32 @@ func TestYAMLSearch(t *testing.T) {
 		}
 	}
 }
+
+// kbu starts on the panel the user left from (tdp K3: what they expect).
+func TestStartsOnThePanelLeftFrom(t *testing.T) {
+	for panel, want := range map[string]func(*Model) *terminu.Panel{
+		"table":  func(m *Model) *terminu.Panel { return m.listP },
+		"detail": func(m *Model) *terminu.Panel { return m.detailP },
+	} {
+		state := config.DefaultState()
+		state.Kind, state.Panel = "pod", panel
+		m := newTestModelWith(t, Options{State: state})
+		if m.screen.Focused() != want(m) {
+			t.Errorf("state panel %q: the focus is not on it", panel)
+		}
+	}
+}
+
+// The namespace picker opens at once, loading (tdp F7), and the namespaces
+// fill it when they come.
+func TestNamespacePickerLoads(t *testing.T) {
+	m := newTestModel(t)
+	m.drive(m.namespacePicker(k8s.AllNamespaces()))
+	if s := m.screen_(); !strings.Contains(s, "NAMESPACES") || strings.Contains(s, "alpha") {
+		t.Fatalf("the picker did not open before its namespaces:\n%s", s)
+	}
+	m.drive(m.onMsg(namespacesMsg{names: []string{"alpha", "beta"}}))
+	if s := m.screen_(); !strings.Contains(s, "alpha") || !strings.Contains(s, "beta") {
+		t.Errorf("the namespaces did not fill the picker:\n%s", s)
+	}
+}

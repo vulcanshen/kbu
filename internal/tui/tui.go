@@ -87,6 +87,9 @@ type Model struct {
 	startTab   string // the state's panel 3 tab, applied once the kind has its tabs
 	startPanel string
 	moved      config.Move
+
+	// fillNamespaces puts the namespaces in the open namespace picker.
+	fillNamespaces func([]string)
 }
 
 // New builds kbu's UI.
@@ -234,11 +237,10 @@ func (m *Model) start() tea.Cmd {
 		cmds = append(cmds, fetchNamespaces(m.client, true), discoverCRDs(m.client))
 	}
 	cmds = append(cmds, m.sayMoved())
-	// The lib has no call that sets the focus: the panel the user left from
-	// is reached with its digit, as the user would (tdp K1).
-	// TODO(lib KB5): a way to set the focused panel.
-	if n := map[string]rune{"table": '2', "detail": '3'}[m.startPanel]; n != 0 {
-		cmds = append(cmds, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{n}} })
+	// Back on the panel the user left from: starting kbu is what they did,
+	// and where it starts is what they expect (tdp K3).
+	if p := map[string]*terminu.Panel{"table": m.listP, "detail": m.detailP}[m.startPanel]; p != nil {
+		cmds = append(cmds, m.app.Focus(p))
 	}
 	return tea.Batch(cmds...)
 }

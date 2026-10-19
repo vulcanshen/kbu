@@ -172,29 +172,33 @@ func (m *Model) openAppLog() tea.Cmd {
 
 // --- namespaces ----------------------------------------------------------------
 
-// openNamespaces asks the cluster for its namespaces; the picker opens when
-// they come. TODO(lib KB8): open it at once, loading, when the checkbox
-// popup can load.
+// openNamespaces opens the namespace picker at once and asks the cluster for
+// its namespaces, which fill it as they come (onNamespaces).
 func (m *Model) openNamespaces() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return fetchNamespaces(m.client, false)
+	return tea.Batch(m.namespacePicker(m.client.Selection()), fetchNamespaces(m.client, false))
 }
 
 // namespacePicker picks which namespaces panel 2 shows: All Namespaces or
 // any set of them (components/input/checkbox: Space checks a row, Enter
-// takes the set).
-func (m *Model) namespacePicker(names []string) tea.Cmd {
-	sel := m.client.Selection()
-	opts := append([]string{"All Namespaces"}, names...)
-	checked := make([]bool, len(opts))
-	checked[0] = sel.IsAll()
-	for i, n := range names {
-		checked[i+1] = !sel.IsAll() && sel.Contains(n)
+// takes the set). It opens loading (tdp F7); fillNamespaces puts the
+// namespaces in.
+func (m *Model) namespacePicker(sel k8s.NamespaceSelection) tea.Cmd {
+	var names []string
+	c := &terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Options: []string{"All Namespaces"},
+		Checked: []bool{sel.IsAll()}, Loading: true,
+		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(names, now)) }}
+	m.fillNamespaces = func(got []string) {
+		names = got
+		for _, n := range got {
+			c.Options = append(c.Options, n)
+			c.Checked = append(c.Checked, !sel.IsAll() && sel.Contains(n))
+		}
+		c.Loading = false
 	}
-	return m.app.Checks(terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Options: opts, Checked: checked,
-		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(names, now)) }})
+	return m.app.LoadChecks(c)
 }
 
 // pickedSelection is what the namespace picker's checks mean, as the

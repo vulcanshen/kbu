@@ -31,7 +31,10 @@ func newTestModelWith(t *testing.T, o Options) *Model {
 	t.Setenv("KBU__CONFIG", t.TempDir())
 	t.Setenv("KBU__STATE", t.TempDir())
 	terminu.SetIconWidth(1, 1)
-	o.Config, o.State = config.DefaultConfig(), config.DefaultState()
+	o.Config = config.DefaultConfig()
+	if o.State == nil {
+		o.State = config.DefaultState()
+	}
 	m := New(o)
 	m.run = func(name string, args ...string) (string, error) {
 		t.Fatalf("a test ran %s %s", name, strings.Join(args, " "))
