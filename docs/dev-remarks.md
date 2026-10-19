@@ -121,12 +121,12 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看
   那一筆的 YAML。`TODO(lib KB18)`：lib 給 viewer 不折行的選項後改用它，畫面變窄時才不會折。
 - **設定位置照 tdp E3**：`~/.config/kbu`。舊版放在系統的設定目錄（macOS `~/Library/Application Support/kbu`、Windows
-  `%APPDATA%\kbu`）。照 tdp E3 的「換了位置時」：新位置沒有、舊位置有，啟動時（`config.MovePlatformConfigDir`，在讀設定之前）
-  用 `os.Rename` 把整個目錄搬過去，Info toast 說從哪搬到哪；搬不動（例：跨磁碟、權限）時照舊讀寫舊目錄（`ConfigDir` 的退路），
-  開 error popup 寫出兩個路徑。舊目錄裡的 `logs/`（舊版的 log）跟著整個目錄搬，不另外搬到資料目錄。uninstall.sh、uninstall.ps1
-  照樣問舊位置。
+  `%APPDATA%\kbu`）。照 tdp E3（v0.8.1）的「換了位置時」逐項搬（`config.MoveOldPlaces`，啟動時、讀設定之前）：舊目錄裡的每一項
+  用 `os.Rename` 搬到 `~/.config/kbu`，`logs/` 搬到資料目錄；新位置已經有的那一項留在舊位置（設定、資料都不刪）；搬完把空了的
+  舊目錄拿掉。Info toast 說從哪搬到哪，留下來的開 error popup 寫兩個路徑。設定搬到一半失敗（例：跨磁碟、權限）時，已經搬的
+  搬回去，照舊讀寫舊目錄（`ConfigDir` 的退路），error popup 寫兩個路徑。uninstall.sh、uninstall.ps1 照樣問舊位置。
 - **log（crash、audit）放資料目錄 `~/.kbu/logs`**（`KBU__DATA`）：tdp E3 照「刪掉會怎樣」分，log 刪了就找不回來，是資料（KB15，
-  user 2026-10-19）。舊的 log 留在設定目錄的 `logs/`，kbu 不會讀回 log，所以不搬。
+  user 2026-10-19）。舊版寫在設定目錄 `logs/` 的 log（Linux 也是），第一次啟動時一起搬到資料目錄。
 - **確認一律用 `Action.Ask`**：edit、shell、delete、rollback、切換 context 的問句在排 panel 的動作時就照游標那一筆建好（換列時重排），
   從 Space menu 執行時 `Esc` 回到 menu（tdp F4）、`Enter` 清掉整疊。只有 YAML viewer 的 `E` 用 `App.Confirm`，viewer 留在底下。
 - **menu 的 source 留或清照 tdp T1 的表**（照「確定之後的動作」判）：打開東西來看的（`Y`、`Enter` 打開 YAML、compare、helm 的文件、

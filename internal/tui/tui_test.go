@@ -150,21 +150,29 @@ func TestBelowTheLeastSize(t *testing.T) {
 	}
 }
 
-// tdp E3: settings moved at start are told in an Info toast; a move that
-// failed opens an error popup with both paths.
+// tdp E3: what moved at start is told in an Info toast, from where to where;
+// what stayed where it was opens an error popup with both paths.
 func TestTheMovedSettingsAreTold(t *testing.T) {
-	m := newTestModelWith(t, Options{Moved: config.Move{From: "/old/kbu", To: "/new/kbu"}})
-	if s := m.screen_(); !strings.Contains(s, "Moved kbu's settings from /old/kbu to /new/kbu") {
+	m := newTestModelWith(t, Options{Moved: []config.Moved{
+		{What: "settings", From: "/old/kbu/config.yaml", To: "/new/kbu/config.yaml"},
+		{What: "settings", From: "/old/kbu/state.yaml", To: "/new/kbu/state.yaml"},
+		{What: "logs", From: "/old/kbu/logs", To: "/data/logs"},
+	}})
+	if s := m.screen_(); !strings.Contains(s, "Moved kbu's settings from /old/kbu to /new/kbu, and its logs from") {
 		t.Errorf("no toast for the move:\n%s", s)
 	}
-	m = newTestModelWith(t, Options{Moved: config.Move{From: "/old/kbu", To: "/new/kbu", Err: errors.New("permission denied")}})
+	m = newTestModelWith(t, Options{Moved: []config.Moved{
+		{What: "settings", From: "/old/kbu", To: "/new/kbu", Err: errors.New("permission denied")},
+		{What: "logs", From: "/old/logs", To: "/data/logs", Err: config.ErrThereAlready},
+	}})
 	s := m.screen_()
-	for _, want := range []string{"SETTINGS NOT MOVED", "/old/kbu", "/new/kbu", "permission denied"} {
+	for _, want := range []string{"NOT MOVED", "/old/kbu", "/new/kbu", "permission denied", "kbu keeps using it",
+		"/old/logs stays where it is", "Merge the two yourself"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the error popup has no %q:\n%s", want, s)
 		}
 	}
-	if m = newTestModel(t); strings.Contains(m.screen_(), "settings") {
+	if m = newTestModel(t); strings.Contains(m.screen_(), "Moved") {
 		t.Errorf("nothing moved, yet the screen talks about it:\n%s", m.screen_())
 	}
 }

@@ -55,12 +55,13 @@ The rest:
 - **Settings live in `~/.config/kbu` on every platform** (tdp E3), or in
   `$XDG_CONFIG_HOME/kbu`; `KBU__CONFIG` still moves them. On macOS and Windows
   an older kbu kept them in `~/Library/Application Support/kbu` and
-  `%APPDATA%\kbu`: the first start moves that directory to `~/.config/kbu`
-  and says so. If it cannot, kbu keeps using the old one and shows both paths
-  so you can move it yourself.
+  `%APPDATA%\kbu`: the first start moves what is there, one by one, to
+  `~/.config/kbu` and says so. What `~/.config/kbu` has already stays where
+  it was, and kbu shows both paths for you to merge them; if the settings
+  cannot be moved, kbu keeps using the old place and shows both paths.
 - **The logs move to `~/.kbu/logs`** (tdp E3: they are kbu's data);
-  `KBU__DATA` points them elsewhere. Logs already written stay in the settings
-  directory's `logs/`.
+  `KBU__DATA` points them elsewhere. The logs an older kbu wrote in the
+  settings directory move there at the first start.
 - **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
   many cells a tab takes in the viewers (default 4).
 - **`kbu help`** prints how to run kbu (also `--help`, `-h`).

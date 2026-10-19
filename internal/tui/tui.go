@@ -1,4 +1,4 @@
-// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.8.0): the lib
+// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.8.1): the lib
 // draws the screen and drives the core keys — the Space menu, the key
 // reference, the hints, confirms, dimming, Esc one layer at a time — and
 // this package registers kbu's three panels, their actions and popups, and
@@ -6,8 +6,10 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,7 +31,7 @@ type Options struct {
 	Notices []string
 	// Moved is where the settings were moved at start (tdp E3): a toast
 	// says so, or an error popup when the move failed.
-	Moved config.Move
+	Moved []config.Moved
 	// Status are the colours of a resource's status cells (the app's
 	// content, tdp P4).
 	Status theme.StatusColors
@@ -86,7 +88,7 @@ type Model struct {
 
 	startTab   string // the state's panel 3 tab, applied once the kind has its tabs
 	startPanel string
-	moved      config.Move
+	moved      []config.Moved
 
 	// fillNamespaces puts the namespaces in the open namespace picker.
 	fillNamespaces func([]string)
@@ -245,20 +247,43 @@ func (m *Model) start() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// sayMoved says where the settings were moved at start (tdp E3): an Info
-// toast, or an error popup with both paths when the move failed.
+// sayMoved says what was moved at start (tdp E3): an Info toast from where
+// to where, and an error popup with both paths for what stayed where it was.
 func (m *Model) sayMoved() tea.Cmd {
-	mv := m.moved
-	if mv.From == "" {
-		return nil
+	var done, left []string
+	said := map[string]bool{}
+	for _, mv := range m.moved {
+		switch {
+		case mv.Err == nil:
+			m.log.info(fmt.Sprintf("config: moved %s to %s", mv.From, mv.To))
+			from, to := mv.From, mv.To
+			if mv.What == "settings" {
+				from, to = filepath.Dir(from), filepath.Dir(to) // the files of one directory
+			}
+			if s := fmt.Sprintf("%s from %s to %s", mv.What, from, to); !said[s] {
+				said[s] = true
+				done = append(done, s)
+			}
+		case errors.Is(mv.Err, config.ErrThereAlready):
+			m.log.err(fmt.Sprintf("config: %s not moved, %s is there already", mv.From, mv.To))
+			left = append(left, fmt.Sprintf("%s stays where it is: %s is there already. Merge the two yourself.", mv.From, mv.To))
+		default:
+			m.log.err(fmt.Sprintf("config: could not move %s to %s: %v", mv.From, mv.To, mv.Err))
+			keeps := ""
+			if mv.What == "settings" {
+				keeps = ": kbu keeps using it"
+			}
+			left = append(left, fmt.Sprintf("%s could not be moved to %s (%v)%s. Move it yourself.", mv.From, mv.To, mv.Err, keeps))
+		}
 	}
-	if mv.Err != nil {
-		m.log.err(fmt.Sprintf("config: could not move %s to %s: %v", mv.From, mv.To, mv.Err))
-		return m.app.Error("Settings not moved", fmt.Sprintf("kbu could not move its settings from %s to %s (%v). "+
-			"It keeps using %s; move the directory to %s yourself.", mv.From, mv.To, mv.Err, mv.From, mv.To))
+	var cmds []tea.Cmd
+	if len(done) > 0 {
+		cmds = append(cmds, m.app.Toast(terminu.Info, "Moved kbu's "+strings.Join(done, ", and its ")))
 	}
-	m.log.info(fmt.Sprintf("config: moved %s to %s", mv.From, mv.To))
-	return m.app.Toast(terminu.Info, fmt.Sprintf("Moved kbu's settings from %s to %s", mv.From, mv.To))
+	if len(left) > 0 {
+		cmds = append(cmds, m.app.Error("Not moved", strings.Join(left, "\n")))
+	}
+	return tea.Batch(cmds...)
 }
 
 // statusbar is the row at the top (components/layout/screen): the context

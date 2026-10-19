@@ -208,9 +208,10 @@ defaults.
 kbu's logs are its data, in **`~/.kbu/logs`** (`KBU__DATA` points it elsewhere): `audit-<date>.log`, every edit and delete
 made from kbu, and `crash-<date>.log` when kbu crashes. Back them up if you need them: deleted, they are gone.
 
-An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows). The first time
-you start this one, it moves that directory to `~/.config/kbu` and says so. If it cannot, it keeps using the old one and
-shows both paths, so you can move it yourself.
+An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows), and its logs
+next to them. The first time you start this one, it moves them, one by one, to `~/.config/kbu` and `~/.kbu/logs`, and says
+so. What the new place has already stays where it was, and kbu shows both paths for you to merge them; if the settings
+cannot be moved, kbu keeps using the old place and shows both paths, so you can move them yourself.
 
 ### config.yaml
 
