@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"slices"
 	"strings"
@@ -13,7 +14,7 @@ import (
 	"github.com/vulcanshen/kbu/internal/k8s"
 )
 
-// Rules L4: every row is exactly as wide as the terminal, at every size, with
+// tdp L4: every row is exactly as wide as the terminal, at every size, with
 // icons and powerline symbols one cell or two (tdp E5), each kind of popup
 // kbu opens on top — menus, the key reference, a confirm, the viewers —
 // including screens smaller than the popup in width, in height, in both.
@@ -29,6 +30,9 @@ func TestL4EveryRowIsTheTerminalWidth(t *testing.T) {
 		{"Tab", "C", "j", "C"},  // the compare viewer
 		{"!"},                   // the App Log
 	}
+	// TODO(lib S53): also below the minimum size, down to 1x1 (tdp E5; e.g.
+	// {80, 5}, {3, 2}, {1, 1}), showing the name and the hint. terminu-go
+	// v0.1.13 panics there with a menu open; the next one does not.
 	sizes := [][2]int{{120, 40}, {80, 40}, {59, 20}, {200, 60}, {24, 40}, {200, 7}, {16, 6}}
 	for _, widths := range [][2]int{{1, 1}, {2, 1}, {2, 2}} {
 		for _, open := range popups {
@@ -89,6 +93,25 @@ func TestNamespaceKeepsItsWidth(t *testing.T) {
 	}
 }
 
+// tdp E3: settings moved at start are told in an Info toast; a move that
+// failed opens an error popup with both paths.
+func TestTheMovedSettingsAreTold(t *testing.T) {
+	m := newTestModelWith(t, Options{Moved: config.Move{From: "/old/kbu", To: "/new/kbu"}})
+	if s := m.screen_(); !strings.Contains(s, "Moved kbu's settings from /old/kbu to /new/kbu") {
+		t.Errorf("no toast for the move:\n%s", s)
+	}
+	m = newTestModelWith(t, Options{Moved: config.Move{From: "/old/kbu", To: "/new/kbu", Err: errors.New("permission denied")}})
+	s := m.screen_()
+	for _, want := range []string{"SETTINGS NOT MOVED", "/old/kbu", "/new/kbu", "permission denied"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the error popup has no %q:\n%s", want, s)
+		}
+	}
+	if m = newTestModel(t); strings.Contains(m.screen_(), "settings") {
+		t.Errorf("nothing moved, yet the screen talks about it:\n%s", m.screen_())
+	}
+}
+
 // P pins the kind under panel 1's cursor: it moves to the Pinned group at
 // the top (it is not copied), and the order is saved. P again puts it back.
 func TestPinMovesTheKindToPinned(t *testing.T) {
@@ -117,8 +140,8 @@ func TestPinMovesTheKindToPinned(t *testing.T) {
 	}
 }
 
-// D on a pinned kind is the Drag mode (Rules K11): j moves it, past the end
-// it wraps to the top (Rules K12), Enter keeps the order; Esc puts it back.
+// D on a pinned kind is the Drag mode (tdp K11): j moves it, past the end
+// it wraps to the top (tdp K12), Enter keeps the order; Esc puts it back.
 func TestDragReordersThePinnedKinds(t *testing.T) {
 	m := newTestModel(t)
 	m.press("P") // Pods
@@ -148,8 +171,24 @@ func TestDragReordersThePinnedKinds(t *testing.T) {
 	}
 }
 
+// tdp L2: the statusbar's chips that come and go are first, the context has
+// a fixed width, and the namespaces, the last dynamic field, come last.
+func TestStatusbarKeepsItsFields(t *testing.T) {
+	m := newTestModel(t)
+	bar := terminu.StripStyles(m.statusbar(120))
+	if i, want := strings.Index(bar, "[N]amespace"), 1+len("[C]ontext: ")+24+2; i != want {
+		t.Errorf("[N]amespace at %d, want %d:\n%q", i, want, bar)
+	}
+	m.feed(pod("demo", "a"), pod("demo", "b"))
+	m.press("Tab", "C")
+	bar = terminu.StripStyles(m.statusbar(120))
+	if c, x := strings.Index(bar, "[C]ompare"), strings.Index(bar, "[C]ontext"); c < 0 || c > x {
+		t.Errorf("[C]ompare is not before [C]ontext:\n%q", bar)
+	}
+}
+
 // C marks the compare anchor, C on another row compares (a viewer opens),
-// Esc on the panel drops the anchor first (Rules K4).
+// Esc on the panel drops the anchor first (tdp K4).
 func TestCompareAnchor(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
@@ -220,7 +259,7 @@ func TestTabsOfKinds(t *testing.T) {
 }
 
 // Logs and Events are streaming content: not dimmed when the panel loses the
-// focus (Rules T2).
+// focus (tdp T2).
 func TestStreamingTabsAreNotDimmed(t *testing.T) {
 	m := newTestModel(t)
 	for i, tab := range m.det.tabs {

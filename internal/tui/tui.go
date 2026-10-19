@@ -1,4 +1,4 @@
-// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.7.4): the lib
+// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.8.0): the lib
 // draws the screen and drives the core keys — the Space menu, the key
 // reference, the hints, confirms, dimming, Esc one layer at a time — and
 // this package registers kbu's three panels, their actions and popups, and
@@ -24,11 +24,14 @@ type Options struct {
 	Config   *config.Config
 	State    *config.State
 	StateErr error
-	// Notices go into the App Log at start (a migrated or old config
-	// directory, a deprecated key).
+	// Notices go into the App Log at start (a migrated config directory, a
+	// deprecated key).
 	Notices []string
-	// Status are the colours of a resource's status cells (theme.yaml's
-	// status section; the app's content, Principle P4).
+	// Moved is where the settings were moved at start (tdp E3): a toast
+	// says so, or an error popup when the move failed.
+	Moved config.Move
+	// Status are the colours of a resource's status cells (the app's
+	// content, tdp P4).
 	Status theme.StatusColors
 	// Version is what `kbu version` prints, for the splash.
 	Version string
@@ -83,6 +86,7 @@ type Model struct {
 
 	startTab   string // the state's panel 3 tab, applied once the kind has its tabs
 	startPanel string
+	moved      config.Move
 }
 
 // New builds kbu's UI.
@@ -93,6 +97,7 @@ func New(o Options) *Model {
 		state:  o.State,
 		status: o.Status,
 		run:    runCommand,
+		moved:  o.Moved,
 	}
 	if m.cfg == nil {
 		m.cfg = config.DefaultConfig()
@@ -104,8 +109,8 @@ func New(o Options) *Model {
 		m.watcher = k8s.NewWatcher(m.client.Clientset())
 		m.logs = k8s.NewLogStreamer(m.client.Clientset())
 	}
-	// TODO(lib KB4): the mouse (click, wheel, right-click for Space) and the
-	// Settings popup that held its two settings.
+	// No mouse: the terminu family is keyboard only (tdp X1; KB4, settled),
+	// and so the Settings popup that held its two settings is gone too.
 	a := terminu.New("kbu")
 	a.QuitDesc = "leave kbu"
 	a.ShiftTab = true
@@ -178,7 +183,7 @@ func (m *Model) App() *terminu.App { return m.app }
 
 // layout puts panel 1 on the left, 24 cells wide, and panels 2 and 3 on the
 // right, panel 3 under panel 2 (tdp leaves the arrangement to the app,
-// Rules L1).
+// tdp L1).
 func layout(w, h int) []terminu.Rect {
 	left := min(26, w/3) // the kinds' names and the hint Enter:open beside the scroll position
 	bottom := min(14, h/2)
@@ -192,15 +197,15 @@ func layout(w, h int) []terminu.Rect {
 	}
 }
 
-// globalActions are what acts on kbu as a whole (Principle P3): every one is
-// a row of the global operation popup and a key on the panels (Rules M4).
+// globalActions are what acts on kbu as a whole (tdp P3): every one is
+// a row of the global operation popup and a key on the panels (tdp M4).
 func (m *Model) globalActions() []terminu.Action {
 	return []terminu.Action{
 		{Key: "N", Label: "Namespace", Desc: "pick which namespaces to show", Scope: terminu.GlobalScope, Do: m.openNamespaces},
 		{Key: "C", Label: "Context", Desc: "switch the kubeconfig context", Scope: terminu.GlobalScope, Do: m.openContexts},
 		{Key: "Alt-t", Label: "term", Desc: "show the embedded shell (Alterm)", Scope: terminu.GlobalScope, Do: m.showAlterm},
-		{Key: "!", Label: "App log", Desc: "what kbu has done and what failed", Scope: terminu.GlobalScope, Do: m.openAppLog},
-		// Not a key of the App Log viewer: a note only shows (Rules F1).
+		{Key: "!", Label: "App log", Desc: "what kbu has done and what failed", Scope: terminu.GlobalScope, Stay: true, Do: m.openAppLog},
+		// Not a key of the App Log viewer: a note only shows (tdp F1).
 		{Label: "Clear the App log", Desc: "forget what it has kept", Scope: terminu.GlobalScope,
 			Disabled: func() bool { return len(m.log.entries) == 0 },
 			Do:       func() tea.Cmd { m.log.entries = nil; m.log.seen(); return nil }},
@@ -220,8 +225,9 @@ func (m *Model) start() tea.Cmd {
 		}
 		cmds = append(cmds, fetchNamespaces(m.client, true), discoverCRDs(m.client))
 	}
+	cmds = append(cmds, m.sayMoved())
 	// The lib has no call that sets the focus: the panel the user left from
-	// is reached with its digit, as the user would (Rules K1).
+	// is reached with its digit, as the user would (tdp K1).
 	// TODO(lib KB5): a way to set the focused panel.
 	if n := map[string]rune{"table": '2', "detail": '3'}[m.startPanel]; n != 0 {
 		cmds = append(cmds, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{n}} })
@@ -229,17 +235,33 @@ func (m *Model) start() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// sayMoved says where the settings were moved at start (tdp E3): an Info
+// toast, or an error popup with both paths when the move failed.
+func (m *Model) sayMoved() tea.Cmd {
+	mv := m.moved
+	if mv.From == "" {
+		return nil
+	}
+	if mv.Err != nil {
+		m.log.err(fmt.Sprintf("config: could not move %s to %s: %v", mv.From, mv.To, mv.Err))
+		return m.app.Error("Settings not moved", fmt.Sprintf("kbu could not move its settings from %s to %s (%v). "+
+			"It keeps using %s; move the directory to %s yourself.", mv.From, mv.To, mv.Err, mv.From, mv.To))
+	}
+	m.log.info(fmt.Sprintf("config: moved %s to %s", mv.From, mv.To))
+	return m.app.Toast(terminu.Info, fmt.Sprintf("Moved kbu's settings from %s to %s", mv.From, mv.To))
+}
+
 // statusbar is the row at the top (components/layout/screen): the context
 // and the namespaces with their hotkeys, the Alterm in the background, the
 // compare anchor, and on the right the errors and warnings not seen yet.
 // When panel 2 has the focus its C (Compare) is the C that fires: [C]ompare
-// is lit there and [C]ontext is not (Rules M9).
+// is lit there and [C]ontext is not (tdp M9).
 func (m *Model) statusbar(w int) string {
 	grey, value := terminu.Fg(terminu.Overlay0), terminu.Fg(terminu.Lavender)
 	lit, unlit := terminu.Fg(terminu.Blue), terminu.Fg(terminu.Surface2)
 	onList := m.screen.Focused() == m.listP
 	// panel 2's C is compare where it has a row to compare: there [C]ontext
-	// does not fire (Rules M9).
+	// does not fire (tdp M9).
 	compareC := onList && !m.atContainers() && m.list.HasItem()
 	ctxKey := lit
 	if compareC {
@@ -256,23 +278,26 @@ func (m *Model) statusbar(w int) string {
 			}
 		}
 	}
-	// The values take their own width, up to a cap (a deviation from Rules
-	// L2, docs/dev-remarks.md). TODO(tdp KB6): whether it stays.
-	left := " " + ctxKey.Render("[C]") + grey.Render("ontext: ") + value.Render(capMiddle(ctx, 24)) +
-		"  " + lit.Render("[N]") + grey.Render("amespace: ") + value.Render(capMiddle(ns, 16))
+	// tdp L2: the chips that come and go first, then the context in a fixed
+	// width, and the namespaces last, as wide as they are: the last dynamic
+	// field of a row pushes nothing.
+	var chips []string
 	if m.alterm != nil && m.alterm.Running() {
 		// A live session is in effect (components/color: Green).
-		left += "  " + lit.Render("[Alt-t]") + terminu.Fg(terminu.Green).Render("erm")
+		chips = append(chips, lit.Render("[Alt-t]")+terminu.Fg(terminu.Green).Render("erm"))
 	}
 	if m.anchor != nil {
 		cmpKey := unlit
 		if compareC {
 			cmpKey = lit
 		}
-		left += "  " + cmpKey.Render("[C]") + grey.Render("ompare")
+		chips = append(chips, cmpKey.Render("[C]")+grey.Render("ompare"))
 	}
+	chips = append(chips, ctxKey.Render("[C]")+grey.Render("ontext: ")+value.Render(terminu.Pad(capMiddle(ctx, 24), 24)),
+		lit.Render("[N]")+grey.Render("amespace: ")+value.Render(capMiddle(ns, 16)))
+	left := " " + strings.Join(chips, "  ")
 	right := ""
-	// The count keeps its width as it grows (Rules L2).
+	// The count keeps its width as it grows (tdp L2).
 	switch {
 	case m.log.unseenErrors > 0:
 		right = terminu.Fg(terminu.Red).Render(countText(m.log.unseenErrors, "error")) + grey.Render(" in the App Log [!] ")
@@ -329,14 +354,21 @@ func (m *Model) kubectlArgs(args ...string) []string {
 	return args
 }
 
-// toastErr says a failure at once (Rules F5) and keeps it in the App Log.
+// toastErr says a failure at once (tdp F5) and keeps it in the App Log.
 func (m *Model) toastErr(text string) tea.Cmd {
 	m.log.err(text)
 	return m.app.Toast(terminu.Error, text)
 }
 
-// toastWarn is toastErr for something worth a look that is not broken.
+// toastWarn is toastErr for something done, or still usable, that is worth
+// a look (components/dialog/toast).
 func (m *Model) toastWarn(text string) tea.Cmd {
 	m.log.warn(text)
 	return m.app.Toast(terminu.Warning, text)
+}
+
+// toastDone says an action the user asked for is done. TODO(lib S8): the
+// Success toast, in Green (components/dialog/toast).
+func (m *Model) toastDone(text string) tea.Cmd {
+	return m.app.Toast(terminu.Info, text)
 }

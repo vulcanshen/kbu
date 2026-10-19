@@ -287,16 +287,16 @@ const appName = "kbu"
 // dir migration (see MigrateLegacyConfigDir).
 const legacyAppName = "km8"
 
-// ConfigDir returns kbu's config directory: config.yaml, theme.yaml,
-// logs/ and — unless $KBU__STATE says otherwise — state.yaml live in it.
+// ConfigDir returns kbu's config directory: config.yaml and — unless
+// $KBU__STATE says otherwise — state.yaml live in it.
 // Priority (tdp E3): $KBU__CONFIG → $XDG_CONFIG_HOME/kbu → ~/.config/kbu,
 // the same on every platform (on Windows ~ is %USERPROFILE%).
 //
 // An older kbu kept the directory where the platform keeps an app's
 // settings (macOS ~/Library/Application Support/kbu, Windows
-// %APPDATA%\kbu). While that one is there and the tdp one is not, kbu
-// keeps reading and writing it, so nothing the user had is lost.
-// TODO(tdp KB2): whether to move it, copy it or keep using it.
+// %APPDATA%\kbu). MovePlatformConfigDir moves it at start; while it could
+// not and that one is the only one there, kbu keeps reading and writing it,
+// so nothing the user had is lost (tdp E3).
 //
 // $KBU__CONFIG is the family's <APP>__CONFIG (tdp E2): a directory — a
 // per-project one, a tmpfs path on CI, a sandbox for a test run. It is
@@ -313,17 +313,32 @@ func ConfigDir() string {
 	return dir
 }
 
-// LegacyConfigNotice says, for the App Log, that kbu is still using the
-// directory an older kbu kept its settings in; "" when it is not.
-func LegacyConfigNotice() string {
+// Move is where MovePlatformConfigDir moved the settings from and to.
+// From is "" when nothing was moved.
+type Move struct {
+	From, To string
+	// Err is why the move failed: the settings stay in From.
+	Err error
+}
+
+// MovePlatformConfigDir moves the directory an older kbu kept its settings
+// in to tdp E3's, when the old one is there and the new one is not (tdp E3:
+// a new place is moved to at the first start). $KBU__CONFIG moves nothing.
+func MovePlatformConfigDir() Move {
 	if strings.TrimSpace(os.Getenv("KBU__CONFIG")) != "" {
-		return ""
+		return Move{}
 	}
-	dir, got := familyConfigDir(appName), ConfigDir()
-	if got == dir {
-		return ""
+	to, from := familyConfigDir(appName), platformConfigDir(appName)
+	if from == "" || from == to || exists(to) || !exists(from) {
+		return Move{}
 	}
-	return fmt.Sprintf("config: still using %s, where an older kbu kept its settings; kbu now looks in %s first — move the directory there to follow it.", got, dir)
+	mv := Move{From: from, To: to}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		mv.Err = err
+	} else if err := os.Rename(from, to); err != nil {
+		mv.Err = err
+	}
+	return mv
 }
 
 // familyConfigDir is where tdp E3 puts an app's settings:
@@ -370,12 +385,6 @@ func legacyConfigDir() string {
 // in ConfigDir(), which $KBU__CONFIG moves.
 func ConfigPath() string {
 	return filepath.Join(ConfigDir(), "config.yaml")
-}
-
-// ThemePath returns the full path to the kbu theme file.
-// This is provided for the theme package to use.
-func ThemePath() string {
-	return filepath.Join(ConfigDir(), "theme.yaml")
 }
 
 // Load reads the config file from the default path and returns the parsed Config.

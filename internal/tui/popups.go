@@ -25,7 +25,7 @@ const (
 	glyphSearch  = "\U000F0233" // nf-md-file_find
 )
 
-// selection is the viewers' selection mode (Rules K11): v, then v again
+// selection is the viewers' selection mode (tdp K11): v, then v again
 // where the selection starts, y copies it.
 func (m *Model) selection() *terminu.Selection {
 	return &terminu.Selection{Key: "v", Name: "Visual", Copy: copyText}
@@ -34,7 +34,9 @@ func (m *Model) selection() *terminu.Selection {
 // --- the YAML viewer ---------------------------------------------------------
 
 // yamlSearch is the YAML viewer's search: the lines that match, and which of
-// them the viewer is on.
+// them the viewer is on. TODO(lib KB21): every hit underlined and the one it
+// is on a cursor block (components/dialog/note); the viewer colours its lines
+// itself, so kbu cannot mark them.
 type yamlSearch struct {
 	v       *terminu.Viewer
 	matches []int
@@ -71,6 +73,10 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 	v := &terminu.Viewer{Title: "YAML", Subject: subject(rt, item), Glyph: glyphYAML,
 		Lines: strings.Split(strings.TrimRight(yaml, "\n"), "\n"), Lang: "yaml", Select: m.selection()}
 	s := &yamlSearch{v: v}
+	// show puts the resource as it is now in the viewer, after an edit.
+	show := func(y string) {
+		yaml, v.Lines, s.matches = y, strings.Split(strings.TrimRight(y, "\n"), "\n"), nil
+	}
 	v.Keys = []terminu.ViewerKey{
 		{Key: "/", Desc: "search", Do: func() tea.Cmd {
 			// TODO(lib KB11): a search's typing row only draws a pasted
@@ -90,10 +96,11 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 		{Key: "y", Desc: "copy", Do: func() tea.Cmd { return copyText(yaml) }},
 	}
 	if allowsEdit(rt) && item.Name != "" && !k8s.IsHelmManaged(item) {
-		// TODO(lib KB10): the edit is a long session (Rules T1): the viewer
-		// should close under it, but the lib cannot close its own popups for
-		// the app.
-		v.Keys = append(v.Keys, terminu.ViewerKey{Key: "E", Desc: "edit", Do: func() tea.Cmd { return m.confirmEdit(rt, item) }})
+		// tdp T1: an edit in the editor keeps the viewer it was started
+		// from; when the edit ends, the viewer reads the resource again.
+		v.Keys = append(v.Keys, terminu.ViewerKey{Key: "E", Desc: "edit", Do: func() tea.Cmd {
+			return m.confirmEdit(rt, item, func() tea.Cmd { return m.rereadYAML(rt, item, show) })
+		}})
 	}
 	return m.app.Viewer(v)
 }
@@ -111,7 +118,7 @@ func (m *Model) compareHere() tea.Cmd {
 	if i := indexOfKey(m.shownItems(), m.anchor.key); i >= 0 {
 		anchor = m.shownItems()[i]
 	} else {
-		return m.toastWarn("compare: anchor item gone")
+		return m.toastErr("compare: anchor item gone")
 	}
 	left, right := k8s.MarshalItemYAMLForCompare(anchor), k8s.MarshalItemYAMLForCompare(item)
 	ll, rl := diffLabel(anchor), diffLabel(item)
@@ -135,7 +142,7 @@ func (m *Model) compareHere() tea.Cmd {
 			m.cfg.Compare.Layout = "split"
 		}
 		if err := m.cfg.Save(); err != nil {
-			// A popup's action failed: an error popup over it (Rules F7).
+			// A popup's action failed: an error popup over it (tdp F7).
 			m.log.err("compare layout save failed: " + err.Error())
 			return m.app.Error("Save failed", "The layout could not be saved to config.yaml: "+err.Error())
 		}
@@ -245,7 +252,7 @@ func (m *Model) setNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
 // --- contexts ------------------------------------------------------------------
 
 // openContexts picks the context kbu talks to (components/input/select),
-// the one now chosen; picking it is the confirmation (Rules F6).
+// the one now chosen; picking it is the confirmation (tdp F6).
 func (m *Model) openContexts() tea.Cmd {
 	if m.client == nil {
 		return nil
@@ -259,7 +266,7 @@ func (m *Model) openContexts() tea.Cmd {
 
 // --- sort ----------------------------------------------------------------------
 
-// openSort is the first of the sort's two steps: the column (Rules F1: each
+// openSort is the first of the sort's two steps: the column (tdp F1: each
 // step its own popup). A column already sorted by says where in the order
 // and which way.
 func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {

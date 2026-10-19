@@ -150,7 +150,7 @@ func (m *Model) showTab() {
 		m.detailP.Body = m.histList
 	}
 	t := m.currentTab()
-	m.detailP.Stream = t == "Logs" || t == "Events" // streaming content is not dimmed (Rules T2)
+	m.detailP.Stream = t == "Logs" || t == "Events" // streaming content is not dimmed (tdp T2)
 	m.setTabLabels()
 	m.setDetailActions()
 }
@@ -165,7 +165,7 @@ func (m *Model) currentTab() string {
 
 // setTabLabels writes the tabs on panel 3's frame: Logs and Events with
 // whether they follow the newest lines (the glyph keeps its width either
-// way, Rules L2), Relatives with how deep its chain is.
+// way, tdp L2), Relatives with how deep its chain is.
 func (m *Model) setTabLabels() {
 	d := &m.det
 	names := make([]string, len(d.tabs))
@@ -178,7 +178,7 @@ func (m *Model) setTabLabels() {
 			names[i] += " " + liveGlyph(d.eventBody.live)
 		case "Relatives":
 			// How deep the chain is, from 1: always there, so the tabs
-			// after it do not move when it changes (Rules L2).
+			// after it do not move when it changes (tdp L2).
 			names[i] += " " + glyphLink + strconv.Itoa(len(d.chain)+1)
 		}
 	}
@@ -385,7 +385,7 @@ func sanitizeLog(s string) string {
 }
 
 // logPalette colours a container's and a pod's name in the Logs tab, the
-// same name always the same colour (the app's content, Principle P4).
+// same name always the same colour (the app's content, tdp P4).
 var logPalette = []terminu.Color{
 	terminu.Hex("#f38ba8"), terminu.Hex("#fab387"), terminu.Hex("#f9e2af"), terminu.Hex("#a6e3a1"),
 	terminu.Hex("#94e2d5"), terminu.Hex("#89b4fa"), terminu.Hex("#cba6f7"), terminu.Hex("#f5c2e7"),
@@ -673,7 +673,7 @@ func (m *Model) relDrill() tea.Cmd {
 	ref := *e.ref
 	for _, f := range m.chainRefs() {
 		if f.Type == ref.Type && f.Name == ref.Name && f.Namespace == ref.Namespace {
-			return m.toastWarn(fmt.Sprintf("cycle blocked: %s/%s already in chain", ref.Type, ref.Name))
+			return m.toastErr(fmt.Sprintf("cycle blocked: %s/%s already in chain", ref.Type, ref.Name))
 		}
 	}
 	src := m.det.uid
@@ -791,7 +791,7 @@ func (m *Model) setDetailActions() {
 	// a key for the whole panel (components/layout/panel).
 	zoomHinted := zoom
 	zoomHinted.Hint = "zoom"
-	yaml := terminu.Action{Key: "Y", Label: "YAML", Desc: "this resource's manifest", Scope: terminu.PanelScope, Do: m.yamlOfLevel}
+	yaml := terminu.Action{Key: "Y", Label: "YAML", Desc: "this resource's manifest", Scope: terminu.PanelScope, Stay: true, Do: m.yamlOfLevel}
 	copyAll := terminu.Action{Key: "y", Label: "Copy", Desc: "everything in this tab", Scope: terminu.PanelScope, Do: m.copyTab}
 	var acts []terminu.Action
 	switch tab {
@@ -815,14 +815,14 @@ func (m *Model) setDetailActions() {
 			// operation), else the YAML of the level the tab is at (the
 			// panel's): one key, the object under the cursor first.
 			{Key: "Y", Label: "YAML", Desc: "this entry's manifest", Scope: terminu.ItemScope,
-				Hidden: func() bool { return !onRef() }, Do: m.yamlOfRelative},
+				Hidden: func() bool { return !onRef() }, Stay: true, Do: m.yamlOfRelative},
 			{Key: "y", Label: "Copy", Desc: "this row", Scope: terminu.ItemScope, Do: m.copyRelative},
 			{Label: "Back", Desc: "up one level of the chain ([Esc])", Scope: terminu.PanelScope,
 				Hidden: func() bool { return len(m.det.chain) == 0 }, Do: m.relBack},
 			{Key: "B", Label: "Breadcrumb", Desc: "switch panels 1 and 2 to a resource up the chain", Scope: terminu.PanelScope,
 				Hidden: func() bool { return len(m.det.chain) == 0 }, Do: m.openBreadcrumb},
 			{Key: "Y", Label: "YAML", Desc: "the manifest of the resource this level is at", Scope: terminu.PanelScope,
-				Hidden: onRef, Do: m.yamlOfLevel},
+				Hidden: onRef, Stay: true, Do: m.yamlOfLevel},
 			zoomHinted,
 		}
 	case "History":
@@ -842,7 +842,7 @@ func (m *Model) setDetailActions() {
 		}
 	}
 	m.detailP.Actions = acts
-	// Esc is one level up only on a Relatives chain (Rules K4).
+	// Esc is one level up only on a Relatives chain (tdp K4).
 	m.detailP.OnEsc = nil
 	if tab == "Relatives" && len(m.det.chain) > 0 {
 		m.detailP.OnEsc = m.detailEsc

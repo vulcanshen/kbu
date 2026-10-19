@@ -253,14 +253,15 @@ var numberColumns = map[string]bool{"Restarts": true, "Desired": true, "Current"
 
 // keptColumns keep their width on a narrow panel: what a row is and how it
 // is doing. The others give up room first (an IP, a node, an image), and on
-// a panel too narrow for every column they are left out (Rules L1).
+// a panel too narrow for every column they are left out (tdp L1).
 var keptColumns = map[string]bool{"Namespace": true, "Name": true, "": true, "Ready": true, "Status": true,
 	"Restarts": true, "Age": true, "Type": true, "Reason": true}
 
 // listColumns are the lib's columns for panel 2's kind. A sorted column
 // keeps its width: its sort arrow must stay in sight (components/layout/panel).
 // Of Namespace and Name, Name gives up room when nameGives says it can,
-// else Namespace.
+// else Namespace. TODO(lib KB19): both cut in the middle, where both ends
+// tell a row apart (demo-app…66-gm72n; components/layout/panel).
 func listColumns(cols []k8s.Column, sorted map[string]bool, nameGives bool) []terminu.Column {
 	out := make([]terminu.Column, len(cols))
 	for i, c := range cols {
@@ -324,7 +325,7 @@ func (m *Model) listWidth() int {
 // fitColumns leaves out the columns that give up room first, from the
 // right, while the natural widths do not fit in w (TODO(lib KB17): the lib
 // cuts the widest column to three cells at once): a list of eight columns
-// cut to three cells each says nothing (Rules L1). A sorted column stays.
+// cut to three cells each says nothing (tdp L1). A sorted column stays.
 func fitColumns(cols []k8s.Column, cells [][]string, w int, sorted map[string]bool) []int {
 	keep := make([]int, len(cols))
 	for i := range keep {
@@ -373,6 +374,8 @@ func (m *Model) setListRows() {
 	rt := m.shownKind()
 	m.listP.Label = rt.String()
 	if n := len(m.drill); n > 0 {
+		// TODO(lib S16): the drill's path in the panel's location row, and
+		// the name as it is in the label (tdp's components/layout/panel).
 		m.listP.Label = capRunes(m.drill[n-1].parent.Name, 20) + " > " + rt.String()
 	}
 	all := columnsOf(rt)
@@ -470,7 +473,7 @@ func sortValue(title string, item k8s.ResourceItem, cell string) string {
 
 // colorCell colours what needs a look in a status cell: transitional or
 // degraded in the pending colour, failures in the error colour (the app's
-// content, Principle P4; theme.yaml's status section). Healthy stays plain.
+// content, tdp P4). Healthy stays plain.
 func (m *Model) colorCell(rt k8s.ResourceType, title, cell string) string {
 	raw := strings.TrimSpace(cell)
 	color := ""
@@ -510,7 +513,7 @@ func statusColor(status, pending, failed string) string {
 // width).
 func capRunes(s string, n int) string { return terminu.Truncate(s, n) }
 
-// listEsc is Esc on panel 2, one level at a time (Rules K4): the compare
+// listEsc is Esc on panel 2, one level at a time (tdp K4): the compare
 // anchor, then the drill.
 func (m *Model) listEsc() tea.Cmd {
 	switch {
@@ -542,7 +545,7 @@ func allowsDelete(rt k8s.ResourceType) bool {
 	return true
 }
 
-// setListActions lays out panel 2's actions for what it shows (Rules M2, M3):
+// setListActions lays out panel 2's actions for what it shows (tdp M2, tdp M3):
 // the names and descriptions say what they do to the row.
 func (m *Model) setListActions() {
 	rt := m.shownKind()
@@ -563,12 +566,12 @@ func (m *Model) setListActions() {
 		}
 	case rt == k8s.ResourceReleases:
 		item = []terminu.Action{
-			{Key: "Enter", Label: "Open", Desc: "the release record, as [Y] does", Scope: terminu.ItemScope, Hint: "yaml", Do: m.yamlHere},
-			{Key: "Y", Label: "YAML", Desc: "the release record", Scope: terminu.ItemScope, Do: m.yamlHere},
+			{Key: "Enter", Label: "Open", Desc: "the release record, as [Y] does", Scope: terminu.ItemScope, Hint: "yaml", Stay: true, Do: m.yamlHere},
+			{Key: "Y", Label: "YAML", Desc: "the release record", Scope: terminu.ItemScope, Stay: true, Do: m.yamlHere},
 		}
 		for _, d := range helmDocs {
 			d := d
-			item = append(item, terminu.Action{Label: d.label, Desc: d.desc, Scope: terminu.ItemScope,
+			item = append(item, terminu.Action{Label: d.label, Desc: d.desc, Scope: terminu.ItemScope, Stay: true,
 				Do: func() tea.Cmd { return m.fetchHelmDoc(d) }})
 		}
 		item = append(item, terminu.Action{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow})
@@ -584,7 +587,7 @@ func (m *Model) setListActions() {
 		}
 		item = append(item,
 			terminu.Action{Key: "C", Label: "Compare to anchor", Desc: "open the YAML diff popup", Scope: terminu.ItemScope,
-				Hidden: func() bool { return !m.canCompare() }, Do: m.compareHere},
+				Hidden: func() bool { return !m.canCompare() }, Stay: true, Do: m.compareHere},
 		)
 		switch {
 		case rt.SupportsDrillDown():
@@ -592,12 +595,14 @@ func (m *Model) setListActions() {
 				Scope: terminu.ItemScope, Hint: "drill", Do: m.drillIn})
 		case rt != k8s.ResourceContexts:
 			item = append(item, terminu.Action{Key: "Enter", Label: "Open", Desc: "its YAML, as [Y] does", Scope: terminu.ItemScope,
-				Hint: "yaml", Do: m.yamlHere})
+				Hint: "yaml", Stay: true, Do: m.yamlHere})
 		}
-		item = append(item, terminu.Action{Key: "Y", Label: "YAML", Desc: "view resource manifest", Scope: terminu.ItemScope, Do: m.yamlHere})
+		item = append(item, terminu.Action{Key: "Y", Label: "YAML", Desc: "view resource manifest", Scope: terminu.ItemScope, Stay: true, Do: m.yamlHere})
 		if allowsEdit(rt) && hasCur {
+			// TODO(lib S4): an edit keeps the menu it was run from (tdp T1), but
+			// an action that asks clears the whole stack when accepted.
 			item = append(item, terminu.Action{Key: "E", Label: "Edit", Desc: "kubectl edit", Scope: terminu.ItemScope,
-				Disabled: helmManaged, Ask: m.editAsk(rt, cur), Do: func() tea.Cmd { return m.runEdit(rt, cur) }})
+				Disabled: helmManaged, Ask: m.editAsk(rt, cur), Do: func() tea.Cmd { return m.runEdit(rt, cur, nil) }})
 		}
 		if rt == k8s.ResourcePods && hasCur {
 			item = append(item, terminu.Action{Key: "S", Label: "Shell", Desc: "kubectl exec -it", Scope: terminu.ItemScope,
@@ -635,7 +640,7 @@ func (m *Model) setListActions() {
 		{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom},
 	}
 	m.listP.Actions = append(item, panel...)
-	// Esc is one level up only when there is one (Rules K4): the anchor,
+	// Esc is one level up only when there is one (tdp K4): the anchor,
 	// then the drill; otherwise ? does not list it.
 	m.listP.OnEsc = nil
 	if m.anchor != nil || len(m.drill) > 0 {
@@ -692,7 +697,7 @@ func (m *Model) drillIn() tea.Cmd {
 	}
 }
 
-// onChildren shows what a drill found, or says why there is nothing (Rules
+// onChildren shows what a drill found, or says why there is nothing (tdp
 // F5: a failure is seen at once; an empty result is not an ignored Enter).
 func (m *Model) onChildren(msg childrenMsg) tea.Cmd {
 	if msg.err != nil {

@@ -11,7 +11,7 @@ import (
 
 // Alterm: a shell that lives inside kbu (components/dialog/terminal). It
 // keeps running while it is hidden — its directory, history and jobs stay —
-// and Alt-t brings it back. Alt-Esc ends it, asked first (Rules K10).
+// and Alt-t brings it back. Alt-Esc ends it, asked first (tdp K10).
 
 // showAlterm opens Alterm, starting a shell the first time.
 func (m *Model) showAlterm() tea.Cmd {
@@ -22,17 +22,18 @@ func (m *Model) showAlterm() tea.Cmd {
 }
 
 func (m *Model) newAlterm() *terminu.Terminal {
-	// PgUp and PgDn scroll back. TODO(lib KB7): Home and End, the oldest
-	// line and back to live, as before.
+	// PgUp and PgDn scroll back; Home and End stay the shell's (tdp K12).
+	// TODO(lib KB7): the history mode, where gg|G go to the oldest line and
+	// back to live (components/dialog/terminal).
 	t := &terminu.Terminal{Title: "Alterm", Subject: hostname(), Command: altermCommand(m.cfg.AltermShell, m.cfg.AltermLoginShell),
 		Ends: true, History: true}
 	// Alt-t hides it, as it shows it on a panel. (The Ctrl-T an older kbu
 	// also took, for VHS, which cannot send Alt, is gone: on a panel it did
-	// not show Alterm, a half alias, Rules K7.)
+	// not show Alterm, a half alias, tdp K7.)
 	t.Keys = []terminu.TerminalKey{{Key: "Alt-t", Desc: "hide", Do: func() tea.Cmd { return t.Hide(m.app) }}}
 	t.OnExit = func(err error) tea.Cmd {
 		if err != nil {
-			return m.toastErr("Alterm ended: " + err.Error()) // Rules F5
+			return m.toastErr("Alterm ended: " + err.Error()) // tdp F5
 		}
 		return nil
 	}

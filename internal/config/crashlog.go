@@ -10,8 +10,8 @@ import (
 )
 
 // DataDir is where kbu keeps what it writes down for the user, its logs
-// (tdp E3): $KBU__DATA, else ~/.kbu (on Windows %USERPROFILE%\.kbu).
-// TODO(tdp KB15): E3 has no place for logs; data is the nearest.
+// (tdp E3: a log deleted is gone for good, so it is data): $KBU__DATA,
+// else ~/.kbu (on Windows %USERPROFILE%\.kbu).
 func DataDir() string {
 	if d := strings.TrimSpace(os.Getenv("KBU__DATA")); d != "" {
 		return d

@@ -21,10 +21,18 @@ import (
 // saves never touches the real ones; kubectl and helm are never run.
 func newTestModel(t *testing.T) *Model {
 	t.Helper()
+	return newTestModelWith(t, Options{})
+}
+
+// newTestModelWith is newTestModel with what kbu starts with besides the
+// settings and the state.
+func newTestModelWith(t *testing.T, o Options) *Model {
+	t.Helper()
 	t.Setenv("KBU__CONFIG", t.TempDir())
 	t.Setenv("KBU__STATE", t.TempDir())
 	terminu.SetIconWidth(1, 1)
-	m := New(Options{Config: config.DefaultConfig(), State: config.DefaultState()})
+	o.Config, o.State = config.DefaultConfig(), config.DefaultState()
+	m := New(o)
 	m.run = func(name string, args ...string) (string, error) {
 		t.Fatalf("a test ran %s %s", name, strings.Join(args, " "))
 		return "", nil
@@ -105,6 +113,13 @@ func keyMsg(name string) tea.KeyMsg {
 
 // screen is the whole frame without its colours.
 func (m *Model) screen_() string { return terminu.StripStyles(strings.Join(m.app.Frame(), "\n")) }
+
+// marked is a menu row's label with its key, as either lib marks it: "[z] Zoom"
+// in terminu-go v0.1.13, "[z]oom" in the next one (tdp M5 since tdp v0.8.0).
+// The old form goes when go.mod moves on.
+func marked(s, key, label string) bool {
+	return strings.Contains(s, "["+key+"] "+label) || strings.Contains(s, "["+key+"]"+label[len(key):])
+}
 
 // feed gives panel 2 a list of the kind it shows, as the watcher would.
 func (m *Model) feed(items ...k8s.ResourceItem) {

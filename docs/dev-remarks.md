@@ -1,7 +1,7 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.7.4/principle)（tdp v0.7.4），畫面建在
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.8.0/principle)（tdp v0.8.0），畫面建在
 [terminu-go](https://github.com/vulcanshen/terminu-go)（v0.1.13）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
@@ -58,7 +58,7 @@
 | sort 的欄位與方向兩個 picker | 兩個 menu（tdp F1：一步一個 popup） |
 | namespace picker | checkbox popup（`App.Checks`）；第一列是 All Namespaces |
 | context picker | select（`App.Select`） |
-| YAML、compare、helm 文件、App Log | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`、`L`、`D`） |
+| YAML、compare、helm 文件、App Log | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`、`L`） |
 | breadcrumb | menu，每一列先問（`Action.Ask`） |
 | confirm | lib 的（`App.Confirm`、`Action.Ask`） |
 | toast | lib 的 |
@@ -86,11 +86,11 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **離開不先問**（tdp K9：由 app 決定）：跟舊版一樣直接離開，離開時存 state。
 - **Esc 在 panel 2 的上一層**：先放掉 compare anchor，再退出 drill（tdp K4 一次一層）。panel 3：Relatives 的鏈退一層。
 - **Logs 與 Events 是串流**（tdp T2），panel 3 失焦時不變暗；tab 名後面的 glyph 說它現在是不是跟著最新的一行（播放 / 暫停，
-  同寬，tdp L2）。舊版 Events 失焦會變暗、寫成偏離；換到 lib 之後照 T2 做，偏離拿掉。
+  同寬，tdp L2）。舊版 Events 失焦會變暗、寫成偏離；換到 lib 之後照 tdp T2 做，偏離拿掉。
 - **Alterm 的隱藏只有 `Alt-t`**：舊版另有一個不揭露的 `Ctrl-T`（錄 demo 的 VHS 送不出 Alt），但它在 panel 上不會叫出 Alterm，
   是半套的別名（tdp K7），一起拿掉；舊版「`Ctrl-T` 不揭露」的偏離也就沒了。README 的 demo 不錄 Alterm。
 - **zoom（`z`）是 `App.ForceNarrow`**：只畫 focus 的 panel、用滿畫面；`Tab` 照樣換 panel。它是版面的切換，不是模式（術語「模式」），
-  再按一次 `z` 還原。**暫定**：tdp 只說窄寬時這樣畫，zoom 要不要做成別的樣子由 app 決定。
+  再按一次 `z` 還原。這就是 tdp v0.8.0 的 zoom 預設（components/layout/screen：跟窄寬一樣，換到的 panel 也放大）。
 - **窄寬的門檻是 60 欄**（`Screen.NarrowBelow`）。**暫定**：panel 1 要 24 欄、panel 2 至少要放得下 Namespace 與 Name。
 - **panel 2 的欄**：namespaced 的種類第一欄是 Namespace，接著 Name，再一個沒有標題的 helm 標記欄 —— 選了好幾個 namespace 時，
   同名的物件要靠 Namespace 分；helm 標記欄沒有標題，是因為它只是一個標記、不是值。窄的時候先讓出空間的是 IP、Node、Image 這類
@@ -101,8 +101,8 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   `kubectl --sort-by` 一樣），`N/M` 照兩個數字。沒有選排序時照 namespace、名稱。
 - **Relatives 是一般清單加分組**：組是 section 的標題，兩欄 `NAME`、`TARGET`（多欄的清單一定有表頭）；能進去的那一列尾端一個箭頭。
   沒有 ref 的列照樣停得到，`Enter` 停用。**暫定**：欄名。
-- **狀態欄的顏色是 kbu 的內容**（tdp P4）：只有需要注意的才上色，pending 與 error 兩色，從 `theme.yaml` 的 `status` 讀。
-  **暫定**：`theme.yaml` 其他段不再有作用（KB3）。
+- **狀態欄的顏色是 kbu 的內容**（tdp P4）：只有需要注意的才上色，pending 與 error 兩色，寫死在 `internal/theme`。
+  `theme.yaml` 整個拿掉（KB3，user 2026-10-19）：介面元素是家族的配色，改不了；之後要有 theme，是全家族一起重新設計的題目。
 - **namespace picker 的 All Namespaces**：All 勾著就是全部，沒勾 All 就是勾起來的那幾個，一個都沒勾也是全部。理由：checkbox popup
   裡的 Green 讀成「按 `Enter` 就是這個值」（components/input/finder），All 跟幾個 namespace 都是 Green 時，結果只能是全部；
   一個都沒勾時沒有東西可以看，全部最接近使用者的意思。舊版「All 勾著時再勾一個就變成只有那一個」跟畫面對不上，改掉。
@@ -110,12 +110,26 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   切換時清掉 CRD 再重新探索，正在看的種類是能 drill 的或新叢集沒有的，就回到 Pods。
 - **錯誤**：toast（tdp F5）加 App Log；statusbar 右邊寫還沒看過的錯誤、警告數（Red、Peach 的字），打開 App Log 就算看過。
   watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
+- **statusbar 的順序**（tdp L2：一列裡最後一個動態欄位可以不補空白）：會出現、消失的 chip（`[Alt-t]erm`、`[C]ompare`）在最前面，
+  接著 `[C]ontext`（固定 24 格，太長從中間截），`[N]amespace` 排最後、照名稱長度（最多 16 格）。舊版 context 與 namespace 都照名稱
+  長度、後面的 chip 跟著移，是 user 2026-09-28 裁定的偏離（固定 24 格時短名字後面空一大格、80 欄把 chip 擠出去）；tdp L2（v0.8.0）
+  補了這個做法（KB6，user 2026-10-19 選 C），偏離拿掉。
+- **split 版的 compare 不折行**（tdp v0.8.0 的 components/dialog/note：要對齊的內容 app 可以讓它不折行，截掉的加 `…`）：左右兩欄
+  並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看
+  那一筆的 YAML。`TODO(lib KB18)`：lib 給 viewer 不折行的選項後改用它，畫面變窄時才不會折。
 - **設定位置照 tdp E3**：`~/.config/kbu`。舊版放在系統的設定目錄（macOS `~/Library/Application Support/kbu`、Windows
-  `%APPDATA%\kbu`）；只有舊目錄在時繼續讀寫它、App Log 提一句。**暫定**（KB2）。
-- **log（crash、audit）放資料目錄 `~/.kbu/logs`**（`KBU__DATA`）。**暫定**（KB15）：E3 沒有 log 這一類，它是 kbu 替使用者記下來的
-  東西，最接近「資料」。舊的 log 留在原本的設定目錄，kbu 不會讀回 log，所以不搬。
+  `%APPDATA%\kbu`）。照 tdp E3 的「換了位置時」：新位置沒有、舊位置有，啟動時（`config.MovePlatformConfigDir`，在讀設定之前）
+  用 `os.Rename` 把整個目錄搬過去，Info toast 說從哪搬到哪；搬不動（例：跨磁碟、權限）時照舊讀寫舊目錄（`ConfigDir` 的退路），
+  開 error popup 寫出兩個路徑。舊目錄裡的 `logs/`（舊版的 log）跟著整個目錄搬，不另外搬到資料目錄。uninstall.sh、uninstall.ps1
+  照樣問舊位置。
+- **log（crash、audit）放資料目錄 `~/.kbu/logs`**（`KBU__DATA`）：tdp E3 照「刪掉會怎樣」分，log 刪了就找不回來，是資料（KB15，
+  user 2026-10-19）。舊的 log 留在設定目錄的 `logs/`，kbu 不會讀回 log，所以不搬。
 - **確認一律用 `Action.Ask`**：edit、shell、delete、rollback、切換 context 的問句在排 panel 的動作時就照游標那一筆建好（換列時重排），
-  從 Space menu 執行時 `Esc` 回到 menu（tdp F4）、`Enter` 清掉整疊（tdp T1）。只有 YAML viewer 的 `E` 用 `App.Confirm`（KB10）。
+  從 Space menu 執行時 `Esc` 回到 menu（tdp F4）、`Enter` 清掉整疊。只有 YAML viewer 的 `E` 用 `App.Confirm`，viewer 留在底下。
+- **menu 的 source 留或清照 tdp T1 的表**（照「確定之後的動作」判）：打開東西來看的（`Y`、`Enter` 打開 YAML、compare、helm 的文件、
+  App Log）設 `Action.Stay`，看完 `Esc` 回到 menu；drill、shell、delete、rollback、切換 context、namespace 清掉。從 YAML viewer 按
+  `E` 編輯，viewer 留著，編輯結束時重讀那一筆（內建的種類向 API 拿，CRD 用 watch 到的；KB10）。`TODO(lib S4)`：從 Space menu 執行
+  edit 也該保留 menu，但 lib 帶 `Ask` 的動作接受後一律清掉整疊，要等「動作可以標保留或清掉」的接口。
 - **App Log 的清除在 Global operation**：note 只用來讀（tdp F1），清除是對整個 app 的動作。
 
 ### 環境變數
@@ -134,7 +148,10 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 
 ## 已知的牆與未做
 
-- **滑鼠**：lib 沒有（KB4），連帶 Settings popup 拿掉。`config.yaml` 的 `mouse_opt_config` 照樣讀進來、不作用。
+- **滑鼠**：家族只用鍵盤（tdp X1 允許；KB4，user 2026-10-19），連帶 Settings popup 拿掉。`config.yaml` 的 `mouse_opt_config` 照樣
+  讀進來、不作用。
+- **PTY 的歷史**：`PgUp|PgDn` 捲；`Home`／`End` 屬於 shell（tdp K12），kbu 不另外綁（KB7，user 2026-10-19）。到最舊、回到即時等 lib
+  的歷史模式（`gg|G`，`TODO(lib KB7)`）。
 - **啟動恢復 focus 的 panel**：lib 沒有設定 focus 的 API（KB5），`start` 送一個數字鍵代替使用者按。
 - **PTY 只在 unix**：lib 的 terminal 在 Windows 開不了（舊版用的 creack/pty 在 Windows 也一樣）。
 - **彙總 log 的 Pod 汰換**：串流在選列當下取快照，rollout 之後要重新選那一列。
@@ -145,19 +162,12 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 
 ## 偏離 tdp
 
-- **statusbar 的 context 與 namespace 依名稱長度，不是固定寬度（tdp L2）。** context 最多 24 格、namespace 最多 16 格，超過從中間
-  截斷（`capMiddle`，`internal/tui/tui.go` 的 `statusbar`）；換了 context 或 namespace，後面的 `[N]amespace`、`[Alt-t]erm`、
-  `[C]ompare` 會跟著移。理由（user 2026-09-28 實機看過固定寬度的版本後裁定）：固定 24 格讓 `orbstack` 這種短名字後面空出一大格，
-  80 欄左右還把後面的 chip 擠出畫面；切換是使用者自己按的、不常發生。改用 terminu-go 之後這一列仍是 kbu 自己畫的（`App.Status`），
-  照舊保留，要不要留已回報（KB6）。
-- **split 版的 compare 截斷、不折行（components/dialog/note 的 viewer 折行）。** 左右兩欄並排，各自截到欄寬（`splitDiff`，
-  `internal/tui/compare.go`）。理由：兩欄並排的一列折下來，左右就對不齊，side-by-side 比對的意義也沒了；要看完整的一行，用 `L` 換成
-  unified（折行）或 `Y` 看那一筆的 YAML。這是 components 的偏離，也是 tdp 的缺漏：viewer 沒有並排內容的方案。
+目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法，移到「設計決定」。
 
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.7.4/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.8.0/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

@@ -6,7 +6,7 @@ import (
 	terminu "github.com/vulcanshen/terminu-go"
 )
 
-// icon is kbu's mark, drawn by the splash (Rules S5): a copy of
+// icon is kbu's mark, drawn by the splash (tdp S5): a copy of
 // docs/icon.svg, which go:embed cannot reach. A test keeps the two the same.
 //
 //go:embed icon.svg

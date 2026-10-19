@@ -87,6 +87,8 @@ esac
 echo ""
 echo "NOTE: $APP draws with Nerd Font glyphs. Use a Nerd Font terminal"
 echo "      profile (https://www.nerdfonts.com) or they render as boxes."
+echo "      It also needs a truecolor (24-bit) terminal; with 256 colours"
+echo "      the dimmed and layered colours can't be told apart."
 echo "      $APP reads your kubeconfig; edit, shell and the built-in terminal"
 echo "      also need kubectl on PATH, and Helm releases need helm."
 echo ""

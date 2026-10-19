@@ -21,29 +21,40 @@ if ($userPath -like "*$installDir*") {
     Write-Host "removed $installDir from PATH" -ForegroundColor Green
 }
 
-# Remove the settings: where tdp E3 puts them (KBU__CONFIG, else
-# $XDG_CONFIG_HOME\kbu, else %USERPROFILE%\.config\kbu), and where an older
-# kbu kept them (%APPDATA%\kbu).
-$configDirs = @()
-if ($env:KBU__CONFIG) {
-    $configDirs += $env:KBU__CONFIG.Trim()
-} elseif ($env:XDG_CONFIG_HOME) {
-    $configDirs += Join-Path $env:XDG_CONFIG_HOME "kbu"
-} else {
-    $configDirs += Join-Path $env:USERPROFILE ".config\kbu"
-}
-$configDirs += Join-Path $env:APPDATA "kbu"
-foreach ($configDir in $configDirs) {
-    if (Test-Path $configDir) {
-        $answer = Read-Host "Remove kbu settings in $configDir? [y/N]"
+# Asks before removing a directory, only when it is there.
+function Ask-Remove($dir, $what) {
+    if (Test-Path $dir) {
+        $answer = Read-Host "Remove $what in ${dir}? [y/N]"
         if ($answer -eq "y" -or $answer -eq "Y") {
-            Remove-Item $configDir -Recurse -Force
-            Write-Host "removed $configDir" -ForegroundColor Green
+            Remove-Item $dir -Recurse -Force
+            Write-Host "removed $dir" -ForegroundColor Green
         } else {
-            Write-Host "kept $configDir" -ForegroundColor Yellow
+            Write-Host "kept $dir" -ForegroundColor Yellow
         }
     }
 }
+
+# Where tdp E3 puts the settings (KBU__CONFIG, else $XDG_CONFIG_HOME\kbu,
+# else %USERPROFILE%\.config\kbu), the state (in the settings unless
+# KBU__STATE moved it) and the data (KBU__DATA, else %USERPROFILE%\.kbu).
+if ($env:KBU__CONFIG) {
+    $configDir = $env:KBU__CONFIG.Trim()
+} elseif ($env:XDG_CONFIG_HOME) {
+    $configDir = Join-Path $env:XDG_CONFIG_HOME "kbu"
+} else {
+    $configDir = Join-Path $env:USERPROFILE ".config\kbu"
+}
+Ask-Remove $configDir "kbu settings"
+if ($env:KBU__STATE -and $env:KBU__STATE.Trim() -ne $configDir) {
+    Ask-Remove $env:KBU__STATE.Trim() "kbu state"
+}
+if ($env:KBU__DATA) {
+    Ask-Remove $env:KBU__DATA.Trim() "kbu data"
+} else {
+    Ask-Remove (Join-Path $env:USERPROFILE ".kbu") "kbu data"
+}
+# Where an older kbu kept its settings.
+Ask-Remove (Join-Path $env:APPDATA "kbu") "kbu settings from an older kbu"
 
 Write-Host ""
 Write-Host "kbu uninstalled. Restart your terminal for PATH changes to take effect." -ForegroundColor Green

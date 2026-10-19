@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-logr/logr"
@@ -74,6 +73,10 @@ func main() {
 	klog.SetLogger(logr.Discard())
 	log.SetOutput(io.Discard)
 
+	// tdp E3: the settings an older kbu kept in the platform's directory move
+	// to the family's at the first start; the UI says where to, or why not.
+	moved := config.MovePlatformConfigDir()
+
 	// v2.0 km8 → kbu rename: one-shot copy of the km8 settings directory
 	// when kbu's does not exist yet. A copy failure is fatal — going on with
 	// an empty directory would silently lose the user's pins and sorts.
@@ -83,7 +86,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error migrating legacy config dir: %v\n", err)
 		os.Exit(1)
 	}
-	notices = append(notices, migrated, config.LegacyConfigNotice())
+	notices = append(notices, migrated)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -96,16 +99,6 @@ func main() {
 	state, stateErr := config.LoadState()
 	if stateErr != nil {
 		state = config.DefaultState()
-	}
-
-	t, err := theme.LoadTheme(config.ThemePath())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading theme: %v\n", err)
-		os.Exit(1)
-	}
-	if ignored := theme.IgnoredSections(config.ThemePath()); len(ignored) > 0 {
-		notices = append(notices, "theme.yaml: only status still takes effect; "+strings.Join(ignored, ", ")+
-			" are drawn in the terminu family's colours now")
 	}
 
 	// State wins over config for context / namespace when present — "where
@@ -135,7 +128,7 @@ func main() {
 	k8s.RegisterHelmIfAvailable()
 
 	ui := tui.New(tui.Options{Client: client, Config: cfg, State: state, StateErr: stateErr,
-		Notices: notices, Status: t.Status, Version: version.Display()})
+		Notices: notices, Moved: moved, Status: theme.DefaultTheme().Status, Version: version.Display()})
 	if err := ui.Run(); err != nil {
 		// bubbletea catches panics, restores the terminal, then returns
 		// tea.ErrProgramPanic.

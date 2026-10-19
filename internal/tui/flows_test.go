@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	terminu "github.com/vulcanshen/terminu-go"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/vulcanshen/kbu/internal/config"
 	"github.com/vulcanshen/kbu/internal/k8s"
@@ -105,7 +108,7 @@ func TestPanel2EscOneLevel(t *testing.T) {
 	}
 }
 
-// The Space menu of panel 2 lists what kbu can do to a pod, in Rules M2's
+// The Space menu of panel 2 lists what kbu can do to a pod, in tdp M2's
 // order, the panel's own after.
 func TestPanel2SpaceMenu(t *testing.T) {
 	m := newTestModel(t)
@@ -113,24 +116,76 @@ func TestPanel2SpaceMenu(t *testing.T) {
 	m.press("Tab", "Space")
 	s := m.screen_()
 	for _, want := range []string{"ITEM OPERATION", "[Enter] Drill in", "[Y]AML", "[E]dit", "[S]hell", "[D]elete",
-		"Mark as [C]ompare anchor", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "[z] Zoom", "Global operation"} {
+		"Mark as [C]ompare anchor", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "Global operation"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the Space menu has no %q:\n%s", want, s)
 		}
+	}
+	if !marked(s, "z", "Zoom") {
+		t.Errorf("the Space menu has no Zoom on z:\n%s", s)
 	}
 	if strings.Contains(s, "Exit compare mode") || strings.Contains(s, "Back ") {
 		t.Errorf("rows for an anchor or a drill that are not there:\n%s", s)
 	}
 }
 
-// The global operation popup has kbu's global actions and Quit (Rules M4).
+// The global operation popup has kbu's global actions and Quit (tdp M4).
 func TestGlobalOperations(t *testing.T) {
 	m := newTestModel(t)
 	m.press("Space", "G", "Enter")
 	s := m.screen_()
-	for _, want := range []string{"[N]amespace", "[C]ontext", "[Alt-t]erm", "[!] App log", "[q] Quit"} {
+	for _, want := range []string{"[N]amespace", "[C]ontext", "[Alt-t]erm", "[!] App log"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the global operation popup has no %q:\n%s", want, s)
 		}
+	}
+	if !marked(s, "q", "Quit") {
+		t.Errorf("the global operation popup has no Quit on q:\n%s", s)
+	}
+}
+
+// tdp T1: an edit keeps the YAML viewer it was started from, and when the
+// edit ends the viewer reads the resource again: what the API returns, else
+// (a CRD) what the watch has now.
+func TestAnEditRereadsTheYAML(t *testing.T) {
+	m := newTestModel(t)
+	before, after := pod("demo", "a"), pod("demo", "a")
+	after.Raw.(*corev1.Pod).Labels = map[string]string{"edited": "yes"}
+	m.feed(before)
+	got := ""
+	show := func(y string) { got = y }
+	m.drive(m.onMsg(rereadMsg{key: itemKey(before), item: after, show: show}))
+	if !strings.Contains(got, "edited") {
+		t.Errorf("the viewer did not get what the API read:\n%s", got)
+	}
+	got = ""
+	m.feed(after)
+	m.drive(m.onMsg(rereadMsg{key: itemKey(before), err: errors.New("unsupported ref type"), show: show}))
+	if !strings.Contains(got, "edited") {
+		t.Errorf("the viewer did not get what the watch has:\n%s", got)
+	}
+	ran := false
+	m.drive(m.txExited("edit", func() tea.Cmd { ran = true; return nil })(nil))
+	if !ran {
+		t.Error("the end of the edit did not read the resource again")
+	}
+}
+
+// tdp T1: what opens something to look at keeps the menu it was run from
+// (Esc goes back to it); a drill clears it.
+func TestTheMenuStaysUnderWhatItOpens(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "a"), pod("demo", "b"))
+	m.press("Tab", "Space", "Y")
+	if !strings.Contains(m.screen_(), "YAML") {
+		t.Fatalf("Y from the Space menu opened no YAML:\n%s", m.screen_())
+	}
+	m.press("Esc")
+	if !strings.Contains(m.screen_(), "ITEM OPERATION") {
+		t.Errorf("Esc from the YAML did not go back to the menu:\n%s", m.screen_())
+	}
+	m.press("Esc", "Space", "Enter")
+	if strings.Contains(m.screen_(), "ITEM OPERATION") {
+		t.Errorf("the drill kept the menu:\n%s", m.screen_())
 	}
 }
