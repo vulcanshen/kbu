@@ -99,7 +99,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   長的值的欄（Name、Events 的 Message、Image、Hosts……，`longColumns`）標 `Column.Shrink`，分短欄剩下的寬度、太長就截；短欄照最寬的值。
   放不下時先把長欄縮到最少寬度（Name 是 `nameRoom` 16 格：從中間截還認得出 workload 與 pod 的 hash；其他照 lib 的 12 格），還放不下
   才整欄收掉（`Column.Drop`，`listColumns`）：先收 IP、Node 這類次要欄（從右邊起），再依序收 Restarts、Age、Ready、Status、Type、
-  Reason、helm 標記欄、Namespace；Name 永遠不收。排序中的欄最後才收，排序的箭頭盡量留著。只選一個 namespace 時每一列的
+  Reason、helm 標記欄、Namespace，再收 Name 以外的長欄（它們會縮，所以在短欄之後收，從右邊起）；Name 永遠不收。排序中的欄最後才收，排序的箭頭盡量留著。只選一個 namespace 時每一列的
   Namespace 都一樣，它第一個收。名稱從中間截（`Column.Middle`：`demo-app…66-gm72n`，前面是 workload、後面的 hash 分得出是哪一個
   pod；KB19）。實機（OrbStack，有一個 52 格的 pod 名稱）：120 欄收掉 Node、Name 24 格；100 欄再收 IP；80 欄再收 Restarts、Age，
   Name 16 格，Ready、Status 都在。

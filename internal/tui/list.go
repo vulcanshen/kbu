@@ -252,10 +252,10 @@ var numberColumns = map[string]bool{"Restarts": true, "Desired": true, "Current"
 	"Min": true, "Max": true, "Replicas": true, "Allowed": true}
 
 // lastColumns say what a row is and how it is doing: on a narrow panel they
-// are taken away last, in this order, after the others (an IP, a node, an
-// image) have gone from the right (components/layout/panel). The name never
-// goes, and a sorted column goes after them all, its arrow in sight as long
-// as it can be.
+// are taken away in this order, after the other short ones (an IP, a node)
+// have gone from the right, and before the long ones (longColumns), which
+// shrink first (components/layout/panel). The name never goes, and a sorted
+// column goes after them all, its arrow in sight as long as it can be.
 var lastColumns = []string{"Restarts", "Age", "Ready", "Status", "Type", "Reason", "", "Namespace"}
 
 // longColumns hold long values (a name, a message, a list of hosts): on a
@@ -297,13 +297,19 @@ func listColumns(cols []k8s.Column, sorted map[string]bool, oneNamespace bool) [
 		set(at("Namespace"))
 	}
 	for i := len(cols) - 1; i >= 0; i-- {
-		if t := cols[i].Title; !slices.Contains(lastColumns, t) && !sorted[t] {
+		if t := cols[i].Title; !slices.Contains(lastColumns, t) && !longColumns[t] && !sorted[t] {
 			set(i)
 		}
 	}
 	for _, t := range lastColumns {
 		if !sorted[t] {
 			set(at(t))
+		}
+	}
+	// The long ones shrink first, so they go after the short ones.
+	for i := len(cols) - 1; i >= 0; i-- {
+		if !sorted[cols[i].Title] {
+			set(i)
 		}
 	}
 	for i := range cols {

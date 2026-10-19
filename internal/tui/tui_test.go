@@ -106,6 +106,16 @@ func TestListColumnsDropOrder(t *testing.T) {
 			t.Errorf("%q drops at %d, not before %q at %d", order[i-1], d[order[i-1]], order[i], d[order[i]])
 		}
 	}
+	// The long columns shrink first, so they go after the short ones.
+	ev := map[string]int{}
+	for _, c := range listColumns(columnsOf(k8s.ResourceEvents), nil, false) {
+		ev[c.Title] = c.Drop
+	}
+	for _, short := range []string{"Age", "Type", "Reason", "Namespace"} {
+		if ev[short] >= ev["Message"] || ev[short] >= ev["Object"] {
+			t.Errorf("Events: %q drops at %d, not before Message (%d) and Object (%d)", short, ev[short], ev["Message"], ev["Object"])
+		}
+	}
 	if d := drops(nil, true); d["Namespace"] != 1 {
 		t.Errorf("one namespace: Namespace drops at %d, want first", d["Namespace"])
 	}
