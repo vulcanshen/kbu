@@ -54,8 +54,8 @@ func TestConfigPath(t *testing.T) {
 	}
 }
 
-// tdp E2: $KBU__CONFIG is the config directory — config.yaml and theme.yaml
-// move with it — trimmed of surrounding whitespace.
+// tdp E2: $KBU__CONFIG is the config directory — config.yaml moves with it —
+// trimmed of surrounding whitespace.
 func TestConfigDir_KBUConfigIsTheDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "kbu-cfg")
 	for _, v := range []string{dir, "  " + dir + "\t"} {
@@ -63,12 +63,8 @@ func TestConfigDir_KBUConfigIsTheDirectory(t *testing.T) {
 		if got := ConfigDir(); got != dir {
 			t.Errorf("KBU__CONFIG=%q: ConfigDir() = %q, want %q", v, got, dir)
 		}
-		for name, got := range map[string]string{
-			"config.yaml": ConfigPath(), "theme.yaml": ThemePath(),
-		} {
-			if want := filepath.Join(dir, name); got != want {
-				t.Errorf("KBU__CONFIG=%q: %s at %q, want %q", v, name, got, want)
-			}
+		if got, want := ConfigPath(), filepath.Join(dir, "config.yaml"); got != want {
+			t.Errorf("KBU__CONFIG=%q: config.yaml at %q, want %q", v, got, want)
 		}
 	}
 }
@@ -106,21 +102,6 @@ func TestConfigPath_OldNamesAreNotRead(t *testing.T) {
 	t.Setenv("KM8__CONFIGPATH", "/tmp/legacy-km8.yaml")
 	if got := ConfigPath(); got == "/tmp/old-kbu.yaml" || got == "/tmp/legacy-km8.yaml" {
 		t.Errorf("an old name was read: ConfigPath() = %q", got)
-	}
-}
-
-func TestThemePath(t *testing.T) {
-	path := ThemePath()
-
-	if path == "" {
-		t.Fatal("ThemePath() returned empty string")
-	}
-	if filepath.Base(path) != "theme.yaml" {
-		t.Errorf("ThemePath() base: got %q, want %q", filepath.Base(path), "theme.yaml")
-	}
-	// ThemePath should be under ConfigDir
-	if filepath.Dir(path) != ConfigDir() {
-		t.Errorf("ThemePath() dir: got %q, want %q", filepath.Dir(path), ConfigDir())
 	}
 }
 

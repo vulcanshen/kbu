@@ -470,7 +470,7 @@ func sortValue(title string, item k8s.ResourceItem, cell string) string {
 
 // colorCell colours what needs a look in a status cell: transitional or
 // degraded in the pending colour, failures in the error colour (the app's
-// content, Principle P4; theme.yaml's status section). Healthy stays plain.
+// content, tdp P4). Healthy stays plain.
 func (m *Model) colorCell(rt k8s.ResourceType, title, cell string) string {
 	raw := strings.TrimSpace(cell)
 	color := ""

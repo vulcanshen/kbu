@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-logr/logr"
@@ -98,16 +97,6 @@ func main() {
 		state = config.DefaultState()
 	}
 
-	t, err := theme.LoadTheme(config.ThemePath())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading theme: %v\n", err)
-		os.Exit(1)
-	}
-	if ignored := theme.IgnoredSections(config.ThemePath()); len(ignored) > 0 {
-		notices = append(notices, "theme.yaml: only status still takes effect; "+strings.Join(ignored, ", ")+
-			" are drawn in the terminu family's colours now")
-	}
-
 	// State wins over config for context / namespace when present — "where
 	// the user left off" is a stronger signal than the static default.
 	initialContext := cfg.DefaultContext
@@ -135,7 +124,7 @@ func main() {
 	k8s.RegisterHelmIfAvailable()
 
 	ui := tui.New(tui.Options{Client: client, Config: cfg, State: state, StateErr: stateErr,
-		Notices: notices, Status: t.Status, Version: version.Display()})
+		Notices: notices, Status: theme.DefaultTheme().Status, Version: version.Display()})
 	if err := ui.Run(); err != nil {
 		// bubbletea catches panics, restores the terminal, then returns
 		// tea.ErrProgramPanic.

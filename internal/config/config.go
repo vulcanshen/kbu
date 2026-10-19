@@ -287,8 +287,8 @@ const appName = "kbu"
 // dir migration (see MigrateLegacyConfigDir).
 const legacyAppName = "km8"
 
-// ConfigDir returns kbu's config directory: config.yaml, theme.yaml,
-// logs/ and — unless $KBU__STATE says otherwise — state.yaml live in it.
+// ConfigDir returns kbu's config directory: config.yaml and — unless
+// $KBU__STATE says otherwise — state.yaml live in it.
 // Priority (tdp E3): $KBU__CONFIG → $XDG_CONFIG_HOME/kbu → ~/.config/kbu,
 // the same on every platform (on Windows ~ is %USERPROFILE%).
 //
@@ -370,12 +370,6 @@ func legacyConfigDir() string {
 // in ConfigDir(), which $KBU__CONFIG moves.
 func ConfigPath() string {
 	return filepath.Join(ConfigDir(), "config.yaml")
-}
-
-// ThemePath returns the full path to the kbu theme file.
-// This is provided for the theme package to use.
-func ThemePath() string {
-	return filepath.Join(ConfigDir(), "theme.yaml")
 }
 
 // Load reads the config file from the default path and returns the parsed Config.

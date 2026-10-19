@@ -201,7 +201,6 @@ Everything kbu keeps is in **`~/.config/kbu`** (`$XDG_CONFIG_HOME/kbu` when that
 |---|---|
 | `config.yaml` | Your settings (below). kbu writes it when you pin, sort or switch the compare layout |
 | `state.yaml` | Where you left off; written when you quit. `KBU__STATE` keeps it in another directory |
-| `theme.yaml` | The colours of the status cells (below) |
 
 kbu's logs are in **`~/.kbu/logs`** (`KBU__DATA` points it elsewhere): `audit-<date>.log`, every edit and delete made from kbu,
 and `crash-<date>.log` when kbu crashes.
@@ -232,16 +231,6 @@ resource_kind_config:
         direction: desc
       - column: Name
         direction: asc
-```
-
-### theme.yaml
-
-The colours of a status cell — the rest of the screen is drawn in the terminu family's colours:
-
-```yaml
-status:
-  pending: "#f9e2af"   # pending, creating, terminating …
-  error: "#f38ba8"     # failed, crash-looping, not ready …
 ```
 
 ### Environment variables

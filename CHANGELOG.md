@@ -11,9 +11,9 @@ Each release names the version of terminu design (tdp) it follows.
   - **The mouse is gone for now**, and with it the Settings popup (`>`), which
     only held the mouse's two settings; `mouse_opt_config` in `config.yaml` is
     still read and does nothing. The library has no mouse yet.
-  - **`theme.yaml` only sets the status colours** (`status:`). The rest of the
-    screen is drawn in the family's colours; the App Log says which sections no
-    longer take effect.
+  - **`theme.yaml` is gone** (incompatible): kbu no longer reads it, and the
+    screen is drawn in the family's colours. A theme for the whole terminu
+    family may come later. You can delete the file.
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
     `Enter` shows the ones checked. All Namespaces checked means all of them,
     whatever else is checked.

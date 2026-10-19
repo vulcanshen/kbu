@@ -188,7 +188,6 @@ kbu 存的東西都在 **`~/.config/kbu`**（有設 `$XDG_CONFIG_HOME` 時是 `$
 |---|---|
 | `config.yaml` | 你的設定（見下面）。釘選、排序、切換比對版面時 kbu 會寫它 |
 | `state.yaml` | 上次停在哪裡；離開時寫入。`KBU__STATE` 可以放到別的目錄 |
-| `theme.yaml` | 狀態欄的顏色（見下面） |
 
 kbu 的 log 在 **`~/.kbu/logs`**（`KBU__DATA` 可以改到別的目錄）：`audit-<日期>.log` 記從 kbu 做的每一次 edit 與 delete，
 `crash-<日期>.log` 是 kbu 當掉時的紀錄。
@@ -219,16 +218,6 @@ resource_kind_config:
         direction: desc
       - column: Name
         direction: asc
-```
-
-### theme.yaml
-
-狀態欄的顏色 —— 畫面其他地方用的是 terminu 家族的配色：
-
-```yaml
-status:
-  pending: "#f9e2af"   # pending、建立中、終止中……
-  error: "#f38ba8"     # 失敗、crash loop、not ready……
 ```
 
 ### 環境變數

@@ -101,8 +101,8 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   `kubectl --sort-by` 一樣），`N/M` 照兩個數字。沒有選排序時照 namespace、名稱。
 - **Relatives 是一般清單加分組**：組是 section 的標題，兩欄 `NAME`、`TARGET`（多欄的清單一定有表頭）；能進去的那一列尾端一個箭頭。
   沒有 ref 的列照樣停得到，`Enter` 停用。**暫定**：欄名。
-- **狀態欄的顏色是 kbu 的內容**（tdp P4）：只有需要注意的才上色，pending 與 error 兩色，從 `theme.yaml` 的 `status` 讀。
-  **暫定**：`theme.yaml` 其他段不再有作用（KB3）。
+- **狀態欄的顏色是 kbu 的內容**（tdp P4）：只有需要注意的才上色，pending 與 error 兩色，寫死在 `internal/theme`。
+  `theme.yaml` 整個拿掉（KB3，user 2026-10-19）：介面元素是家族的配色，改不了；之後要有 theme，是全家族一起重新設計的題目。
 - **namespace picker 的 All Namespaces**：All 勾著就是全部，沒勾 All 就是勾起來的那幾個，一個都沒勾也是全部。理由：checkbox popup
   裡的 Green 讀成「按 `Enter` 就是這個值」（components/input/finder），All 跟幾個 namespace 都是 Green 時，結果只能是全部；
   一個都沒勾時沒有東西可以看，全部最接近使用者的意思。舊版「All 勾著時再勾一個就變成只有那一個」跟畫面對不上，改掉。

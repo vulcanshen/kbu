@@ -27,8 +27,8 @@ type Options struct {
 	// Notices go into the App Log at start (a migrated or old config
 	// directory, a deprecated key).
 	Notices []string
-	// Status are the colours of a resource's status cells (theme.yaml's
-	// status section; the app's content, Principle P4).
+	// Status are the colours of a resource's status cells (the app's
+	// content, tdp P4).
 	Status theme.StatusColors
 	// Version is what `kbu version` prints, for the splash.
 	Version string
