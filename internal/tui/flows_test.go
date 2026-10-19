@@ -193,3 +193,23 @@ func TestTheMenuStaysUnderWhatItOpens(t *testing.T) {
 		t.Errorf("the drill kept the menu:\n%s", m.screen_())
 	}
 }
+
+// The YAML viewer's / finds the hits the viewer draws (Viewer.FindText); none
+// found is told.
+func TestYAMLSearch(t *testing.T) {
+	for _, c := range []struct {
+		q     string
+		found bool
+	}{{"kind", true}, {"zzzz", false}} {
+		m := newTestModel(t)
+		m.feed(pod("demo", "a"), pod("demo", "b"))
+		m.press("Tab", "Y", "/")
+		for _, r := range c.q {
+			m.press(string(r))
+		}
+		m.press("Enter")
+		if told := strings.Contains(m.screen_(), "No match for "+c.q); told == c.found {
+			t.Errorf("search %q: no-match toast %v, want %v:\n%s", c.q, told, !c.found, m.screen_())
+		}
+	}
+}

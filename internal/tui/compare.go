@@ -68,10 +68,9 @@ func unifiedDiff(left, right, ll, rl string, w int) []string {
 
 // splitDiff puts the two sides next to each other, line by line: a changed
 // line in red on the left and green on the right, a line only one side has
-// against an empty one. Each side is cut to its column, not wrapped: wrapped,
-// the two sides no longer line up (components/dialog/note lets content that
-// lines up skip wrapping). TODO(lib KB18): the viewer's own no-wrap option,
-// so that a narrower screen cuts the lines too.
+// against an empty one. Each side is cut to its column, and the viewer does not
+// wrap it (Viewer.NoWrap): wrapped, the two sides no longer line up
+// (components/dialog/note).
 func splitDiff(left, right, ll, rl string, w int) []string {
 	col := max((w-3)/2, 8)
 	l, r, cutL, cutR := capLines(left, right)

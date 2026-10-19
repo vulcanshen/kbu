@@ -33,34 +33,23 @@ func (m *Model) selection() *terminu.Selection {
 
 // --- the YAML viewer ---------------------------------------------------------
 
-// yamlSearch is the YAML viewer's search: the lines that match, and which of
-// them the viewer is on. TODO(lib KB21): every hit underlined and the one it
-// is on a cursor block (components/dialog/note); the viewer colours its lines
-// itself, so kbu cannot mark them.
-type yamlSearch struct {
-	v       *terminu.Viewer
-	matches []int
-	at      int
-}
+// yamlSearch is the YAML viewer's search: the viewer draws its hits, every
+// one underlined and the one it is on as the cursor block
+// (components/dialog/note).
+type yamlSearch struct{ v *terminu.Viewer }
 
 func (s *yamlSearch) find(q string) tea.Cmd {
-	s.matches, s.at = nil, 0
-	q = strings.ToLower(q)
-	for i, l := range s.v.Lines {
-		if strings.Contains(strings.ToLower(l), q) {
-			s.matches = append(s.matches, i)
-		}
-	}
+	s.v.Hits, s.v.Current = s.v.FindText(q), 0
 	return s.go_(0)
 }
 
 func (s *yamlSearch) go_(step int) tea.Cmd {
-	if len(s.matches) == 0 {
+	n := len(s.v.Hits)
+	if n == 0 {
 		return nil
 	}
-	n := len(s.matches)
-	s.at = ((s.at+step)%n + n) % n
-	s.v.ScrollTo(s.matches[s.at])
+	s.v.Current = ((s.v.Current+step)%n + n) % n
+	s.v.ScrollTo(s.v.Hits[s.v.Current].Line)
 	return nil
 }
 
@@ -75,17 +64,17 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 	s := &yamlSearch{v: v}
 	// show puts the resource as it is now in the viewer, after an edit.
 	show := func(y string) {
-		yaml, v.Lines, s.matches = y, strings.Split(strings.TrimRight(y, "\n"), "\n"), nil
+		yaml, v.Lines, v.Hits = y, strings.Split(strings.TrimRight(y, "\n"), "\n"), nil
 	}
 	v.Keys = []terminu.ViewerKey{
 		{Key: "/", Desc: "search", Do: func() tea.Cmd {
-			// TODO(lib KB11): a search's typing row only draws a pasted
-			// control character, it does not refuse it (components/input/README).
+			// Search: a pasted control character is only drawn, not refused
+			// (components/input/README).
 			return m.app.Text(terminu.TextInput{Title: "Search", Subject: subject(rt, item), Glyph: glyphSearch,
-				Name:   "The text to find",
+				Name: "The text to find", Search: true,
 				Prompt: "Find in the YAML; [n] and [N] go to the next and the previous", Verb: "search",
 				Done: func(q string) tea.Cmd {
-					if s.find(q); len(s.matches) == 0 {
+					if s.find(q); len(v.Hits) == 0 {
 						return m.app.Toast(terminu.Info, "No match for "+q)
 					}
 					return nil
@@ -128,9 +117,9 @@ func (m *Model) compareHere() tea.Cmd {
 		w, _ := m.app.Size()
 		inner := max(min(w-2, 120)-4-5, 20) // the frame, its margins, the line numbers
 		if split {
-			v.Lines, v.Lang = splitDiff(left, right, ll, rl, inner), ""
+			v.Lines, v.Lang, v.NoWrap = splitDiff(left, right, ll, rl, inner), "", true
 		} else {
-			v.Lines, v.Lang = unifiedDiff(left, right, ll, rl, inner), "diff"
+			v.Lines, v.Lang, v.NoWrap = unifiedDiff(left, right, ll, rl, inner), "diff", false
 		}
 	}
 	fill()

@@ -375,8 +375,8 @@ func (m *Model) toastWarn(text string) tea.Cmd {
 	return m.app.Toast(terminu.Warning, text)
 }
 
-// toastDone says an action the user asked for is done. TODO(lib S8): the
-// Success toast, in Green (components/dialog/toast).
+// toastDone says an action the user asked for is done: a Success toast, in
+// Green (components/dialog/toast).
 func (m *Model) toastDone(text string) tea.Cmd {
-	return m.app.Toast(terminu.Info, text)
+	return m.app.Toast(terminu.Success, text)
 }
