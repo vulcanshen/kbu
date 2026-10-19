@@ -116,7 +116,7 @@ func (m *Model) compareHere() tea.Cmd {
 	if i := indexOfKey(m.shownItems(), m.anchor.key); i >= 0 {
 		anchor = m.shownItems()[i]
 	} else {
-		return m.toastWarn("compare: anchor item gone")
+		return m.toastErr("compare: anchor item gone")
 	}
 	left, right := k8s.MarshalItemYAMLForCompare(anchor), k8s.MarshalItemYAMLForCompare(item)
 	ll, rl := diffLabel(anchor), diffLabel(item)

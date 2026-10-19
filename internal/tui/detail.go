@@ -673,7 +673,7 @@ func (m *Model) relDrill() tea.Cmd {
 	ref := *e.ref
 	for _, f := range m.chainRefs() {
 		if f.Type == ref.Type && f.Name == ref.Name && f.Namespace == ref.Namespace {
-			return m.toastWarn(fmt.Sprintf("cycle blocked: %s/%s already in chain", ref.Type, ref.Name))
+			return m.toastErr(fmt.Sprintf("cycle blocked: %s/%s already in chain", ref.Type, ref.Name))
 		}
 	}
 	src := m.det.uid

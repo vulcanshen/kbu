@@ -328,10 +328,10 @@ func (m *Model) onCommandDone(msg commandDoneMsg) tea.Cmd {
 			out = "deleted " + target
 		}
 		m.log.success(out)
-		return m.app.Toast(terminu.Info, out)
+		return m.toastDone(out)
 	case "rollback":
 		m.log.success(out)
-		return m.app.Toast(terminu.Info, "Rolled back "+target)
+		return m.toastDone("Rolled back " + target)
 	}
 	return nil
 }

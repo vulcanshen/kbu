@@ -58,7 +58,7 @@
 | sort 的欄位與方向兩個 picker | 兩個 menu（tdp F1：一步一個 popup） |
 | namespace picker | checkbox popup（`App.Checks`）；第一列是 All Namespaces |
 | context picker | select（`App.Select`） |
-| YAML、compare、helm 文件、App Log | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`、`L`、`D`） |
+| YAML、compare、helm 文件、App Log | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`、`L`） |
 | breadcrumb | menu，每一列先問（`Action.Ask`） |
 | confirm | lib 的（`App.Confirm`、`Action.Ask`） |
 | toast | lib 的 |
@@ -148,7 +148,10 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 
 ## 已知的牆與未做
 
-- **滑鼠**：lib 沒有（KB4），連帶 Settings popup 拿掉。`config.yaml` 的 `mouse_opt_config` 照樣讀進來、不作用。
+- **滑鼠**：家族只用鍵盤（tdp X1 允許；KB4，user 2026-10-19），連帶 Settings popup 拿掉。`config.yaml` 的 `mouse_opt_config` 照樣
+  讀進來、不作用。
+- **PTY 的歷史**：`PgUp|PgDn` 捲；`Home`／`End` 屬於 shell（tdp K12），kbu 不另外綁（KB7，user 2026-10-19）。到最舊、回到即時等 lib
+  的歷史模式（`gg|G`，`TODO(lib KB7)`）。
 - **啟動恢復 focus 的 panel**：lib 沒有設定 focus 的 API（KB5），`start` 送一個數字鍵代替使用者按。
 - **PTY 只在 unix**：lib 的 terminal 在 Windows 開不了（舊版用的 creack/pty 在 Windows 也一樣）。
 - **彙總 log 的 Pod 汰換**：串流在選列當下取快照，rollout 之後要重新選那一列。

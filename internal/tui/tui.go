@@ -109,8 +109,8 @@ func New(o Options) *Model {
 		m.watcher = k8s.NewWatcher(m.client.Clientset())
 		m.logs = k8s.NewLogStreamer(m.client.Clientset())
 	}
-	// TODO(lib KB4): the mouse (click, wheel, right-click for Space) and the
-	// Settings popup that held its two settings.
+	// No mouse: the terminu family is keyboard only (tdp X1; KB4, settled),
+	// and so the Settings popup that held its two settings is gone too.
 	a := terminu.New("kbu")
 	a.QuitDesc = "leave kbu"
 	a.ShiftTab = true
@@ -360,8 +360,15 @@ func (m *Model) toastErr(text string) tea.Cmd {
 	return m.app.Toast(terminu.Error, text)
 }
 
-// toastWarn is toastErr for something worth a look that is not broken.
+// toastWarn is toastErr for something done, or still usable, that is worth
+// a look (components/dialog/toast).
 func (m *Model) toastWarn(text string) tea.Cmd {
 	m.log.warn(text)
 	return m.app.Toast(terminu.Warning, text)
+}
+
+// toastDone says an action the user asked for is done. TODO(lib S8): the
+// Success toast, in Green (components/dialog/toast).
+func (m *Model) toastDone(text string) tea.Cmd {
+	return m.app.Toast(terminu.Info, text)
 }

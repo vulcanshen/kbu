@@ -8,9 +8,9 @@ Each release names the version of terminu design (tdp) it follows.
   follows terminu design v0.7.4: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
-  - **The mouse is gone for now**, and with it the Settings popup (`>`), which
-    only held the mouse's two settings; `mouse_opt_config` in `config.yaml` is
-    still read and does nothing. The library has no mouse yet.
+  - **The mouse is gone**, and with it the Settings popup (`>`), which only
+    held the mouse's two settings: the terminu family is keyboard only.
+    `mouse_opt_config` in `config.yaml` is still read and does nothing.
   - **`theme.yaml` is gone** (incompatible): kbu no longer reads it, and the
     screen is drawn in the family's colours. A theme for the whole terminu
     family may come later. You can delete the file.
@@ -22,9 +22,9 @@ Each release names the version of terminu design (tdp) it follows.
   - **The App Log** lists the oldest entry first and opens at the newest.
   - **The Events tab no longer dims** when panel 3 loses the focus: it streams,
     like Logs.
-  - **In the terminals** (Alterm, edit, shell) `PgUp` / `PgDn` scroll back;
-    `Home` and `End` go to the program now. Leaving asks with the library's
-    question.
+  - **In the terminals** (Alterm, edit, shell) `PgUp|PgDn` scroll back;
+    `Home` and `End` go to the program now, as in every terminu app. Leaving
+    asks with the library's question.
   - **`kbu help`** prints how to run kbu (also `--help`, `-h`).
   - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
   - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.

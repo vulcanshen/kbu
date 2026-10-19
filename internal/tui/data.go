@@ -158,7 +158,7 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 			return m.app.Error("Copy failed", msg.err.Error())
 		}
 		m.log.info(fmt.Sprintf("copied %s", plural(msg.lines, "line")))
-		return m.app.Toast(0, "Copied!")
+		return m.toastDone("Copied!")
 	}
 	return nil
 }
