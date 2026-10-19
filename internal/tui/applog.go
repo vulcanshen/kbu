@@ -87,7 +87,7 @@ func (l *appLog) lines() []string {
 }
 
 // line is one entry: its time, its level coloured as a log colours it (the
-// app's content, Principle P4), then what happened.
+// app's content, tdp P4), then what happened.
 func (e logEntry) line() string {
 	level, color := "INFO", terminu.Text
 	switch e.level {

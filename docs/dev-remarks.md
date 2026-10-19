@@ -86,7 +86,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **離開不先問**（tdp K9：由 app 決定）：跟舊版一樣直接離開，離開時存 state。
 - **Esc 在 panel 2 的上一層**：先放掉 compare anchor，再退出 drill（tdp K4 一次一層）。panel 3：Relatives 的鏈退一層。
 - **Logs 與 Events 是串流**（tdp T2），panel 3 失焦時不變暗；tab 名後面的 glyph 說它現在是不是跟著最新的一行（播放 / 暫停，
-  同寬，tdp L2）。舊版 Events 失焦會變暗、寫成偏離；換到 lib 之後照 T2 做，偏離拿掉。
+  同寬，tdp L2）。舊版 Events 失焦會變暗、寫成偏離；換到 lib 之後照 tdp T2 做，偏離拿掉。
 - **Alterm 的隱藏只有 `Alt-t`**：舊版另有一個不揭露的 `Ctrl-T`（錄 demo 的 VHS 送不出 Alt），但它在 panel 上不會叫出 Alterm，
   是半套的別名（tdp K7），一起拿掉；舊版「`Ctrl-T` 不揭露」的偏離也就沒了。README 的 demo 不錄 Alterm。
 - **zoom（`z`）是 `App.ForceNarrow`**：只畫 focus 的 panel、用滿畫面；`Tab` 照樣換 panel。它是版面的切換，不是模式（術語「模式」），
@@ -112,7 +112,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
 - **statusbar 的順序**（tdp L2：一列裡最後一個動態欄位可以不補空白）：會出現、消失的 chip（`[Alt-t]erm`、`[C]ompare`）在最前面，
   接著 `[C]ontext`（固定 24 格，太長從中間截），`[N]amespace` 排最後、照名稱長度（最多 16 格）。舊版 context 與 namespace 都照名稱
-  長度、後面的 chip 跟著移，是 user 2026-09-28 裁定的偏離（固定 24 格時短名字後面空一大格、80 欄把 chip 擠出去）；tdp v0.8.0 的 L2
+  長度、後面的 chip 跟著移，是 user 2026-09-28 裁定的偏離（固定 24 格時短名字後面空一大格、80 欄把 chip 擠出去）；tdp L2（v0.8.0）
   補了這個做法（KB6，user 2026-10-19 選 C），偏離拿掉。
 - **split 版的 compare 不折行**（tdp v0.8.0 的 components/dialog/note：要對齊的內容 app 可以讓它不折行，截掉的加 `…`）：左右兩欄
   並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看

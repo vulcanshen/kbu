@@ -18,7 +18,7 @@ import (
 
 // What kbu does to the cluster and to the clipboard. Every kubectl it runs
 // carries kbu's own --context; edit, shell, delete, a rollback and a context
-// switch ask first, every time (Rules F6).
+// switch ask first, every time (tdp F6).
 
 // copyText copies text to the clipboard with OSC 52, which also works over
 // ssh and in tmux (wrapped for it).
@@ -129,10 +129,10 @@ func (m *Model) yamlOfRelative() tea.Cmd {
 
 // --- edit and shell --------------------------------------------------------
 //
-// Each asks first (Rules F6). Its question is built for the row under the
+// Each asks first (tdp F6). Its question is built for the row under the
 // cursor when panel 2's actions are laid out (Action.Ask), so that from the
-// Space menu Esc on it goes back to the menu (Rules F4) and Enter clears the
-// stack for the long session (Rules T1).
+// Space menu Esc on it goes back to the menu (tdp F4) and Enter clears the
+// stack for the long session (tdp T1).
 
 func (m *Model) editArgs(rt k8s.ResourceType, item k8s.ResourceItem) []string {
 	return m.kubectlArgs(namespaced([]string{"edit", rt.KubectlName() + "/" + item.Name}, item.Namespace)...)

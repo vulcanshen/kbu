@@ -25,7 +25,7 @@ const (
 	glyphSearch  = "\U000F0233" // nf-md-file_find
 )
 
-// selection is the viewers' selection mode (Rules K11): v, then v again
+// selection is the viewers' selection mode (tdp K11): v, then v again
 // where the selection starts, y copies it.
 func (m *Model) selection() *terminu.Selection {
 	return &terminu.Selection{Key: "v", Name: "Visual", Copy: copyText}
@@ -140,7 +140,7 @@ func (m *Model) compareHere() tea.Cmd {
 			m.cfg.Compare.Layout = "split"
 		}
 		if err := m.cfg.Save(); err != nil {
-			// A popup's action failed: an error popup over it (Rules F7).
+			// A popup's action failed: an error popup over it (tdp F7).
 			m.log.err("compare layout save failed: " + err.Error())
 			return m.app.Error("Save failed", "The layout could not be saved to config.yaml: "+err.Error())
 		}
@@ -250,7 +250,7 @@ func (m *Model) setNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
 // --- contexts ------------------------------------------------------------------
 
 // openContexts picks the context kbu talks to (components/input/select),
-// the one now chosen; picking it is the confirmation (Rules F6).
+// the one now chosen; picking it is the confirmation (tdp F6).
 func (m *Model) openContexts() tea.Cmd {
 	if m.client == nil {
 		return nil
@@ -264,7 +264,7 @@ func (m *Model) openContexts() tea.Cmd {
 
 // --- sort ----------------------------------------------------------------------
 
-// openSort is the first of the sort's two steps: the column (Rules F1: each
+// openSort is the first of the sort's two steps: the column (tdp F1: each
 // step its own popup). A column already sorted by says where in the order
 // and which way.
 func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {

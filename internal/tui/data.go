@@ -153,7 +153,7 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 	case copiedMsg:
 		if msg.err != nil {
 			// Copying is done from a panel or a viewer: what failed is shown
-			// in full (Rules F5, F7: an action's failure is an error popup).
+			// in full (tdp F5, tdp F7: an action's failure is an error popup).
 			m.log.err("copy: " + msg.err.Error())
 			return m.app.Error("Copy failed", msg.err.Error())
 		}
@@ -187,7 +187,7 @@ func (m *Model) waitWatch() tea.Cmd {
 }
 
 // onWatchErr is the watch failing: the App Log keeps it; the first time, a
-// toast says it (Rules F5), and an empty panel 2 says why it is empty
+// toast says it (tdp F5), and an empty panel 2 says why it is empty
 // (components/layout/panel, errors). The watcher tries again on its own.
 func (m *Model) onWatchErr(err error) tea.Cmd {
 	m.log.err(err.Error())

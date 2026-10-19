@@ -153,7 +153,7 @@ func (b *textBody) Key(key string, _ tea.KeyMsg) (bool, tea.Cmd) {
 // failure in the middle instead (components/layout/panel).
 func (b *textBody) Empty() bool { return len(b.rows) == 0 }
 
-// HasItem: a text has no items; Enter works on the whole panel (Rules K3).
+// HasItem: a text has no items; Enter works on the whole panel (tdp K3).
 func (b *textBody) HasItem() bool { return false }
 
 // Scroll is "N-M of T" when the rows do not all fit (layout/panel).

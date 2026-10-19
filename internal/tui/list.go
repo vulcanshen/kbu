@@ -253,7 +253,7 @@ var numberColumns = map[string]bool{"Restarts": true, "Desired": true, "Current"
 
 // keptColumns keep their width on a narrow panel: what a row is and how it
 // is doing. The others give up room first (an IP, a node, an image), and on
-// a panel too narrow for every column they are left out (Rules L1).
+// a panel too narrow for every column they are left out (tdp L1).
 var keptColumns = map[string]bool{"Namespace": true, "Name": true, "": true, "Ready": true, "Status": true,
 	"Restarts": true, "Age": true, "Type": true, "Reason": true}
 
@@ -324,7 +324,7 @@ func (m *Model) listWidth() int {
 // fitColumns leaves out the columns that give up room first, from the
 // right, while the natural widths do not fit in w (TODO(lib KB17): the lib
 // cuts the widest column to three cells at once): a list of eight columns
-// cut to three cells each says nothing (Rules L1). A sorted column stays.
+// cut to three cells each says nothing (tdp L1). A sorted column stays.
 func fitColumns(cols []k8s.Column, cells [][]string, w int, sorted map[string]bool) []int {
 	keep := make([]int, len(cols))
 	for i := range keep {
@@ -510,7 +510,7 @@ func statusColor(status, pending, failed string) string {
 // width).
 func capRunes(s string, n int) string { return terminu.Truncate(s, n) }
 
-// listEsc is Esc on panel 2, one level at a time (Rules K4): the compare
+// listEsc is Esc on panel 2, one level at a time (tdp K4): the compare
 // anchor, then the drill.
 func (m *Model) listEsc() tea.Cmd {
 	switch {
@@ -542,7 +542,7 @@ func allowsDelete(rt k8s.ResourceType) bool {
 	return true
 }
 
-// setListActions lays out panel 2's actions for what it shows (Rules M2, M3):
+// setListActions lays out panel 2's actions for what it shows (tdp M2, tdp M3):
 // the names and descriptions say what they do to the row.
 func (m *Model) setListActions() {
 	rt := m.shownKind()
@@ -637,7 +637,7 @@ func (m *Model) setListActions() {
 		{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom},
 	}
 	m.listP.Actions = append(item, panel...)
-	// Esc is one level up only when there is one (Rules K4): the anchor,
+	// Esc is one level up only when there is one (tdp K4): the anchor,
 	// then the drill; otherwise ? does not list it.
 	m.listP.OnEsc = nil
 	if m.anchor != nil || len(m.drill) > 0 {
@@ -694,7 +694,7 @@ func (m *Model) drillIn() tea.Cmd {
 	}
 }
 
-// onChildren shows what a drill found, or says why there is nothing (Rules
+// onChildren shows what a drill found, or says why there is nothing (tdp
 // F5: a failure is seen at once; an empty result is not an ignored Enter).
 func (m *Model) onChildren(msg childrenMsg) tea.Cmd {
 	if msg.err != nil {

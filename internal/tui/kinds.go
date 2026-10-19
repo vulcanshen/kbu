@@ -16,7 +16,7 @@ import (
 
 const pinnedGroup = "Pinned"
 
-// dragState is the Drag mode on the pinned kinds (Rules K11): the order to
+// dragState is the Drag mode on the pinned kinds (tdp K11): the order to
 // go back to on Esc.
 type dragState struct {
 	before []k8s.ResourceType
@@ -56,7 +56,7 @@ func (m *Model) refreshKinds() {
 }
 
 // setKindActions lays out panel 1's actions for the kind under the cursor:
-// the names say which kind (Rules M5, the description says what to what).
+// the names say which kind (tdp M5, the description says what to what).
 func (m *Model) setKindActions() {
 	name := m.kindAt.String()
 	pinned := m.isPinned(m.kindAt)
@@ -66,7 +66,7 @@ func (m *Model) setKindActions() {
 		pin.Label, pin.Desc = "Unpin "+name, "move it back to its category"
 	}
 	// Sorting a kind's list is panel 2's (Alt-S there): only it shows the
-	// list (Principle P3).
+	// list (tdp P3).
 	m.kindsP.Actions = []terminu.Action{
 		pin,
 		{Key: "Enter", Label: "Show in panel 2", Desc: "focus panel 2 on this kind", Scope: terminu.ItemScope, Hint: "open",
@@ -133,8 +133,8 @@ func (m *Model) togglePin() tea.Cmd {
 	return nil
 }
 
-// startDrag enters the Drag mode on the pinned kind under the cursor (Rules
-// K11): j|k move it among the pinned ones, wrapping at the ends (Rules K12),
+// startDrag enters the Drag mode on the pinned kind under the cursor (tdp
+// K11): j|k move it among the pinned ones, wrapping at the ends (tdp K12),
 // Enter drops it and keeps the order, Esc puts it back.
 func (m *Model) startDrag() tea.Cmd {
 	if !m.isPinned(m.kindAt) || len(m.pinned) < 2 {
@@ -159,7 +159,7 @@ func (m *Model) startDrag() tea.Cmd {
 }
 
 // moveDragged moves the held kind one place among the pinned ones; past the
-// last it goes to the top and the others move down one (Rules K12).
+// last it goes to the top and the others move down one (tdp K12).
 func (m *Model) moveDragged(down bool) {
 	i := slices.Index(m.pinned, m.drag.kind)
 	if i < 0 {

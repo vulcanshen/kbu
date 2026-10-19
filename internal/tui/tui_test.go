@@ -14,7 +14,7 @@ import (
 	"github.com/vulcanshen/kbu/internal/k8s"
 )
 
-// Rules L4: every row is exactly as wide as the terminal, at every size, with
+// tdp L4: every row is exactly as wide as the terminal, at every size, with
 // icons and powerline symbols one cell or two (tdp E5), each kind of popup
 // kbu opens on top — menus, the key reference, a confirm, the viewers —
 // including screens smaller than the popup in width, in height, in both.
@@ -137,8 +137,8 @@ func TestPinMovesTheKindToPinned(t *testing.T) {
 	}
 }
 
-// D on a pinned kind is the Drag mode (Rules K11): j moves it, past the end
-// it wraps to the top (Rules K12), Enter keeps the order; Esc puts it back.
+// D on a pinned kind is the Drag mode (tdp K11): j moves it, past the end
+// it wraps to the top (tdp K12), Enter keeps the order; Esc puts it back.
 func TestDragReordersThePinnedKinds(t *testing.T) {
 	m := newTestModel(t)
 	m.press("P") // Pods
@@ -185,7 +185,7 @@ func TestStatusbarKeepsItsFields(t *testing.T) {
 }
 
 // C marks the compare anchor, C on another row compares (a viewer opens),
-// Esc on the panel drops the anchor first (Rules K4).
+// Esc on the panel drops the anchor first (tdp K4).
 func TestCompareAnchor(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
@@ -256,7 +256,7 @@ func TestTabsOfKinds(t *testing.T) {
 }
 
 // Logs and Events are streaming content: not dimmed when the panel loses the
-// focus (Rules T2).
+// focus (tdp T2).
 func TestStreamingTabsAreNotDimmed(t *testing.T) {
 	m := newTestModel(t)
 	for i, tab := range m.det.tabs {

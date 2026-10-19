@@ -183,7 +183,7 @@ func (m *Model) App() *terminu.App { return m.app }
 
 // layout puts panel 1 on the left, 24 cells wide, and panels 2 and 3 on the
 // right, panel 3 under panel 2 (tdp leaves the arrangement to the app,
-// Rules L1).
+// tdp L1).
 func layout(w, h int) []terminu.Rect {
 	left := min(26, w/3) // the kinds' names and the hint Enter:open beside the scroll position
 	bottom := min(14, h/2)
@@ -197,15 +197,15 @@ func layout(w, h int) []terminu.Rect {
 	}
 }
 
-// globalActions are what acts on kbu as a whole (Principle P3): every one is
-// a row of the global operation popup and a key on the panels (Rules M4).
+// globalActions are what acts on kbu as a whole (tdp P3): every one is
+// a row of the global operation popup and a key on the panels (tdp M4).
 func (m *Model) globalActions() []terminu.Action {
 	return []terminu.Action{
 		{Key: "N", Label: "Namespace", Desc: "pick which namespaces to show", Scope: terminu.GlobalScope, Do: m.openNamespaces},
 		{Key: "C", Label: "Context", Desc: "switch the kubeconfig context", Scope: terminu.GlobalScope, Do: m.openContexts},
 		{Key: "Alt-t", Label: "term", Desc: "show the embedded shell (Alterm)", Scope: terminu.GlobalScope, Do: m.showAlterm},
 		{Key: "!", Label: "App log", Desc: "what kbu has done and what failed", Scope: terminu.GlobalScope, Stay: true, Do: m.openAppLog},
-		// Not a key of the App Log viewer: a note only shows (Rules F1).
+		// Not a key of the App Log viewer: a note only shows (tdp F1).
 		{Label: "Clear the App log", Desc: "forget what it has kept", Scope: terminu.GlobalScope,
 			Disabled: func() bool { return len(m.log.entries) == 0 },
 			Do:       func() tea.Cmd { m.log.entries = nil; m.log.seen(); return nil }},
@@ -227,7 +227,7 @@ func (m *Model) start() tea.Cmd {
 	}
 	cmds = append(cmds, m.sayMoved())
 	// The lib has no call that sets the focus: the panel the user left from
-	// is reached with its digit, as the user would (Rules K1).
+	// is reached with its digit, as the user would (tdp K1).
 	// TODO(lib KB5): a way to set the focused panel.
 	if n := map[string]rune{"table": '2', "detail": '3'}[m.startPanel]; n != 0 {
 		cmds = append(cmds, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{n}} })
@@ -255,13 +255,13 @@ func (m *Model) sayMoved() tea.Cmd {
 // and the namespaces with their hotkeys, the Alterm in the background, the
 // compare anchor, and on the right the errors and warnings not seen yet.
 // When panel 2 has the focus its C (Compare) is the C that fires: [C]ompare
-// is lit there and [C]ontext is not (Rules M9).
+// is lit there and [C]ontext is not (tdp M9).
 func (m *Model) statusbar(w int) string {
 	grey, value := terminu.Fg(terminu.Overlay0), terminu.Fg(terminu.Lavender)
 	lit, unlit := terminu.Fg(terminu.Blue), terminu.Fg(terminu.Surface2)
 	onList := m.screen.Focused() == m.listP
 	// panel 2's C is compare where it has a row to compare: there [C]ontext
-	// does not fire (Rules M9).
+	// does not fire (tdp M9).
 	compareC := onList && !m.atContainers() && m.list.HasItem()
 	ctxKey := lit
 	if compareC {
@@ -297,7 +297,7 @@ func (m *Model) statusbar(w int) string {
 		lit.Render("[N]")+grey.Render("amespace: ")+value.Render(capMiddle(ns, 16)))
 	left := " " + strings.Join(chips, "  ")
 	right := ""
-	// The count keeps its width as it grows (Rules L2).
+	// The count keeps its width as it grows (tdp L2).
 	switch {
 	case m.log.unseenErrors > 0:
 		right = terminu.Fg(terminu.Red).Render(countText(m.log.unseenErrors, "error")) + grey.Render(" in the App Log [!] ")
@@ -354,7 +354,7 @@ func (m *Model) kubectlArgs(args ...string) []string {
 	return args
 }
 
-// toastErr says a failure at once (Rules F5) and keeps it in the App Log.
+// toastErr says a failure at once (tdp F5) and keeps it in the App Log.
 func (m *Model) toastErr(text string) tea.Cmd {
 	m.log.err(text)
 	return m.app.Toast(terminu.Error, text)
