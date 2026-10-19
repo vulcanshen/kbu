@@ -101,7 +101,8 @@ scoop install kbu
 ### 第一次啟動
 
 kbu 連上 kubeconfig 的 current context，先顯示 Pods。在你釘選、排序或離開之前什麼都不寫；那時才建立 `~/.config/kbu`
-（見[設定與資料](#設定與資料)）。
+（見[設定與資料](#設定與資料)）。舊版的 kbu 把設定留在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`
+（Windows）的話，第一次啟動會把它搬到 `~/.config/kbu`，並告訴你。
 
 ### 移除
 
@@ -113,7 +114,7 @@ curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | 
 irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
 ```
 
-兩個都會先問，才刪你的設定。
+兩個都會先問，才刪你的設定、狀態與 log。
 
 ## 快速開始
 
@@ -181,16 +182,16 @@ nvim 在 popup 裡關得慢（plugin 在收尾）的話，`editor: "nvim --noplu
 
 ## 設定與資料
 
-kbu 存的東西都在 **`~/.config/kbu`**（有設 `$XDG_CONFIG_HOME` 時是 `$XDG_CONFIG_HOME/kbu`；Windows 是
-`%USERPROFILE%\.config\kbu`）。`KBU__CONFIG` 可以改到別的目錄。
+kbu 的設定與上次停在哪裡都在 **`~/.config/kbu`**（有設 `$XDG_CONFIG_HOME` 時是 `$XDG_CONFIG_HOME/kbu`；Windows 是
+`%USERPROFILE%\.config\kbu`）。`KBU__CONFIG` 可以改到別的目錄。刪掉它們，kbu 只是回到預設。
 
 | 檔案 | 是什麼 |
 |---|---|
 | `config.yaml` | 你的設定（見下面）。釘選、排序、切換比對版面時 kbu 會寫它 |
 | `state.yaml` | 上次停在哪裡；離開時寫入。`KBU__STATE` 可以放到別的目錄 |
 
-kbu 的 log 在 **`~/.kbu/logs`**（`KBU__DATA` 可以改到別的目錄）：`audit-<日期>.log` 記從 kbu 做的每一次 edit 與 delete，
-`crash-<日期>.log` 是 kbu 當掉時的紀錄。
+kbu 的 log 是它的資料，在 **`~/.kbu/logs`**（`KBU__DATA` 可以改到別的目錄）：`audit-<日期>.log` 記從 kbu 做的每一次 edit 與
+delete，`crash-<日期>.log` 是 kbu 當掉時的紀錄。需要的話自己備份：刪掉就找不回來了。
 
 舊版的 kbu 把設定放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows）。第一次啟動這一版時，
 kbu 會把那個目錄搬到 `~/.config/kbu`，並告訴你搬好了；搬不動時照舊用舊目錄，並寫出兩個路徑，讓你自己搬。
@@ -234,7 +235,7 @@ resource_kind_config:
 
 ## 限制
 
-- **滑鼠目前沒有作用。** 一切都在鍵盤上。
+- **滑鼠沒有作用。** kbu 跟 terminu 家族的每個 app 一樣，用鍵盤操作。
 - **Alterm、edit 與 shell 要 macOS 或 Linux**（WSL 也可以）：在 Windows 上 kbu 開不了內嵌的 terminal。
 - **框線歪了一格的話**，是 kbu 啟動時問終端機得到的答案不對：`kbu iconwidth` 印出它量到的；設 `KBU__ICON_WIDTH` 與
   `KBU__POWERLINE_WIDTH`。Windows 不會量：字型把 icon 畫成兩格時，在那裡設這兩個變數。

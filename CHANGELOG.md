@@ -4,67 +4,77 @@ Each release names the version of terminu design (tdp) it follows.
 
 ## Unreleased
 
+Not compatible with the last release in three ways:
+
+- **`theme.yaml` is gone.** kbu no longer reads it, and the screen is drawn in
+  the terminu family's colours. A theme for the whole family may come later.
+  You can delete the file.
+- **The mouse is gone**, and with it the Settings popup (`>`), which only held
+  the mouse's two settings: the terminu family is keyboard only.
+  `mouse_opt_config` in `config.yaml` is still read and does nothing.
+- **On Windows, install with PowerShell** (`install.ps1`): `install.sh` no
+  longer installs under Git Bash. If an older `install.sh` put `kbu.exe` in
+  `~/bin`, delete it yourself, or two copies may be on your `PATH`.
+
+The rest:
+
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.7.4: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.8.0: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
-  - **The mouse is gone**, and with it the Settings popup (`>`), which only
-    held the mouse's two settings: the terminu family is keyboard only.
-    `mouse_opt_config` in `config.yaml` is still read and does nothing.
-  - **`theme.yaml` is gone** (incompatible): kbu no longer reads it, and the
-    screen is drawn in the family's colours. A theme for the whole terminu
-    family may come later. You can delete the file.
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
     `Enter` shows the ones checked. All Namespaces checked means all of them,
     whatever else is checked.
   - **Sorting** is still two steps, a column then a direction; choosing the
     direction closes both, so a second column is a second `Alt-S`.
+  - **What you open to look at from the `Space` menu** (the YAML, a compare,
+    Helm's documents, the App Log) keeps the menu: `Esc` goes back to it. A
+    confirm opened from the menu goes back to it on `Esc` too.
+  - **After `E` in the YAML viewer** the viewer shows the resource as the edit
+    left it.
+  - **The top row** shows `[Alt-t]erm` and `[C]ompare` first, then the context
+    and the namespace, so a long context no longer pushes them about.
   - **The App Log** lists the oldest entry first and opens at the newest.
+    Clearing it is a row of `Global operation`, no longer `D` in the App Log.
+  - **A failure is an error toast**, in Red, always; a warning is for something
+    done that is still worth a look.
   - **The Events tab no longer dims** when panel 3 loses the focus: it streams,
     like Logs.
   - **In the terminals** (Alterm, edit, shell) `PgUp|PgDn` scroll back;
     `Home` and `End` go to the program now, as in every terminu app. Leaving
     asks with the library's question.
-  - **`kbu help`** prints how to run kbu (also `--help`, `-h`).
-  - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
+  - **Alterm hides with `Alt-t` only**; `Ctrl-T` goes to the shell.
   - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.
     `z` zooms back from any panel.
-  - **Alterm hides with `Alt-t` only**; `Ctrl-T` goes to the shell.
-  - **Clearing the App Log** is a row of `Global operation`, no longer `D` in
-    the App Log.
-  - **A confirm opened from the `Space` menu** goes back to the menu on `Esc`.
+  - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
   - **On a narrow panel 2** the columns that matter least (IP, node, image…)
     are left out, so the names stay readable; `z` shows them all.
-  - **What you open to look at from the `Space` menu** (the YAML, a compare,
-    Helm's documents, the App Log) keeps the menu: `Esc` goes back to it.
-  - **After `E` in the YAML viewer** the viewer shows the resource as the edit
-    left it.
-  - **The top row** shows `[Alt-t]erm` and `[C]ompare` first, then the context
-    and the namespace, so a long context no longer pushes them about.
   - **A long name is cut at the end** (`demo-app-67f76fb666…`), no longer in
     the middle (`demo-app…66-gm72n`), so the pods of one Deployment can look
     the same on a narrow panel; `z` shows them whole.
-- **The logs move to `~/.kbu/logs`** (tdp E3: they are kbu's data);
-  `KBU__DATA` points them elsewhere. Logs already written stay in the settings
-  directory's `logs/`.
-- **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
-  many cells a tab takes in the viewers (default 4).
-- `KBU_TEST_RUN_MAIN`, a variable only kbu's tests read, is
-  `KBU__TEST_RUN_MAIN` (tdp E2).
-- **The repository takes the terminu family's shape** (tdp project): the
-  program is built from `cmd/kbu`, so `go install` takes
-  `github.com/vulcanshen/kbu/cmd/kbu@latest`; the Makefile, release workflow,
-  goreleaser configuration and `install.sh` / `uninstall.sh` are the family's
-  templates. `install.sh` no longer installs on Windows under Git Bash: it
-  points to `install.ps1`, which it always had. `uninstall.sh` also offers to
-  remove the settings an older kbu kept in `~/Library/Application Support/kbu`
-  on macOS.
 - **Settings live in `~/.config/kbu` on every platform** (tdp E3), or in
   `$XDG_CONFIG_HOME/kbu`; `KBU__CONFIG` still moves them. On macOS and Windows
   an older kbu kept them in `~/Library/Application Support/kbu` and
   `%APPDATA%\kbu`: the first start moves that directory to `~/.config/kbu`
   and says so. If it cannot, kbu keeps using the old one and shows both paths
-  so you can move it yourself. `uninstall.ps1` asks about both directories.
+  so you can move it yourself.
+- **The logs move to `~/.kbu/logs`** (tdp E3: they are kbu's data);
+  `KBU__DATA` points them elsewhere. Logs already written stay in the settings
+  directory's `logs/`.
+- **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
+  many cells a tab takes in the viewers (default 4).
+- **`kbu help`** prints how to run kbu (also `--help`, `-h`).
+- **The uninstallers** ask about the settings, the state (when `KBU__STATE`
+  moved it) and the logs. `uninstall.sh` also offers, on macOS, to remove the
+  settings an older kbu kept in `~/Library/Application Support/kbu`, and
+  `uninstall.ps1` the ones in `%APPDATA%\kbu`.
+- **The repository takes the terminu family's shape** (tdp project): the
+  program is built from `cmd/kbu`, so `go install` takes
+  `github.com/vulcanshen/kbu/cmd/kbu@latest`; the Makefile, release workflow,
+  goreleaser configuration and `install.sh` / `uninstall.sh` are the family's
+  templates.
+- `KBU_TEST_RUN_MAIN`, a variable only kbu's tests read, is
+  `KBU__TEST_RUN_MAIN` (tdp E2).
 
 ## [v3.0.0] - 2026-10-06
 

@@ -34,7 +34,9 @@ func (m *Model) selection() *terminu.Selection {
 // --- the YAML viewer ---------------------------------------------------------
 
 // yamlSearch is the YAML viewer's search: the lines that match, and which of
-// them the viewer is on.
+// them the viewer is on. TODO(lib KB21): every hit underlined and the one it
+// is on a cursor block (components/dialog/note); the viewer colours its lines
+// itself, so kbu cannot mark them.
 type yamlSearch struct {
 	v       *terminu.Viewer
 	matches []int

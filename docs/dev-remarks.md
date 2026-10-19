@@ -1,7 +1,7 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.7.4/principle)（tdp v0.7.4），畫面建在
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.8.0/principle)（tdp v0.8.0），畫面建在
 [terminu-go](https://github.com/vulcanshen/terminu-go)（v0.1.13）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
@@ -90,7 +90,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **Alterm 的隱藏只有 `Alt-t`**：舊版另有一個不揭露的 `Ctrl-T`（錄 demo 的 VHS 送不出 Alt），但它在 panel 上不會叫出 Alterm，
   是半套的別名（tdp K7），一起拿掉；舊版「`Ctrl-T` 不揭露」的偏離也就沒了。README 的 demo 不錄 Alterm。
 - **zoom（`z`）是 `App.ForceNarrow`**：只畫 focus 的 panel、用滿畫面；`Tab` 照樣換 panel。它是版面的切換，不是模式（術語「模式」），
-  再按一次 `z` 還原。**暫定**：tdp 只說窄寬時這樣畫，zoom 要不要做成別的樣子由 app 決定。
+  再按一次 `z` 還原。這就是 tdp v0.8.0 的 zoom 預設（components/layout/screen：跟窄寬一樣，換到的 panel 也放大）。
 - **窄寬的門檻是 60 欄**（`Screen.NarrowBelow`）。**暫定**：panel 1 要 24 欄、panel 2 至少要放得下 Namespace 與 Name。
 - **panel 2 的欄**：namespaced 的種類第一欄是 Namespace，接著 Name，再一個沒有標題的 helm 標記欄 —— 選了好幾個 namespace 時，
   同名的物件要靠 Namespace 分；helm 標記欄沒有標題，是因為它只是一個標記、不是值。窄的時候先讓出空間的是 IP、Node、Image 這類
@@ -167,7 +167,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.7.4/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.8.0/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

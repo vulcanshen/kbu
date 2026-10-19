@@ -30,6 +30,9 @@ func TestL4EveryRowIsTheTerminalWidth(t *testing.T) {
 		{"Tab", "C", "j", "C"},  // the compare viewer
 		{"!"},                   // the App Log
 	}
+	// TODO(lib S53): also below the minimum size, down to 1x1 (tdp E5; e.g.
+	// {80, 5}, {3, 2}, {1, 1}), showing the name and the hint. terminu-go
+	// v0.1.13 panics there with a menu open; the next one does not.
 	sizes := [][2]int{{120, 40}, {80, 40}, {59, 20}, {200, 60}, {24, 40}, {200, 7}, {16, 6}}
 	for _, widths := range [][2]int{{1, 1}, {2, 1}, {2, 2}} {
 		for _, open := range popups {

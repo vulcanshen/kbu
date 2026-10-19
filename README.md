@@ -111,7 +111,9 @@ Building from source is in [`docs/dev-remarks.md`](docs/dev-remarks.md).
 ### The first start
 
 kbu connects to your kubeconfig's current context and shows the Pods. Nothing is written until you pin, sort or quit: then
-`~/.config/kbu` is made (see [Settings and data](#settings-and-data)).
+`~/.config/kbu` is made (see [Settings and data](#settings-and-data)). If an older kbu left its settings in
+`~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows), the first start moves them to `~/.config/kbu`
+and says so.
 
 ### Uninstall
 
@@ -123,7 +125,7 @@ curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | 
 irm https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.ps1 | iex
 ```
 
-Both ask before they remove your settings.
+Both ask before they remove your settings, your state and your logs.
 
 ## Quick start
 
@@ -194,16 +196,17 @@ edits only.
 
 ## Settings and data
 
-Everything kbu keeps is in **`~/.config/kbu`** (`$XDG_CONFIG_HOME/kbu` when that is set; on Windows
-`%USERPROFILE%\.config\kbu`). `KBU__CONFIG` points it at another directory.
+kbu's settings and where you left off are in **`~/.config/kbu`** (`$XDG_CONFIG_HOME/kbu` when that is set; on Windows
+`%USERPROFILE%\.config\kbu`). `KBU__CONFIG` points it at another directory. Deleting them only takes kbu back to its
+defaults.
 
 | File | What it is |
 |---|---|
 | `config.yaml` | Your settings (below). kbu writes it when you pin, sort or switch the compare layout |
 | `state.yaml` | Where you left off; written when you quit. `KBU__STATE` keeps it in another directory |
 
-kbu's logs are in **`~/.kbu/logs`** (`KBU__DATA` points it elsewhere): `audit-<date>.log`, every edit and delete made from kbu,
-and `crash-<date>.log` when kbu crashes.
+kbu's logs are its data, in **`~/.kbu/logs`** (`KBU__DATA` points it elsewhere): `audit-<date>.log`, every edit and delete
+made from kbu, and `crash-<date>.log` when kbu crashes. Back them up if you need them: deleted, they are gone.
 
 An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows). The first time
 you start this one, it moves that directory to `~/.config/kbu` and says so. If it cannot, it keeps using the old one and
@@ -248,7 +251,7 @@ resource_kind_config:
 
 ## Limits
 
-- **The mouse does nothing for now.** Everything is on the keyboard.
+- **The mouse does nothing.** kbu, like every terminu app, is used from the keyboard.
 - **Alterm, edit and shell need macOS or Linux** (WSL too): on Windows kbu cannot open a terminal inside itself.
 - **If the frames are a cell off**, the check kbu runs at start got a wrong answer from your terminal: `kbu iconwidth` prints
   what it found; set `KBU__ICON_WIDTH` and `KBU__POWERLINE_WIDTH`. On Windows there is no check: set them there when your font

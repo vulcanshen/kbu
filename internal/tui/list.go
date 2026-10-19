@@ -260,7 +260,8 @@ var keptColumns = map[string]bool{"Namespace": true, "Name": true, "": true, "Re
 // listColumns are the lib's columns for panel 2's kind. A sorted column
 // keeps its width: its sort arrow must stay in sight (components/layout/panel).
 // Of Namespace and Name, Name gives up room when nameGives says it can,
-// else Namespace.
+// else Namespace. TODO(lib KB19): both cut in the middle, where both ends
+// tell a row apart (demo-app…66-gm72n; components/layout/panel).
 func listColumns(cols []k8s.Column, sorted map[string]bool, nameGives bool) []terminu.Column {
 	out := make([]terminu.Column, len(cols))
 	for i, c := range cols {
@@ -373,6 +374,8 @@ func (m *Model) setListRows() {
 	rt := m.shownKind()
 	m.listP.Label = rt.String()
 	if n := len(m.drill); n > 0 {
+		// TODO(lib S16): the drill's path in the panel's location row, and
+		// the name as it is in the label (tdp's components/layout/panel).
 		m.listP.Label = capRunes(m.drill[n-1].parent.Name, 20) + " > " + rt.String()
 	}
 	all := columnsOf(rt)
