@@ -145,13 +145,14 @@ func (m *Model) editAsk(rt k8s.ResourceType, item k8s.ResourceItem) *terminu.Ask
 }
 
 // confirmEdit asks, then edits: for the YAML viewer's E, where no Action
-// carries the question.
-func (m *Model) confirmEdit(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
-	return m.app.Confirm(*m.editAsk(rt, item), func() tea.Cmd { return m.runEdit(rt, item) })
+// carries the question. then runs when the edit ends.
+func (m *Model) confirmEdit(rt k8s.ResourceType, item k8s.ResourceItem, then func() tea.Cmd) tea.Cmd {
+	return m.app.Confirm(*m.editAsk(rt, item), func() tea.Cmd { return m.runEdit(rt, item, then) })
 }
 
-// runEdit runs kubectl edit in a terminal popup.
-func (m *Model) runEdit(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
+// runEdit runs kubectl edit in a terminal popup; then, when not nil, runs
+// when it ends.
+func (m *Model) runEdit(rt k8s.ResourceType, item k8s.ResourceItem, then func() tea.Cmd) tea.Cmd {
 	if m.tx != nil && m.tx.Running() {
 		return m.app.Error("Edit", "An edit or a shell is open already: close it first.")
 	}
@@ -162,8 +163,46 @@ func (m *Model) runEdit(rt k8s.ResourceType, item k8s.ResourceItem) tea.Cmd {
 		env = append(env, "KUBE_EDITOR="+m.cfg.Editor)
 	}
 	m.tx = &terminu.Terminal{Title: "Edit", Subject: subject(rt, item), Command: append([]string{"kubectl"}, m.editArgs(rt, item)...),
-		Env: env, Ends: true, History: true, OnExit: m.txExited("edit")}
+		Env: env, Ends: true, History: true, OnExit: m.txExited("edit", then)}
 	return m.app.OpenTerminal(m.tx)
+}
+
+// rereadMsg is a resource read again after an edit, for the viewer that
+// show puts it in.
+type rereadMsg struct {
+	key  string
+	item k8s.ResourceItem
+	err  error
+	show func(yaml string)
+}
+
+// rereadYAML reads the resource again for the YAML viewer an edit was
+// started from: from the API for the kinds kbu knows, else as the watch has
+// it (onReread).
+func (m *Model) rereadYAML(rt k8s.ResourceType, item k8s.ResourceItem, show func(string)) tea.Cmd {
+	if m.client == nil {
+		return nil
+	}
+	cs, ref := m.client.Clientset(), k8s.RefTarget{Type: rt, Name: item.Name, Namespace: item.Namespace}
+	return func() tea.Msg {
+		it, err := k8s.FetchResourceByRef(context.Background(), cs, ref)
+		return rereadMsg{key: itemKey(item), item: it, err: err, show: show}
+	}
+}
+
+// onReread puts what was read in the viewer; when it could not be read
+// (a CRD), what the watch has now.
+func (m *Model) onReread(msg rereadMsg) tea.Cmd {
+	if msg.err == nil {
+		msg.show(k8s.MarshalItemYAML(msg.item))
+		return nil
+	}
+	if i := indexOfKey(m.shownItems(), msg.key); i >= 0 {
+		msg.show(k8s.MarshalItemYAML(m.shownItems()[i]))
+		return nil
+	}
+	m.log.warn("YAML not read again after the edit: " + msg.err.Error())
+	return nil
 }
 
 func namespaced(args []string, ns string) []string {
@@ -217,19 +256,23 @@ func (m *Model) runShell() tea.Cmd {
 	args := m.shellArgs(pod, container)
 	m.log.info("exec shell: kubectl " + strings.Join(args, " "))
 	m.tx = &terminu.Terminal{Title: "Shell", Subject: "pod/" + pod.Name + " → " + container,
-		Command: append([]string{"kubectl"}, args...), Ends: true, History: true, OnExit: m.txExited("shell")}
+		Command: append([]string{"kubectl"}, args...), Ends: true, History: true, OnExit: m.txExited("shell", nil)}
 	return m.app.OpenTerminal(m.tx)
 }
 
 // txExited is what an edit's or a shell's end says when it failed.
-func (m *Model) txExited(what string) func(error) tea.Cmd {
+func (m *Model) txExited(what string, then func() tea.Cmd) func(error) tea.Cmd {
 	return func(err error) tea.Cmd {
+		var cmds []tea.Cmd
 		if err != nil {
 			// The popup closes with the program: what failed is said at
-			// once (Rules F5) and kept in the App Log.
-			return m.toastErr(what + " ended: " + err.Error())
+			// once (tdp F5) and kept in the App Log.
+			cmds = append(cmds, m.toastErr(what+" ended: "+err.Error()))
 		}
-		return nil
+		if then != nil {
+			cmds = append(cmds, then())
+		}
+		return tea.Batch(cmds...)
 	}
 }
 

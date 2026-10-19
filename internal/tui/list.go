@@ -563,12 +563,12 @@ func (m *Model) setListActions() {
 		}
 	case rt == k8s.ResourceReleases:
 		item = []terminu.Action{
-			{Key: "Enter", Label: "Open", Desc: "the release record, as [Y] does", Scope: terminu.ItemScope, Hint: "yaml", Do: m.yamlHere},
-			{Key: "Y", Label: "YAML", Desc: "the release record", Scope: terminu.ItemScope, Do: m.yamlHere},
+			{Key: "Enter", Label: "Open", Desc: "the release record, as [Y] does", Scope: terminu.ItemScope, Hint: "yaml", Stay: true, Do: m.yamlHere},
+			{Key: "Y", Label: "YAML", Desc: "the release record", Scope: terminu.ItemScope, Stay: true, Do: m.yamlHere},
 		}
 		for _, d := range helmDocs {
 			d := d
-			item = append(item, terminu.Action{Label: d.label, Desc: d.desc, Scope: terminu.ItemScope,
+			item = append(item, terminu.Action{Label: d.label, Desc: d.desc, Scope: terminu.ItemScope, Stay: true,
 				Do: func() tea.Cmd { return m.fetchHelmDoc(d) }})
 		}
 		item = append(item, terminu.Action{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow})
@@ -584,7 +584,7 @@ func (m *Model) setListActions() {
 		}
 		item = append(item,
 			terminu.Action{Key: "C", Label: "Compare to anchor", Desc: "open the YAML diff popup", Scope: terminu.ItemScope,
-				Hidden: func() bool { return !m.canCompare() }, Do: m.compareHere},
+				Hidden: func() bool { return !m.canCompare() }, Stay: true, Do: m.compareHere},
 		)
 		switch {
 		case rt.SupportsDrillDown():
@@ -592,12 +592,14 @@ func (m *Model) setListActions() {
 				Scope: terminu.ItemScope, Hint: "drill", Do: m.drillIn})
 		case rt != k8s.ResourceContexts:
 			item = append(item, terminu.Action{Key: "Enter", Label: "Open", Desc: "its YAML, as [Y] does", Scope: terminu.ItemScope,
-				Hint: "yaml", Do: m.yamlHere})
+				Hint: "yaml", Stay: true, Do: m.yamlHere})
 		}
-		item = append(item, terminu.Action{Key: "Y", Label: "YAML", Desc: "view resource manifest", Scope: terminu.ItemScope, Do: m.yamlHere})
+		item = append(item, terminu.Action{Key: "Y", Label: "YAML", Desc: "view resource manifest", Scope: terminu.ItemScope, Stay: true, Do: m.yamlHere})
 		if allowsEdit(rt) && hasCur {
+			// TODO(lib S4): an edit keeps the menu it was run from (tdp T1), but
+			// an action that asks clears the whole stack when accepted.
 			item = append(item, terminu.Action{Key: "E", Label: "Edit", Desc: "kubectl edit", Scope: terminu.ItemScope,
-				Disabled: helmManaged, Ask: m.editAsk(rt, cur), Do: func() tea.Cmd { return m.runEdit(rt, cur) }})
+				Disabled: helmManaged, Ask: m.editAsk(rt, cur), Do: func() tea.Cmd { return m.runEdit(rt, cur, nil) }})
 		}
 		if rt == k8s.ResourcePods && hasCur {
 			item = append(item, terminu.Action{Key: "S", Label: "Shell", Desc: "kubectl exec -it", Scope: terminu.ItemScope,

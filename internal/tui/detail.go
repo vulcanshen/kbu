@@ -791,7 +791,7 @@ func (m *Model) setDetailActions() {
 	// a key for the whole panel (components/layout/panel).
 	zoomHinted := zoom
 	zoomHinted.Hint = "zoom"
-	yaml := terminu.Action{Key: "Y", Label: "YAML", Desc: "this resource's manifest", Scope: terminu.PanelScope, Do: m.yamlOfLevel}
+	yaml := terminu.Action{Key: "Y", Label: "YAML", Desc: "this resource's manifest", Scope: terminu.PanelScope, Stay: true, Do: m.yamlOfLevel}
 	copyAll := terminu.Action{Key: "y", Label: "Copy", Desc: "everything in this tab", Scope: terminu.PanelScope, Do: m.copyTab}
 	var acts []terminu.Action
 	switch tab {
@@ -815,14 +815,14 @@ func (m *Model) setDetailActions() {
 			// operation), else the YAML of the level the tab is at (the
 			// panel's): one key, the object under the cursor first.
 			{Key: "Y", Label: "YAML", Desc: "this entry's manifest", Scope: terminu.ItemScope,
-				Hidden: func() bool { return !onRef() }, Do: m.yamlOfRelative},
+				Hidden: func() bool { return !onRef() }, Stay: true, Do: m.yamlOfRelative},
 			{Key: "y", Label: "Copy", Desc: "this row", Scope: terminu.ItemScope, Do: m.copyRelative},
 			{Label: "Back", Desc: "up one level of the chain ([Esc])", Scope: terminu.PanelScope,
 				Hidden: func() bool { return len(m.det.chain) == 0 }, Do: m.relBack},
 			{Key: "B", Label: "Breadcrumb", Desc: "switch panels 1 and 2 to a resource up the chain", Scope: terminu.PanelScope,
 				Hidden: func() bool { return len(m.det.chain) == 0 }, Do: m.openBreadcrumb},
 			{Key: "Y", Label: "YAML", Desc: "the manifest of the resource this level is at", Scope: terminu.PanelScope,
-				Hidden: onRef, Do: m.yamlOfLevel},
+				Hidden: onRef, Stay: true, Do: m.yamlOfLevel},
 			zoomHinted,
 		}
 	case "History":

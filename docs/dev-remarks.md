@@ -125,7 +125,11 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **log（crash、audit）放資料目錄 `~/.kbu/logs`**（`KBU__DATA`）：tdp E3 照「刪掉會怎樣」分，log 刪了就找不回來，是資料（KB15，
   user 2026-10-19）。舊的 log 留在設定目錄的 `logs/`，kbu 不會讀回 log，所以不搬。
 - **確認一律用 `Action.Ask`**：edit、shell、delete、rollback、切換 context 的問句在排 panel 的動作時就照游標那一筆建好（換列時重排），
-  從 Space menu 執行時 `Esc` 回到 menu（tdp F4）、`Enter` 清掉整疊（tdp T1）。只有 YAML viewer 的 `E` 用 `App.Confirm`（KB10）。
+  從 Space menu 執行時 `Esc` 回到 menu（tdp F4）、`Enter` 清掉整疊。只有 YAML viewer 的 `E` 用 `App.Confirm`，viewer 留在底下。
+- **menu 的 source 留或清照 tdp T1 的表**（照「確定之後的動作」判）：打開東西來看的（`Y`、`Enter` 打開 YAML、compare、helm 的文件、
+  App Log）設 `Action.Stay`，看完 `Esc` 回到 menu；drill、shell、delete、rollback、切換 context、namespace 清掉。從 YAML viewer 按
+  `E` 編輯，viewer 留著，編輯結束時重讀那一筆（內建的種類向 API 拿，CRD 用 watch 到的；KB10）。`TODO(lib S4)`：從 Space menu 執行
+  edit 也該保留 menu，但 lib 帶 `Ask` 的動作接受後一律清掉整疊，要等「動作可以標保留或清掉」的接口。
 - **App Log 的清除在 Global operation**：note 只用來讀（tdp F1），清除是對整個 app 的動作。
 
 ### 環境變數

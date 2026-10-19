@@ -204,7 +204,7 @@ func (m *Model) globalActions() []terminu.Action {
 		{Key: "N", Label: "Namespace", Desc: "pick which namespaces to show", Scope: terminu.GlobalScope, Do: m.openNamespaces},
 		{Key: "C", Label: "Context", Desc: "switch the kubeconfig context", Scope: terminu.GlobalScope, Do: m.openContexts},
 		{Key: "Alt-t", Label: "term", Desc: "show the embedded shell (Alterm)", Scope: terminu.GlobalScope, Do: m.showAlterm},
-		{Key: "!", Label: "App log", Desc: "what kbu has done and what failed", Scope: terminu.GlobalScope, Do: m.openAppLog},
+		{Key: "!", Label: "App log", Desc: "what kbu has done and what failed", Scope: terminu.GlobalScope, Stay: true, Do: m.openAppLog},
 		// Not a key of the App Log viewer: a note only shows (Rules F1).
 		{Label: "Clear the App log", Desc: "forget what it has kept", Scope: terminu.GlobalScope,
 			Disabled: func() bool { return len(m.log.entries) == 0 },

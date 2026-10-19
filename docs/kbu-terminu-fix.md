@@ -6,7 +6,7 @@
 | tdp | 在哪裡 | 現況 | 該怎麼改 | 等 |
 |---|---|---|---|---|
 | components/input/README「貼上的控制字元」（清單 input-56） | YAML viewer 的 `/` 搜尋（`internal/tui/popups.go` 的 `openYAML`） | lib 的 text input 在 `Enter` 時擋下貼上的控制字元；搜尋的打字列應該只畫、不擋 | 換成只畫不擋的搜尋輸入 | lib（KB11） |
-| T1（清單 T1-4） | YAML viewer 的 `E`（`openYAML`、`internal/tui/ops.go` 的 `confirmEdit`） | `kubectl edit` 是長時間的 session，source 該清掉；terminal 卻疊在 viewer 上，edit 結束回到的是舊的 YAML | 接受 edit 時清掉整疊 | lib（KB10） |
+| T1「用編輯器改那一項：保留」 | 從 Space menu 執行 `E`（`list.go` 的 `setListActions`） | 帶 `Ask` 的動作接受後，lib 一律清掉整疊，編輯完回不到 menu | 編輯完回到 menu | lib（S4） |
 | F4、T1（清單 T1-1） | 兩步排序（`popups.go` 的 `openSortDirection`） | 選完方向，欄位那一步也一起關掉，要排第二欄得重開 | 只關方向那一步，回到欄位那一步 | lib（KB9） |
 | F7 的 loading | namespace picker（`popups.go` 的 `openNamespaces`） | checkbox popup 不能 loading，清單抓到才打開；按 `N` 到出現之間沒有回饋 | 打開時就有 loading icon，清單到了再填 | lib（KB8） |
 | L1（清單 L1-1） | panel 2 在 80 欄 | 次要欄拿掉之後，Name 仍只剩約 8 格；`z` 放大時整列放得下 | 清單的欄寬依比例讓，或欄位可以設「窄時藏起來」 | lib、規範（KB17） |

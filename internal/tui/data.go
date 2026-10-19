@@ -139,6 +139,8 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		return m.onChildren(msg)
 	case relativeMsg:
 		return m.onRelative(msg)
+	case rereadMsg:
+		return m.onReread(msg)
 	case refYAMLMsg:
 		if msg.err != nil {
 			return m.toastErr(fmt.Sprintf("YAML of %s/%s: %v", msg.ref.Type.KubectlName(), msg.ref.Name, msg.err))

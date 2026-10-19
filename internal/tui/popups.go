@@ -71,6 +71,10 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 	v := &terminu.Viewer{Title: "YAML", Subject: subject(rt, item), Glyph: glyphYAML,
 		Lines: strings.Split(strings.TrimRight(yaml, "\n"), "\n"), Lang: "yaml", Select: m.selection()}
 	s := &yamlSearch{v: v}
+	// show puts the resource as it is now in the viewer, after an edit.
+	show := func(y string) {
+		yaml, v.Lines, s.matches = y, strings.Split(strings.TrimRight(y, "\n"), "\n"), nil
+	}
 	v.Keys = []terminu.ViewerKey{
 		{Key: "/", Desc: "search", Do: func() tea.Cmd {
 			// TODO(lib KB11): a search's typing row only draws a pasted
@@ -90,10 +94,11 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 		{Key: "y", Desc: "copy", Do: func() tea.Cmd { return copyText(yaml) }},
 	}
 	if allowsEdit(rt) && item.Name != "" && !k8s.IsHelmManaged(item) {
-		// TODO(lib KB10): the edit is a long session (Rules T1): the viewer
-		// should close under it, but the lib cannot close its own popups for
-		// the app.
-		v.Keys = append(v.Keys, terminu.ViewerKey{Key: "E", Desc: "edit", Do: func() tea.Cmd { return m.confirmEdit(rt, item) }})
+		// tdp T1: an edit in the editor keeps the viewer it was started
+		// from; when the edit ends, the viewer reads the resource again.
+		v.Keys = append(v.Keys, terminu.ViewerKey{Key: "E", Desc: "edit", Do: func() tea.Cmd {
+			return m.confirmEdit(rt, item, func() tea.Cmd { return m.rereadYAML(rt, item, show) })
+		}})
 	}
 	return m.app.Viewer(v)
 }

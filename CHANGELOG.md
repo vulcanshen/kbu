@@ -35,6 +35,10 @@ Each release names the version of terminu design (tdp) it follows.
   - **A confirm opened from the `Space` menu** goes back to the menu on `Esc`.
   - **On a narrow panel 2** the columns that matter least (IP, node, image…)
     are left out, so the names stay readable; `z` shows them all.
+  - **What you open to look at from the `Space` menu** (the YAML, a compare,
+    Helm's documents, the App Log) keeps the menu: `Esc` goes back to it.
+  - **After `E` in the YAML viewer** the viewer shows the resource as the edit
+    left it.
   - **The top row** shows `[Alt-t]erm` and `[C]ompare` first, then the context
     and the namespace, so a long context no longer pushes them about.
   - **A long name is cut at the end** (`demo-app-67f76fb666…`), no longer in
