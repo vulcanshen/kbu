@@ -205,8 +205,9 @@ Everything kbu keeps is in **`~/.config/kbu`** (`$XDG_CONFIG_HOME/kbu` when that
 kbu's logs are in **`~/.kbu/logs`** (`KBU__DATA` points it elsewhere): `audit-<date>.log`, every edit and delete made from kbu,
 and `crash-<date>.log` when kbu crashes.
 
-An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows). While only that
-directory is there, kbu keeps using it and the App Log (`!`) says so; move it to `~/.config/kbu` to follow the family.
+An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows). The first time
+you start this one, it moves that directory to `~/.config/kbu` and says so. If it cannot, it keeps using the old one and
+shows both paths, so you can move it yourself.
 
 ### config.yaml
 

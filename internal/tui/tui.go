@@ -24,9 +24,12 @@ type Options struct {
 	Config   *config.Config
 	State    *config.State
 	StateErr error
-	// Notices go into the App Log at start (a migrated or old config
-	// directory, a deprecated key).
+	// Notices go into the App Log at start (a migrated config directory, a
+	// deprecated key).
 	Notices []string
+	// Moved is where the settings were moved at start (tdp E3): a toast
+	// says so, or an error popup when the move failed.
+	Moved config.Move
 	// Status are the colours of a resource's status cells (the app's
 	// content, tdp P4).
 	Status theme.StatusColors
@@ -83,6 +86,7 @@ type Model struct {
 
 	startTab   string // the state's panel 3 tab, applied once the kind has its tabs
 	startPanel string
+	moved      config.Move
 }
 
 // New builds kbu's UI.
@@ -93,6 +97,7 @@ func New(o Options) *Model {
 		state:  o.State,
 		status: o.Status,
 		run:    runCommand,
+		moved:  o.Moved,
 	}
 	if m.cfg == nil {
 		m.cfg = config.DefaultConfig()
@@ -220,6 +225,7 @@ func (m *Model) start() tea.Cmd {
 		}
 		cmds = append(cmds, fetchNamespaces(m.client, true), discoverCRDs(m.client))
 	}
+	cmds = append(cmds, m.sayMoved())
 	// The lib has no call that sets the focus: the panel the user left from
 	// is reached with its digit, as the user would (Rules K1).
 	// TODO(lib KB5): a way to set the focused panel.
@@ -227,6 +233,22 @@ func (m *Model) start() tea.Cmd {
 		cmds = append(cmds, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{n}} })
 	}
 	return tea.Batch(cmds...)
+}
+
+// sayMoved says where the settings were moved at start (tdp E3): an Info
+// toast, or an error popup with both paths when the move failed.
+func (m *Model) sayMoved() tea.Cmd {
+	mv := m.moved
+	if mv.From == "" {
+		return nil
+	}
+	if mv.Err != nil {
+		m.log.err(fmt.Sprintf("config: could not move %s to %s: %v", mv.From, mv.To, mv.Err))
+		return m.app.Error("Settings not moved", fmt.Sprintf("kbu could not move its settings from %s to %s (%v). "+
+			"It keeps using %s; move the directory to %s yourself.", mv.From, mv.To, mv.Err, mv.From, mv.To))
+	}
+	m.log.info(fmt.Sprintf("config: moved %s to %s", mv.From, mv.To))
+	return m.app.Toast(terminu.Info, fmt.Sprintf("Moved kbu's settings from %s to %s", mv.From, mv.To))
 }
 
 // statusbar is the row at the top (components/layout/screen): the context

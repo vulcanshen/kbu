@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"slices"
 	"strings"
@@ -86,6 +87,25 @@ func TestNamespaceKeepsItsWidth(t *testing.T) {
 		if s := m.screen_(); !strings.Contains(s, "kube-system") {
 			t.Errorf("at %d columns Namespace is cut:\n%s", w, s)
 		}
+	}
+}
+
+// tdp E3: settings moved at start are told in an Info toast; a move that
+// failed opens an error popup with both paths.
+func TestTheMovedSettingsAreTold(t *testing.T) {
+	m := newTestModelWith(t, Options{Moved: config.Move{From: "/old/kbu", To: "/new/kbu"}})
+	if s := m.screen_(); !strings.Contains(s, "Moved kbu's settings from /old/kbu to /new/kbu") {
+		t.Errorf("no toast for the move:\n%s", s)
+	}
+	m = newTestModelWith(t, Options{Moved: config.Move{From: "/old/kbu", To: "/new/kbu", Err: errors.New("permission denied")}})
+	s := m.screen_()
+	for _, want := range []string{"SETTINGS NOT MOVED", "/old/kbu", "/new/kbu", "permission denied"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the error popup has no %q:\n%s", want, s)
+		}
+	}
+	if m = newTestModel(t); strings.Contains(m.screen_(), "settings") {
+		t.Errorf("nothing moved, yet the screen talks about it:\n%s", m.screen_())
 	}
 }
 

@@ -21,10 +21,18 @@ import (
 // saves never touches the real ones; kubectl and helm are never run.
 func newTestModel(t *testing.T) *Model {
 	t.Helper()
+	return newTestModelWith(t, Options{})
+}
+
+// newTestModelWith is newTestModel with what kbu starts with besides the
+// settings and the state.
+func newTestModelWith(t *testing.T, o Options) *Model {
+	t.Helper()
 	t.Setenv("KBU__CONFIG", t.TempDir())
 	t.Setenv("KBU__STATE", t.TempDir())
 	terminu.SetIconWidth(1, 1)
-	m := New(Options{Config: config.DefaultConfig(), State: config.DefaultState()})
+	o.Config, o.State = config.DefaultConfig(), config.DefaultState()
+	m := New(o)
 	m.run = func(name string, args ...string) (string, error) {
 		t.Fatalf("a test ran %s %s", name, strings.Join(args, " "))
 		return "", nil

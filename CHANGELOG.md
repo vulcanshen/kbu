@@ -39,7 +39,8 @@ Each release names the version of terminu design (tdp) it follows.
     the middle (`demo-app…66-gm72n`), so the pods of one Deployment can look
     the same on a narrow panel; `z` shows them whole.
 - **The logs move to `~/.kbu/logs`** (tdp E3: they are kbu's data);
-  `KBU__DATA` points them elsewhere. Logs already written stay where they are.
+  `KBU__DATA` points them elsewhere. Logs already written stay in the settings
+  directory's `logs/`.
 - **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
   many cells a tab takes in the viewers (default 4).
 - `KBU_TEST_RUN_MAIN`, a variable only kbu's tests read, is
@@ -55,9 +56,9 @@ Each release names the version of terminu design (tdp) it follows.
 - **Settings live in `~/.config/kbu` on every platform** (tdp E3), or in
   `$XDG_CONFIG_HOME/kbu`; `KBU__CONFIG` still moves them. On macOS and Windows
   an older kbu kept them in `~/Library/Application Support/kbu` and
-  `%APPDATA%\kbu`: while only that directory is there, kbu keeps using it and
-  says so in the App Log. Move it to `~/.config/kbu` to follow the family.
-  `uninstall.ps1` asks about both directories.
+  `%APPDATA%\kbu`: the first start moves that directory to `~/.config/kbu`
+  and says so. If it cannot, kbu keeps using the old one and shows both paths
+  so you can move it yourself. `uninstall.ps1` asks about both directories.
 
 ## [v3.0.0] - 2026-10-06
 

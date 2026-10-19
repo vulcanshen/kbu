@@ -111,7 +111,10 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **錯誤**：toast（tdp F5）加 App Log；statusbar 右邊寫還沒看過的錯誤、警告數（Red、Peach 的字），打開 App Log 就算看過。
   watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
 - **設定位置照 tdp E3**：`~/.config/kbu`。舊版放在系統的設定目錄（macOS `~/Library/Application Support/kbu`、Windows
-  `%APPDATA%\kbu`）；只有舊目錄在時繼續讀寫它、App Log 提一句。**暫定**（KB2）。
+  `%APPDATA%\kbu`）。照 tdp E3 的「換了位置時」：新位置沒有、舊位置有，啟動時（`config.MovePlatformConfigDir`，在讀設定之前）
+  用 `os.Rename` 把整個目錄搬過去，Info toast 說從哪搬到哪；搬不動（例：跨磁碟、權限）時照舊讀寫舊目錄（`ConfigDir` 的退路），
+  開 error popup 寫出兩個路徑。舊目錄裡的 `logs/`（舊版的 log）跟著整個目錄搬，不另外搬到資料目錄。uninstall.sh、uninstall.ps1
+  照樣問舊位置。
 - **log（crash、audit）放資料目錄 `~/.kbu/logs`**（`KBU__DATA`）。**暫定**（KB15）：E3 沒有 log 這一類，它是 kbu 替使用者記下來的
   東西，最接近「資料」。舊的 log 留在原本的設定目錄，kbu 不會讀回 log，所以不搬。
 - **確認一律用 `Action.Ask`**：edit、shell、delete、rollback、切換 context 的問句在排 panel 的動作時就照游標那一筆建好（換列時重排），

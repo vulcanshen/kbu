@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -34,57 +33,93 @@ func TestE3_ConfigDirIsTheFamilys(t *testing.T) {
 	if got, want := ConfigDir(), filepath.Join(xdg, "kbu"); got != want {
 		t.Errorf("with XDG_CONFIG_HOME: ConfigDir() = %q, want %q", got, want)
 	}
-	if LegacyConfigNotice() != "" {
-		t.Errorf("no old directory: LegacyConfigNotice() = %q, want empty", LegacyConfigNotice())
+	if mv := MovePlatformConfigDir(); mv.From != "" {
+		t.Errorf("no old directory: moved %+v", mv)
 	}
 }
 
-// An older kbu kept its settings in the platform's directory (macOS
-// ~/Library/Application Support/kbu, Windows %AppData%\kbu). While only
-// that one is there, kbu keeps using it, and says so in the App Log; once
-// the family's directory exists, that one wins.
-func TestE3_OldPlatformDirIsStillRead(t *testing.T) {
+// oldPlatformDir lays out the directory an older kbu kept its settings in
+// (macOS ~/Library/Application Support/kbu, Windows %AppData%\kbu), with a
+// config.yaml, and returns it and the family's directory.
+func oldPlatformDir(t *testing.T) (old, family string) {
+	t.Helper()
 	home := isolateHome(t)
 	platform, err := os.UserConfigDir()
 	if err != nil {
 		t.Skip("no platform settings directory here:", err)
 	}
-	old, family := filepath.Join(platform, "kbu"), filepath.Join(home, ".config", "kbu")
+	old, family = filepath.Join(platform, "kbu"), filepath.Join(home, ".config", "kbu")
 	if old == family {
 		t.Skipf("on %s the platform's directory is the family's", runtime.GOOS)
 	}
 	if err := os.MkdirAll(old, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(old, "config.yaml"), []byte("editor: vi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return old, family
+}
+
+// tdp E3: when only the old directory is there, the first start moves the
+// whole of it to the family's.
+func TestE3_OldPlatformDirMoves(t *testing.T) {
+	old, family := oldPlatformDir(t)
+	if mv := MovePlatformConfigDir(); mv.From != old || mv.To != family || mv.Err != nil {
+		t.Fatalf("MovePlatformConfigDir() = %+v, want from %q to %q", mv, old, family)
+	}
+	if exists(old) {
+		t.Error("the old directory is still there")
+	}
+	if b, err := os.ReadFile(filepath.Join(family, "config.yaml")); err != nil || string(b) != "editor: vi\n" {
+		t.Errorf("config.yaml did not move: %q, %v", b, err)
+	}
+	if got := ConfigDir(); got != family {
+		t.Errorf("ConfigDir() = %q, want %q", got, family)
+	}
+	if mv := MovePlatformConfigDir(); mv.From != "" {
+		t.Errorf("the second start moved again: %+v", mv)
+	}
+}
+
+// tdp E3: when the move fails, kbu keeps using the old directory, and the
+// move says why.
+func TestE3_AFailedMoveKeepsTheOldDir(t *testing.T) {
+	old, family := oldPlatformDir(t)
+	// ~/.config is a file: the family's directory cannot be made.
+	if err := os.WriteFile(filepath.Dir(family), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if mv := MovePlatformConfigDir(); mv.From != old || mv.Err == nil {
+		t.Fatalf("MovePlatformConfigDir() = %+v, want a failed move from %q", mv, old)
+	}
 	if got := ConfigDir(); got != old {
-		t.Errorf("only the old directory: ConfigDir() = %q, want %q", got, old)
+		t.Errorf("ConfigDir() = %q, want the old %q", got, old)
 	}
-	if n := LegacyConfigNotice(); !strings.Contains(n, old) || !strings.Contains(n, family) {
-		t.Errorf("LegacyConfigNotice() = %q, want it to name %q and %q", n, old, family)
-	}
+}
+
+// When both are there the family's wins and nothing moves; $KBU__CONFIG
+// moves nothing either.
+func TestE3_NothingMovesOverAnExistingDir(t *testing.T) {
+	old, family := oldPlatformDir(t)
 	if err := os.MkdirAll(family, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	if mv := MovePlatformConfigDir(); mv.From != "" || !exists(old) {
+		t.Errorf("both directories: moved %+v", mv)
 	}
 	if got := ConfigDir(); got != family {
 		t.Errorf("both directories: ConfigDir() = %q, want %q", got, family)
 	}
-	if n := LegacyConfigNotice(); n != "" {
-		t.Errorf("both directories: LegacyConfigNotice() = %q, want empty", n)
-	}
-}
-
-// $KBU__CONFIG still moves everything, old directory or not.
-func TestE3_KBUConfigWinsOverTheOldDir(t *testing.T) {
-	isolateHome(t)
-	if platform, err := os.UserConfigDir(); err == nil {
-		_ = os.MkdirAll(filepath.Join(platform, "kbu"), 0o755)
+	if err := os.Remove(family); err != nil {
+		t.Fatal(err)
 	}
 	dir := filepath.Join(t.TempDir(), "mine")
 	t.Setenv("KBU__CONFIG", dir)
+	if mv := MovePlatformConfigDir(); mv.From != "" || !exists(old) {
+		t.Errorf("with KBU__CONFIG: moved %+v", mv)
+	}
 	if got := ConfigDir(); got != dir {
 		t.Errorf("ConfigDir() = %q, want %q", got, dir)
-	}
-	if n := LegacyConfigNotice(); n != "" {
-		t.Errorf("LegacyConfigNotice() = %q, want empty", n)
 	}
 }

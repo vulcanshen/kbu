@@ -192,8 +192,8 @@ kbu 存的東西都在 **`~/.config/kbu`**（有設 `$XDG_CONFIG_HOME` 時是 `$
 kbu 的 log 在 **`~/.kbu/logs`**（`KBU__DATA` 可以改到別的目錄）：`audit-<日期>.log` 記從 kbu 做的每一次 edit 與 delete，
 `crash-<日期>.log` 是 kbu 當掉時的紀錄。
 
-舊版的 kbu 把設定放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows）。只有那個目錄在的時候，
-kbu 繼續用它，App Log（`!`）會提一句；把它搬到 `~/.config/kbu`，就跟家族其他成員一樣了。
+舊版的 kbu 把設定放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows）。第一次啟動這一版時，
+kbu 會把那個目錄搬到 `~/.config/kbu`，並告訴你搬好了；搬不動時照舊用舊目錄，並寫出兩個路徑，讓你自己搬。
 
 ### config.yaml
 
