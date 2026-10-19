@@ -1,4 +1,4 @@
-// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.8.2): the lib
+// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.8.3): the lib
 // draws the screen and drives the core keys — the Space menu, the key
 // reference, the hints, confirms, dimming, Esc one layer at a time — and
 // this package registers kbu's three panels, their actions and popups, and
