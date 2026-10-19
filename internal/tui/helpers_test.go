@@ -106,6 +106,13 @@ func keyMsg(name string) tea.KeyMsg {
 // screen is the whole frame without its colours.
 func (m *Model) screen_() string { return terminu.StripStyles(strings.Join(m.app.Frame(), "\n")) }
 
+// marked is a menu row's label with its key, as either lib marks it: "[z] Zoom"
+// in terminu-go v0.1.13, "[z]oom" in the next one (tdp M5 since tdp v0.8.0).
+// The old form goes when go.mod moves on.
+func marked(s, key, label string) bool {
+	return strings.Contains(s, "["+key+"] "+label) || strings.Contains(s, "["+key+"]"+label[len(key):])
+}
+
 // feed gives panel 2 a list of the kind it shows, as the watcher would.
 func (m *Model) feed(items ...k8s.ResourceItem) {
 	m.drive(m.onMsg(watchDataMsg{kind: m.current, items: items}))
