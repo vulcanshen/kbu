@@ -35,6 +35,8 @@ Each release names the version of terminu design (tdp) it follows.
   - **A confirm opened from the `Space` menu** goes back to the menu on `Esc`.
   - **On a narrow panel 2** the columns that matter least (IP, node, image…)
     are left out, so the names stay readable; `z` shows them all.
+  - **The top row** shows `[Alt-t]erm` and `[C]ompare` first, then the context
+    and the namespace, so a long context no longer pushes them about.
   - **A long name is cut at the end** (`demo-app-67f76fb666…`), no longer in
     the middle (`demo-app…66-gm72n`), so the pods of one Deployment can look
     the same on a narrow panel; `z` shows them whole.

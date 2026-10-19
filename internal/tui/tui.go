@@ -278,21 +278,24 @@ func (m *Model) statusbar(w int) string {
 			}
 		}
 	}
-	// The values take their own width, up to a cap (a deviation from Rules
-	// L2, docs/dev-remarks.md). TODO(tdp KB6): whether it stays.
-	left := " " + ctxKey.Render("[C]") + grey.Render("ontext: ") + value.Render(capMiddle(ctx, 24)) +
-		"  " + lit.Render("[N]") + grey.Render("amespace: ") + value.Render(capMiddle(ns, 16))
+	// tdp L2: the chips that come and go first, then the context in a fixed
+	// width, and the namespaces last, as wide as they are: the last dynamic
+	// field of a row pushes nothing.
+	var chips []string
 	if m.alterm != nil && m.alterm.Running() {
 		// A live session is in effect (components/color: Green).
-		left += "  " + lit.Render("[Alt-t]") + terminu.Fg(terminu.Green).Render("erm")
+		chips = append(chips, lit.Render("[Alt-t]")+terminu.Fg(terminu.Green).Render("erm"))
 	}
 	if m.anchor != nil {
 		cmpKey := unlit
 		if compareC {
 			cmpKey = lit
 		}
-		left += "  " + cmpKey.Render("[C]") + grey.Render("ompare")
+		chips = append(chips, cmpKey.Render("[C]")+grey.Render("ompare"))
 	}
+	chips = append(chips, ctxKey.Render("[C]")+grey.Render("ontext: ")+value.Render(terminu.Pad(capMiddle(ctx, 24), 24)),
+		lit.Render("[N]")+grey.Render("amespace: ")+value.Render(capMiddle(ns, 16)))
+	left := " " + strings.Join(chips, "  ")
 	right := ""
 	// The count keeps its width as it grows (Rules L2).
 	switch {

@@ -168,6 +168,22 @@ func TestDragReordersThePinnedKinds(t *testing.T) {
 	}
 }
 
+// tdp L2: the statusbar's chips that come and go are first, the context has
+// a fixed width, and the namespaces, the last dynamic field, come last.
+func TestStatusbarKeepsItsFields(t *testing.T) {
+	m := newTestModel(t)
+	bar := terminu.StripStyles(m.statusbar(120))
+	if i, want := strings.Index(bar, "[N]amespace"), 1+len("[C]ontext: ")+24+2; i != want {
+		t.Errorf("[N]amespace at %d, want %d:\n%q", i, want, bar)
+	}
+	m.feed(pod("demo", "a"), pod("demo", "b"))
+	m.press("Tab", "C")
+	bar = terminu.StripStyles(m.statusbar(120))
+	if c, x := strings.Index(bar, "[C]ompare"), strings.Index(bar, "[C]ontext"); c < 0 || c > x {
+		t.Errorf("[C]ompare is not before [C]ontext:\n%q", bar)
+	}
+}
+
 // C marks the compare anchor, C on another row compares (a viewer opens),
 // Esc on the panel drops the anchor first (Rules K4).
 func TestCompareAnchor(t *testing.T) {
