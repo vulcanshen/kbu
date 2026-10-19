@@ -500,8 +500,8 @@ func (m *Model) setListActions() {
 		shell := m.shellAsk()
 		item = []terminu.Action{
 			{Key: "Enter", Label: "Open a shell", Desc: "kubectl exec -it into this container, as [S] does", Scope: terminu.ItemScope,
-				Hint: "shell", Ask: shell, Do: m.runShell},
-			{Key: "S", Label: "Shell", Desc: "kubectl exec -it into this container", Scope: terminu.ItemScope, Ask: shell, Do: m.runShell},
+				Hint: "shell", Ask: shell, Clear: true, Do: m.runShell},
+			{Key: "S", Label: "Shell", Desc: "kubectl exec -it into this container", Scope: terminu.ItemScope, Ask: shell, Clear: true, Do: m.runShell},
 			{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
 		}
 	case rt == k8s.ResourceReleases:
@@ -518,7 +518,7 @@ func (m *Model) setListActions() {
 	default:
 		if rt == k8s.ResourceContexts {
 			item = append(item, terminu.Action{Key: "Enter", Label: "Switch to this context", Desc: "kbu only; ~/.kube/config is not changed",
-				Scope: terminu.ItemScope, Hint: "switch", Ask: contextAsk(cur),
+				Scope: terminu.ItemScope, Hint: "switch", Ask: contextAsk(cur), Clear: true,
 				Disabled: func() bool {
 					it, ok := m.currentItem()
 					return !ok || m.client == nil || it.Name == m.client.ContextName()
@@ -532,25 +532,23 @@ func (m *Model) setListActions() {
 		switch {
 		case rt.SupportsDrillDown():
 			item = append(item, terminu.Action{Key: "Enter", Label: "Drill in", Desc: "into its " + drillLabel(rt, cur),
-				Scope: terminu.ItemScope, Hint: "drill", Do: m.drillIn})
+				Scope: terminu.ItemScope, Hint: "drill", Clear: true, Do: m.drillIn})
 		case rt != k8s.ResourceContexts:
 			item = append(item, terminu.Action{Key: "Enter", Label: "Open", Desc: "its YAML, as [Y] does", Scope: terminu.ItemScope,
 				Hint: "yaml", Stay: true, Do: m.yamlHere})
 		}
 		item = append(item, terminu.Action{Key: "Y", Label: "YAML", Desc: "view resource manifest", Scope: terminu.ItemScope, Stay: true, Do: m.yamlHere})
 		if allowsEdit(rt) && hasCur {
-			// TODO(lib S4): an edit keeps the menu it was run from (tdp T1), but
-			// an action that asks clears the whole stack when accepted.
 			item = append(item, terminu.Action{Key: "E", Label: "Edit", Desc: "kubectl edit", Scope: terminu.ItemScope,
 				Disabled: helmManaged, Ask: m.editAsk(rt, cur), Do: func() tea.Cmd { return m.runEdit(rt, cur, nil) }})
 		}
 		if rt == k8s.ResourcePods && hasCur {
 			item = append(item, terminu.Action{Key: "S", Label: "Shell", Desc: "kubectl exec -it", Scope: terminu.ItemScope,
-				Hidden: func() bool { return m.shellAsk() == nil }, Ask: m.shellAsk(), Do: m.runShell})
+				Hidden: func() bool { return m.shellAsk() == nil }, Ask: m.shellAsk(), Clear: true, Do: m.runShell})
 		}
 		if allowsDelete(rt) && hasCur {
 			item = append(item, terminu.Action{Key: "D", Label: "Delete", Desc: "kubectl delete", Scope: terminu.ItemScope,
-				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
+				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Clear: true, Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
 		item = append(item,
 			terminu.Action{Key: "C", Label: "Unmark Compare anchor", Desc: "cancel anchor, exit compare mode", Scope: terminu.ItemScope,

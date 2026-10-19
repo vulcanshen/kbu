@@ -271,34 +271,39 @@ func (m *Model) openContexts() tea.Cmd {
 // and which way.
 func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {
 	cols := columnsOf(rt)
-	chain := m.cfg.GetSort(rt.KubectlName())
 	var fields []terminu.Action
 	for _, c := range cols {
 		if c.Title == "" {
 			continue
 		}
 		title := c.Title
-		desc := "sort by " + strings.ToLower(title)
-		if i := chain.IndexOf(title); i >= 0 {
-			desc = fmt.Sprintf("sorted %s, %s", ordinal(i+1), directionWord(chain[i].Direction))
+		// Live: back from the direction, the row says the sort it set.
+		live := func() (string, string) {
+			if i := m.cfg.GetSort(rt.KubectlName()).IndexOf(title); i >= 0 {
+				chain := m.cfg.GetSort(rt.KubectlName())
+				return title, fmt.Sprintf("sorted %s, %s", ordinal(i+1), directionWord(chain[i].Direction))
+			}
+			return title, "sort by " + strings.ToLower(title)
 		}
-		fields = append(fields, terminu.Action{Label: title, Desc: desc, Stay: true,
+		fields = append(fields, terminu.Action{Label: title, Live: live,
 			Do: func() tea.Cmd { return m.openSortDirection(rt, title) }})
 	}
-	reset := terminu.Action{Label: "Reset", Desc: "back to the namespace, then the name", Disabled: func() bool { return len(chain) == 0 },
+	reset := terminu.Action{Label: "Reset", Desc: "back to the namespace, then the name",
+		Disabled: func() bool { return len(m.cfg.GetSort(rt.KubectlName())) == 0 },
 		Do: func() tea.Cmd {
 			m.cfg.ResetSort(rt.KubectlName())
 			return m.sortSaved(rt)
 		}}
-	// What the menu acts on goes after ": " (components/layout/popup, the
-	// title). TODO(lib KB13): the lib writes it in capitals.
-	return m.app.Menu("Sort by: "+rt.String(), terminu.MenuSection{Title: "fields", Actions: fields},
+	// What the menu acts on goes after ": ", as it is (components/layout/popup,
+	// the title).
+	return m.app.MenuAbout("Sort by", rt.String(), terminu.MenuSection{Title: "fields", Actions: fields},
 		terminu.MenuSection{Title: "all", Actions: []terminu.Action{reset}})
 }
 
 // openSortDirection is the second step: the direction, or out of the order.
-// Choosing one closes both steps. TODO(lib KB9): only this one, the columns
-// staying for a second column.
+// Choosing one writes it back to the columns, the first step, and closes only
+// this one (tdp T1: a value written back to a picker keeps it), so a second
+// column is the next row.
 func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 	chain := m.cfg.GetSort(rt.KubectlName())
 	cur := ""
@@ -314,20 +319,20 @@ func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 	set := func(dir string) func() tea.Cmd {
 		return func() tea.Cmd {
 			m.cfg.SetSort(rt.KubectlName(), column, dir)
-			return m.sortSaved(rt)
+			return tea.Batch(m.sortSaved(rt), m.app.CloseTop(1))
 		}
 	}
 	rows := []terminu.Action{
-		{Label: "Ascending", Desc: mark(config.SortDirectionAscending, "smallest first"), Do: set(config.SortDirectionAscending)},
-		{Label: "Descending", Desc: mark(config.SortDirectionDescending, "largest first"), Do: set(config.SortDirectionDescending)},
+		{Label: "Ascending", Desc: mark(config.SortDirectionAscending, "smallest first"), Stay: true, Do: set(config.SortDirectionAscending)},
+		{Label: "Descending", Desc: mark(config.SortDirectionDescending, "largest first"), Stay: true, Do: set(config.SortDirectionDescending)},
 	}
 	if cur != "" {
-		rows = append(rows, terminu.Action{Label: "Unset", Desc: "take it out of the order", Do: func() tea.Cmd {
+		rows = append(rows, terminu.Action{Label: "Unset", Desc: "take it out of the order", Stay: true, Do: func() tea.Cmd {
 			m.cfg.UnsetSortColumn(rt.KubectlName(), column)
-			return m.sortSaved(rt)
+			return tea.Batch(m.sortSaved(rt), m.app.CloseTop(1))
 		}})
 	}
-	return m.app.Menu("Direction: "+column, terminu.MenuSection{Actions: rows})
+	return m.app.MenuAbout("Direction", column, terminu.MenuSection{Actions: rows})
 }
 
 // sortSaved writes the sort down and shows it, when panel 2 shows that kind.
@@ -383,7 +388,7 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 		if ref.Namespace != "" {
 			details[0] += "  namespace: " + ref.Namespace
 		}
-		rows = append(rows, terminu.Action{Label: label, Desc: desc,
+		rows = append(rows, terminu.Action{Label: label, Desc: desc, Clear: true,
 			Ask: &terminu.Ask{Title: "Switch", Subject: ref.Name, Details: details,
 				Question: "Switch panel 1 + 2 to this resource?", Verb: "switch"},
 			Do: func() tea.Cmd { return m.switchTo(ref) }})

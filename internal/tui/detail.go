@@ -809,7 +809,7 @@ func (m *Model) setDetailActions() {
 	case "Relatives":
 		onRef := func() bool { e, ok := m.relAt(); return ok && e.ref != nil }
 		acts = []terminu.Action{
-			{Key: "Enter", Label: "Drill in", Desc: "show its relatives here", Scope: terminu.ItemScope, Hint: "drill",
+			{Key: "Enter", Label: "Drill in", Desc: "show its relatives here", Scope: terminu.ItemScope, Hint: "drill", Clear: true,
 				Disabled: func() bool { return !onRef() }, Do: m.relDrill},
 			// Y is the entry's YAML on an entry kbu can go to (an item
 			// operation), else the YAML of the level the tab is at (the

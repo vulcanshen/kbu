@@ -65,19 +65,23 @@ func TestDrillIntoContainersAndBack(t *testing.T) {
 }
 
 // The sort's two steps write the kind's sort to the config and show it on
-// the header.
+// the header; the direction goes back to the columns, saying the sort it set
+// (tdp T1), the names in the titles as they are.
 func TestSortTwoSteps(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "Alt-S")
-	if !strings.Contains(m.screen_(), "SORT BY: PODS") {
+	if !strings.Contains(m.screen_(), "SORT BY: Pods") {
 		t.Fatalf("Alt-S opened no sort menu:\n%s", m.screen_())
 	}
 	m.press("Enter") // Namespace, the first column
-	if !strings.Contains(m.screen_(), "DIRECTION: NAMESPACE") {
+	if !strings.Contains(m.screen_(), "DIRECTION: Namespace") {
 		t.Fatalf("no direction step:\n%s", m.screen_())
 	}
 	m.press("j", "Enter") // Descending
+	if s := m.screen_(); strings.Contains(s, "DIRECTION:") || !strings.Contains(s, "sorted 1st, descending") {
+		t.Errorf("the direction did not go back to the columns:\n%s", s)
+	}
 	want := config.SortChain{{Column: "Namespace", Direction: config.SortDirectionDescending}}
 	if got := m.cfg.GetSort("pod"); !slices.Equal(got, want) {
 		t.Errorf("sort %v, want %v", got, want)
