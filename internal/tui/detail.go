@@ -62,10 +62,10 @@ func (m *Model) buildDetail() {
 	d.infoBody = newTextBody(m.renderInfo, "No detail", false)
 	d.logBody.onLive = m.setTabLabels
 	d.eventBody.onLive = m.setTabLabels
-	m.relList = &terminu.List{Columns: []terminu.Column{{Title: "Name"}, {Title: "Target", Flex: true}},
+	m.relList = &terminu.List{Columns: []terminu.Column{{Title: "Name", Shrink: true}, {Title: "Target", Shrink: true}},
 		EmptyFact: "No relatives to show", EmptyHint: "Press [Y] for the full YAML"}
 	m.histList = &terminu.List{Columns: []terminu.Column{{Title: ""}, {Title: "Rev", Number: true}, {Title: "Status"},
-		{Title: "Date"}, {Title: "Chart"}, {Title: "Description", Flex: true}}, EmptyFact: "No revision history",
+		{Title: "Date"}, {Title: "Chart", Shrink: true}, {Title: "Description", Shrink: true}}, EmptyFact: "No revision history",
 		EmptyHint: "Press [Space] to see what you can do here"}
 	m.histList.OnMove = func(terminu.Row) tea.Cmd { m.setDetailActions(); return nil } // the rollback asks about this row
 	m.detailP = &terminu.Panel{Label: "Relatives", OnEsc: m.detailEsc, LoadingText: "loading details…"}
