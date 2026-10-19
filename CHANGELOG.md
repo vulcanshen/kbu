@@ -193,8 +193,6 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
   the terminal's bottom border, in the editor too. Before, only the subprocess
   exiting could close them. `Alt-Esc` closes Alterm the same way — it ends the
   shell after asking; `Alt-t` still just hides it, and is now Alterm's alone.
-- **Any key closes the splash.** It used to answer only `Esc`, `Enter` and
-  `Space` and ignore the rest; now any key closes it, and only closes it.
 - **A drill that fails says so.** `Enter` on a panel 2 row whose children
   couldn't be fetched (RBAC, API error) did nothing at all; it now shows a
   warning toast and writes the reason to the App log. A row with nothing under
@@ -255,8 +253,8 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 - **Fonts that draw icons two cells wide line up.** kbu checks at start how
   many cells a Nerd Font icon takes on your terminal (it draws one and asks
   where the cursor ended up) and measures every width with that: panel
-  borders, popup frames, the helm mark's column, popups laid over the screen,
-  the splash. Set `KBU__ICON_WIDTH=1` or `2` when the check gets it wrong, and
+  borders, popup frames, the helm mark's column, popups laid over the screen.
+  Set `KBU__ICON_WIDTH=1` or `2` when the check gets it wrong, and
   on Windows, which has no check; `kbu iconwidth` prints what kbu detects.
 - **Inside another terminu app, kbu draws icons as wide as that app does.**
   The width check at start is answered by the app's terminal there, which
@@ -297,7 +295,7 @@ Following the [terminu design principle](https://github.com/vulcanshen/terminu/t
 
 ## [v2.2.2] - 2026-09-04
 
-Quit without the extra keystroke; the splash credits its developer.
+Quit without the extra keystroke.
 
 - **`q` quits immediately.** The confirm dialog is gone — `q` exits on the
   spot. Everything that used to happen behind the confirmation still
@@ -306,9 +304,6 @@ Quit without the extra keystroke; the splash credits its developer.
   namespace, kind, cursor, focused panel, active tab) is written before the
   process exits, so the next launch resumes where you left off. `Ctrl+C`
   still quits from anywhere, including while a panel search is active.
-- **The splash screen (`V`) credits its developer.** "developed by" and the
-  author's email fade in under the tagline, on the same beat as the name,
-  version, and tagline.
 
 ## [v2.2.1] - 2026-08-27
 
@@ -412,9 +407,8 @@ detail — no functional or workflow changes.
   text the user reads directly to the full name "KubeUI"; v2.0.2 puts
   the short name **kbu** back in the quit confirm dialog, the `Space`
   menu / hint title, the toast title, the applog startup line, and the
-  crash messages. The splash easter-egg identity reveal keeps the full
-  **KubeUI**, and the README `kbu — KubeUI` subtitle stays — both are
-  deliberate full-name surfaces, not in-app chrome.
+  crash messages. The README `kbu — KubeUI` subtitle stays — a deliberate
+  full-name surface, not in-app chrome.
 - **Border-title trailing cap rounded.** Panel 1/2/3 title chips and the
   panel-3 tab bar now close their right end with a round half-circle
   (Powerline `E0B4`) instead of a hard triangle (`E0B0`), mirroring the
@@ -429,11 +423,6 @@ detail — no functional or workflow changes.
 Branding polish following the v2.0.0 rename — no functional or workflow
 changes, just finishing the visual identity that km8 → kbu started.
 
-- **Splash easter egg** (`V`) redesigned: the pixel logo now spells
-  **KBU** (K and B in gold, U as the navy frame that wraps them) instead
-  of the old `K8`. New staged reveal — a dark-gray background sheet
-  sweeps top-to-bottom, the U frame rises from the base, then the K/B
-  letters shuffle in; every cell is a single solid-square glyph.
 - **User-facing display text** now uses the full name **KubeUI** where
   the product is named to the user: quit confirm dialog, the `Space`
   menu title, toast title, applog startup line, and crash messages.
@@ -460,9 +449,7 @@ Reason: **km8** was a mouthful (three syllables, unclear "M8"),
 searched poorly, and didn't compose into a family for later tools.
 **kbu** is three letters, home-row-friendly to type, ends in a vowel
 so it reads naturally in any language, and leaves room for `filu` /
-`hostu` / etc. later. Splash caption changed from `KubeMate` (the
-v1.7.x display name) to `KubeUI` in the same beat — the long-form
-identity that "kbu" is short for.
+`hostu` / etc. later.
 
 Six threads make up the rename:
 
@@ -502,15 +489,10 @@ Six threads make up the rename:
    with no warning noise for the removed tier.
 
 3. **User-facing strings.** Every literal `km8` in a rendered
-   surface — `--version` prefix (`km8 dev` → `kbu dev`), splash
-   caption (`KubeMate` → `KubeUI`), `?` help popup title, toast
-   title (`󰵅 km8` / `󰀦 km8` → `󰵅 kbu` / `󰀦 kbu`), quit hotkey
+   surface — `--version` prefix (`km8 dev` → `kbu dev`), `?` help
+   popup title, toast title (`󰵅 km8` / `󰀦 km8` → `󰵅 kbu` / `󰀦 kbu`), quit hotkey
    description, confirm popup message (`Quit km8?` → `Quit kbu?`),
    startup App Log line, crash banner — all read `kbu` in v2.0.
-   The 18×18 splash pixel-art logo still spells K/8 through this
-   release; a redesign to K/B (or another kbu identity) is deferred
-   as a separate follow-up so the two decisions can be made
-   independently.
 
 4. **Documentation.** README.md + README-zh_TW.md rewritten with the
    new identity throughout — title line, badges, install commands
@@ -699,7 +681,7 @@ viewer into a vim-style buffer. Four threads:
 
 ## [v1.7.9] - 2026-07-06
 
-A UI-polish release on top of v1.7.8. Two threads:
+A UI-polish release on top of v1.7.8. One thread:
 
 1. **Panel 3 tab bar → Powerline chip chain.** The v1.7.8 tab-bar
    layout (space-cell interleave with subtle Nerd Font markers on
@@ -716,15 +698,6 @@ A UI-polish release on top of v1.7.8. Two threads:
    `<E0B6>[3]<E0B0>rest…` depending on which tab is active. Panel 1
    / 2 titles also grew the  U+E0B6 round-left cap for a softer
    opening edge than the previous  U+E0D4 honeycomb.
-2. **Splash caption expansion.** The splash easter egg used to
-   reveal just the version line after the pixel logo settled.
-   v1.7.9 expands that into a three-line identity block matching
-   the README intro — `KubeMate` (bold), `v1.7.9`, and
-   `A single-pane kubernetes workspace` — all appearing together
-   in blue 400ms after the K/8 pixel reveal completes, held for
-   500ms before the "Press Esc to close" dim hint fades in.
-   Everything users see now says the same thing about km8, whether
-   they landed from GitHub or opened the splash directly.
 
 ## [v1.7.8] - 2026-07-05
 
@@ -771,16 +744,9 @@ A UI-polish release on top of v1.7.7. Five threads:
    values like status / age / IP / node. New `truncateMiddle`
    helper walks rune-by-rune via `lipgloss.Width` so wide chars
    and Nerd Font PUA glyphs count correctly.
-5. **Splash easter-egg refresh.** The hidden `Ctrl+K K M 8` splash
-   reveal was reworked into a four-phase animation: M background
-   sweeps top-to-bottom (4 pixels / 10ms), brief boundary beat
-   (250ms hold), K/8 foreground shuffles in (2 pixels / 10ms),
-   400ms hold before the version caption fades in, 300ms hold
-   before the `Press Esc to close` hint. Total runtime ~1.5s —
-   deliberate cinematic pacing over the previous single-shot
-   reveal. Also: panel 2's helm-toggle hint compacted from
-   `.: toggle helm` to `.: helm` to leave more breathing room in
-   the bottom-left border.
+5. **Panel 2's helm-toggle hint compacted** from `.: toggle helm`
+   to `.: helm` to leave more breathing room in the bottom-left
+   border.
 
 ### Changed
 
@@ -799,9 +765,6 @@ A UI-polish release on top of v1.7.7. Five threads:
   path uses it for the Name column (title == "Name"), tail
   truncation preserved for other columns; centered dim empty-
   state message when `len(rows) == 0`.
-- `internal/ui/splash.go` — reworked to four-phase reveal with
-  `splashVersionMsg` / `splashHintMsg` message types for the
-  independent caption reveals.
 
 ### Tests
 
@@ -809,9 +772,6 @@ A UI-polish release on top of v1.7.7. Five threads:
   covering fits / edge widths / wide chars / empty input);
   `TestTableModel_EmptyStateRendersMessage` and
   `TestTableModel_EmptyStateWithSearchShowsQuery`.
-- `internal/ui/splash_test.go` — 3 tests for the new phase
-  transitions and cap glyph rendering; existing tests still pass
-  with the reworked state machine.
 
 ## [v1.7.7] - 2026-07-01
 
@@ -1329,8 +1289,7 @@ re-chamfered.
   styles — added back.
 - **K icon: arm corners chamfered.** `docs/icon.svg` re-cut so the
   K's upper / lower arms get a 1-cell taper at the outer corner,
-  with a single interior pixel a row above / below. Synced to
-  `internal/ui/splash.go logoPixels` (the easter egg) and the
+  with a single interior pixel a row above / below. Synced to the
   1280×640 GitHub social preview.
 
 ### Fixed
@@ -1572,8 +1531,7 @@ appears as one slot in the container-log color palette.
   is the universal close gesture and `q` only fires when no popup
   is open, where it still triggers the ConfirmQuit dialog. Inside
   any popup, `q` is a silent no-op (Esc out first, then `q`).
-  Also stripped from splash (`Esc` / `Enter` / `Space` still
-  dismiss it) and confirm dialogs (`Esc` / `n` / `Space` still
+  Also stripped from confirm dialogs (`Esc` / `n` / `Space` still
   cancel).
 - **Sidebar categories: stay blue.** Briefly tried overlay1 grey
   to match Relatives section headers; reverted after the
@@ -2212,8 +2170,8 @@ signal danger. The mental-model anchor is a desktop GUI analogue: Enter
   Previously the chip only appeared when helm filter was off, as a
   state indicator. Now it's a permanent hotkey advert (Releases panel
   is the only exception — toggle is a no-op there).
-- **Space closes every popup uniformly.** YAML popup, Help popup, App
-  log popup, Splash screen all now accept `Space` to close, matching
+- **Space closes every popup uniformly.** YAML popup, Help popup and App
+  log popup all now accept `Space` to close, matching
   the universal "Space mirror-closes the popup that opened" rule from
   the v1.5.1 mental model.
 - **README rewritten around zero-learning-curve framing.** Three keys
@@ -2807,11 +2765,10 @@ for absolute stacking.
 ## [v1.0.10] - 2026-05-21
 
 ### Changed
-- **Splash easter egg now shows the build version** instead of the `Hi! It's KubeMate.` tagline. Tagged releases display `v1.0.10`, local `go build` output displays `dev`. Quick way to confirm what release is running without quitting + `km8 --version`.
 - **`--version` output prefixes tagged releases with `v`** (`km8 v1.0.10`); `dev` builds remain `km8 dev`. The `v` is added by `version.Display()` so the on-disk constant matches the goreleaser convention of stripping the tag's `v` prefix.
 
 ### Internal
-- Build version moved from `cmd/main.go` to a new `internal/version` package so both `cmd/` and `internal/ui/splash.go` can read it without import cycles. goreleaser ldflags target updated to `github.com/vulcanshen/km8/internal/version.Version`.
+- Build version moved from `cmd/main.go` to a new `internal/version` package so both `cmd/` and `internal/ui` can read it without import cycles. goreleaser ldflags target updated to `github.com/vulcanshen/km8/internal/version.Version`.
 
 ## [v1.0.9] - 2026-05-21
 
@@ -2857,7 +2814,6 @@ for absolute stacking.
 - **Search input fixed in panel 1/2/3 + popups**: `j`/`k` are now typed as characters in search mode (previously hijacked as navigation, blocking inputs like "kafka" or "jenkins"). `↑`/`↓` remain for navigation while searching.
 - **Namespace and context popup titles updated** with a Nerd Font glyph: `󱧌 Namespaces` and `󱧌 Contexts`.
 - **Toast popup style aligned with picker popups** (same `#74c7ec` border, `󱧌` title glyph).
-- **Easter egg hotkey `K` → `V`**; `K M 8` caption now followed by `Hi! It's KubeMate.` tagline.
 
 ### Fixed
 - **YAML output was missing `apiVersion` / `kind`**: client-go strips TypeMeta on objects pulled from the informer cache; km8 now restores GVK via `scheme.Scheme.ObjectKinds` before marshaling.
@@ -2867,9 +2823,6 @@ for absolute stacking.
 
 ## [v1.0.6] - 2026-05-18
 
-### Added
-- Easter egg (`K`): logo now reveals with a random pixel-by-pixel animation (~500 ms); each trigger produces a different order. "K M 8" caption and dim close hint appear after animation completes. `K` is intentionally absent from the help overlay.
-
 ### Fixed
 - **kubectl context safety**: edit (`e`), delete (`D`), and shell exec (`s`) now pass `--context <name>` to every `kubectl` subprocess. Previously they used the ambient kubeconfig `current-context`, which could differ from what km8 was showing after a context switch.
 - **Watch reconnection goroutine leak**: each namespace or context switch previously leaked one goroutine that persisted until the next switch; after N switches there were N+1 goroutines waiting on the same channel. Fixed by checking `ok` on channel receive — closed-channel wakeups return `nil` and break the chain.
@@ -2877,7 +2830,6 @@ for absolute stacking.
 - **Context-canceled log noise**: rapidly switching resources cancelled the previous watch context mid-flight, which non-deterministically logged a spurious `ERR watching <resource>: context canceled`. Now silently discarded when the context was intentionally cancelled.
 - **Init log messages discarded**: "km8 started" and "connected to …" were written inside `Init()` which has a value receiver — the mutations were silently thrown away. Moved to an `appInitMsg` dispatched through `Update()`.
 - **Shell exec success badge**: exiting a shell (`s`) showed a green "✓ applied" badge and wrote an empty audit entry. Fixed by returning `EditDoneMsg{Output: "no changes"}` to suppress both side-effects.
-- **Splash animation never started**: `SplashModel.Show()` was changed to return a `tea.Cmd` for the first tick, but the call site in `app.go` discarded the return value, so the pixel-reveal animation never ran.
 - **Duplicate edit / stale badge / double renderAllLines** (carried from main, not previously released): `editing` flag prevents concurrent edits; success badge timer carries a generation ID to prevent stale timers from clearing a newer badge; `maxScrollOffset()` no longer calls `renderAllLines()` to avoid double computation.
 
 ### Documentation
@@ -2919,7 +2871,6 @@ for absolute stacking.
 
 ### Added
 - Open/close animation for all overlay popups (horizontal line expanding then vertical reveal; reversed on close)
-- Hidden km8 logo easter egg — press `K` to show a centered pixel-art logo, `Esc`/`q` to dismiss
 - Navigation hotkey hints (`j/k scroll`, `u/d page`, `gg/G top/bot`) added to status line for all panels
 - `/ search` hint added to Panel 3 (Detail)
 
