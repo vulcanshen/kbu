@@ -265,8 +265,8 @@ resource_kind_config:
 - **Some edits and deletes are not offered.** Events and nodes cannot be deleted from kbu; what a Helm chart manages is changed
   with `helm upgrade`, `rollback` and `uninstall`.
 - **Panel 3 has no `/` filter.** Open the YAML with `Y` and search there.
-- **On a narrow panel 2 whole columns go**, the least needed first, until the rest fit: with one very long name in the list
-  only the names may be left. The name never goes, and is cut in the middle (`demo-app…66-gm72n`); `z` shows every column.
+- **On a narrow panel 2 long values are cut first**, names in the middle (`demo-app…66-gm72n`), and only then do whole
+  columns go, the least needed first; the name never goes. `z` shows every column in full.
 
 ## Links
 

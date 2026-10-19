@@ -252,20 +252,36 @@ var numberColumns = map[string]bool{"Restarts": true, "Desired": true, "Current"
 	"Min": true, "Max": true, "Replicas": true, "Allowed": true}
 
 // lastColumns say what a row is and how it is doing: on a narrow panel they
-// are taken away last, in this order, after the others (an IP, a node, an
-// image) have gone from the right (components/layout/panel). The name never
-// goes, and a sorted column goes after them all, its arrow in sight as long
-// as it can be.
+// are taken away in this order, after the other short ones (an IP, a node)
+// have gone from the right, and before the long ones (longColumns), which
+// shrink first (components/layout/panel). The name never goes, and a sorted
+// column goes after them all, its arrow in sight as long as it can be.
 var lastColumns = []string{"Restarts", "Age", "Ready", "Status", "Type", "Reason", "", "Namespace"}
 
+// longColumns hold long values (a name, a message, a list of hosts): on a
+// narrow panel they share the room the short ones leave, each cut to fit,
+// before any column is taken away (Column.Shrink; components/layout/panel).
+var longColumns = map[string]bool{"Name": true, "Message": true, "Object": true, "Image": true, "Ports": true,
+	"Hosts": true, "Endpoints": true, "Targets": true, "Reference": true, "Server": true, "Cluster": true, "User": true,
+	"Chart": true, "Claim": true, "Provisioner": true, "Parameters": true, "Pod-Selector": true}
+
+// nameRoom is the least the name keeps before columns are taken away: a
+// pod's workload and its hash, cut in the middle (demo-app…66-gm72n).
+const nameRoom = 16
+
 // listColumns are the lib's columns for panel 2's kind, each with when it is
-// taken away on a narrow panel (Column.Drop). Namespace goes first when only
-// one namespace is shown: every row has the same. The name is cut in the
-// middle, where both ends tell a row apart (demo-app…66-gm72n).
+// taken away on a narrow panel (Column.Drop) and the long ones shrinking
+// first. Namespace goes first when only one namespace is shown: every row
+// has the same. The name is cut in the middle, where both ends tell a row
+// apart (demo-app…66-gm72n).
 func listColumns(cols []k8s.Column, sorted map[string]bool, oneNamespace bool) []terminu.Column {
 	out := make([]terminu.Column, len(cols))
 	for i, c := range cols {
-		out[i] = terminu.Column{Title: c.Title, Number: numberColumns[c.Title], Middle: c.Title == "Name"}
+		out[i] = terminu.Column{Title: c.Title, Number: numberColumns[c.Title], Shrink: longColumns[c.Title],
+			Middle: c.Title == "Name"}
+		if c.Title == "Name" {
+			out[i].MinWidth = nameRoom
+		}
 	}
 	drop := 0
 	set := func(i int) {
@@ -281,13 +297,19 @@ func listColumns(cols []k8s.Column, sorted map[string]bool, oneNamespace bool) [
 		set(at("Namespace"))
 	}
 	for i := len(cols) - 1; i >= 0; i-- {
-		if t := cols[i].Title; !slices.Contains(lastColumns, t) && !sorted[t] {
+		if t := cols[i].Title; !slices.Contains(lastColumns, t) && !longColumns[t] && !sorted[t] {
 			set(i)
 		}
 	}
 	for _, t := range lastColumns {
 		if !sorted[t] {
 			set(at(t))
+		}
+	}
+	// The long ones shrink first, so they go after the short ones.
+	for i := len(cols) - 1; i >= 0; i-- {
+		if !sorted[cols[i].Title] {
+			set(i)
 		}
 	}
 	for i := range cols {
@@ -318,7 +340,8 @@ func (m *Model) setListRows() {
 	if m.atContainers() {
 		lv := m.drill[len(m.drill)-1]
 		m.listP.Label = "Containers"
-		m.list.Columns = []terminu.Column{{Title: "Name"}, {Title: "Image", Drop: 1}, {Title: "State", Drop: 4},
+		m.list.Columns = []terminu.Column{{Title: "Name", Shrink: true, MinWidth: nameRoom}, {Title: "Image", Shrink: true, Drop: 1},
+			{Title: "State", Drop: 4},
 			{Title: "Ready", Drop: 3}, {Title: "Restarts", Number: true, Drop: 2}}
 		rows := make([]terminu.Row, len(lv.containers))
 		for i, c := range lv.containers {

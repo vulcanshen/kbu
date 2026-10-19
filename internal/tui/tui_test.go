@@ -90,8 +90,8 @@ func TestListColumnsDropOrder(t *testing.T) {
 		d := map[string]int{}
 		for _, c := range listColumns(cols, sorted, one) {
 			d[c.Title] = c.Drop
-			if c.Middle != (c.Title == "Name") {
-				t.Errorf("%q: Middle %v", c.Title, c.Middle)
+			if name := c.Title == "Name"; c.Middle != name || c.Shrink != name || (name && c.MinWidth != nameRoom) {
+				t.Errorf("%q: Middle %v, Shrink %v, MinWidth %d", c.Title, c.Middle, c.Shrink, c.MinWidth)
 			}
 		}
 		return d
@@ -106,6 +106,16 @@ func TestListColumnsDropOrder(t *testing.T) {
 			t.Errorf("%q drops at %d, not before %q at %d", order[i-1], d[order[i-1]], order[i], d[order[i]])
 		}
 	}
+	// The long columns shrink first, so they go after the short ones.
+	ev := map[string]int{}
+	for _, c := range listColumns(columnsOf(k8s.ResourceEvents), nil, false) {
+		ev[c.Title] = c.Drop
+	}
+	for _, short := range []string{"Age", "Type", "Reason", "Namespace"} {
+		if ev[short] >= ev["Message"] || ev[short] >= ev["Object"] {
+			t.Errorf("Events: %q drops at %d, not before Message (%d) and Object (%d)", short, ev[short], ev["Message"], ev["Object"])
+		}
+	}
 	if d := drops(nil, true); d["Namespace"] != 1 {
 		t.Errorf("one namespace: Namespace drops at %d, want first", d["Namespace"])
 	}
@@ -114,20 +124,30 @@ func TestListColumnsDropOrder(t *testing.T) {
 	}
 }
 
-// On a panel too narrow for every column, a long name and its namespace stay
-// whole while the counts go.
-func TestALongNameKeepsItsNamespace(t *testing.T) {
-	m := newTestModel(t)
-	m.size(100, 30)
-	m.feed(pod("kube-system", "prometheus-kube-prometheus-operator-6644ffcf4d-x2b9q"), pod("demo", "web-1"))
-	s := m.screen_()
-	for _, want := range []string{"kube-system", "prometheus-kube-prometheus-operator-6644ffcf4d-x2b9q"} {
-		if !strings.Contains(s, want) {
-			t.Errorf("no %q:\n%s", want, s)
+// A long name shrinks before any column goes, cut in the middle, down to
+// nameRoom (components/layout/panel): at 100 and 80 columns a list with one
+// still shows its namespace, readiness and status.
+func TestALongNameShrinksFirst(t *testing.T) {
+	for _, c := range []struct {
+		w    int
+		want []string
+	}{
+		{100, []string{"kube-system", "READY", "STATUS", "RESTARTS"}},
+		{80, []string{"kube-system", "READY", "STATUS"}},
+	} {
+		m := newTestModel(t)
+		m.size(c.w, 30)
+		m.feed(pod("kube-system", "prometheus-kube-prometheus-operator-6644ffcf4d-x2b9q"), pod("demo", "web-1"))
+		m.press("Tab") // panel 2 has the focus: at 80 columns the layout is not narrow yet
+		s := m.screen_()
+		for _, want := range append(c.want, "x2b9q", "promethe") {
+			if !strings.Contains(s, want) {
+				t.Errorf("at %d columns, no %q:\n%s", c.w, want, s)
+			}
 		}
-	}
-	if strings.Contains(s, "RESTARTS") {
-		t.Errorf("RESTARTS stayed while the name did not fit:\n%s", s)
+		if strings.Contains(s, "prometheus-kube-prometheus-operator-6644ffcf4d-x2b9q") {
+			t.Errorf("at %d columns the long name is not cut:\n%s", c.w, s)
+		}
 	}
 }
 

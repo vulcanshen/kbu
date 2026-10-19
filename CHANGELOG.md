@@ -19,7 +19,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.8.1: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.8.2: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -49,9 +49,10 @@ The rest:
   - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.
     `z` zooms back from any panel.
   - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
-  - **On a narrow panel 2 whole columns go**, the least needed first (IP,
-    node, image…, then restarts, age, ready, status, namespace) until the
-    rest fit; the name never goes. With one namespace shown, its column goes
+  - **On a narrow panel 2 long values are cut first** (names in the middle,
+    `demo-app…66-gm72n`, as before), and only then do whole columns go, the
+    least needed first: IP, node…, then restarts, age, ready, status,
+    namespace. The name never goes. With one namespace shown, its column goes
     first. `z` shows them all.
   - **Drilled into a row**, panel 2's title names it (`[2] PODS: web-7d4f`)
     and the path is on the first row of the panel (`deployment/web > pods`).
