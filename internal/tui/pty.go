@@ -22,9 +22,9 @@ func (m *Model) showAlterm() tea.Cmd {
 }
 
 func (m *Model) newAlterm() *terminu.Terminal {
-	// PgUp and PgDn scroll back; Home and End stay the shell's (tdp K12).
-	// TODO(lib KB7): the history mode, where gg|G go to the oldest line and
-	// back to live (components/dialog/terminal).
+	// PgUp goes into the History mode, where gg|G go to the oldest line and
+	// back to live (components/dialog/terminal); Home and End stay the
+	// shell's (tdp K12).
 	t := &terminu.Terminal{Title: "Alterm", Subject: hostname(), Command: altermCommand(m.cfg.AltermShell, m.cfg.AltermLoginShell),
 		Ends: true, History: true}
 	// Alt-t hides it, as it shows it on a panel. (The Ctrl-T an older kbu

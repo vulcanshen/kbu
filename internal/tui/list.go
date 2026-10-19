@@ -251,113 +251,75 @@ var numberColumns = map[string]bool{"Restarts": true, "Desired": true, "Current"
 	"Available": true, "Active": true, "Rev": true, "Age": true, "Updated": true, "Data": true, "Secrets": true,
 	"Min": true, "Max": true, "Replicas": true, "Allowed": true}
 
-// keptColumns keep their width on a narrow panel: what a row is and how it
-// is doing. The others give up room first (an IP, a node, an image), and on
-// a panel too narrow for every column they are left out (tdp L1).
-var keptColumns = map[string]bool{"Namespace": true, "Name": true, "": true, "Ready": true, "Status": true,
-	"Restarts": true, "Age": true, "Type": true, "Reason": true}
+// lastColumns say what a row is and how it is doing: on a narrow panel they
+// are taken away last, in this order, after the others (an IP, a node, an
+// image) have gone from the right (components/layout/panel). The name never
+// goes, and a sorted column goes after them all, its arrow in sight as long
+// as it can be.
+var lastColumns = []string{"Restarts", "Age", "Ready", "Status", "Type", "Reason", "", "Namespace"}
 
-// listColumns are the lib's columns for panel 2's kind. A sorted column
-// keeps its width: its sort arrow must stay in sight (components/layout/panel).
-// Of Namespace and Name, Name gives up room when nameGives says it can,
-// else Namespace. TODO(lib KB19): both cut in the middle, where both ends
-// tell a row apart (demo-app…66-gm72n; components/layout/panel).
-func listColumns(cols []k8s.Column, sorted map[string]bool, nameGives bool) []terminu.Column {
+// listColumns are the lib's columns for panel 2's kind, each with when it is
+// taken away on a narrow panel (Column.Drop). Namespace goes first when only
+// one namespace is shown: every row has the same. The name is cut in the
+// middle, where both ends tell a row apart (demo-app…66-gm72n).
+func listColumns(cols []k8s.Column, sorted map[string]bool, oneNamespace bool) []terminu.Column {
 	out := make([]terminu.Column, len(cols))
 	for i, c := range cols {
-		flex := !keptColumns[c.Title]
-		if c.Title == "Namespace" || c.Title == "Name" {
-			flex = (c.Title == "Name") == nameGives
+		out[i] = terminu.Column{Title: c.Title, Number: numberColumns[c.Title], Middle: c.Title == "Name"}
+	}
+	drop := 0
+	set := func(i int) {
+		if i >= 0 && cols[i].Title != "Name" && out[i].Drop == 0 {
+			drop++
+			out[i].Drop = drop
 		}
-		flex = flex && !sorted[c.Title]
-		out[i] = terminu.Column{Title: c.Title, Number: numberColumns[c.Title], Flex: flex}
+	}
+	at := func(title string) int {
+		return slices.IndexFunc(cols, func(c k8s.Column) bool { return c.Title == title })
+	}
+	if oneNamespace {
+		set(at("Namespace"))
+	}
+	for i := len(cols) - 1; i >= 0; i-- {
+		if t := cols[i].Title; !slices.Contains(lastColumns, t) && !sorted[t] {
+			set(i)
+		}
+	}
+	for _, t := range lastColumns {
+		if !sorted[t] {
+			set(at(t))
+		}
+	}
+	for i := range cols {
+		set(i)
 	}
 	return out
 }
 
-// nameGives is whether Name can give up all the room the columns in keep
-// lack in w and still be its MinWidth wide. Then Name gives it, and
-// Namespace, which tells same-named objects apart, keeps its width; past
-// that, Namespace gives first (TODO(lib KB17): the lib cuts the column that
-// gives to three cells at once). A sorted Name keeps its width.
-func nameGives(cols []k8s.Column, cells [][]string, keep []int, w int, sorted map[string]bool) bool {
-	total, name := 2*(len(keep)-1), -1
-	for _, i := range keep {
-		arrow := 0
-		if sorted[cols[i].Title] {
-			arrow = 4
-		}
-		total += naturalWidth(cols, cells, i, arrow)
-		if cols[i].Title == "Name" {
-			name = i
-		}
-	}
-	if name < 0 || sorted["Name"] || w <= 0 {
+// oneNamespace is whether panel 2 shows the items of a single namespace.
+func (m *Model) oneNamespace() bool {
+	if m.client == nil {
 		return false
 	}
-	return naturalWidth(cols, cells, name, 0)-(total-w) >= max(cols[name].MinWidth, 3)
-}
-
-// naturalWidth is column i's widest value or title, the title with arrow
-// cells for a sort arrow.
-func naturalWidth(cols []k8s.Column, cells [][]string, i, arrow int) int {
-	n := terminu.Width(terminu.Upper(cols[i].Title)) + arrow
-	for _, r := range cells {
-		if i < len(r) {
-			n = max(n, terminu.Width(r[i]))
-		}
-	}
-	return n
-}
-
-// listWidth is how many cells panel 2's rows have now.
-func (m *Model) listWidth() int {
-	w, h := m.app.Size()
-	if w == 0 {
-		return 0
-	}
-	if m.app.ForceNarrow || w < m.screen.NarrowBelow {
-		return w - 4
-	}
-	return layout(w, h)[1].W - 4
-}
-
-// fitColumns leaves out the columns that give up room first, from the
-// right, while the natural widths do not fit in w (TODO(lib KB17): the lib
-// cuts the widest column to three cells at once): a list of eight columns
-// cut to three cells each says nothing (tdp L1). A sorted column stays.
-func fitColumns(cols []k8s.Column, cells [][]string, w int, sorted map[string]bool) []int {
-	keep := make([]int, len(cols))
-	for i := range keep {
-		keep[i] = i
-	}
-	if w <= 0 {
-		return keep
-	}
-	natural := func(i int) int { return naturalWidth(cols, cells, i, 4) } // room for a sort arrow
-	total := func() int {
-		t := 2 * (len(keep) - 1)
-		for _, i := range keep {
-			t += natural(i)
-		}
-		return t
-	}
-	for k := len(keep) - 1; k >= 0 && total() > w; k-- {
-		if c := cols[keep[k]].Title; !keptColumns[c] && !sorted[c] {
-			keep = append(keep[:k], keep[k+1:]...)
-		}
-	}
-	return keep
+	sel := m.client.Selection()
+	return !sel.IsAll() && sel.Count() == 1
 }
 
 // setListRows lays panel 2 out for what it shows now: its label, columns,
 // rows, sort and actions.
 func (m *Model) setListRows() {
+	m.list.Location = m.drillPath()
+	m.listP.Name = ""
+	if n := len(m.drill); n > 0 {
+		// What the level is in: [2] PODS: nginx-7d4f, the path above the
+		// header (components/layout/panel: the location row).
+		m.listP.Name = m.drill[n-1].parent.Name
+	}
 	if m.atContainers() {
 		lv := m.drill[len(m.drill)-1]
-		m.listP.Label = capRunes(lv.parent.Name, 20) + " > Containers"
-		m.list.Columns = []terminu.Column{{Title: "Name", Flex: true}, {Title: "Image", Flex: true}, {Title: "State"},
-			{Title: "Ready"}, {Title: "Restarts", Number: true}}
+		m.listP.Label = "Containers"
+		m.list.Columns = []terminu.Column{{Title: "Name"}, {Title: "Image", Drop: 1}, {Title: "State", Drop: 4},
+			{Title: "Ready", Drop: 3}, {Title: "Restarts", Number: true, Drop: 2}}
 		rows := make([]terminu.Row, len(lv.containers))
 		for i, c := range lv.containers {
 			name := c.Name
@@ -373,39 +335,21 @@ func (m *Model) setListRows() {
 	}
 	rt := m.shownKind()
 	m.listP.Label = rt.String()
-	if n := len(m.drill); n > 0 {
-		// TODO(lib S16): the drill's path in the panel's location row, and
-		// the name as it is in the label (tdp's components/layout/panel).
-		m.listP.Label = capRunes(m.drill[n-1].parent.Name, 20) + " > " + rt.String()
-	}
-	all := columnsOf(rt)
+	cols := columnsOf(rt)
 	sorted := map[string]bool{}
 	for _, t := range m.cfg.GetSort(rt.KubectlName()) {
 		sorted[t.Column] = true
 	}
+	m.list.Columns = listColumns(cols, sorted, m.oneNamespace())
 	items := m.shownItems()
-	allCells := make([][]string, len(items))
-	for i, it := range items {
-		allCells[i] = rowCells(rt, it)
-	}
-	keep := fitColumns(all, allCells, m.listWidth(), sorted)
-	cols := make([]k8s.Column, len(keep))
-	for i, c := range keep {
-		cols[i] = all[c]
-	}
-	m.list.Columns = listColumns(cols, sorted, nameGives(all, allCells, keep, m.listWidth(), sorted))
 	rows := make([]terminu.Row, len(items))
 	current := ""
 	if rt == k8s.ResourceContexts && m.client != nil {
 		current = m.client.ContextName()
 	}
 	for i, it := range items {
-		cells := make([]string, len(keep))
-		for j, c := range keep {
-			if c < len(allCells[i]) {
-				cells[j] = allCells[i][c]
-			}
-		}
+		cells := make([]string, len(cols))
+		copy(cells, rowCells(rt, it))
 		sortVals := make([]string, len(cells))
 		for c := range cells {
 			title := ""
@@ -509,10 +453,6 @@ func statusColor(status, pending, failed string) string {
 	return ""
 }
 
-// capRunes fits s in n cells, cutting its end (tdp E5: by the display
-// width).
-func capRunes(s string, n int) string { return terminu.Truncate(s, n) }
-
 // listEsc is Esc on panel 2, one level at a time (tdp K4): the compare
 // anchor, then the drill.
 func (m *Model) listEsc() tea.Cmd {
@@ -560,8 +500,8 @@ func (m *Model) setListActions() {
 		shell := m.shellAsk()
 		item = []terminu.Action{
 			{Key: "Enter", Label: "Open a shell", Desc: "kubectl exec -it into this container, as [S] does", Scope: terminu.ItemScope,
-				Hint: "shell", Ask: shell, Do: m.runShell},
-			{Key: "S", Label: "Shell", Desc: "kubectl exec -it into this container", Scope: terminu.ItemScope, Ask: shell, Do: m.runShell},
+				Hint: "shell", Ask: shell, Clear: true, Do: m.runShell},
+			{Key: "S", Label: "Shell", Desc: "kubectl exec -it into this container", Scope: terminu.ItemScope, Ask: shell, Clear: true, Do: m.runShell},
 			{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
 		}
 	case rt == k8s.ResourceReleases:
@@ -578,7 +518,7 @@ func (m *Model) setListActions() {
 	default:
 		if rt == k8s.ResourceContexts {
 			item = append(item, terminu.Action{Key: "Enter", Label: "Switch to this context", Desc: "kbu only; ~/.kube/config is not changed",
-				Scope: terminu.ItemScope, Hint: "switch", Ask: contextAsk(cur),
+				Scope: terminu.ItemScope, Hint: "switch", Ask: contextAsk(cur), Clear: true,
 				Disabled: func() bool {
 					it, ok := m.currentItem()
 					return !ok || m.client == nil || it.Name == m.client.ContextName()
@@ -592,25 +532,23 @@ func (m *Model) setListActions() {
 		switch {
 		case rt.SupportsDrillDown():
 			item = append(item, terminu.Action{Key: "Enter", Label: "Drill in", Desc: "into its " + drillLabel(rt, cur),
-				Scope: terminu.ItemScope, Hint: "drill", Do: m.drillIn})
+				Scope: terminu.ItemScope, Hint: "drill", Clear: true, Do: m.drillIn})
 		case rt != k8s.ResourceContexts:
 			item = append(item, terminu.Action{Key: "Enter", Label: "Open", Desc: "its YAML, as [Y] does", Scope: terminu.ItemScope,
 				Hint: "yaml", Stay: true, Do: m.yamlHere})
 		}
 		item = append(item, terminu.Action{Key: "Y", Label: "YAML", Desc: "view resource manifest", Scope: terminu.ItemScope, Stay: true, Do: m.yamlHere})
 		if allowsEdit(rt) && hasCur {
-			// TODO(lib S4): an edit keeps the menu it was run from (tdp T1), but
-			// an action that asks clears the whole stack when accepted.
 			item = append(item, terminu.Action{Key: "E", Label: "Edit", Desc: "kubectl edit", Scope: terminu.ItemScope,
 				Disabled: helmManaged, Ask: m.editAsk(rt, cur), Do: func() tea.Cmd { return m.runEdit(rt, cur, nil) }})
 		}
 		if rt == k8s.ResourcePods && hasCur {
 			item = append(item, terminu.Action{Key: "S", Label: "Shell", Desc: "kubectl exec -it", Scope: terminu.ItemScope,
-				Hidden: func() bool { return m.shellAsk() == nil }, Ask: m.shellAsk(), Do: m.runShell})
+				Hidden: func() bool { return m.shellAsk() == nil }, Ask: m.shellAsk(), Clear: true, Do: m.runShell})
 		}
 		if allowsDelete(rt) && hasCur {
 			item = append(item, terminu.Action{Key: "D", Label: "Delete", Desc: "kubectl delete", Scope: terminu.ItemScope,
-				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
+				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Clear: true, Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
 		item = append(item,
 			terminu.Action{Key: "C", Label: "Unmark Compare anchor", Desc: "cancel anchor, exit compare mode", Scope: terminu.ItemScope,
@@ -660,6 +598,24 @@ func drillLabel(rt k8s.ResourceType, item k8s.ResourceItem) string {
 		}
 	}
 	return "children"
+}
+
+// drillPath is where panel 2 is drilled to, for its location row: each
+// level's kind and name, then what the list shows ("deployment/web > pods");
+// "" at the top.
+func (m *Model) drillPath() string {
+	if len(m.drill) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(m.drill)+1)
+	for _, lv := range m.drill {
+		parts = append(parts, lv.parentKind.KubectlName()+"/"+lv.parent.Name)
+	}
+	last := "containers"
+	if k := m.drill[len(m.drill)-1].kind; k != "" {
+		last = k.KubectlName() + "s"
+	}
+	return strings.Join(append(parts, last), " > ")
 }
 
 // drillParentLabel names the list Back goes to.

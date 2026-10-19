@@ -294,7 +294,7 @@ const legacyAppName = "km8"
 //
 // An older kbu kept the directory where the platform keeps an app's
 // settings (macOS ~/Library/Application Support/kbu, Windows
-// %APPDATA%\kbu). MovePlatformConfigDir moves it at start; while it could
+// %APPDATA%\kbu). MoveOldPlaces moves it at start; while it could
 // not and that one is the only one there, kbu keeps reading and writing it,
 // so nothing the user had is lost (tdp E3).
 //
@@ -313,32 +313,99 @@ func ConfigDir() string {
 	return dir
 }
 
-// Move is where MovePlatformConfigDir moved the settings from and to.
-// From is "" when nothing was moved.
-type Move struct {
+// ErrThereAlready is why an item was left where it was: its new place has
+// one already, for the user to merge.
+var ErrThereAlready = errors.New("the new place has one already")
+
+// Moved is one item MoveOldPlaces moved, or left where it was (Err).
+type Moved struct {
+	What     string // "settings" or "logs"
 	From, To string
-	// Err is why the move failed: the settings stay in From.
-	Err error
+	Err      error // it stays in From: ErrThereAlready, or why it could not move
 }
 
-// MovePlatformConfigDir moves the directory an older kbu kept its settings
-// in to tdp E3's, when the old one is there and the new one is not (tdp E3:
-// a new place is moved to at the first start). $KBU__CONFIG moves nothing.
-func MovePlatformConfigDir() Move {
-	if strings.TrimSpace(os.Getenv("KBU__CONFIG")) != "" {
-		return Move{}
+// MoveOldPlaces moves what an older kbu kept elsewhere to where tdp E3 puts
+// it now, item by item, at the first start (tdp E3: a new place): the
+// settings from the platform's settings directory (macOS
+// ~/Library/Application Support/kbu, Windows %APPDATA%\kbu) to
+// ~/.config/kbu, and the logs from the settings directory to the data one
+// (~/.kbu/logs). What the new place has already stays where it was; when a
+// setting cannot be moved none is, and kbu keeps using the old directory
+// (ConfigDir). The old directory goes once it is empty.
+func MoveOldPlaces() []Moved {
+	var out []Moved
+	if strings.TrimSpace(os.Getenv("KBU__CONFIG")) == "" {
+		out = moveSettings()
 	}
+	out = append(out, moveLogs()...)
+	if old := platformConfigDir(appName); old != "" && old != familyConfigDir(appName) {
+		_ = os.Remove(old) // only when it is empty
+	}
+	return out
+}
+
+func moveSettings() []Moved {
 	to, from := familyConfigDir(appName), platformConfigDir(appName)
-	if from == "" || from == to || exists(to) || !exists(from) {
-		return Move{}
+	if from == "" || from == to || !exists(from) {
+		return nil
 	}
-	mv := Move{From: from, To: to}
-	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
-		mv.Err = err
-	} else if err := os.Rename(from, to); err != nil {
-		mv.Err = err
+	whole := Moved{What: "settings", From: from, To: to}
+	entries, err := os.ReadDir(from)
+	if err != nil {
+		whole.Err = err
+		return []Moved{whole}
 	}
-	return mv
+	made := !exists(to)
+	if err := os.MkdirAll(to, 0o755); err != nil {
+		whole.Err = err
+		return []Moved{whole}
+	}
+	var out []Moved
+	for _, e := range entries {
+		if e.Name() == "logs" {
+			continue // moveLogs takes them to the data directory
+		}
+		mv := Moved{What: "settings", From: filepath.Join(from, e.Name()), To: filepath.Join(to, e.Name())}
+		if exists(mv.To) {
+			mv.Err = ErrThereAlready
+		} else if err := os.Rename(mv.From, mv.To); err != nil {
+			if made {
+				// None is moved: kbu keeps using the old directory.
+				for _, done := range out {
+					_ = os.Rename(done.To, done.From)
+				}
+				_ = os.Remove(to)
+				whole.Err = err
+				return []Moved{whole}
+			}
+			mv.Err = err
+		}
+		out = append(out, mv)
+	}
+	return out
+}
+
+func moveLogs() []Moved {
+	to := LogDir()
+	var out []Moved
+	seen := map[string]bool{}
+	for _, dir := range []string{platformConfigDir(appName), ConfigDir()} {
+		from := filepath.Join(dir, "logs")
+		if dir == "" || seen[from] || from == to || !exists(from) {
+			continue
+		}
+		seen[from] = true
+		mv := Moved{What: "logs", From: from, To: to}
+		if exists(to) {
+			mv.Err = ErrThereAlready
+		} else if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+			mv.Err = err
+		} else if err := os.Rename(from, to); err != nil {
+			mv.Err = err
+		}
+		out = append(out, mv)
+	}
+	return out
 }
 
 // familyConfigDir is where tdp E3 puts an app's settings:

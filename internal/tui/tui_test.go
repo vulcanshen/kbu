@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -30,10 +31,10 @@ func TestL4EveryRowIsTheTerminalWidth(t *testing.T) {
 		{"Tab", "C", "j", "C"},  // the compare viewer
 		{"!"},                   // the App Log
 	}
-	// TODO(lib S53): also below the minimum size, down to 1x1 (tdp E5; e.g.
-	// {80, 5}, {3, 2}, {1, 1}), showing the name and the hint. terminu-go
-	// v0.1.13 panics there with a menu open; the next one does not.
-	sizes := [][2]int{{120, 40}, {80, 40}, {59, 20}, {200, 60}, {24, 40}, {200, 7}, {16, 6}}
+	// Below kbu's least size too, down to 1×1 (tdp E5): only the name and
+	// the size it needs are drawn there.
+	sizes := [][2]int{{120, 40}, {80, 40}, {80, 24}, {59, 20}, {40, 15}, {200, 60}, {24, 40}, {200, 7}, {16, 6},
+		{80, 5}, {3, 2}, {1, 1}}
 	for _, widths := range [][2]int{{1, 1}, {2, 1}, {2, 2}} {
 		for _, open := range popups {
 			m := newTestModel(t)
@@ -79,35 +80,99 @@ func TestListRowsFromTheWatch(t *testing.T) {
 	}
 }
 
-// Namespace tells same-named objects apart: while Name can give up the room
-// panel 2 lacks and keep its MinWidth, Name gives it and Namespace stays
-// whole (the old table kept Namespace at 15 cells or more).
-func TestNamespaceKeepsItsWidth(t *testing.T) {
-	for _, w := range []int{120, 100} {
-		m := newTestModel(t)
-		m.size(w, 30)
-		m.feed(pod("kube-system", "prometheus-kube-prometheus-operator-6644ffcf4d-x2b9q"), pod("demo", "web-1"))
-		if s := m.screen_(); !strings.Contains(s, "kube-system") {
-			t.Errorf("at %d columns Namespace is cut:\n%s", w, s)
+// tdp's components/layout/panel: the columns that do not fit go whole, the
+// minor ones first (from the right), then Restarts, Age, Ready, Status, the
+// Helm mark and Namespace; the name never goes, and it is cut in the middle.
+// A sorted column goes last; with one namespace shown, Namespace goes first.
+func TestListColumnsDropOrder(t *testing.T) {
+	cols := columnsOf(k8s.ResourcePods)
+	drops := func(sorted map[string]bool, one bool) map[string]int {
+		d := map[string]int{}
+		for _, c := range listColumns(cols, sorted, one) {
+			d[c.Title] = c.Drop
+			if c.Middle != (c.Title == "Name") {
+				t.Errorf("%q: Middle %v", c.Title, c.Middle)
+			}
 		}
+		return d
+	}
+	d := drops(nil, false)
+	if d["Name"] != 0 {
+		t.Errorf("Name drops at %d, want never", d["Name"])
+	}
+	order := []string{"Node", "IP", "Restarts", "Age", "Ready", "Status", "", "Namespace"}
+	for i := 1; i < len(order); i++ {
+		if d[order[i-1]] >= d[order[i]] {
+			t.Errorf("%q drops at %d, not before %q at %d", order[i-1], d[order[i-1]], order[i], d[order[i]])
+		}
+	}
+	if d := drops(nil, true); d["Namespace"] != 1 {
+		t.Errorf("one namespace: Namespace drops at %d, want first", d["Namespace"])
+	}
+	if d := drops(map[string]bool{"Restarts": true}, false); d["Restarts"] != len(cols)-1 {
+		t.Errorf("sorted Restarts drops at %d, want last (%d)", d["Restarts"], len(cols)-1)
 	}
 }
 
-// tdp E3: settings moved at start are told in an Info toast; a move that
-// failed opens an error popup with both paths.
+// On a panel too narrow for every column, a long name and its namespace stay
+// whole while the counts go.
+func TestALongNameKeepsItsNamespace(t *testing.T) {
+	m := newTestModel(t)
+	m.size(100, 30)
+	m.feed(pod("kube-system", "prometheus-kube-prometheus-operator-6644ffcf4d-x2b9q"), pod("demo", "web-1"))
+	s := m.screen_()
+	for _, want := range []string{"kube-system", "prometheus-kube-prometheus-operator-6644ffcf4d-x2b9q"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("no %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "RESTARTS") {
+		t.Errorf("RESTARTS stayed while the name did not fit:\n%s", s)
+	}
+}
+
+// tdp L1: below kbu's least size only its name and the size it needs are
+// drawn, and the screen comes back as it was when the terminal grows.
+func TestBelowTheLeastSize(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "web-1"))
+	m.size(minWidth-1, minHeight)
+	s := m.screen_()
+	if !strings.Contains(s, "kbu") || !strings.Contains(s, fmt.Sprintf("needs a terminal of at least %d×%d", minWidth, minHeight)) {
+		t.Errorf("below the least size:\n%s", s)
+	}
+	if m.size(minWidth, minHeight); strings.Contains(m.screen_(), "needs a terminal") {
+		t.Errorf("at the least size:\n%s", m.screen_())
+	}
+	m.size(120, 40)
+	if s := m.screen_(); !strings.Contains(s, "web-1") || strings.Contains(s, "needs a terminal") {
+		t.Errorf("grown again, the screen is not back:\n%s", s)
+	}
+}
+
+// tdp E3: what moved at start is told in an Info toast, from where to where;
+// what stayed where it was opens an error popup with both paths.
 func TestTheMovedSettingsAreTold(t *testing.T) {
-	m := newTestModelWith(t, Options{Moved: config.Move{From: "/old/kbu", To: "/new/kbu"}})
-	if s := m.screen_(); !strings.Contains(s, "Moved kbu's settings from /old/kbu to /new/kbu") {
+	m := newTestModelWith(t, Options{Moved: []config.Moved{
+		{What: "settings", From: "/old/kbu/config.yaml", To: "/new/kbu/config.yaml"},
+		{What: "settings", From: "/old/kbu/state.yaml", To: "/new/kbu/state.yaml"},
+		{What: "logs", From: "/old/kbu/logs", To: "/data/logs"},
+	}})
+	if s := m.screen_(); !strings.Contains(s, "Moved kbu's settings from /old/kbu to /new/kbu, and its logs from") {
 		t.Errorf("no toast for the move:\n%s", s)
 	}
-	m = newTestModelWith(t, Options{Moved: config.Move{From: "/old/kbu", To: "/new/kbu", Err: errors.New("permission denied")}})
+	m = newTestModelWith(t, Options{Moved: []config.Moved{
+		{What: "settings", From: "/old/kbu", To: "/new/kbu", Err: errors.New("permission denied")},
+		{What: "logs", From: "/old/logs", To: "/data/logs", Err: config.ErrThereAlready},
+	}})
 	s := m.screen_()
-	for _, want := range []string{"SETTINGS NOT MOVED", "/old/kbu", "/new/kbu", "permission denied"} {
+	for _, want := range []string{"NOT MOVED", "/old/kbu", "/new/kbu", "permission denied", "kbu keeps using it",
+		"/old/logs stays where it is", "Merge the two yourself"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the error popup has no %q:\n%s", want, s)
 		}
 	}
-	if m = newTestModel(t); strings.Contains(m.screen_(), "settings") {
+	if m = newTestModel(t); strings.Contains(m.screen_(), "Moved") {
 		t.Errorf("nothing moved, yet the screen talks about it:\n%s", m.screen_())
 	}
 }

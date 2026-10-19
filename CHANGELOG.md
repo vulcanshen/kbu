@@ -19,17 +19,16 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.8.0: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.8.1: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
     `Enter` shows the ones checked. All Namespaces checked means all of them,
     whatever else is checked.
-  - **Sorting** is still two steps, a column then a direction; choosing the
-    direction closes both, so a second column is a second `Alt-S`.
-  - **What you open to look at from the `Space` menu** (the YAML, a compare,
-    Helm's documents, the App Log) keeps the menu: `Esc` goes back to it. A
-    confirm opened from the menu goes back to it on `Esc` too.
+  - **What you open from the `Space` menu** (the YAML, a compare, Helm's
+    documents, the App Log, an edit) keeps the menu: `Esc` goes back to it.
+    A shell, a drill, a delete or a context switch closes it. A confirm
+    opened from the menu goes back to it on `Esc`.
   - **After `E` in the YAML viewer** the viewer shows the resource as the edit
     left it.
   - **The top row** shows `[Alt-t]erm` and `[C]ompare` first, then the context
@@ -37,30 +36,37 @@ The rest:
   - **The App Log** lists the oldest entry first and opens at the newest.
     Clearing it is a row of `Global operation`, no longer `D` in the App Log.
   - **A failure is an error toast**, in Red, always; a warning is for something
-    done that is still worth a look.
+    done that is still worth a look; what is done, a copy say, is a Success
+    toast in Green.
+  - **The YAML search** underlines every hit and marks the one it is on.
   - **The Events tab no longer dims** when panel 3 loses the focus: it streams,
     like Logs.
-  - **In the terminals** (Alterm, edit, shell) `PgUp|PgDn` scroll back;
-    `Home` and `End` go to the program now, as in every terminu app. Leaving
-    asks with the library's question.
+  - **In the terminals** (Alterm, edit, shell) `PgUp` goes into the History
+    mode: `j|k`, `u|d` and `gg|G` scroll back, `Esc` goes back to the live
+    screen. `Home` and `End` go to the program now, as in every terminu app.
+    Leaving asks with the library's question.
   - **Alterm hides with `Alt-t` only**; `Ctrl-T` goes to the shell.
   - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.
     `z` zooms back from any panel.
   - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
-  - **On a narrow panel 2** the columns that matter least (IP, node, image…)
-    are left out, so the names stay readable; `z` shows them all.
-  - **A long name is cut at the end** (`demo-app-67f76fb666…`), no longer in
-    the middle (`demo-app…66-gm72n`), so the pods of one Deployment can look
-    the same on a narrow panel; `z` shows them whole.
+  - **On a narrow panel 2 whole columns go**, the least needed first (IP,
+    node, image…, then restarts, age, ready, status, namespace) until the
+    rest fit; the name never goes. With one namespace shown, its column goes
+    first. `z` shows them all.
+  - **Drilled into a row**, panel 2's title names it (`[2] PODS: web-7d4f`)
+    and the path is on the first row of the panel (`deployment/web > pods`).
+  - **Below 40×15** kbu shows only its name and the size it needs; the
+    screen comes back as the window grows.
 - **Settings live in `~/.config/kbu` on every platform** (tdp E3), or in
   `$XDG_CONFIG_HOME/kbu`; `KBU__CONFIG` still moves them. On macOS and Windows
   an older kbu kept them in `~/Library/Application Support/kbu` and
-  `%APPDATA%\kbu`: the first start moves that directory to `~/.config/kbu`
-  and says so. If it cannot, kbu keeps using the old one and shows both paths
-  so you can move it yourself.
+  `%APPDATA%\kbu`: the first start moves what is there, one by one, to
+  `~/.config/kbu` and says so. What `~/.config/kbu` has already stays where
+  it was, and kbu shows both paths for you to merge them; if the settings
+  cannot be moved, kbu keeps using the old place and shows both paths.
 - **The logs move to `~/.kbu/logs`** (tdp E3: they are kbu's data);
-  `KBU__DATA` points them elsewhere. Logs already written stay in the settings
-  directory's `logs/`.
+  `KBU__DATA` points them elsewhere. The logs an older kbu wrote in the
+  settings directory move there at the first start.
 - **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
   many cells a tab takes in the viewers (default 4).
 - **`kbu help`** prints how to run kbu (also `--help`, `-h`).

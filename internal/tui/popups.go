@@ -33,34 +33,23 @@ func (m *Model) selection() *terminu.Selection {
 
 // --- the YAML viewer ---------------------------------------------------------
 
-// yamlSearch is the YAML viewer's search: the lines that match, and which of
-// them the viewer is on. TODO(lib KB21): every hit underlined and the one it
-// is on a cursor block (components/dialog/note); the viewer colours its lines
-// itself, so kbu cannot mark them.
-type yamlSearch struct {
-	v       *terminu.Viewer
-	matches []int
-	at      int
-}
+// yamlSearch is the YAML viewer's search: the viewer draws its hits, every
+// one underlined and the one it is on as the cursor block
+// (components/dialog/note).
+type yamlSearch struct{ v *terminu.Viewer }
 
 func (s *yamlSearch) find(q string) tea.Cmd {
-	s.matches, s.at = nil, 0
-	q = strings.ToLower(q)
-	for i, l := range s.v.Lines {
-		if strings.Contains(strings.ToLower(l), q) {
-			s.matches = append(s.matches, i)
-		}
-	}
+	s.v.Hits, s.v.Current = s.v.FindText(q), 0
 	return s.go_(0)
 }
 
 func (s *yamlSearch) go_(step int) tea.Cmd {
-	if len(s.matches) == 0 {
+	n := len(s.v.Hits)
+	if n == 0 {
 		return nil
 	}
-	n := len(s.matches)
-	s.at = ((s.at+step)%n + n) % n
-	s.v.ScrollTo(s.matches[s.at])
+	s.v.Current = ((s.v.Current+step)%n + n) % n
+	s.v.ScrollTo(s.v.Hits[s.v.Current].Line)
 	return nil
 }
 
@@ -75,17 +64,17 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 	s := &yamlSearch{v: v}
 	// show puts the resource as it is now in the viewer, after an edit.
 	show := func(y string) {
-		yaml, v.Lines, s.matches = y, strings.Split(strings.TrimRight(y, "\n"), "\n"), nil
+		yaml, v.Lines, v.Hits = y, strings.Split(strings.TrimRight(y, "\n"), "\n"), nil
 	}
 	v.Keys = []terminu.ViewerKey{
 		{Key: "/", Desc: "search", Do: func() tea.Cmd {
-			// TODO(lib KB11): a search's typing row only draws a pasted
-			// control character, it does not refuse it (components/input/README).
+			// Search: a pasted control character is only drawn, not refused
+			// (components/input/README).
 			return m.app.Text(terminu.TextInput{Title: "Search", Subject: subject(rt, item), Glyph: glyphSearch,
-				Name:   "The text to find",
+				Name: "The text to find", Search: true,
 				Prompt: "Find in the YAML; [n] and [N] go to the next and the previous", Verb: "search",
 				Done: func(q string) tea.Cmd {
-					if s.find(q); len(s.matches) == 0 {
+					if s.find(q); len(v.Hits) == 0 {
 						return m.app.Toast(terminu.Info, "No match for "+q)
 					}
 					return nil
@@ -128,9 +117,9 @@ func (m *Model) compareHere() tea.Cmd {
 		w, _ := m.app.Size()
 		inner := max(min(w-2, 120)-4-5, 20) // the frame, its margins, the line numbers
 		if split {
-			v.Lines, v.Lang = splitDiff(left, right, ll, rl, inner), ""
+			v.Lines, v.Lang, v.NoWrap = splitDiff(left, right, ll, rl, inner), "", true
 		} else {
-			v.Lines, v.Lang = unifiedDiff(left, right, ll, rl, inner), "diff"
+			v.Lines, v.Lang, v.NoWrap = unifiedDiff(left, right, ll, rl, inner), "diff", false
 		}
 	}
 	fill()
@@ -183,29 +172,33 @@ func (m *Model) openAppLog() tea.Cmd {
 
 // --- namespaces ----------------------------------------------------------------
 
-// openNamespaces asks the cluster for its namespaces; the picker opens when
-// they come. TODO(lib KB8): open it at once, loading, when the checkbox
-// popup can load.
+// openNamespaces opens the namespace picker at once and asks the cluster for
+// its namespaces, which fill it as they come (onNamespaces).
 func (m *Model) openNamespaces() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return fetchNamespaces(m.client, false)
+	return tea.Batch(m.namespacePicker(m.client.Selection()), fetchNamespaces(m.client, false))
 }
 
 // namespacePicker picks which namespaces panel 2 shows: All Namespaces or
 // any set of them (components/input/checkbox: Space checks a row, Enter
-// takes the set).
-func (m *Model) namespacePicker(names []string) tea.Cmd {
-	sel := m.client.Selection()
-	opts := append([]string{"All Namespaces"}, names...)
-	checked := make([]bool, len(opts))
-	checked[0] = sel.IsAll()
-	for i, n := range names {
-		checked[i+1] = !sel.IsAll() && sel.Contains(n)
+// takes the set). It opens loading (tdp F7); fillNamespaces puts the
+// namespaces in.
+func (m *Model) namespacePicker(sel k8s.NamespaceSelection) tea.Cmd {
+	var names []string
+	c := &terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Options: []string{"All Namespaces"},
+		Checked: []bool{sel.IsAll()}, Loading: true,
+		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(names, now)) }}
+	m.fillNamespaces = func(got []string) {
+		names = got
+		for _, n := range got {
+			c.Options = append(c.Options, n)
+			c.Checked = append(c.Checked, !sel.IsAll() && sel.Contains(n))
+		}
+		c.Loading = false
 	}
-	return m.app.Checks(terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Options: opts, Checked: checked,
-		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(names, now)) }})
+	return m.app.LoadChecks(c)
 }
 
 // pickedSelection is what the namespace picker's checks mean, as the
@@ -271,34 +264,39 @@ func (m *Model) openContexts() tea.Cmd {
 // and which way.
 func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {
 	cols := columnsOf(rt)
-	chain := m.cfg.GetSort(rt.KubectlName())
 	var fields []terminu.Action
 	for _, c := range cols {
 		if c.Title == "" {
 			continue
 		}
 		title := c.Title
-		desc := "sort by " + strings.ToLower(title)
-		if i := chain.IndexOf(title); i >= 0 {
-			desc = fmt.Sprintf("sorted %s, %s", ordinal(i+1), directionWord(chain[i].Direction))
+		// Live: back from the direction, the row says the sort it set.
+		live := func() (string, string) {
+			if i := m.cfg.GetSort(rt.KubectlName()).IndexOf(title); i >= 0 {
+				chain := m.cfg.GetSort(rt.KubectlName())
+				return title, fmt.Sprintf("sorted %s, %s", ordinal(i+1), directionWord(chain[i].Direction))
+			}
+			return title, "sort by " + strings.ToLower(title)
 		}
-		fields = append(fields, terminu.Action{Label: title, Desc: desc, Stay: true,
+		fields = append(fields, terminu.Action{Label: title, Live: live,
 			Do: func() tea.Cmd { return m.openSortDirection(rt, title) }})
 	}
-	reset := terminu.Action{Label: "Reset", Desc: "back to the namespace, then the name", Disabled: func() bool { return len(chain) == 0 },
+	reset := terminu.Action{Label: "Reset", Desc: "back to the namespace, then the name",
+		Disabled: func() bool { return len(m.cfg.GetSort(rt.KubectlName())) == 0 },
 		Do: func() tea.Cmd {
 			m.cfg.ResetSort(rt.KubectlName())
 			return m.sortSaved(rt)
 		}}
-	// What the menu acts on goes after ": " (components/layout/popup, the
-	// title). TODO(lib KB13): the lib writes it in capitals.
-	return m.app.Menu("Sort by: "+rt.String(), terminu.MenuSection{Title: "fields", Actions: fields},
+	// What the menu acts on goes after ": ", as it is (components/layout/popup,
+	// the title).
+	return m.app.MenuAbout("Sort by", rt.String(), terminu.MenuSection{Title: "fields", Actions: fields},
 		terminu.MenuSection{Title: "all", Actions: []terminu.Action{reset}})
 }
 
 // openSortDirection is the second step: the direction, or out of the order.
-// Choosing one closes both steps. TODO(lib KB9): only this one, the columns
-// staying for a second column.
+// Choosing one writes it back to the columns, the first step, and closes only
+// this one (tdp T1: a value written back to a picker keeps it), so a second
+// column is the next row.
 func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 	chain := m.cfg.GetSort(rt.KubectlName())
 	cur := ""
@@ -314,20 +312,20 @@ func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 	set := func(dir string) func() tea.Cmd {
 		return func() tea.Cmd {
 			m.cfg.SetSort(rt.KubectlName(), column, dir)
-			return m.sortSaved(rt)
+			return tea.Batch(m.sortSaved(rt), m.app.CloseTop(1))
 		}
 	}
 	rows := []terminu.Action{
-		{Label: "Ascending", Desc: mark(config.SortDirectionAscending, "smallest first"), Do: set(config.SortDirectionAscending)},
-		{Label: "Descending", Desc: mark(config.SortDirectionDescending, "largest first"), Do: set(config.SortDirectionDescending)},
+		{Label: "Ascending", Desc: mark(config.SortDirectionAscending, "smallest first"), Stay: true, Do: set(config.SortDirectionAscending)},
+		{Label: "Descending", Desc: mark(config.SortDirectionDescending, "largest first"), Stay: true, Do: set(config.SortDirectionDescending)},
 	}
 	if cur != "" {
-		rows = append(rows, terminu.Action{Label: "Unset", Desc: "take it out of the order", Do: func() tea.Cmd {
+		rows = append(rows, terminu.Action{Label: "Unset", Desc: "take it out of the order", Stay: true, Do: func() tea.Cmd {
 			m.cfg.UnsetSortColumn(rt.KubectlName(), column)
-			return m.sortSaved(rt)
+			return tea.Batch(m.sortSaved(rt), m.app.CloseTop(1))
 		}})
 	}
-	return m.app.Menu("Direction: "+column, terminu.MenuSection{Actions: rows})
+	return m.app.MenuAbout("Direction", column, terminu.MenuSection{Actions: rows})
 }
 
 // sortSaved writes the sort down and shows it, when panel 2 shows that kind.
@@ -383,7 +381,7 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 		if ref.Namespace != "" {
 			details[0] += "  namespace: " + ref.Namespace
 		}
-		rows = append(rows, terminu.Action{Label: label, Desc: desc,
+		rows = append(rows, terminu.Action{Label: label, Desc: desc, Clear: true,
 			Ask: &terminu.Ask{Title: "Switch", Subject: ref.Name, Details: details,
 				Question: "Switch panel 1 + 2 to this resource?", Verb: "switch"},
 			Do: func() tea.Cmd { return m.switchTo(ref) }})

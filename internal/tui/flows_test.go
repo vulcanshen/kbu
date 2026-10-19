@@ -65,19 +65,23 @@ func TestDrillIntoContainersAndBack(t *testing.T) {
 }
 
 // The sort's two steps write the kind's sort to the config and show it on
-// the header.
+// the header; the direction goes back to the columns, saying the sort it set
+// (tdp T1), the names in the titles as they are.
 func TestSortTwoSteps(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "Alt-S")
-	if !strings.Contains(m.screen_(), "SORT BY: PODS") {
+	if !strings.Contains(m.screen_(), "SORT BY: Pods") {
 		t.Fatalf("Alt-S opened no sort menu:\n%s", m.screen_())
 	}
 	m.press("Enter") // Namespace, the first column
-	if !strings.Contains(m.screen_(), "DIRECTION: NAMESPACE") {
+	if !strings.Contains(m.screen_(), "DIRECTION: Namespace") {
 		t.Fatalf("no direction step:\n%s", m.screen_())
 	}
 	m.press("j", "Enter") // Descending
+	if s := m.screen_(); strings.Contains(s, "DIRECTION:") || !strings.Contains(s, "sorted 1st, descending") {
+		t.Errorf("the direction did not go back to the columns:\n%s", s)
+	}
 	want := config.SortChain{{Column: "Namespace", Direction: config.SortDirectionDescending}}
 	if got := m.cfg.GetSort("pod"); !slices.Equal(got, want) {
 		t.Errorf("sort %v, want %v", got, want)
@@ -116,13 +120,11 @@ func TestPanel2SpaceMenu(t *testing.T) {
 	m.press("Tab", "Space")
 	s := m.screen_()
 	for _, want := range []string{"ITEM OPERATION", "[Enter] Drill in", "[Y]AML", "[E]dit", "[S]hell", "[D]elete",
-		"Mark as [C]ompare anchor", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "Global operation"} {
+		"Mark as [C]ompare anchor", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "[z]oom",
+		"Global operation"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the Space menu has no %q:\n%s", want, s)
 		}
-	}
-	if !marked(s, "z", "Zoom") {
-		t.Errorf("the Space menu has no Zoom on z:\n%s", s)
 	}
 	if strings.Contains(s, "Exit compare mode") || strings.Contains(s, "Back ") {
 		t.Errorf("rows for an anchor or a drill that are not there:\n%s", s)
@@ -134,13 +136,10 @@ func TestGlobalOperations(t *testing.T) {
 	m := newTestModel(t)
 	m.press("Space", "G", "Enter")
 	s := m.screen_()
-	for _, want := range []string{"[N]amespace", "[C]ontext", "[Alt-t]erm", "[!] App log"} {
+	for _, want := range []string{"[N]amespace", "[C]ontext", "[Alt-t]erm", "[!] App log", "[q]uit"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the global operation popup has no %q:\n%s", want, s)
 		}
-	}
-	if !marked(s, "q", "Quit") {
-		t.Errorf("the global operation popup has no Quit on q:\n%s", s)
 	}
 }
 
@@ -187,5 +186,54 @@ func TestTheMenuStaysUnderWhatItOpens(t *testing.T) {
 	m.press("Esc", "Space", "Enter")
 	if strings.Contains(m.screen_(), "ITEM OPERATION") {
 		t.Errorf("the drill kept the menu:\n%s", m.screen_())
+	}
+}
+
+// The YAML viewer's / finds the hits the viewer draws (Viewer.FindText); none
+// found is told.
+func TestYAMLSearch(t *testing.T) {
+	for _, c := range []struct {
+		q     string
+		found bool
+	}{{"kind", true}, {"zzzz", false}} {
+		m := newTestModel(t)
+		m.feed(pod("demo", "a"), pod("demo", "b"))
+		m.press("Tab", "Y", "/")
+		for _, r := range c.q {
+			m.press(string(r))
+		}
+		m.press("Enter")
+		if told := strings.Contains(m.screen_(), "No match for "+c.q); told == c.found {
+			t.Errorf("search %q: no-match toast %v, want %v:\n%s", c.q, told, !c.found, m.screen_())
+		}
+	}
+}
+
+// kbu starts on the panel the user left from (tdp K3: what they expect).
+func TestStartsOnThePanelLeftFrom(t *testing.T) {
+	for panel, want := range map[string]func(*Model) *terminu.Panel{
+		"table":  func(m *Model) *terminu.Panel { return m.listP },
+		"detail": func(m *Model) *terminu.Panel { return m.detailP },
+	} {
+		state := config.DefaultState()
+		state.Kind, state.Panel = "pod", panel
+		m := newTestModelWith(t, Options{State: state})
+		if m.screen.Focused() != want(m) {
+			t.Errorf("state panel %q: the focus is not on it", panel)
+		}
+	}
+}
+
+// The namespace picker opens at once, loading (tdp F7), and the namespaces
+// fill it when they come.
+func TestNamespacePickerLoads(t *testing.T) {
+	m := newTestModel(t)
+	m.drive(m.namespacePicker(k8s.AllNamespaces()))
+	if s := m.screen_(); !strings.Contains(s, "NAMESPACES") || strings.Contains(s, "alpha") {
+		t.Fatalf("the picker did not open before its namespaces:\n%s", s)
+	}
+	m.drive(m.onMsg(namespacesMsg{names: []string{"alpha", "beta"}}))
+	if s := m.screen_(); !strings.Contains(s, "alpha") || !strings.Contains(s, "beta") {
+		t.Errorf("the namespaces did not fill the picker:\n%s", s)
 	}
 }

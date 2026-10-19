@@ -80,6 +80,8 @@ an embedded shell are built in; any other tool you trust rides along in that she
   runs inside another family app's terminal, that app sets them for it.
 - **A truecolor terminal** (24-bit colour): the soft colours and the shading between stacked popups cannot be told apart in
   256 colours.
+- **A terminal of at least 40×15.** Below 60 columns kbu shows one panel at a time; below 40×15 it shows only its name and
+  the size it needs, and comes back as you make the window bigger.
 
 ### Quick install (macOS / Linux)
 
@@ -208,9 +210,10 @@ defaults.
 kbu's logs are its data, in **`~/.kbu/logs`** (`KBU__DATA` points it elsewhere): `audit-<date>.log`, every edit and delete
 made from kbu, and `crash-<date>.log` when kbu crashes. Back them up if you need them: deleted, they are gone.
 
-An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows). The first time
-you start this one, it moves that directory to `~/.config/kbu` and says so. If it cannot, it keeps using the old one and
-shows both paths, so you can move it yourself.
+An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows), and its logs
+next to them. The first time you start this one, it moves them, one by one, to `~/.config/kbu` and `~/.kbu/logs`, and says
+so. What the new place has already stays where it was, and kbu shows both paths for you to merge them; if the settings
+cannot be moved, kbu keeps using the old place and shows both paths, so you can move them yourself.
 
 ### config.yaml
 
@@ -262,8 +265,8 @@ resource_kind_config:
 - **Some edits and deletes are not offered.** Events and nodes cannot be deleted from kbu; what a Helm chart manages is changed
   with `helm upgrade`, `rollback` and `uninstall`.
 - **Panel 3 has no `/` filter.** Open the YAML with `Y` and search there.
-- **Long names are cut at the end**, so on a narrow panel the Pods of one Deployment can look the same: `z` shows them whole.
-- **After you resize the window**, panel 2 fits its columns to the new width when the list next changes.
+- **On a narrow panel 2 whole columns go**, the least needed first, until the rest fit: with one very long name in the list
+  only the names may be left. The name never goes, and is cut in the middle (`demo-app…66-gm72n`); `z` shows every column.
 
 ## Links
 

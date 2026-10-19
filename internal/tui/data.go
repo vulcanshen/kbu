@@ -301,15 +301,23 @@ func (m *Model) onCRDs(msg crdsMsg) tea.Cmd {
 // onNamespaces fills the namespace picker, or, at start, drops the saved
 // namespaces that are gone.
 func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
-	if msg.err != nil {
-		if msg.check {
-			m.log.warn("namespaces: " + msg.err.Error())
+	if !msg.check {
+		fill := m.fillNamespaces
+		m.fillNamespaces = nil
+		if fill == nil {
 			return nil
 		}
-		return m.toastErr("namespace fetch failed: " + msg.err.Error())
+		fill(msg.names)
+		if msg.err != nil {
+			// The picker's own load failed: an error popup over it (tdp F7).
+			m.log.err("namespace fetch failed: " + msg.err.Error())
+			return m.app.Error("Namespaces not read", msg.err.Error())
+		}
+		return nil
 	}
-	if !msg.check {
-		return m.namespacePicker(msg.names)
+	if msg.err != nil {
+		m.log.warn("namespaces: " + msg.err.Error())
+		return nil
 	}
 	if m.client == nil {
 		return nil

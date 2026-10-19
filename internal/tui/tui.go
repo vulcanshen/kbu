@@ -1,4 +1,4 @@
-// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.8.0): the lib
+// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.8.1): the lib
 // draws the screen and drives the core keys — the Space menu, the key
 // reference, the hints, confirms, dimming, Esc one layer at a time — and
 // this package registers kbu's three panels, their actions and popups, and
@@ -6,8 +6,10 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,7 +31,7 @@ type Options struct {
 	Notices []string
 	// Moved is where the settings were moved at start (tdp E3): a toast
 	// says so, or an error popup when the move failed.
-	Moved config.Move
+	Moved []config.Moved
 	// Status are the colours of a resource's status cells (the app's
 	// content, tdp P4).
 	Status theme.StatusColors
@@ -86,7 +88,10 @@ type Model struct {
 
 	startTab   string // the state's panel 3 tab, applied once the kind has its tabs
 	startPanel string
-	moved      config.Move
+	moved      []config.Moved
+
+	// fillNamespaces puts the namespaces in the open namespace picker.
+	fillNamespaces func([]string)
 }
 
 // New builds kbu's UI.
@@ -114,6 +119,10 @@ func New(o Options) *Model {
 	a := terminu.New("kbu")
 	a.QuitDesc = "leave kbu"
 	a.ShiftTab = true
+	// kbu's least size is lower than the family's 80×40 (tdp L1): it runs in
+	// a terminal's usual 80×24 and in a split pane, its narrow layout (one
+	// panel) working down to minWidth×minHeight. docs/dev-remarks.md says why.
+	a.MinWidth, a.MinHeight = minWidth, minHeight
 	a.InputTabWidth = m.cfg.InputTabWidth // the family's input_tab_width (tdp E3)
 	a.Status = m.statusbar
 	a.OnMsg = m.onMsg
@@ -181,6 +190,10 @@ func (m *Model) shutdown() {
 // App is the lib's app, for tests.
 func (m *Model) App() *terminu.App { return m.app }
 
+// minWidth and minHeight are kbu's least size (tdp L1): below it only its
+// name and the size it needs are drawn.
+const minWidth, minHeight = 40, 15
+
 // layout puts panel 1 on the left, 24 cells wide, and panels 2 and 3 on the
 // right, panel 3 under panel 2 (tdp leaves the arrangement to the app,
 // tdp L1).
@@ -203,7 +216,7 @@ func (m *Model) globalActions() []terminu.Action {
 	return []terminu.Action{
 		{Key: "N", Label: "Namespace", Desc: "pick which namespaces to show", Scope: terminu.GlobalScope, Do: m.openNamespaces},
 		{Key: "C", Label: "Context", Desc: "switch the kubeconfig context", Scope: terminu.GlobalScope, Do: m.openContexts},
-		{Key: "Alt-t", Label: "term", Desc: "show the embedded shell (Alterm)", Scope: terminu.GlobalScope, Do: m.showAlterm},
+		{Key: "Alt-t", Label: "Term", Desc: "show the embedded shell (Alterm)", Scope: terminu.GlobalScope, Clear: true, Do: m.showAlterm},
 		{Key: "!", Label: "App log", Desc: "what kbu has done and what failed", Scope: terminu.GlobalScope, Stay: true, Do: m.openAppLog},
 		// Not a key of the App Log viewer: a note only shows (tdp F1).
 		{Label: "Clear the App log", Desc: "forget what it has kept", Scope: terminu.GlobalScope,
@@ -226,29 +239,51 @@ func (m *Model) start() tea.Cmd {
 		cmds = append(cmds, fetchNamespaces(m.client, true), discoverCRDs(m.client))
 	}
 	cmds = append(cmds, m.sayMoved())
-	// The lib has no call that sets the focus: the panel the user left from
-	// is reached with its digit, as the user would (tdp K1).
-	// TODO(lib KB5): a way to set the focused panel.
-	if n := map[string]rune{"table": '2', "detail": '3'}[m.startPanel]; n != 0 {
-		cmds = append(cmds, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{n}} })
+	// Back on the panel the user left from: starting kbu is what they did,
+	// and where it starts is what they expect (tdp K3).
+	if p := map[string]*terminu.Panel{"table": m.listP, "detail": m.detailP}[m.startPanel]; p != nil {
+		cmds = append(cmds, m.app.Focus(p))
 	}
 	return tea.Batch(cmds...)
 }
 
-// sayMoved says where the settings were moved at start (tdp E3): an Info
-// toast, or an error popup with both paths when the move failed.
+// sayMoved says what was moved at start (tdp E3): an Info toast from where
+// to where, and an error popup with both paths for what stayed where it was.
 func (m *Model) sayMoved() tea.Cmd {
-	mv := m.moved
-	if mv.From == "" {
-		return nil
+	var done, left []string
+	said := map[string]bool{}
+	for _, mv := range m.moved {
+		switch {
+		case mv.Err == nil:
+			m.log.info(fmt.Sprintf("config: moved %s to %s", mv.From, mv.To))
+			from, to := mv.From, mv.To
+			if mv.What == "settings" {
+				from, to = filepath.Dir(from), filepath.Dir(to) // the files of one directory
+			}
+			if s := fmt.Sprintf("%s from %s to %s", mv.What, from, to); !said[s] {
+				said[s] = true
+				done = append(done, s)
+			}
+		case errors.Is(mv.Err, config.ErrThereAlready):
+			m.log.err(fmt.Sprintf("config: %s not moved, %s is there already", mv.From, mv.To))
+			left = append(left, fmt.Sprintf("%s stays where it is: %s is there already. Merge the two yourself.", mv.From, mv.To))
+		default:
+			m.log.err(fmt.Sprintf("config: could not move %s to %s: %v", mv.From, mv.To, mv.Err))
+			keeps := ""
+			if mv.What == "settings" {
+				keeps = ": kbu keeps using it"
+			}
+			left = append(left, fmt.Sprintf("%s could not be moved to %s (%v)%s. Move it yourself.", mv.From, mv.To, mv.Err, keeps))
+		}
 	}
-	if mv.Err != nil {
-		m.log.err(fmt.Sprintf("config: could not move %s to %s: %v", mv.From, mv.To, mv.Err))
-		return m.app.Error("Settings not moved", fmt.Sprintf("kbu could not move its settings from %s to %s (%v). "+
-			"It keeps using %s; move the directory to %s yourself.", mv.From, mv.To, mv.Err, mv.From, mv.To))
+	var cmds []tea.Cmd
+	if len(done) > 0 {
+		cmds = append(cmds, m.app.Toast(terminu.Info, "Moved kbu's "+strings.Join(done, ", and its ")))
 	}
-	m.log.info(fmt.Sprintf("config: moved %s to %s", mv.From, mv.To))
-	return m.app.Toast(terminu.Info, fmt.Sprintf("Moved kbu's settings from %s to %s", mv.From, mv.To))
+	if len(left) > 0 {
+		cmds = append(cmds, m.app.Error("Not moved", strings.Join(left, "\n")))
+	}
+	return tea.Batch(cmds...)
 }
 
 // statusbar is the row at the top (components/layout/screen): the context
@@ -367,8 +402,8 @@ func (m *Model) toastWarn(text string) tea.Cmd {
 	return m.app.Toast(terminu.Warning, text)
 }
 
-// toastDone says an action the user asked for is done. TODO(lib S8): the
-// Success toast, in Green (components/dialog/toast).
+// toastDone says an action the user asked for is done: a Success toast, in
+// Green (components/dialog/toast).
 func (m *Model) toastDone(text string) tea.Cmd {
-	return m.app.Toast(terminu.Info, text)
+	return m.app.Toast(terminu.Success, text)
 }

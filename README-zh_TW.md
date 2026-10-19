@@ -70,6 +70,7 @@ Relatives 導覽、YAML 比對與內嵌的 shell 都是內建的；kbu 沒做的
   `TERMINU__ICON_WIDTH` 與 `TERMINU__POWERLINE_WIDTH` —— terminu 家族共用：設一次，家族每個 app 都讀得到；kbu 在家族其他
   app 的 terminal 裡跑時，外層的 app 會替它設好。
 - **truecolor 終端機**（24-bit 色）：柔和的顏色與疊起來的 popup 之間的明暗，在 256 色下分不出來。
+- **終端機至少 40×15。** 60 欄以下 kbu 一次只畫一個 panel；比 40×15 小時只畫名稱與需要的大小，把視窗拉大就回來。
 
 ### 快速安裝（macOS / Linux）
 
@@ -193,8 +194,9 @@ kbu 的設定與上次停在哪裡都在 **`~/.config/kbu`**（有設 `$XDG_CONF
 kbu 的 log 是它的資料，在 **`~/.kbu/logs`**（`KBU__DATA` 可以改到別的目錄）：`audit-<日期>.log` 記從 kbu 做的每一次 edit 與
 delete，`crash-<日期>.log` 是 kbu 當掉時的紀錄。需要的話自己備份：刪掉就找不回來了。
 
-舊版的 kbu 把設定放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows）。第一次啟動這一版時，
-kbu 會把那個目錄搬到 `~/.config/kbu`，並告訴你搬好了；搬不動時照舊用舊目錄，並寫出兩個路徑，讓你自己搬。
+舊版的 kbu 把設定放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows），log 也放在旁邊。第一次
+啟動這一版時，kbu 會把它們一項一項搬到 `~/.config/kbu` 與 `~/.kbu/logs`，並告訴你搬好了。新位置已經有的那一項留在原處，kbu
+寫出兩個路徑讓你自己合併；設定搬不動時照舊用舊位置，並寫出兩個路徑，讓你自己搬。
 
 ### config.yaml
 
@@ -243,8 +245,8 @@ resource_kind_config:
 - **workload 的 log 跟的是你選那一列時已經有的 Pod。** rollout 之後，重新選那一列才會換成新的 Pod。
 - **有些 edit 與 delete 不提供。** Events 與 node 不能從 kbu 刪；Helm chart 管理的物件請用 `helm upgrade`、`rollback`、`uninstall` 改。
 - **panel 3 沒有 `/` 篩選。** 用 `Y` 打開 YAML，在那裡搜尋。
-- **太長的名稱從尾端截**，panel 窄的時候，同一個 Deployment 的 Pod 可能看起來一樣：按 `z` 看完整的名稱。
-- **改了視窗大小之後**，panel 2 等清單下一次變動時才照新的寬度排欄。
+- **panel 2 窄的時候整欄收掉**，最不需要的先收，直到放得下：清單裡有一個很長的名稱時，可能只剩名稱一欄。名稱永遠不收，
+  太長從中間截（`demo-app…66-gm72n`）；按 `z` 看所有的欄。
 
 ## 相關連結
 

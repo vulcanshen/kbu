@@ -73,9 +73,9 @@ func main() {
 	klog.SetLogger(logr.Discard())
 	log.SetOutput(io.Discard)
 
-	// tdp E3: the settings an older kbu kept in the platform's directory move
-	// to the family's at the first start; the UI says where to, or why not.
-	moved := config.MovePlatformConfigDir()
+	// tdp E3: what an older kbu kept elsewhere moves, item by item, at the
+	// first start; the UI says where to, or what stayed.
+	moved := config.MoveOldPlaces()
 
 	// v2.0 km8 → kbu rename: one-shot copy of the km8 settings directory
 	// when kbu's does not exist yet. A copy failure is fatal — going on with
