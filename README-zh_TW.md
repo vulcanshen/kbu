@@ -70,6 +70,7 @@ Relatives 導覽、YAML 比對與內嵌的 shell 都是內建的；kbu 沒做的
   `TERMINU__ICON_WIDTH` 與 `TERMINU__POWERLINE_WIDTH` —— terminu 家族共用：設一次，家族每個 app 都讀得到；kbu 在家族其他
   app 的 terminal 裡跑時，外層的 app 會替它設好。
 - **truecolor 終端機**（24-bit 色）：柔和的顏色與疊起來的 popup 之間的明暗，在 256 色下分不出來。
+- **終端機至少 40×15。** 60 欄以下 kbu 一次只畫一個 panel；比 40×15 小時只畫名稱與需要的大小，把視窗拉大就回來。
 
 ### 快速安裝（macOS / Linux）
 
@@ -244,8 +245,8 @@ resource_kind_config:
 - **workload 的 log 跟的是你選那一列時已經有的 Pod。** rollout 之後，重新選那一列才會換成新的 Pod。
 - **有些 edit 與 delete 不提供。** Events 與 node 不能從 kbu 刪；Helm chart 管理的物件請用 `helm upgrade`、`rollback`、`uninstall` 改。
 - **panel 3 沒有 `/` 篩選。** 用 `Y` 打開 YAML，在那裡搜尋。
-- **太長的名稱從尾端截**，panel 窄的時候，同一個 Deployment 的 Pod 可能看起來一樣：按 `z` 看完整的名稱。
-- **改了視窗大小之後**，panel 2 等清單下一次變動時才照新的寬度排欄。
+- **panel 2 窄的時候整欄收掉**，最不需要的先收，直到放得下：清單裡有一個很長的名稱時，可能只剩名稱一欄。名稱永遠不收，
+  太長從中間截（`demo-app…66-gm72n`）；按 `z` 看所有的欄。
 
 ## 相關連結
 

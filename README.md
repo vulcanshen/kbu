@@ -80,6 +80,8 @@ an embedded shell are built in; any other tool you trust rides along in that she
   runs inside another family app's terminal, that app sets them for it.
 - **A truecolor terminal** (24-bit colour): the soft colours and the shading between stacked popups cannot be told apart in
   256 colours.
+- **A terminal of at least 40×15.** Below 60 columns kbu shows one panel at a time; below 40×15 it shows only its name and
+  the size it needs, and comes back as you make the window bigger.
 
 ### Quick install (macOS / Linux)
 
@@ -263,8 +265,8 @@ resource_kind_config:
 - **Some edits and deletes are not offered.** Events and nodes cannot be deleted from kbu; what a Helm chart manages is changed
   with `helm upgrade`, `rollback` and `uninstall`.
 - **Panel 3 has no `/` filter.** Open the YAML with `Y` and search there.
-- **Long names are cut at the end**, so on a narrow panel the Pods of one Deployment can look the same: `z` shows them whole.
-- **After you resize the window**, panel 2 fits its columns to the new width when the list next changes.
+- **On a narrow panel 2 whole columns go**, the least needed first, until the rest fit: with one very long name in the list
+  only the names may be left. The name never goes, and is cut in the middle (`demo-app…66-gm72n`); `z` shows every column.
 
 ## Links
 

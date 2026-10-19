@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.8.0/principle)（tdp v0.8.0），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.1.13）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.8.1/principle)（tdp v0.8.1），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.2.0）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -118,8 +118,8 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   長度、後面的 chip 跟著移，是 user 2026-09-28 裁定的偏離（固定 24 格時短名字後面空一大格、80 欄把 chip 擠出去）；tdp L2（v0.8.0）
   補了這個做法（KB6，user 2026-10-19 選 C），偏離拿掉。
 - **split 版的 compare 不折行**（tdp v0.8.0 的 components/dialog/note：要對齊的內容 app 可以讓它不折行，截掉的加 `…`）：左右兩欄
-  並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看
-  那一筆的 YAML。`TODO(lib KB18)`：lib 給 viewer 不折行的選項後改用它，畫面變窄時才不會折。
+  並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`），viewer 設 `NoWrap`，畫面變窄時也是截、不折
+  （KB18）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看那一筆的 YAML。
 - **設定位置照 tdp E3**：`~/.config/kbu`。舊版放在系統的設定目錄（macOS `~/Library/Application Support/kbu`、Windows
   `%APPDATA%\kbu`）。照 tdp E3（v0.8.1）的「換了位置時」逐項搬（`config.MoveOldPlaces`，啟動時、讀設定之前）：舊目錄裡的每一項
   用 `os.Rename` 搬到 `~/.config/kbu`，`logs/` 搬到資料目錄；新位置已經有的那一項留在舊位置（設定、資料都不刪）；搬完把空了的
@@ -128,11 +128,19 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **log（crash、audit）放資料目錄 `~/.kbu/logs`**（`KBU__DATA`）：tdp E3 照「刪掉會怎樣」分，log 刪了就找不回來，是資料（KB15，
   user 2026-10-19）。舊版寫在設定目錄 `logs/` 的 log（Linux 也是），第一次啟動時一起搬到資料目錄。
 - **確認一律用 `Action.Ask`**：edit、shell、delete、rollback、切換 context 的問句在排 panel 的動作時就照游標那一筆建好（換列時重排），
-  從 Space menu 執行時 `Esc` 回到 menu（tdp F4）、`Enter` 清掉整疊。只有 YAML viewer 的 `E` 用 `App.Confirm`，viewer 留在底下。
-- **menu 的 source 留或清照 tdp T1 的表**（照「確定之後的動作」判）：打開東西來看的（`Y`、`Enter` 打開 YAML、compare、helm 的文件、
-  App Log）設 `Action.Stay`，看完 `Esc` 回到 menu；drill、shell、delete、rollback、切換 context、namespace 清掉。從 YAML viewer 按
-  `E` 編輯，viewer 留著，編輯結束時重讀那一筆（內建的種類向 API 拿，CRD 用 watch 到的；KB10）。`TODO(lib S4)`：從 Space menu 執行
-  edit 也該保留 menu，但 lib 帶 `Ask` 的動作接受後一律清掉整疊，要等「動作可以標保留或清掉」的接口。
+  從 Space menu 執行時 `Esc` 回到 menu（tdp F4），`Enter` 之後 menu 留或清照下一條。只有 YAML viewer 的 `E` 用 `App.Confirm`，
+  viewer 留在底下。
+- **menu 的 source 留或清照 tdp T1 的表**（照「確定之後的動作」判）：terminu-go v0.2.0 從 menu 執行、打開了東西的動作預設保留 menu
+  —— YAML、compare、helm 的文件、App Log、edit（S4），看完、改完 `Esc` 回到 menu。開 shell、drill、delete、切換 context、Alterm、
+  breadcrumb 的跳轉設 `Action.Clear`；沒打開東西的（rollback、複製、標 anchor）照 lib 關掉 menu。要非同步才打開的（Relatives 的 `Y`、
+  helm 的文件）設 `Action.Stay`，等它打開時 menu 還在。兩步排序選完方向用 `App.CloseTop(1)` 只關自己，回到欄位那一步，欄位的
+  說明用 `Action.Live` 寫剛排好的順位（KB9）。從 YAML viewer 按 `E` 編輯，viewer 留著，編輯結束時重讀那一筆（內建的種類向 API 拿，
+  CRD 用 watch 到的；KB10）。
+- **YAML viewer 的搜尋**：`/` 與 `n|N` 是 kbu 的，命中交給 viewer 畫（`Viewer.FindText`、`Hits`、`Current`：每一筆加底線，目前那一筆
+  是 cursor 色塊；KB21）；打字列用 `TextInput.Search`，貼上的控制字元只畫不擋（KB11）。
+- **namespace picker 一按就開**（`App.LoadChecks`）：標題轉 loading，namespace 清單到了再填進去（KB8）；抓不到時 error popup 蓋在
+  picker 上。
+- **啟動回到上次的 panel**：`App.Focus`（tdp K3：啟動是使用者按的，回到上次的地方是他預期的；KB5）。
 - **App Log 的清除在 Global operation**：note 只用來讀（tdp F1），清除是對整個 app 的動作。
 
 ### 環境變數
@@ -153,9 +161,8 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 
 - **滑鼠**：家族只用鍵盤（tdp X1 允許；KB4，user 2026-10-19），連帶 Settings popup 拿掉。`config.yaml` 的 `mouse_opt_config` 照樣
   讀進來、不作用。
-- **PTY 的歷史**：`PgUp|PgDn` 捲；`Home`／`End` 屬於 shell（tdp K12），kbu 不另外綁（KB7，user 2026-10-19）。到最舊、回到即時等 lib
-  的歷史模式（`gg|G`，`TODO(lib KB7)`）。
-- **啟動恢復 focus 的 panel**：lib 沒有設定 focus 的 API（KB5），`start` 送一個數字鍵代替使用者按。
+- **PTY 的歷史**：`PgUp` 進歷史模式（lib 的 `Terminal.History`：`j|k`、`u|d`、`gg|G` 捲、`Esc` 回即時）；`Home`／`End` 屬於 shell
+  （tdp K12），kbu 不另外綁（KB7，user 2026-10-19）。
 - **PTY 只在 unix**：lib 的 terminal 在 Windows 開不了（舊版用的 creack/pty 在 Windows 也一樣）。
 - **彙總 log 的 Pod 汰換**：串流在選列當下取快照，rollout 之後要重新選那一列。
 - **Helm 沒有 watch**：release 清單每 3 秒 poll 一次。
@@ -166,15 +173,15 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 偏離 tdp
 
 目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法，移到「設計決定」。
+等 terminu-go 第三批的那些也都做了，`docs/kbu-terminu-fix.md` 拿掉（tdp E7：全部修完刪掉）。
 
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.8.0/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.8.1/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|
-| [`kbu-terminu-fix.md`](kbu-terminu-fix.md) | 還沒符合 tdp、等 lib 或規範的地方（tdp E7） |
 | [`icon.svg`](icon.svg) | kbu 的 mark（tdp S5：U 框、K、B 各一段註解），README 與 splash 用 |
 | [`km8-icon.svg`](km8-icon.svg) | 改名前（km8）的圖示 |
 | [`social-preview.png`](social-preview.png) | GitHub 的 social preview |
