@@ -120,13 +120,11 @@ func TestPanel2SpaceMenu(t *testing.T) {
 	m.press("Tab", "Space")
 	s := m.screen_()
 	for _, want := range []string{"ITEM OPERATION", "[Enter] Drill in", "[Y]AML", "[E]dit", "[S]hell", "[D]elete",
-		"Mark as [C]ompare anchor", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "Global operation"} {
+		"Mark as [C]ompare anchor", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "[z]oom",
+		"Global operation"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the Space menu has no %q:\n%s", want, s)
 		}
-	}
-	if !marked(s, "z", "Zoom") {
-		t.Errorf("the Space menu has no Zoom on z:\n%s", s)
 	}
 	if strings.Contains(s, "Exit compare mode") || strings.Contains(s, "Back ") {
 		t.Errorf("rows for an anchor or a drill that are not there:\n%s", s)
@@ -138,13 +136,10 @@ func TestGlobalOperations(t *testing.T) {
 	m := newTestModel(t)
 	m.press("Space", "G", "Enter")
 	s := m.screen_()
-	for _, want := range []string{"[N]amespace", "[C]ontext", "[Alt-t]erm", "[!] App log"} {
+	for _, want := range []string{"[N]amespace", "[C]ontext", "[Alt-t]erm", "[!] App log", "[q]uit"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the global operation popup has no %q:\n%s", want, s)
 		}
-	}
-	if !marked(s, "q", "Quit") {
-		t.Errorf("the global operation popup has no Quit on q:\n%s", s)
 	}
 }
 
