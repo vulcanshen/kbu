@@ -17,21 +17,25 @@ import (
 )
 
 // newTestModel is kbu without a cluster: nothing is fetched, the lists are
-// fed by hand. The settings go to a temporary directory, so a test that
-// saves never touches the real ones; kubectl and helm are never run.
+// fed by hand. The settings, the state and the data go to temporary
+// directories, so a test that saves never touches the real ones; kubectl and
+// helm are never run.
 func newTestModel(t *testing.T) *Model {
 	t.Helper()
 	return newTestModelWith(t, Options{})
 }
 
-// newTestModelWith is newTestModel with what kbu starts with besides the
-// settings and the state.
+// newTestModelWith is newTestModel with what kbu starts with: the defaults
+// for the settings and the state when it gives none.
 func newTestModelWith(t *testing.T, o Options) *Model {
 	t.Helper()
 	t.Setenv("KBU__CONFIG", t.TempDir())
 	t.Setenv("KBU__STATE", t.TempDir())
+	t.Setenv("KBU__DATA", t.TempDir())
 	terminu.SetIconWidth(1, 1)
-	o.Config = config.DefaultConfig()
+	if o.Config == nil {
+		o.Config = config.DefaultConfig()
+	}
 	if o.State == nil {
 		o.State = config.DefaultState()
 	}

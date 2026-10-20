@@ -68,8 +68,8 @@ brews:
       edit, shell and the built-in terminal also need `kubectl` on PATH, and
       the Helm releases need `helm`.
 
-      Settings live in ~/.config/kbu (KBU__CONFIG moves them), the logs in
-      ~/.kbu/logs (KBU__DATA moves them).
+      Settings live in ~/.config/kbu (KBU__CONFIG moves them), the pins,
+      sorts and logs in ~/.kbu (KBU__DATA moves them).
 
       A Nerd Font terminal profile and a truecolor (24-bit) terminal are
       required. macOS, Linux (WSL too) and Windows.

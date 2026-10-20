@@ -19,7 +19,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.9.0: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.9.1: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -44,7 +44,7 @@ The rest:
     a progress bar's last state, anything else by its name in red.
   - **In Alterm and a shell** `Alt-v` selects text to copy, as in a viewer;
     in `kubectl edit` every key is the editor's, `PgUp` too.
-  - **Settings or a state kbu cannot read** are asked about at the start:
+  - **Settings, a state or pins and sorts kbu cannot read** are asked about at the start:
     `Enter` moves the file to `.bak` and starts from the defaults, `Esc`
     leaves kbu and says why. kbu used to stop on broken settings, and start
     over a broken state without a word.
@@ -80,11 +80,17 @@ The rest:
 - **The logs move to `~/.kbu/logs`** (tdp E3: they are kbu's data);
   `KBU__DATA` points them elsewhere. The logs an older kbu wrote in the
   settings directory move there at the first start.
+- **The pins and sorts move to `~/.kbu/kinds.yaml`** (tdp E3: a list you
+  write is data, not a setting); `KBU__DATA` points it elsewhere, and
+  `config.yaml` keeps only kbu's own options. The first start moves an older
+  kbu's `resource_kind_config` out of `config.yaml`, the rest of the file
+  left as it was; if they cannot be moved, kbu keeps using them in
+  `config.yaml` and shows both paths.
 - **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
   many cells a tab takes in the viewers (default 4).
 - **`kbu help`** prints how to run kbu (also `--help`, `-h`).
 - **The uninstallers** ask about the settings, the state (when `KBU__STATE`
-  moved it) and the logs. `uninstall.sh` also offers, on macOS, to remove the
+  moved it) and the data (the pins and sorts, the logs). `uninstall.sh` also offers, on macOS, to remove the
   settings an older kbu kept in `~/Library/Application Support/kbu`, and
   `uninstall.ps1` the ones in `%APPDATA%\kbu`.
 - **The repository takes the terminu family's shape** (tdp project): the

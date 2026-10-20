@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -197,6 +198,56 @@ func TestTheMovedSettingsAreTold(t *testing.T) {
 	}
 }
 
+// The pins and sorts moved out of config.yaml are told as the settings are;
+// when they stayed, the error popup says where they are and why.
+func TestTheMovedPinsAndSortsAreTold(t *testing.T) {
+	m := newTestModelWith(t, Options{Moved: []config.Moved{
+		{What: "pins and sorts", From: "/cfg/config.yaml", To: "/data/kinds.yaml"},
+	}})
+	if s := m.screen_(); !strings.Contains(s, "Moved kbu's pins and sorts from /cfg/config.yaml to /data/kinds.yaml") {
+		t.Errorf("no toast for the move:\n%s", s)
+	}
+	for _, mv := range []config.Moved{
+		{What: "pins and sorts", From: "/cfg/config.yaml", To: "/data/kinds.yaml", Err: config.ErrThereAlready},
+		{What: "pins and sorts", From: "/cfg/config.yaml", To: "/data/kinds.yaml", Err: errors.New("read-only")},
+	} {
+		m = newTestModelWith(t, Options{Moved: []config.Moved{mv}})
+		s := m.screen_()
+		wants := []string{"NOT MOVED", "/cfg/config.yaml", "/data/kinds.yaml"}
+		if mv.Err == config.ErrThereAlready {
+			wants = append(wants, "stay where they are", "Merge the two")
+		} else {
+			wants = append(wants, "read-only", "keeps using them")
+		}
+		for _, want := range wants {
+			if !strings.Contains(s, want) {
+				t.Errorf("the error popup has no %q:\n%s", want, s)
+			}
+		}
+	}
+}
+
+// tdp E3: while the pins and sorts could not be moved out of config.yaml,
+// kbu keeps reading and writing them there, and makes no kinds.yaml.
+func TestPinsAndSortsNotMovedStayInConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.ResourceKindConfig.SetPinned("deployment", 10)
+	m := newTestModelWith(t, Options{Config: cfg})
+	if !slices.Equal(m.pinned, []k8s.ResourceType{k8s.ResourceDeployments}) {
+		t.Fatalf("pinned %v, want the config's Deployments", m.pinned)
+	}
+	m.kinds.Select(string(k8s.ResourcePods))
+	m.size(120, 40) // a frame: OnMove takes the cursor's kind
+	m.press("P")
+	saved, err := config.Load()
+	if err != nil || !slices.Equal(saved.ResourceKindConfig.PinnedOrdered(), []string{"deployment", "pod"}) {
+		t.Errorf("config.yaml pins %v, %v", saved.ResourceKindConfig.PinnedOrdered(), err)
+	}
+	if _, err := os.Stat(config.KindDataPath()); err == nil {
+		t.Error("a kinds.yaml was made")
+	}
+}
+
 // P pins the kind under panel 1's cursor: it moves to the Pinned group at
 // the top (it is not copied), and the order is saved. P again puts it back.
 func TestPinMovesTheKindToPinned(t *testing.T) {
@@ -215,7 +266,7 @@ func TestPinMovesTheKindToPinned(t *testing.T) {
 	if n != 1 {
 		t.Errorf("Pods is in panel 1 %d times, want once", n)
 	}
-	saved, err := config.Load()
+	saved, err := config.LoadKindData()
 	if err != nil || !saved.IsPinned("pod") {
 		t.Errorf("pin not saved: %v %v", err, saved.PinnedOrdered())
 	}
@@ -250,7 +301,7 @@ func TestDragReordersThePinnedKinds(t *testing.T) {
 		t.Errorf("Esc kept %v, want back to %v", m.pinned, want)
 	}
 	m.press("D", "k", "Enter")
-	saved, _ := config.Load()
+	saved, _ := config.LoadKindData()
 	if got := saved.PinnedOrdered(); !slices.Equal(got, []string{"deployment", "pod"}) {
 		t.Errorf("saved order %v, want deployment, pod", got)
 	}
@@ -423,25 +474,28 @@ func TestSessionState(t *testing.T) {
 	}
 }
 
-// tdp E3: settings and a state kbu cannot read are asked about at the start,
-// MOVE ASIDE: Enter moves each to .bak and writes a new one, the settings
-// first, then the state.
+// tdp E3: settings, a state and pins and sorts kbu cannot read are asked
+// about at the start, MOVE ASIDE: Enter moves each to .bak and writes a new
+// one, the settings first, then the state, then the pins and sorts.
 func TestUnreadableFilesMoveAside(t *testing.T) {
-	m := newTestModelWith(t, Options{ConfigErr: errors.New("yaml: line 3: bad"), StateErr: errors.New("yaml: line 1: bad")})
-	for _, p := range []string{config.ConfigPath(), config.StatePath()} {
+	m := newTestModelWith(t, Options{ConfigErr: errors.New("yaml: line 3: bad"), StateErr: errors.New("yaml: line 1: bad"),
+		KindsErr: errors.New("yaml: line 2: bad")})
+	files := []string{config.ConfigPath(), config.StatePath(), config.KindDataPath()}
+	for _, p := range files {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(p, []byte("broken: ["), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if s := m.screen_(); !strings.Contains(s, "MOVE ASIDE") || !strings.Contains(s, "config.yaml") {
-		t.Fatalf("no MOVE ASIDE for the settings:\n%s", s)
+	for _, name := range []string{"config.yaml", "state.yaml", "kinds.yaml"} {
+		if s := m.screen_(); !strings.Contains(s, "MOVE ASIDE") || !strings.Contains(s, name) {
+			t.Fatalf("no MOVE ASIDE for %s:\n%s", name, s)
+		}
+		m.press("Enter")
 	}
-	m.press("Enter")
-	if s := m.screen_(); !strings.Contains(s, "MOVE ASIDE") || !strings.Contains(s, "state.yaml") {
-		t.Fatalf("no MOVE ASIDE for the state:\n%s", s)
-	}
-	m.press("Enter")
-	for _, p := range []string{config.ConfigPath(), config.StatePath()} {
+	for _, p := range files {
 		if b, err := os.ReadFile(p + ".bak"); err != nil || string(b) != "broken: [" {
 			t.Errorf("%s.bak: %q, %v", p, b, err)
 		}

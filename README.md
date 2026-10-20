@@ -112,8 +112,8 @@ Building from source is in [`docs/dev-remarks.md`](docs/dev-remarks.md).
 
 ### The first start
 
-kbu connects to your kubeconfig's current context and shows the Pods. Nothing is written until you pin, sort or quit: then
-`~/.config/kbu` is made (see [Settings and data](#settings-and-data)). If an older kbu left its settings in
+kbu connects to your kubeconfig's current context and shows the Pods. Nothing is written until you pin, sort or quit:
+pinning or sorting makes `~/.kbu`, quitting `~/.config/kbu` (see [Settings and data](#settings-and-data)). If an older kbu left its settings in
 `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows), the first start moves them to `~/.config/kbu`
 and says so.
 
@@ -206,20 +206,28 @@ defaults.
 
 | File | What it is |
 |---|---|
-| `config.yaml` | Your settings (below). kbu writes it when you pin, sort or switch the compare layout |
+| `config.yaml` | Your settings (below). kbu writes it when you switch the compare layout |
 | `state.yaml` | Where you left off; written when you quit. `KBU__STATE` keeps it in another directory |
 
-kbu's logs are its data, in **`~/.kbu/logs`** (`KBU__DATA` points it elsewhere): `audit-<date>.log`, every edit and delete
-made from kbu, and `crash-<date>.log` when kbu crashes. Back them up if you need them: deleted, they are gone.
+kbu's data is in **`~/.kbu`** (`KBU__DATA` points it elsewhere). Back it up if you need it: deleted, it is gone.
+
+| File | What it is |
+|---|---|
+| `kinds.yaml` | Your pins and sorts, kind by kind (below). kbu writes it when you pin or sort |
+| `logs/audit-<date>.log` | Every edit and delete made from kbu |
+| `logs/crash-<date>.log` | What kbu left when it crashed |
 
 An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or `%APPDATA%\kbu` (Windows), and its logs
 next to them. The first time you start this one, it moves them, one by one, to `~/.config/kbu` and `~/.kbu/logs`, and says
 so. What the new place has already stays where it was, and kbu shows both paths for you to merge them; if the settings
-cannot be moved, kbu keeps using the old place and shows both paths, so you can move them yourself.
+cannot be moved, kbu keeps using the old place and shows both paths, so you can move them yourself. An older kbu also
+kept the pins and sorts in `config.yaml` (`resource_kind_config`): the first start moves them to `~/.kbu/kinds.yaml` and
+leaves the rest of `config.yaml` as it was. When `kinds.yaml` is there already, they stay in `config.yaml` for you to
+merge; when they cannot be moved, kbu keeps using them there; either way it shows both paths.
 
-When kbu cannot read `config.yaml` or `state.yaml` (a broken file, no permission), it asks at the start: `Enter` renames
-it to `config.yaml.bak` (or `.bak.1`…, never over another) and starts again from the defaults; `Esc` leaves kbu and prints
-the path and the reason in the terminal.
+When kbu cannot read `config.yaml`, `state.yaml` or `kinds.yaml` (a broken file, no permission), it asks at the start:
+`Enter` renames it to `config.yaml.bak` (or `.bak.1`…, never over another) and starts again from the defaults, or with no
+pins and sorts; `Esc` leaves kbu and prints the path and the reason in the terminal.
 
 ### config.yaml
 
@@ -232,18 +240,21 @@ alterm_login_shell: false # true starts Alterm's shell with -l, reading ~/.zprof
 compare:
   layout: unified         # "unified" or "split"; L in the compare popup writes it back
 input_tab_width: 4        # the cells a tab takes in the viewers (YAML, logs); shared by the terminu family
+```
 
+### kinds.yaml
+
+```yaml
 # Per kind, by its kubectl name. A kind that is gone for a while (a CRD
 # reinstalled) keeps its pin and sort.
-resource_kind_config:
-  pod:
-    pinned:
-      order: 10           # 10 apart, so a hand edit can put one in between
-    sort:                 # first the restarts, most first; then the name
-      - column: Restarts
-        direction: desc
-      - column: Name
-        direction: asc
+pod:
+  pinned:
+    order: 10           # 10 apart, so a hand edit can put one in between
+  sort:                 # first the restarts, most first; then the name
+    - column: Restarts
+      direction: desc
+    - column: Name
+      direction: asc
 ```
 
 ### Environment variables
@@ -252,7 +263,7 @@ resource_kind_config:
 |---|---|
 | `KBU__CONFIG` | The settings directory, instead of `~/.config/kbu` |
 | `KBU__STATE` | Where `state.yaml` goes, instead of the settings directory |
-| `KBU__DATA` | Where the logs go, instead of `~/.kbu` |
+| `KBU__DATA` | Where the data goes (the pins and sorts, the logs), instead of `~/.kbu` |
 | `KBU__ALTERM_SHELL` | Alterm's shell, before `alterm_shell` and `$SHELL` |
 | `KBU__ALTERM_LOGIN_SHELL` | `true` or `false`: Alterm's shell as a login shell, before `alterm_login_shell` |
 | `KBU__ICON_WIDTH`, `KBU__POWERLINE_WIDTH` | `1` or `2`: the cells an icon and a powerline symbol take (see [Requirements](#requirements)) |

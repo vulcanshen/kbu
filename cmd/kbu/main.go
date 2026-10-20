@@ -31,7 +31,7 @@ Usage:
 Environment:
   KBU__CONFIG               the settings directory (default ~/.config/kbu)
   KBU__STATE                where the session state is kept (default: the settings directory)
-  KBU__DATA                 where the logs are kept (default ~/.kbu)
+  KBU__DATA                 where the logs, pins and sorts are kept (default ~/.kbu)
   KBU__ALTERM_SHELL         the shell Alterm runs
   KBU__ALTERM_LOGIN_SHELL   true runs Alterm's shell as a login shell
   KBU__ICON_WIDTH           1 or 2: how many cells a Nerd Font icon takes, instead of asking the terminal
@@ -87,9 +87,14 @@ func main() {
 		os.Exit(1)
 	}
 	notices = append(notices, migrated)
+	// tdp E3: the pins and sorts are data. An older kbu's, in config.yaml,
+	// move to kinds.yaml in the data directory (after the copy above, which
+	// may bring km8's).
+	moved = append(moved, config.MoveKindData()...)
 
-	// tdp E3: settings or a state kbu cannot read are not used; kbu starts
-	// on its defaults and the UI asks to move the file aside, or to leave.
+	// tdp E3: settings, a state or pins and sorts kbu cannot read are not
+	// used; kbu starts on its defaults and the UI asks to move the file
+	// aside, or to leave.
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
 		cfg = config.DefaultConfig()
@@ -98,6 +103,7 @@ func main() {
 	if stateErr != nil {
 		state = config.DefaultState()
 	}
+	kinds, kindsErr := config.LoadKindData()
 
 	// State wins over config for context / namespace when present — "where
 	// the user left off" is a stronger signal than the static default.
@@ -126,7 +132,7 @@ func main() {
 	k8s.RegisterHelmIfAvailable()
 
 	ui := tui.New(tui.Options{Client: client, Config: cfg, ConfigErr: cfgErr, State: state, StateErr: stateErr,
-		Notices: notices, Moved: moved, Status: theme.DefaultTheme().Status, Version: version.Display()})
+		Kinds: kinds, KindsErr: kindsErr, Notices: notices, Moved: moved, Status: theme.DefaultTheme().Status, Version: version.Display()})
 	if err := ui.Run(); err != nil {
 		// The user left at a file kbu could not read: why, and no crash.
 		var notRead tui.NotRead

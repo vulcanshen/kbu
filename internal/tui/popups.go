@@ -247,8 +247,8 @@ func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {
 		title := c.Title
 		// Live: back from the direction, the row says the sort it set.
 		live := func() (string, string) {
-			if i := m.cfg.GetSort(rt.KubectlName()).IndexOf(title); i >= 0 {
-				chain := m.cfg.GetSort(rt.KubectlName())
+			if i := m.kindData.GetSort(rt.KubectlName()).IndexOf(title); i >= 0 {
+				chain := m.kindData.GetSort(rt.KubectlName())
 				return title, fmt.Sprintf("sorted %s, %s", ordinal(i+1), directionWord(chain[i].Direction))
 			}
 			return title, "sort by " + strings.ToLower(title)
@@ -257,9 +257,9 @@ func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {
 			Do: func() tea.Cmd { return m.openSortDirection(rt, title) }})
 	}
 	reset := terminu.Action{Label: "Reset", Desc: "back to the namespace, then the name",
-		Disabled: func() bool { return len(m.cfg.GetSort(rt.KubectlName())) == 0 },
+		Disabled: func() bool { return len(m.kindData.GetSort(rt.KubectlName())) == 0 },
 		Do: func() tea.Cmd {
-			m.cfg.ResetSort(rt.KubectlName())
+			m.kindData.ResetSort(rt.KubectlName())
 			return m.sortSaved(rt)
 		}}
 	// What the menu acts on goes after ": ", as it is (components/layout/popup,
@@ -273,7 +273,7 @@ func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {
 // this one (tdp T1: a value written back to a picker keeps it), so a second
 // column is the next row.
 func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
-	chain := m.cfg.GetSort(rt.KubectlName())
+	chain := m.kindData.GetSort(rt.KubectlName())
 	cur := ""
 	if i := chain.IndexOf(column); i >= 0 {
 		cur = chain[i].Direction
@@ -286,7 +286,7 @@ func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 	}
 	set := func(dir string) func() tea.Cmd {
 		return func() tea.Cmd {
-			m.cfg.SetSort(rt.KubectlName(), column, dir)
+			m.kindData.SetSort(rt.KubectlName(), column, dir)
 			return tea.Batch(m.sortSaved(rt), m.app.CloseTop(1))
 		}
 	}
@@ -296,7 +296,7 @@ func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 	}
 	if cur != "" {
 		rows = append(rows, terminu.Action{Label: "Unset", Desc: "take it out of the order", Stay: true, Do: func() tea.Cmd {
-			m.cfg.UnsetSortColumn(rt.KubectlName(), column)
+			m.kindData.UnsetSortColumn(rt.KubectlName(), column)
 			return tea.Batch(m.sortSaved(rt), m.app.CloseTop(1))
 		}})
 	}
@@ -308,7 +308,7 @@ func (m *Model) sortSaved(rt k8s.ResourceType) tea.Cmd {
 	if rt == m.shownKind() {
 		m.list.SortBy(m.sortKeys(rt, columnsOf(rt))...)
 	}
-	if err := m.cfg.Save(); err != nil {
+	if err := m.saveKinds(); err != nil {
 		return m.toastErr("sort save failed: " + err.Error())
 	}
 	return nil

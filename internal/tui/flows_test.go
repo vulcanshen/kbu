@@ -64,7 +64,7 @@ func TestDrillIntoContainersAndBack(t *testing.T) {
 	}
 }
 
-// The sort's two steps write the kind's sort to the config and show it on
+// The sort's two steps write the kind's sort to kinds.yaml and show it on
 // the header; the direction goes back to the columns, saying the sort it set
 // (tdp T1), the names in the titles as they are.
 func TestSortTwoSteps(t *testing.T) {
@@ -83,13 +83,13 @@ func TestSortTwoSteps(t *testing.T) {
 		t.Errorf("the direction did not go back to the columns:\n%s", s)
 	}
 	want := config.SortChain{{Column: "Namespace", Direction: config.SortDirectionDescending}}
-	if got := m.cfg.GetSort("pod"); !slices.Equal(got, want) {
+	if got := m.kindData.GetSort("pod"); !slices.Equal(got, want) {
 		t.Errorf("sort %v, want %v", got, want)
 	}
 	if got := m.list.Sorting(); !slices.Equal(got, []terminu.SortKey{{Col: 0, Desc: true}}) {
 		t.Errorf("list sorted by %v", got)
 	}
-	saved, _ := config.Load()
+	saved, _ := config.LoadKindData()
 	if got := saved.GetSort("pod"); !slices.Equal(got, want) {
 		t.Errorf("saved sort %v, want %v", got, want)
 	}

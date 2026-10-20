@@ -86,11 +86,11 @@ func (m *Model) setKindActions() {
 
 func (m *Model) isPinned(rt k8s.ResourceType) bool { return slices.Contains(m.pinned, rt) }
 
-// loadPinned reads the pinned kinds from the config, in their order; kinds
-// that are not known now (a CRD that is gone) keep their pin in the config.
+// loadPinned reads the pinned kinds from the pins and sorts, in their order;
+// kinds that are not known now (a CRD that is gone) keep their pin there.
 func (m *Model) loadPinned() []k8s.ResourceType {
 	var out []k8s.ResourceType
-	for _, name := range m.cfg.PinnedOrdered() {
+	for _, name := range m.kindData.PinnedOrdered() {
 		if rt := k8s.DefaultRegistry.LookupByKubectlName(name); rt != "" {
 			out = append(out, rt)
 		}
@@ -104,15 +104,24 @@ func (m *Model) savePinned() error {
 	for _, rt := range k8s.DefaultRegistry.AllTypes() {
 		known[rt.KubectlName()] = true
 	}
-	for _, name := range m.cfg.PinnedOrdered() {
+	for _, name := range m.kindData.PinnedOrdered() {
 		if known[name] {
-			m.cfg.UnsetPinned(name)
+			m.kindData.UnsetPinned(name)
 		}
 	}
 	for i, rt := range m.pinned {
-		m.cfg.SetPinned(rt.KubectlName(), (i+1)*10)
+		m.kindData.SetPinned(rt.KubectlName(), (i+1)*10)
 	}
-	return m.cfg.Save()
+	return m.saveKinds()
+}
+
+// saveKinds writes the pins and sorts back where they are kept: kinds.yaml,
+// or config.yaml while kbu could not move them from there (tdp E3).
+func (m *Model) saveKinds() error {
+	if m.kindsInConfig {
+		return m.cfg.Save()
+	}
+	return m.kindData.Save()
 }
 
 // togglePin pins the kind under the cursor, or puts it back in its category.

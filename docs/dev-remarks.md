@@ -1,7 +1,7 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.0/principle)（tdp v0.9.0），畫面建在
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.1/principle)（tdp v0.9.1），畫面建在
 [terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.0）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
@@ -133,12 +133,19 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **split 版的 compare 不折行**（tdp v0.8.0 的 components/dialog/note：要對齊的內容 app 可以讓它不折行，截掉的加 `…`）：左右兩欄
   並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`），viewer 設 `NoWrap`，畫面變窄時也是截、不折
   （KB18）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看那一筆的 YAML。
-- **讀不了時**（tdp E3）：`config.yaml` 或 `state.yaml` 讀不了（格式錯、沒有權限），main 先用預設值，啟動時依序開
-  `MOVE ASIDE`（lib 的 `App.MoveAside`，`askAside`）：`Enter` 改名成 `.bak`，設定寫一份預設的、狀態寫一份空的；`Esc` 離開，
+- **讀不了時**（tdp E3）：`config.yaml`、`state.yaml` 或 `kinds.yaml` 讀不了（格式錯、沒有權限），main 先用預設值，啟動時依序開
+  `MOVE ASIDE`（lib 的 `App.MoveAside`，`askAside`）：`Enter` 改名成 `.bak`，設定寫一份預設的、狀態與釘選排序寫一份空的（資料只有
+  `kinds.yaml` 一個檔，沒有一筆一個檔的，E3-22 不適用）；`Esc` 離開，
   `Run` 回傳 `tui.NotRead`，main 把路徑與原因印到 stderr，不寫 crash log。kbu 沒有快取。
-- **設定與狀態怎麼分**（tdp E3）：`config.yaml` 是設定，`state.yaml` 是狀態（上次停在哪裡），log 是資料。釘選與排序是 kbu 從畫面上
-  寫進 `config.yaml` 的（`resource_kind_config`），算設定：它們是 kbu 怎麼排種類與清單的選項，刪了重新釘、重新排幾秒就回來，不是
-  使用者會備份的清單。**暫定**。
+- **設定、狀態、資料怎麼分**（tdp E3）：`config.yaml` 是設定，`state.yaml` 是狀態（上次停在哪裡），log 與釘選、排序是資料。釘選與
+  排序是使用者一個種類一個種類寫給 kbu 的清單，就算內容是 kbu 怎麼排的選項，照 tdp v0.9.1 也是資料（user 2026-10-20 定）；排序
+  是每個種類一串多層的欄位，不是一個清單只記一個排序欄的單一選項。兩者放在 `~/.kbu/kinds.yaml`（`config.KindData`，跟舊的
+  `resource_kind_config` 同一個形狀，一個種類一筆）；`config.yaml` 只剩 kbu 自己一個一個的選項。
+- **釘選與排序搬出 `config.yaml`**（tdp E3「換了位置時」）：`config.MoveKindData` 在啟動時、km8 的設定目錄複製之後跑：
+  `config.yaml` 有 `resource_kind_config` 就寫進 `kinds.yaml`，再用 `yaml.Node` 拿掉那個 key、整份寫回（其他 key 與註解照留）；
+  寫回失敗就刪掉剛寫的 `kinds.yaml`。`kinds.yaml` 已經在時不搬，error popup 寫兩個路徑讓使用者合併；搬不動時照舊讀寫
+  `config.yaml` 裡的（`config.KindDataInConfig`、`Model.saveKinds`），error popup 寫兩個路徑。`Config.ResourceKindConfig` 因此
+  留著：舊位置的那份，存設定時不會被丟掉。
 - **設定位置照 tdp E3**：`~/.config/kbu`。舊版放在系統的設定目錄（macOS `~/Library/Application Support/kbu`、Windows
   `%APPDATA%\kbu`）。照 tdp E3（v0.8.1）的「換了位置時」逐項搬（`config.MoveOldPlaces`，啟動時、讀設定之前）：舊目錄裡的每一項
   用 `os.Rename` 搬到 `~/.config/kbu`，`logs/` 搬到資料目錄；新位置已經有的那一項留在舊位置（設定、資料都不刪）；搬完把空了的
@@ -197,7 +204,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.0/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.1/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

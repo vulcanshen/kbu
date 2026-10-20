@@ -25,14 +25,17 @@ type Options struct {
 	Client *k8s.Client // nil in tests: nothing is fetched
 	Config *config.Config
 	State  *config.State
-	// ConfigErr and StateErr are why the settings or the state could not
-	// be read: kbu starts on the defaults and asks to move the file aside
-	// (tdp E3).
-	ConfigErr, StateErr error
+	// Kinds are the pins and sorts, kbu's data (tdp E3), from kinds.yaml.
+	Kinds config.KindData
+	// ConfigErr, StateErr and KindsErr are why the settings, the state or
+	// the pins and sorts could not be read: kbu starts on the defaults and
+	// asks to move the file aside (tdp E3).
+	ConfigErr, StateErr, KindsErr error
 	// Notices go into the App Log at start (a migrated config directory, a
 	// deprecated key).
 	Notices []string
-	// Moved is where the settings were moved at start (tdp E3): a toast
+	// Moved is where the settings, the logs and the pins and sorts were
+	// moved at start (tdp E3): a toast
 	// says so, or an error popup when the move failed.
 	Moved []config.Moved
 	// Status are the colours of a resource's status cells (the app's
@@ -96,10 +99,15 @@ type Model struct {
 	// fillNamespaces puts the namespaces in the open namespace picker.
 	fillNamespaces func([]string)
 
-	// cfgErr and stateErr are the files kbu could not read; asideAsked is
-	// the start asking to move one aside (tdp E3).
-	cfgErr, stateErr error
-	asideAsked       bool
+	// kindData are the pins and sorts: kinds.yaml's, or config.yaml's while
+	// kbu could not move them from there (kindsInConfig; tdp E3).
+	kindData      *config.KindData
+	kindsInConfig bool
+
+	// cfgErr, stateErr and kindsErr are the files kbu could not read;
+	// asideAsked is the start asking to move one aside (tdp E3).
+	cfgErr, stateErr, kindsErr error
+	asideAsked                 bool
 }
 
 // New builds kbu's UI.
@@ -111,10 +119,14 @@ func New(o Options) *Model {
 		status: o.Status,
 		run:    runCommand,
 		moved:  o.Moved,
-		cfgErr: o.ConfigErr, stateErr: o.StateErr,
+		cfgErr: o.ConfigErr, stateErr: o.StateErr, kindsErr: o.KindsErr,
 	}
 	if m.cfg == nil {
 		m.cfg = config.DefaultConfig()
+	}
+	m.kindData = &o.Kinds
+	if m.kindsInConfig = config.KindDataInConfig(m.cfg); m.kindsInConfig {
+		m.kindData = &m.cfg.ResourceKindConfig
 	}
 	if m.state == nil {
 		m.state = config.DefaultState()
@@ -259,32 +271,38 @@ func (m *Model) start() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// askAside asks about the files of kbu's own it could not read (tdp E3):
-// moved aside, the settings start again from the defaults and the state
-// from nothing; or the user leaves. kbu runs on the defaults meanwhile.
+// askAside asks about the files of kbu's own it could not read (tdp E3), one
+// after the other: moved aside, the settings start again from the defaults,
+// the state and the pins and sorts from nothing; or the user leaves. kbu
+// runs on the defaults meanwhile.
 func (m *Model) askAside() tea.Cmd {
-	state := func() tea.Cmd {
-		if m.stateErr == nil {
+	files := []struct {
+		path, what string
+		err        error
+		fresh      func() error
+	}{
+		{config.ConfigPath(), "settings", m.cfgErr, m.cfg.Save},
+		{config.StatePath(), "state", m.stateErr, config.DefaultState().Save},
+		{config.KindDataPath(), "pins and sorts", m.kindsErr, config.KindData{}.Save},
+	}
+	var ask func(i int) tea.Cmd
+	ask = func(i int) tea.Cmd {
+		for i < len(files) && files[i].err == nil {
+			i++
+		}
+		if i == len(files) {
 			return nil
 		}
+		f := files[i]
 		m.asideAsked = true
-		return m.app.MoveAside(config.StatePath(), m.stateErr, func() tea.Cmd {
-			if err := config.DefaultState().Save(); err != nil {
-				return m.toastErr("state not written: " + err.Error())
+		return m.app.MoveAside(f.path, f.err, func() tea.Cmd {
+			if err := f.fresh(); err != nil {
+				return tea.Batch(m.toastErr(f.what+" not written: "+err.Error()), ask(i+1))
 			}
-			return nil
+			return ask(i + 1)
 		})
 	}
-	if m.cfgErr == nil {
-		return state()
-	}
-	m.asideAsked = true
-	return m.app.MoveAside(config.ConfigPath(), m.cfgErr, func() tea.Cmd {
-		if err := m.cfg.Save(); err != nil {
-			return tea.Batch(m.toastErr("settings not written: "+err.Error()), state())
-		}
-		return state()
-	})
+	return ask(0)
 }
 
 // sayMoved says what was moved at start (tdp E3): an Info toast from where
@@ -303,6 +321,10 @@ func (m *Model) sayMoved() tea.Cmd {
 				said[s] = true
 				done = append(done, s)
 			}
+		case mv.What == "pins and sorts" && errors.Is(mv.Err, config.ErrThereAlready):
+			left = append(left, fmt.Sprintf("The pins and sorts in %s stay where they are: %s is there already. Merge the two yourself.", mv.From, mv.To))
+		case mv.What == "pins and sorts":
+			left = append(left, fmt.Sprintf("The pins and sorts in %s could not be moved to %s (%v): kbu keeps using them there. Move them yourself.", mv.From, mv.To, mv.Err))
 		case errors.Is(mv.Err, config.ErrThereAlready):
 			left = append(left, fmt.Sprintf("%s stays where it is: %s is there already. Merge the two yourself.", mv.From, mv.To))
 		default:
