@@ -101,8 +101,8 @@ scoop install kbu
 
 ### 第一次啟動
 
-kbu 連上 kubeconfig 的 current context，先顯示 Pods。在你釘選、排序或離開之前什麼都不寫；那時才建立 `~/.config/kbu`
-（見[設定與資料](#設定與資料)）。舊版的 kbu 把設定留在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`
+kbu 連上 kubeconfig 的 current context，先顯示 Pods。在你釘選、排序或離開之前什麼都不寫：釘選、排序時才建立 `~/.kbu`，
+離開時才建立 `~/.config/kbu`（見[設定與資料](#設定與資料)）。舊版的 kbu 把設定留在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`
 （Windows）的話，第一次啟動會把它搬到 `~/.config/kbu`，並告訴你。
 
 ### 移除
@@ -190,17 +190,24 @@ kbu 的設定與上次停在哪裡都在 **`~/.config/kbu`**（有設 `$XDG_CONF
 
 | 檔案 | 是什麼 |
 |---|---|
-| `config.yaml` | 你的設定（見下面）。釘選、排序、切換比對版面時 kbu 會寫它 |
+| `config.yaml` | 你的設定（見下面）。切換比對版面時 kbu 會寫它 |
 | `state.yaml` | 上次停在哪裡；離開時寫入。`KBU__STATE` 可以放到別的目錄 |
 
-kbu 的 log 是它的資料，在 **`~/.kbu/logs`**（`KBU__DATA` 可以改到別的目錄）：`audit-<日期>.log` 記從 kbu 做的每一次 edit 與
-delete，`crash-<日期>.log` 是 kbu 當掉時的紀錄。需要的話自己備份：刪掉就找不回來了。
+kbu 的資料在 **`~/.kbu`**（`KBU__DATA` 可以改到別的目錄）。需要的話自己備份：刪掉就找不回來了。
+
+| 檔案 | 是什麼 |
+|---|---|
+| `kinds.yaml` | 你的釘選與排序，一個種類一筆（見下面）。釘選、排序時 kbu 會寫它 |
+| `logs/audit-<日期>.log` | 從 kbu 做的每一次 edit 與 delete |
+| `logs/crash-<日期>.log` | kbu 當掉時留下的紀錄 |
 
 舊版的 kbu 把設定放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows），log 也放在旁邊。第一次
 啟動這一版時，kbu 會把它們一項一項搬到 `~/.config/kbu` 與 `~/.kbu/logs`，並告訴你搬好了。新位置已經有的那一項留在原處，kbu
-寫出兩個路徑讓你自己合併；設定搬不動時照舊用舊位置，並寫出兩個路徑，讓你自己搬。
+寫出兩個路徑讓你自己合併；設定搬不動時照舊用舊位置，並寫出兩個路徑，讓你自己搬。舊版的 kbu 也把釘選與排序放在 `config.yaml`
+（`resource_kind_config`）：第一次啟動時搬到 `~/.kbu/kinds.yaml`，`config.yaml` 其他的內容照舊。`kinds.yaml` 已經有了的話，
+它們留在 `config.yaml` 讓你自己合併；搬不動時 kbu 照舊用 `config.yaml` 裡的；兩種都會寫出兩個路徑。
 
-kbu 讀不了 `config.yaml` 或 `state.yaml`（檔案壞了、沒有權限）時，啟動時會問：`Enter` 把它改名成 `config.yaml.bak`（已經有了就是 `.bak.1`……，不會蓋掉），從預設值重新開始；`Esc` 離開 kbu，把路徑與原因印在終端機上。
+kbu 讀不了 `config.yaml`、`state.yaml` 或 `kinds.yaml`（檔案壞了、沒有權限）時，啟動時會問：`Enter` 把它改名成 `config.yaml.bak`（已經有了就是 `.bak.1`……，不會蓋掉），從預設值、或沒有釘選與排序重新開始；`Esc` 離開 kbu，把路徑與原因印在終端機上。
 
 ### config.yaml
 
@@ -213,18 +220,21 @@ alterm_login_shell: false # true 時 Alterm 的 shell 加 -l，讀 ~/.zprofile /
 compare:
   layout: unified         # "unified" 或 "split"；在比對的 popup 按 L 會寫回來
 input_tab_width: 4        # viewer（YAML、log）裡一個 tab 佔幾格；terminu 家族共用
+```
 
+### kinds.yaml
+
+```yaml
 # 依種類的 kubectl 名稱分開記。暫時不在的種類（重裝中的 CRD）
 # 釘選與排序照樣留著。
-resource_kind_config:
-  pod:
-    pinned:
-      order: 10           # 每個差 10，手改時可以插在兩個中間
-    sort:                 # 先依重啟次數，多的在前；再依名稱
-      - column: Restarts
-        direction: desc
-      - column: Name
-        direction: asc
+pod:
+  pinned:
+    order: 10           # 每個差 10，手改時可以插在兩個中間
+  sort:                 # 先依重啟次數，多的在前；再依名稱
+    - column: Restarts
+      direction: desc
+    - column: Name
+      direction: asc
 ```
 
 ### 環境變數
@@ -233,7 +243,7 @@ resource_kind_config:
 |---|---|
 | `KBU__CONFIG` | 設定目錄，取代 `~/.config/kbu` |
 | `KBU__STATE` | `state.yaml` 放的目錄，取代設定目錄 |
-| `KBU__DATA` | log 放的目錄，取代 `~/.kbu` |
+| `KBU__DATA` | 資料（釘選與排序、log）放的目錄，取代 `~/.kbu` |
 | `KBU__ALTERM_SHELL` | Alterm 的 shell，排在 `alterm_shell` 與 `$SHELL` 前面 |
 | `KBU__ALTERM_LOGIN_SHELL` | `true` 或 `false`：Alterm 的 shell 是不是 login shell，排在 `alterm_login_shell` 前面 |
 | `KBU__ICON_WIDTH`、`KBU__POWERLINE_WIDTH` | `1` 或 `2`：一個 icon、一個 powerline 符號佔幾格（見[需求](#需求)） |
