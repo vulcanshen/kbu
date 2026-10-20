@@ -19,7 +19,6 @@ import (
 const (
 	glyphYAML    = "\U0000F48A" // nf-oct-file_code
 	glyphCompare = "\U000F08AA" // nf-md-vector_difference
-	glyphLog     = "\U0000F03A" // nf-fa-list
 	glyphNS      = "\U0000F51E" // nf-oct-stack
 	glyphCtx     = "\U000F0237" // nf-md-folder_network
 	glyphSearch  = "\U000F0233" // nf-md-file_find
@@ -132,7 +131,6 @@ func (m *Model) compareHere() tea.Cmd {
 		}
 		if err := m.cfg.Save(); err != nil {
 			// A popup's action failed: an error popup over it (tdp F7).
-			m.log.err("compare layout save failed: " + err.Error())
 			return m.app.Error("Save failed", "The layout could not be saved to config.yaml: "+err.Error())
 		}
 		return nil
@@ -145,29 +143,6 @@ func diffLabel(it k8s.ResourceItem) string {
 		return it.Namespace + "/" + it.Name
 	}
 	return it.Name
-}
-
-// --- the App Log -------------------------------------------------------------
-
-func (m *Model) openAppLog() tea.Cmd {
-	m.log.seen()
-	v := &terminu.Viewer{Title: "App log", Glyph: glyphLog, Lines: m.log.lines(), Select: m.selection()}
-	if len(v.Lines) == 0 {
-		v.Lines = []string{terminu.Fg(terminu.Overlay0).Render("No log entries")}
-	}
-	v.Keys = []terminu.ViewerKey{
-		{Key: "y", Desc: "copy", Do: func() tea.Cmd {
-			var b strings.Builder
-			for _, l := range m.log.lines() {
-				b.WriteString(terminu.StripStyles(l) + "\n")
-			}
-			return copyText(b.String())
-		}},
-	}
-	m.log.viewer = v
-	cmd := m.app.Viewer(v)
-	v.ScrollTo(len(v.Lines) - 1) // the newest at the bottom, in sight
-	return cmd
 }
 
 // --- namespaces ----------------------------------------------------------------

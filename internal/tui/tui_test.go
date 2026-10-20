@@ -187,7 +187,7 @@ func TestTheMovedSettingsAreTold(t *testing.T) {
 	}})
 	s := m.screen_()
 	for _, want := range []string{"NOT MOVED", "/old/kbu", "/new/kbu", "permission denied", "kbu keeps using it",
-		"/old/logs stays where it is", "Merge the two yourself"} {
+		"/old/logs stays", "/data/logs is there already", "Merge the two yourself"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the error popup has no %q:\n%s", want, s)
 		}
@@ -260,13 +260,13 @@ func TestDragReordersThePinnedKinds(t *testing.T) {
 // a fixed width, and the namespaces, the last dynamic field, come last.
 func TestStatusbarKeepsItsFields(t *testing.T) {
 	m := newTestModel(t)
-	bar := terminu.StripStyles(m.statusbar(120))
+	bar := plainSpans(m.statusbar(120))
 	if i, want := strings.Index(bar, "[N]amespace"), 1+len("[C]ontext: ")+24+2; i != want {
 		t.Errorf("[N]amespace at %d, want %d:\n%q", i, want, bar)
 	}
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "C")
-	bar = terminu.StripStyles(m.statusbar(120))
+	bar = plainSpans(m.statusbar(120))
 	if c, x := strings.Index(bar, "[C]ompare"), strings.Index(bar, "[C]ontext"); c < 0 || c > x {
 		t.Errorf("[C]ompare is not before [C]ontext:\n%q", bar)
 	}

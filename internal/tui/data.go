@@ -154,11 +154,9 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		if msg.err != nil {
 			// Copying is done from a panel or a viewer: what failed is shown
 			// in full (tdp F5, tdp F7: an action's failure is an error popup).
-			m.log.err("copy: " + msg.err.Error())
 			return m.app.Error("Copy failed", msg.err.Error())
 		}
-		m.log.info(fmt.Sprintf("copied %s", plural(msg.lines, "line")))
-		return m.toastDone("Copied!")
+		return m.toastDone("Copied " + plural(msg.lines, "line"))
 	}
 	return nil
 }
@@ -310,7 +308,6 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 		fill(msg.names)
 		if msg.err != nil {
 			// The picker's own load failed: an error popup over it (tdp F7).
-			m.log.err("namespace fetch failed: " + msg.err.Error())
 			return m.app.Error("Namespaces not read", msg.err.Error())
 		}
 		return nil

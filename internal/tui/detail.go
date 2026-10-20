@@ -319,7 +319,9 @@ func (m *Model) appendLog(l k8s.LogLine) {
 	if m.shownKind() != k8s.ResourcePods && !m.atContainers() {
 		pod = l.Pod // a workload's merged stream says which pod each line came from
 	}
-	m.det.logs = append(m.det.logs, logLine{pod: pod, container: l.Container, text: sanitizeLog(l.Text)})
+	for _, text := range logRows(l.Text, m.tabWidth()) {
+		m.det.logs = append(m.det.logs, logLine{pod: pod, container: l.Container, text: text})
+	}
 	if n := len(m.det.logs); n > maxLogLines {
 		m.det.logs = m.det.logs[n-maxLogLines:]
 	}
@@ -358,30 +360,29 @@ func containerDetail(c k8s.ContainerInfo, pod k8s.ResourceItem) k8s.ResourceDeta
 
 // --- the tabs' content -----------------------------------------------------
 
-// sanitizeLog keeps what a log line shows: a carriage-return progress bar
-// leaves only its last state, escape codes and other control characters go
-// (they would move the cursor inside the frame), a tab becomes a space.
-func sanitizeLog(s string) string {
-	if strings.ContainsRune(s, '\r') {
-		parts := strings.Split(s, "\r")
-		s = ""
-		for i := len(parts) - 1; i >= 0; i-- {
-			if parts[i] != "" {
-				s = parts[i]
-				break
+// logRows are a log line as reading content is drawn (components, control
+// characters): a \n starts another row, a \r leaves only its last state, a
+// tab is tab spaces, any other control character is its name in Red.
+// TODO(lib KB24): its colour codes colour; the lib's drawing of reading
+// content is not the app's to call, so they go for now.
+func logRows(s string, tab int) []string {
+	var out []string
+	for _, line := range strings.Split(strings.TrimSuffix(s, "\n"), "\n") {
+		line = strings.TrimSuffix(line, "\r") // a CRLF's \r is its line break
+		if strings.ContainsRune(line, '\r') {
+			parts := strings.Split(line, "\r")
+			line = ""
+			for i := len(parts) - 1; i >= 0; i-- {
+				if parts[i] != "" {
+					line = parts[i]
+					break
+				}
 			}
 		}
+		line = strings.ReplaceAll(terminu.StripStyles(line), "\t", strings.Repeat(" ", tab))
+		out = append(out, terminu.Escape(line))
 	}
-	s = terminu.StripStyles(s)
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\t':
-			return ' '
-		case r < 0x20, r >= 0x7f && r < 0xa0:
-			return -1
-		}
-		return r
-	}, s)
+	return out
 }
 
 // logPalette colours a container's and a pod's name in the Logs tab, the
@@ -447,6 +448,16 @@ func (m *Model) renderLogs(w int) (header, rows []string, line []int) {
 // header in Blue, the rows in red when bad says so.
 func table(w int, titles []string, rows [][]string, bad func(i int) bool) (header, out []string, lineOf []int) {
 	n := len(titles)
+	// The cluster's words are names and short texts: a control character
+	// in them is its name in Red (components, control characters).
+	esc := make([][]string, len(rows))
+	for i, r := range rows {
+		esc[i] = make([]string, len(r))
+		for c, v := range r {
+			esc[i][c] = terminu.Escape(v)
+		}
+	}
+	rows = esc
 	ws := make([]int, n)
 	for c, t := range titles {
 		ws[c] = terminu.Width(t)
@@ -639,11 +650,12 @@ func (m *Model) refreshRelatives() {
 	entries := relEntries(m.levelDetail())
 	rows := make([]terminu.Row, len(entries))
 	for i, e := range entries {
-		v := e.value
+		row := terminu.Row{ID: strconv.Itoa(i), Cells: []string{e.label, e.value}, Group: e.group}
 		if e.ref != nil {
-			v += " " + terminu.Fg(terminu.Overlay0).Render(glyphLink)
+			row.Cells[1] += " " + glyphLink
+			row.Styled = [][]terminu.Span{nil, {{Text: e.value + " "}, {Text: glyphLink, Style: terminu.Fg(terminu.Overlay0)}}}
 		}
-		rows[i] = terminu.Row{ID: strconv.Itoa(i), Cells: []string{e.label, v}, Group: e.group}
+		rows[i] = row
 	}
 	m.relList.SetRows(rows)
 }
@@ -742,12 +754,12 @@ func (m *Model) refreshHistory() {
 	current := currentRevision(revs)
 	rows := make([]terminu.Row, len(revs))
 	for i, r := range revs {
-		mark := ""
-		if r.Revision == current {
-			mark = terminu.Fg(terminu.Green).Render("●")
-		}
-		rows[i] = terminu.Row{ID: strconv.Itoa(r.Revision), Cells: []string{mark, strconv.Itoa(r.Revision), r.Status,
+		rows[i] = terminu.Row{ID: strconv.Itoa(r.Revision), Cells: []string{"", strconv.Itoa(r.Revision), r.Status,
 			k8s.FormatHelmHistoryDate(r.Updated), r.Chart, r.Description}}
+		if r.Revision == current {
+			rows[i].Cells[0] = "●"
+			rows[i].Styled = [][]terminu.Span{{{Text: "●", Style: terminu.Fg(terminu.Green)}}}
+		}
 	}
 	had := len(m.histList.Rows()) > 0
 	m.histList.SetRows(rows)

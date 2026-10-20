@@ -117,6 +117,7 @@ func New(o Options) *Model {
 	// No mouse: the terminu family is keyboard only (tdp X1; KB4, settled),
 	// and so the Settings popup that held its two settings is gone too.
 	a := terminu.New("kbu")
+	m.log = appLog{app: a}
 	a.QuitDesc = "leave kbu"
 	a.ShiftTab = true
 	// kbu's least size is lower than the family's 80×40 (tdp L1): it runs in
@@ -217,11 +218,6 @@ func (m *Model) globalActions() []terminu.Action {
 		{Key: "N", Label: "Namespace", Desc: "pick which namespaces to show", Scope: terminu.GlobalScope, Do: m.openNamespaces},
 		{Key: "C", Label: "Context", Desc: "switch the kubeconfig context", Scope: terminu.GlobalScope, Do: m.openContexts},
 		{Key: "Alt-t", Label: "Term", Desc: "show the embedded shell (Alterm)", Scope: terminu.GlobalScope, Clear: true, Do: m.showAlterm},
-		{Key: "!", Label: "App log", Desc: "what kbu has done and what failed", Scope: terminu.GlobalScope, Stay: true, Do: m.openAppLog},
-		// Not a key of the App Log viewer: a note only shows (tdp F1).
-		{Label: "Clear the App log", Desc: "forget what it has kept", Scope: terminu.GlobalScope,
-			Disabled: func() bool { return len(m.log.entries) == 0 },
-			Do:       func() tea.Cmd { m.log.entries = nil; m.log.seen(); return nil }},
 	}
 }
 
@@ -255,7 +251,6 @@ func (m *Model) sayMoved() tea.Cmd {
 	for _, mv := range m.moved {
 		switch {
 		case mv.Err == nil:
-			m.log.info(fmt.Sprintf("config: moved %s to %s", mv.From, mv.To))
 			from, to := mv.From, mv.To
 			if mv.What == "settings" {
 				from, to = filepath.Dir(from), filepath.Dir(to) // the files of one directory
@@ -265,10 +260,8 @@ func (m *Model) sayMoved() tea.Cmd {
 				done = append(done, s)
 			}
 		case errors.Is(mv.Err, config.ErrThereAlready):
-			m.log.err(fmt.Sprintf("config: %s not moved, %s is there already", mv.From, mv.To))
 			left = append(left, fmt.Sprintf("%s stays where it is: %s is there already. Merge the two yourself.", mv.From, mv.To))
 		default:
-			m.log.err(fmt.Sprintf("config: could not move %s to %s: %v", mv.From, mv.To, mv.Err))
 			keeps := ""
 			if mv.What == "settings" {
 				keeps = ": kbu keeps using it"
@@ -281,7 +274,7 @@ func (m *Model) sayMoved() tea.Cmd {
 		cmds = append(cmds, m.app.Toast(terminu.Info, "Moved kbu's "+strings.Join(done, ", and its ")))
 	}
 	if len(left) > 0 {
-		cmds = append(cmds, m.app.Error("Not moved", strings.Join(left, "\n")))
+		cmds = append(cmds, m.app.Error("Not moved", strings.Join(left, " ")))
 	}
 	return tea.Batch(cmds...)
 }
@@ -291,7 +284,7 @@ func (m *Model) sayMoved() tea.Cmd {
 // compare anchor, and on the right the errors and warnings not seen yet.
 // When panel 2 has the focus its C (Compare) is the C that fires: [C]ompare
 // is lit there and [C]ontext is not (tdp M9).
-func (m *Model) statusbar(w int) string {
+func (m *Model) statusbar(int) []terminu.Span {
 	grey, value := terminu.Fg(terminu.Overlay0), terminu.Fg(terminu.Lavender)
 	lit, unlit := terminu.Fg(terminu.Blue), terminu.Fg(terminu.Surface2)
 	onList := m.screen.Focused() == m.listP
@@ -315,40 +308,31 @@ func (m *Model) statusbar(w int) string {
 	}
 	// tdp L2: the chips that come and go first, then the context in a fixed
 	// width, and the namespaces last, as wide as they are: the last dynamic
-	// field of a row pushes nothing.
-	var chips []string
+	// field of a row pushes nothing. The lib fits the row to the terminal,
+	// and draws a control character in a name by its name.
+	out := []terminu.Span{{Text: " "}}
+	add := func(spans ...terminu.Span) {
+		if len(out) > 1 {
+			out = append(out, terminu.Span{Text: "  "})
+		}
+		out = append(out, spans...)
+	}
 	if m.alterm != nil && m.alterm.Running() {
 		// A live session is in effect (components/color: Green).
-		chips = append(chips, lit.Render("[Alt-t]")+terminu.Fg(terminu.Green).Render("erm"))
+		add(terminu.Span{Text: "[Alt-t]", Style: lit}, terminu.Span{Text: "erm", Style: terminu.Fg(terminu.Green)})
 	}
 	if m.anchor != nil {
 		cmpKey := unlit
 		if compareC {
 			cmpKey = lit
 		}
-		chips = append(chips, cmpKey.Render("[C]")+grey.Render("ompare"))
+		add(terminu.Span{Text: "[C]", Style: cmpKey}, terminu.Span{Text: "ompare", Style: grey})
 	}
-	chips = append(chips, ctxKey.Render("[C]")+grey.Render("ontext: ")+value.Render(terminu.Pad(capMiddle(ctx, 24), 24)),
-		lit.Render("[N]")+grey.Render("amespace: ")+value.Render(capMiddle(ns, 16)))
-	left := " " + strings.Join(chips, "  ")
-	right := ""
-	// The count keeps its width as it grows (tdp L2).
-	switch {
-	case m.log.unseenErrors > 0:
-		right = terminu.Fg(terminu.Red).Render(countText(m.log.unseenErrors, "error")) + grey.Render(" in the App Log [!] ")
-	case m.log.unseenWarns > 0:
-		right = terminu.Fg(terminu.Peach).Render(countText(m.log.unseenWarns, "warning")) + grey.Render(" in the App Log [!] ")
-	}
-	room := w - terminu.Width(right)
-	if room < terminu.Width(left) {
-		right, room = "", w
-	}
-	return terminu.Pad(terminu.Truncate(left, room), room) + right
-}
-
-// countText is a count for the statusbar, always as wide: "  3 errors  ".
-func countText(n int, what string) string {
-	return fmt.Sprintf("%3d %-8s", min(n, 999), plural(n, what)[len(fmt.Sprint(n))+1:])
+	add(terminu.Span{Text: "[C]", Style: ctxKey}, terminu.Span{Text: "ontext: ", Style: grey},
+		terminu.Span{Text: terminu.Pad(capMiddle(ctx, 24), 24), Style: value})
+	add(terminu.Span{Text: "[N]", Style: lit}, terminu.Span{Text: "amespace: ", Style: grey},
+		terminu.Span{Text: capMiddle(ns, 16), Style: value})
+	return out
 }
 
 func plural(n int, what string) string {
@@ -389,16 +373,23 @@ func (m *Model) kubectlArgs(args ...string) []string {
 	return args
 }
 
-// toastErr says a failure at once (tdp F5) and keeps it in the App Log.
+// tabWidth is the family's input_tab_width (tdp E3): the spaces a tab in
+// reading content is drawn as.
+func (m *Model) tabWidth() int {
+	if m.cfg.InputTabWidth > 0 {
+		return m.cfg.InputTabWidth
+	}
+	return 4
+}
+
+// toastErr says a failure at once (tdp F5); the lib keeps it in the App Log.
 func (m *Model) toastErr(text string) tea.Cmd {
-	m.log.err(text)
 	return m.app.Toast(terminu.Error, text)
 }
 
 // toastWarn is toastErr for something done, or still usable, that is worth
 // a look (components/dialog/toast).
 func (m *Model) toastWarn(text string) tea.Cmd {
-	m.log.warn(text)
 	return m.app.Toast(terminu.Warning, text)
 }
 
