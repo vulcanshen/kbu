@@ -427,18 +427,25 @@ func (m *Model) tabWidth() int {
 }
 
 // toastErr says a failure at once (tdp F5); the lib keeps it in the App Log.
-func (m *Model) toastErr(text string) tea.Cmd {
-	return m.app.Toast(terminu.Error, text)
-}
+func (m *Model) toastErr(text string) tea.Cmd { return m.toast(terminu.Error, text) }
 
 // toastWarn is toastErr for something done, or still usable, that is worth
 // a look (components/dialog/toast).
-func (m *Model) toastWarn(text string) tea.Cmd {
-	return m.app.Toast(terminu.Warning, text)
-}
+func (m *Model) toastWarn(text string) tea.Cmd { return m.toast(terminu.Warning, text) }
 
 // toastDone says an action the user asked for is done: a Success toast, in
 // Green (components/dialog/toast).
-func (m *Model) toastDone(text string) tea.Cmd {
-	return m.app.Toast(terminu.Success, text)
+func (m *Model) toastDone(text string) tea.Cmd { return m.toast(terminu.Success, text) }
+
+// toast is a toast of a text from outside too (kubectl's output, the API's
+// error): a toast is a short text, a line break in it drawn by its name
+// (components, control characters), so its first line goes in the toast
+// and the whole of it in the App Log.
+func (m *Model) toast(kind terminu.ToastKind, text string) tea.Cmd {
+	text = strings.TrimSpace(text)
+	if first, rest, ok := strings.Cut(text, "\n"); ok && strings.TrimSpace(rest) != "" {
+		m.log.app.Log(kind, text)
+		text = strings.TrimSpace(first)
+	}
+	return m.app.Toast(kind, text)
 }

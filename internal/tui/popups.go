@@ -349,8 +349,9 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 		desc := "switch panels 1 and 2 to it"
 		label := fmt.Sprintf("%d. %s", i+1, text)
 		if i == len(refs)-1 {
-			// Where the user is: their footprint's colour (components/color).
-			desc, label = "where the tab is now", terminu.Fg(terminu.Lavender).Render(label)
+			// Where the user is; a menu row is a short text, in no colour
+			// of the app's own (components, control characters).
+			desc = "where the tab is now"
 		}
 		details := []string{ref.Type.KubectlName() + "/" + ref.Name}
 		if ref.Namespace != "" {

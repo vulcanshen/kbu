@@ -559,7 +559,7 @@ func (m *Model) renderInfo(w int) (header, rows []string, line []int) {
 	}
 	for n, f := range fs {
 		label := terminu.Fg(terminu.Blue).Render(terminu.Pad(strings.ToUpper(f.Label), lw))
-		vals := terminu.Wrap(f.Value, max(w-lw-2, 1))
+		vals := terminu.Wrap(terminu.Escape(f.Value), max(w-lw-2, 1)) // the cluster's words
 		if len(vals) == 0 {
 			vals = []string{""}
 		}

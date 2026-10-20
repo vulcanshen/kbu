@@ -453,3 +453,17 @@ func TestUnreadableFilesMoveAside(t *testing.T) {
 		t.Error("Run would not say it was a file kbu could not read")
 	}
 }
+
+// A toast is a short text: of kubectl's many lines only the first goes in it,
+// the whole in the App Log.
+func TestAToastTakesTheFirstLine(t *testing.T) {
+	m := newTestModel(t)
+	m.drive(m.toastErr("delete pod/a failed: exit status 1: Error from server (Forbidden)\nmore detail"))
+	if s := m.screen_(); strings.Contains(s, `\n`) || !strings.Contains(s, "Error from server (Forbidden)") {
+		t.Errorf("the toast:\n%s", s)
+	}
+	m.press("!")
+	if s := m.screen_(); !strings.Contains(s, "more detail") {
+		t.Errorf("the App Log has not the whole of it:\n%s", s)
+	}
+}
