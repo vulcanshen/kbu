@@ -249,7 +249,6 @@ resource_kind_config:
 - **workload 的 log 跟的是你選那一列時已經有的 Pod。** rollout 之後，重新選那一列才會換成新的 Pod。
 - **有些 edit 與 delete 不提供。** Events 與 node 不能從 kbu 刪；Helm chart 管理的物件請用 `helm upgrade`、`rollback`、`uninstall` 改。
 - **panel 3 沒有 `/` 篩選。** 用 `Y` 打開 YAML，在那裡搜尋。
-- **pod 的 log 目前沒有顏色**：程式寫出來的顏色碼先拿掉。
 - **panel 2 窄的時候先截長的值**，名稱從中間截（`demo-app…66-gm72n`），還放不下才整欄收掉，最不需要的先收；名稱永遠不收。
   按 `z` 看所有的欄、完整的值。
 

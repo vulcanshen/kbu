@@ -481,3 +481,21 @@ func TestNoColourCodeShows(t *testing.T) {
 		t.Errorf("a colour code shows:\n%s", s)
 	}
 }
+
+// A log line is reading content (components, control characters): colour
+// codes colour, a \r leaves its last state, another sequence is its name,
+// a \n starts another row.
+func TestLogRowsAreReadingContent(t *testing.T) {
+	if r := logRows("\x1b[32mok\x1b[0m"); len(r) != 1 || !strings.Contains(r[0], "\x1b[32m") {
+		t.Errorf("the colour went: %q", r)
+	}
+	if r := logRows("10%\r100%"); len(r) != 1 || terminu.StripStyles(r[0]) != "100%" {
+		t.Errorf("the progress: %q", r)
+	}
+	if r := logRows("x\x1b[2Jy"); len(r) != 1 || !strings.Contains(terminu.StripStyles(r[0]), `\x1b`) {
+		t.Errorf("a clear-screen is not named: %q", r)
+	}
+	if r := logRows("a\nb\n"); len(r) != 2 {
+		t.Errorf("a \\n is not two rows: %q", r)
+	}
+}

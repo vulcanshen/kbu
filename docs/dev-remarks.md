@@ -123,9 +123,9 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **控制字元**（tdp v0.9.0 components「控制字元」）：清單的格子、statusbar、menu、toast 交給 lib，lib 照「名字與短字」畫；kbu 的顏色
   改成 spans（`Row.Styled` 的狀態色、anchor 的 Lavender、Relatives 的箭頭、History 的 ●；statusbar 回傳 `[]Span`）。menu 的列沒有
   上色的接口，breadcrumb 目前那一層的 Lavender 拿掉（color-9 現在只管位置列）。kbu 自己畫的 panel 3 表格（Events、Conditions）與
-  Info 的值是叢集給的字，用 `terminu.Escape`。pod 的 log 是拿來讀的內容（`logRows`）：`\n` 拆成兩列、`\r` 只留最後的狀態、Tab 是
-  `input_tab_width` 格空白、其他控制字元畫成紅色的名字；顏色碼與清畫面這類序列先拿掉，`TODO(lib KB24)`：lib 公開拿來讀的內容的
-  畫法後照它畫（log 的前綴與折行是 kbu 的 body 做的，換成 Pager 會失去它們）。
+  Info 的值是叢集給的字，用 `terminu.Escape`。pod 的 log 是拿來讀的內容，用 lib 的 `terminu.Reading` 畫（`logRows`，KB24）：
+  `\n` 拆成兩列、`\r` 只留最後的狀態、顏色碼照著上色、Tab 是 `input_tab_width` 格空白、其他控制字元畫成紅色的名字；容器的前綴與
+  折行是 kbu 的 body 自己加的（換成 Pager 會失去它們）。
 - **statusbar 的順序**（tdp L2：一列裡最後一個動態欄位可以不補空白）：會出現、消失的 chip（`[Alt-t]erm`、`[C]ompare`）在最前面，
   接著 `[C]ontext`（固定 24 格，太長從中間截），`[N]amespace` 排最後、照名稱長度（最多 16 格）。舊版 context 與 namespace 都照名稱
   長度、後面的 chip 跟著移，是 user 2026-09-28 裁定的偏離（固定 24 格時短名字後面空一大格、80 欄把 chip 擠出去）；tdp L2（v0.8.0）
@@ -192,7 +192,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 偏離 tdp
 
 目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法，移到「設計決定」。
-還沒符合、等 lib 的寫在 [`kbu-terminu-fix.md`](kbu-terminu-fix.md)。
+還沒符合的也沒有了：`docs/kbu-terminu-fix.md` 全部修完，拿掉（tdp E7）。
 
 ## 設計文件導讀
 
@@ -201,7 +201,6 @@ kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版�
 
 | 檔案 | 內容 |
 |---|---|
-| [`kbu-terminu-fix.md`](kbu-terminu-fix.md) | 還沒符合 tdp、等 lib 的地方（tdp E7） |
 | [`icon.svg`](icon.svg) | kbu 的 mark（tdp S5：U 框、K、B 各一段註解），README 與 splash 用 |
 | [`km8-icon.svg`](km8-icon.svg) | 改名前（km8）的圖示 |
 | [`social-preview.png`](social-preview.png) | GitHub 的 social preview |

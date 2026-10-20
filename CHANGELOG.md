@@ -40,7 +40,8 @@ The rest:
   - **A name or a message with a control character** (a tab, a line break, a
     colour code) shows it by its name in red, in lists, menus, toasts and
     the statusbar; a toast of many lines shows the first, the App Log the
-    rest. Pod logs show no colours for now.
+    rest. Pod logs are drawn as a terminal draws them: their colours,
+    a progress bar's last state, anything else by its name in red.
   - **In Alterm and a shell** `Alt-v` selects text to copy, as in a viewer;
     in `kubectl edit` every key is the editor's, `PgUp` too.
   - **Settings or a state kbu cannot read** are asked about at the start:

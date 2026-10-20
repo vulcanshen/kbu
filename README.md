@@ -271,7 +271,6 @@ resource_kind_config:
 - **Some edits and deletes are not offered.** Events and nodes cannot be deleted from kbu; what a Helm chart manages is changed
   with `helm upgrade`, `rollback` and `uninstall`.
 - **Panel 3 has no `/` filter.** Open the YAML with `Y` and search there.
-- **Pod logs show no colours for now**: the colour codes a program writes are left out.
 - **On a narrow panel 2 long values are cut first**, names in the middle (`demo-app…66-gm72n`), and only then do whole
   columns go, the least needed first; the name never goes. `z` shows every column in full.
 

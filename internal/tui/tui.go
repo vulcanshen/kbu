@@ -417,15 +417,6 @@ func (m *Model) kubectlArgs(args ...string) []string {
 	return args
 }
 
-// tabWidth is the family's input_tab_width (tdp E3): the spaces a tab in
-// reading content is drawn as.
-func (m *Model) tabWidth() int {
-	if m.cfg.InputTabWidth > 0 {
-		return m.cfg.InputTabWidth
-	}
-	return 4
-}
-
 // toastErr says a failure at once (tdp F5); the lib keeps it in the App Log.
 func (m *Model) toastErr(text string) tea.Cmd { return m.toast(terminu.Error, text) }
 

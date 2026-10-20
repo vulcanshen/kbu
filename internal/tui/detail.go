@@ -319,7 +319,7 @@ func (m *Model) appendLog(l k8s.LogLine) {
 	if m.shownKind() != k8s.ResourcePods && !m.atContainers() {
 		pod = l.Pod // a workload's merged stream says which pod each line came from
 	}
-	for _, text := range logRows(l.Text, m.tabWidth()) {
+	for _, text := range logRows(l.Text) {
 		m.det.logs = append(m.det.logs, logLine{pod: pod, container: l.Container, text: text})
 	}
 	if n := len(m.det.logs); n > maxLogLines {
@@ -360,30 +360,11 @@ func containerDetail(c k8s.ContainerInfo, pod k8s.ResourceItem) k8s.ResourceDeta
 
 // --- the tabs' content -----------------------------------------------------
 
-// logRows are a log line as reading content is drawn (components, control
-// characters): a \n starts another row, a \r leaves only its last state, a
-// tab is tab spaces, any other control character is its name in Red.
-// TODO(lib KB24): its colour codes colour; the lib's drawing of reading
-// content is not the app's to call, so they go for now.
-func logRows(s string, tab int) []string {
-	var out []string
-	for _, line := range strings.Split(strings.TrimSuffix(s, "\n"), "\n") {
-		line = strings.TrimSuffix(line, "\r") // a CRLF's \r is its line break
-		if strings.ContainsRune(line, '\r') {
-			parts := strings.Split(line, "\r")
-			line = ""
-			for i := len(parts) - 1; i >= 0; i-- {
-				if parts[i] != "" {
-					line = parts[i]
-					break
-				}
-			}
-		}
-		line = strings.ReplaceAll(terminu.StripStyles(line), "\t", strings.Repeat(" ", tab))
-		out = append(out, terminu.Escape(line))
-	}
-	return out
-}
+// logRows are a log line as the lib draws reading content (components,
+// control characters; terminu.Reading): a \n starts another row, a \r
+// leaves its last state, colour codes colour, a tab is input_tab_width
+// spaces, any other control character is its name in Red.
+func logRows(s string) []string { return terminu.Reading(strings.TrimSuffix(s, "\n")) }
 
 // logPalette colours a container's and a pod's name in the Logs tab, the
 // same name always the same colour (the app's content, tdp P4).
