@@ -163,7 +163,7 @@ func (m *Model) runEdit(rt k8s.ResourceType, item k8s.ResourceItem, then func() 
 		env = append(env, "KUBE_EDITOR="+m.cfg.Editor)
 	}
 	m.tx = &terminu.Terminal{Title: "Edit", Subject: subject(rt, item), Command: append([]string{"kubectl"}, m.editArgs(rt, item)...),
-		Env: env, Ends: true, History: true, OnExit: m.txExited("edit", then)}
+		Env: env, Ends: true, OnExit: m.txExited("edit", then)} // an editor: every key is its own
 	return m.app.OpenTerminal(m.tx)
 }
 
@@ -256,7 +256,7 @@ func (m *Model) runShell() tea.Cmd {
 	args := m.shellArgs(pod, container)
 	m.log.info("exec shell: kubectl " + strings.Join(args, " "))
 	m.tx = &terminu.Terminal{Title: "Shell", Subject: "pod/" + pod.Name + " → " + container,
-		Command: append([]string{"kubectl"}, args...), Ends: true, History: true, OnExit: m.txExited("shell", nil)}
+		Command: append([]string{"kubectl"}, args...), Ends: true, Interactive: true, OnExit: m.txExited("shell", nil)}
 	return m.app.OpenTerminal(m.tx)
 }
 
@@ -327,10 +327,8 @@ func (m *Model) onCommandDone(msg commandDoneMsg) tea.Cmd {
 		if out == "" {
 			out = "deleted " + target
 		}
-		m.log.success(out)
 		return m.toastDone(out)
 	case "rollback":
-		m.log.success(out)
 		return m.toastDone("Rolled back " + target)
 	}
 	return nil

@@ -136,7 +136,7 @@ func TestGlobalOperations(t *testing.T) {
 	m := newTestModel(t)
 	m.press("Space", "G", "Enter")
 	s := m.screen_()
-	for _, want := range []string{"[N]amespace", "[C]ontext", "[Alt-t]erm", "[!] App log", "[q]uit"} {
+	for _, want := range []string{"[N]amespace", "[C]ontext", "[Alt-t]erm", "[q]uit"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the global operation popup has no %q:\n%s", want, s)
 		}
@@ -235,5 +235,20 @@ func TestNamespacePickerLoads(t *testing.T) {
 	m.drive(m.onMsg(namespacesMsg{names: []string{"alpha", "beta"}}))
 	if s := m.screen_(); !strings.Contains(s, "alpha") || !strings.Contains(s, "beta") {
 		t.Errorf("the namespaces did not fill the picker:\n%s", s)
+	}
+}
+
+// ! on a panel opens the lib's App Log (tdp K1, F5): what kbu did is in it,
+// and a toast is too, by itself.
+func TestTheAppLog(t *testing.T) {
+	m := newTestModel(t)
+	m.log.info("compare: anchor set on pod/a")
+	m.drive(m.toastErr("drill failed: forbidden"))
+	m.press("!")
+	s := m.screen_()
+	for _, want := range []string{"APP LOG", "compare: anchor set on pod/a", "drill failed: forbidden", "kbu started"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the App Log has no %q:\n%s", want, s)
+		}
 	}
 }

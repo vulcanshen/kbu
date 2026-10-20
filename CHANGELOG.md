@@ -19,7 +19,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.8.3: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.9.0: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -33,17 +33,29 @@ The rest:
     left it.
   - **The top row** shows `[Alt-t]erm` and `[C]ompare` first, then the context
     and the namespace, so a long context no longer pushes them about.
-  - **The App Log** lists the oldest entry first and opens at the newest.
-    Clearing it is a row of `Global operation`, no longer `D` in the App Log.
+  - **The App Log is the family's**: `!` on any panel opens it, oldest first,
+    every toast and error in it by itself; the footer says `!:2 errors` until
+    you have looked. The statusbar no longer counts them, and the App Log is
+    no longer cleared by hand: it is kept only while kbu runs.
+  - **A name or a message with a control character** (a tab, a line break, a
+    colour code) shows it by its name in red, in lists, menus, toasts and
+    the statusbar; a toast of many lines shows the first, the App Log the
+    rest. Pod logs are drawn as a terminal draws them: their colours,
+    a progress bar's last state, anything else by its name in red.
+  - **In Alterm and a shell** `Alt-v` selects text to copy, as in a viewer;
+    in `kubectl edit` every key is the editor's, `PgUp` too.
+  - **Settings or a state kbu cannot read** are asked about at the start:
+    `Enter` moves the file to `.bak` and starts from the defaults, `Esc`
+    leaves kbu and says why. kbu used to stop on broken settings, and start
+    over a broken state without a word.
   - **A failure is an error toast**, in Red, always; a warning is for something
     done that is still worth a look; what is done, a copy say, is a Success
     toast in Green.
   - **The YAML search** underlines every hit and marks the one it is on.
   - **The Events tab no longer dims** when panel 3 loses the focus: it streams,
     like Logs.
-  - **In the terminals** (Alterm, edit, shell) `PgUp` goes into the History
-    mode: `j|k`, `u|d` and `gg|G` scroll back, `Esc` goes back to the live
-    screen. `Home` and `End` go to the program now, as in every terminu app.
+  - **In Alterm and a shell** `PgUp` goes into the History mode: `j|k`,
+    `u|d` and `gg|G` scroll back, `Esc` goes back to the live screen. `Home` and `End` go to the program now, as in every terminu app.
     Leaving asks with the library's question.
   - **Alterm hides with `Alt-t` only**; `Ctrl-T` goes to the shell.
   - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.

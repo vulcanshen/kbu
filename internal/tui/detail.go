@@ -224,7 +224,7 @@ func (m *Model) rowMoved(key string) tea.Cmd {
 	m.setListActions() // the descriptions name the row's own (an HPA's target)
 	m.rowSeq++
 	seq := m.rowSeq
-	return tea.Tick(rowDebounce, func(time.Time) tea.Msg { return rowTickMsg{seq: seq} })
+	return m.app.Tick(rowDebounce, func(time.Time) tea.Msg { return rowTickMsg{seq: seq} })
 }
 
 // rowMovedNow is rowMoved without the wait, for a drill: the user asked for
@@ -319,7 +319,9 @@ func (m *Model) appendLog(l k8s.LogLine) {
 	if m.shownKind() != k8s.ResourcePods && !m.atContainers() {
 		pod = l.Pod // a workload's merged stream says which pod each line came from
 	}
-	m.det.logs = append(m.det.logs, logLine{pod: pod, container: l.Container, text: sanitizeLog(l.Text)})
+	for _, text := range logRows(l.Text) {
+		m.det.logs = append(m.det.logs, logLine{pod: pod, container: l.Container, text: text})
+	}
 	if n := len(m.det.logs); n > maxLogLines {
 		m.det.logs = m.det.logs[n-maxLogLines:]
 	}
@@ -358,31 +360,11 @@ func containerDetail(c k8s.ContainerInfo, pod k8s.ResourceItem) k8s.ResourceDeta
 
 // --- the tabs' content -----------------------------------------------------
 
-// sanitizeLog keeps what a log line shows: a carriage-return progress bar
-// leaves only its last state, escape codes and other control characters go
-// (they would move the cursor inside the frame), a tab becomes a space.
-func sanitizeLog(s string) string {
-	if strings.ContainsRune(s, '\r') {
-		parts := strings.Split(s, "\r")
-		s = ""
-		for i := len(parts) - 1; i >= 0; i-- {
-			if parts[i] != "" {
-				s = parts[i]
-				break
-			}
-		}
-	}
-	s = terminu.StripStyles(s)
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\t':
-			return ' '
-		case r < 0x20, r >= 0x7f && r < 0xa0:
-			return -1
-		}
-		return r
-	}, s)
-}
+// logRows are a log line as the lib draws reading content (components,
+// control characters; terminu.Reading): a \n starts another row, a \r
+// leaves its last state, colour codes colour, a tab is input_tab_width
+// spaces, any other control character is its name in Red.
+func logRows(s string) []string { return terminu.Reading(strings.TrimSuffix(s, "\n")) }
 
 // logPalette colours a container's and a pod's name in the Logs tab, the
 // same name always the same colour (the app's content, tdp P4).
@@ -447,6 +429,16 @@ func (m *Model) renderLogs(w int) (header, rows []string, line []int) {
 // header in Blue, the rows in red when bad says so.
 func table(w int, titles []string, rows [][]string, bad func(i int) bool) (header, out []string, lineOf []int) {
 	n := len(titles)
+	// The cluster's words are names and short texts: a control character
+	// in them is its name in Red (components, control characters).
+	esc := make([][]string, len(rows))
+	for i, r := range rows {
+		esc[i] = make([]string, len(r))
+		for c, v := range r {
+			esc[i][c] = terminu.Escape(v)
+		}
+	}
+	rows = esc
 	ws := make([]int, n)
 	for c, t := range titles {
 		ws[c] = terminu.Width(t)
@@ -548,7 +540,7 @@ func (m *Model) renderInfo(w int) (header, rows []string, line []int) {
 	}
 	for n, f := range fs {
 		label := terminu.Fg(terminu.Blue).Render(terminu.Pad(strings.ToUpper(f.Label), lw))
-		vals := terminu.Wrap(f.Value, max(w-lw-2, 1))
+		vals := terminu.Wrap(terminu.Escape(f.Value), max(w-lw-2, 1)) // the cluster's words
 		if len(vals) == 0 {
 			vals = []string{""}
 		}
@@ -639,11 +631,12 @@ func (m *Model) refreshRelatives() {
 	entries := relEntries(m.levelDetail())
 	rows := make([]terminu.Row, len(entries))
 	for i, e := range entries {
-		v := e.value
+		row := terminu.Row{ID: strconv.Itoa(i), Cells: []string{e.label, e.value}, Group: e.group}
 		if e.ref != nil {
-			v += " " + terminu.Fg(terminu.Overlay0).Render(glyphLink)
+			row.Cells[1] += " " + glyphLink
+			row.Styled = [][]terminu.Span{nil, {{Text: e.value + " "}, {Text: glyphLink, Style: terminu.Fg(terminu.Overlay0)}}}
 		}
-		rows[i] = terminu.Row{ID: strconv.Itoa(i), Cells: []string{e.label, v}, Group: e.group}
+		rows[i] = row
 	}
 	m.relList.SetRows(rows)
 }
@@ -742,12 +735,12 @@ func (m *Model) refreshHistory() {
 	current := currentRevision(revs)
 	rows := make([]terminu.Row, len(revs))
 	for i, r := range revs {
-		mark := ""
-		if r.Revision == current {
-			mark = terminu.Fg(terminu.Green).Render("●")
-		}
-		rows[i] = terminu.Row{ID: strconv.Itoa(r.Revision), Cells: []string{mark, strconv.Itoa(r.Revision), r.Status,
+		rows[i] = terminu.Row{ID: strconv.Itoa(r.Revision), Cells: []string{"", strconv.Itoa(r.Revision), r.Status,
 			k8s.FormatHelmHistoryDate(r.Updated), r.Chart, r.Description}}
+		if r.Revision == current {
+			rows[i].Cells[0] = "●"
+			rows[i].Styled = [][]terminu.Span{{{Text: "●", Style: terminu.Fg(terminu.Green)}}}
+		}
 	}
 	had := len(m.histList.Rows()) > 0
 	m.histList.SetRows(rows)

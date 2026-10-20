@@ -120,7 +120,7 @@ func (m *Model) selectKind(rt k8s.ResourceType, debounce bool) tea.Cmd {
 		return m.startWatch()
 	}
 	seq := m.kindSeq
-	return tea.Tick(kindDebounce, func(time.Time) tea.Msg { return kindTickMsg{seq: seq} })
+	return m.app.Tick(kindDebounce, func(time.Time) tea.Msg { return kindTickMsg{seq: seq} })
 }
 
 // startWatch starts watching the kind panel 1 shows.
@@ -373,6 +373,12 @@ func (m *Model) setListRows() {
 	for i, it := range items {
 		cells := make([]string, len(cols))
 		copy(cells, rowCells(rt, it))
+		if current != "" && it.Name == current && len(cells) > 0 {
+			cells[0] += " *"
+		}
+		// The app's colours go as spans, the text staying in the cells
+		// (components, control characters).
+		styled := make([][]terminu.Span, len(cells))
 		sortVals := make([]string, len(cells))
 		for c := range cells {
 			title := ""
@@ -380,10 +386,9 @@ func (m *Model) setListRows() {
 				title = cols[c].Title
 			}
 			sortVals[c] = sortValue(title, it, cells[c])
-			cells[c] = m.colorCell(rt, title, cells[c])
-		}
-		if current != "" && it.Name == current && len(cells) > 0 {
-			cells[0] += " *"
+			if st, ok := m.cellStyle(rt, title, cells[c]); ok {
+				styled[c] = []terminu.Span{{Text: cells[c], Style: st}}
+			}
 		}
 		if m.anchor != nil && itemKey(it) == m.anchor.key && len(cells) > 0 {
 			// The anchor's row is the user's footprint (components/color):
@@ -392,9 +397,9 @@ func (m *Model) setListRows() {
 			if len(cols) > 1 && cols[0].Title == "Namespace" {
 				name = 1
 			}
-			cells[name] = terminu.Fg(terminu.Lavender).Render(terminu.StripStyles(cells[name]))
+			styled[name] = []terminu.Span{{Text: cells[name], Style: terminu.Fg(terminu.Lavender)}}
 		}
-		rows[i] = terminu.Row{ID: itemKey(it), Cells: cells, Sort: sortVals}
+		rows[i] = terminu.Row{ID: itemKey(it), Cells: cells, Styled: styled, Sort: sortVals}
 	}
 	m.list.EmptyFact = "No " + strings.ToLower(rt.String())
 	m.list.EmptyHint = "Press [N] to pick other namespaces, or [Space] to see what you can do here"
@@ -441,7 +446,7 @@ func sortValue(title string, item k8s.ResourceItem, cell string) string {
 // colorCell colours what needs a look in a status cell: transitional or
 // degraded in the pending colour, failures in the error colour (the app's
 // content, tdp P4). Healthy stays plain.
-func (m *Model) colorCell(rt k8s.ResourceType, title, cell string) string {
+func (m *Model) cellStyle(rt k8s.ResourceType, title, cell string) (terminu.Style, bool) {
 	raw := strings.TrimSpace(cell)
 	color := ""
 	switch {
@@ -451,9 +456,9 @@ func (m *Model) colorCell(rt k8s.ResourceType, title, cell string) string {
 		color = m.status.Error
 	}
 	if color == "" {
-		return cell
+		return terminu.Style{}, false
 	}
-	return terminu.Fg(terminu.Hex(color)).Render(cell)
+	return terminu.Fg(terminu.Hex(color)), true
 }
 
 // statusColor is the colour of a status value, "" for a healthy or unknown

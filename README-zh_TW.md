@@ -134,11 +134,12 @@ kbu
 
 | 鍵 | 做什麼 |
 |---|---|
-| `Space` | 這裡能做什麼：先是這一項，再是這個 panel，最後是 `Global operation`（namespace、context、Alterm、App log、離開） |
+| `Space` | 這裡能做什麼：先是這一項，再是這個 panel，最後是 `Global operation`（namespace、context、Alterm、離開） |
 | `?` | 最前面那個東西的按鍵：panel，或最上層的 popup。再按 `?` 或 `Esc` 關掉 |
 | `Tab`、`Shift-Tab`、`1–3` | 下一個 panel、上一個、照編號跳 |
 | `Enter` | 最直觀的動作：drill 進去（workload 進它的 Pods）、打開 YAML、切到某個 context、shell 進 container、rollback 到某個 Helm revision。在 panel 1 上是到 panel 2；在 Logs、Events、Conditions、Info 上是全螢幕 |
 | `Esc` | 退一步：清掉篩選、放掉比對的基準列、從 drill 退回一層。永遠不會離開 kbu |
+| `!` | App Log：kbu 做過的事與出問題的事，最新的在最下面。還沒看過的錯誤，footer 會寫 `!:2 errors`，打開看過就回去 |
 | `q`、`Ctrl-C` | 離開 kbu（會記住你在哪裡） |
 | `j\|k`、`u\|d`、`gg\|G` | 下、上，半頁，到頭、到尾。panel 3 上 `h\|l` 切 tab |
 
@@ -154,7 +155,7 @@ kbu
 | Panel 2 | `.` | 顯示或藏起 Helm chart 管理的物件 |
 | 任何 panel | `z` | 全螢幕；再按 `z` 回到三個 |
 | Panel 3 | `B` | 在 Relatives 走深之後：breadcrumb |
-| panel 上任何地方 | `N`、`C`、`Alt-t`、`!` | namespace、context（在 panel 2 上 `C` 是 compare）、Alterm、App log |
+| panel 上任何地方 | `N`、`C`、`Alt-t` | namespace、context（在 panel 2 上 `C` 是 compare）、Alterm |
 
 popup 疊在另一個 popup 上時，只有你正在用的那一個是亮的，底下的都變暗。
 
@@ -164,8 +165,9 @@ popup 疊在另一個 popup 上時，只有你正在用的那一個是亮的，�
 |---|---|
 | `Alt-Esc` | 結束程式，會先問 |
 | `Alt-t` | 只有 Alterm：藏起來，shell 繼續跑 |
-| `PgUp\|PgDn` | 往回捲、看捲出畫面的內容 |
-| 其他鍵 | 送給程式 |
+| `PgUp` | Alterm 與 shell：歷史，往回看捲出畫面的內容（`j\|k`、`u\|d`、`gg\|G`；`Esc` 回到即時畫面） |
+| `Alt-v` | Alterm 與 shell：選一段字複製（`v`，再按 `y`） |
+| 其他鍵 | 送給程式；edit 裡每個鍵都是編輯器的，`PgUp` 也是 |
 
 ### Helm
 
@@ -197,6 +199,8 @@ delete，`crash-<日期>.log` 是 kbu 當掉時的紀錄。需要的話自己備
 舊版的 kbu 把設定放在 `~/Library/Application Support/kbu`（macOS）或 `%APPDATA%\kbu`（Windows），log 也放在旁邊。第一次
 啟動這一版時，kbu 會把它們一項一項搬到 `~/.config/kbu` 與 `~/.kbu/logs`，並告訴你搬好了。新位置已經有的那一項留在原處，kbu
 寫出兩個路徑讓你自己合併；設定搬不動時照舊用舊位置，並寫出兩個路徑，讓你自己搬。
+
+kbu 讀不了 `config.yaml` 或 `state.yaml`（檔案壞了、沒有權限）時，啟動時會問：`Enter` 把它改名成 `config.yaml.bak`（已經有了就是 `.bak.1`……，不會蓋掉），從預設值重新開始；`Esc` 離開 kbu，把路徑與原因印在終端機上。
 
 ### config.yaml
 

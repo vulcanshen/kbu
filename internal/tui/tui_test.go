@@ -187,7 +187,7 @@ func TestTheMovedSettingsAreTold(t *testing.T) {
 	}})
 	s := m.screen_()
 	for _, want := range []string{"NOT MOVED", "/old/kbu", "/new/kbu", "permission denied", "kbu keeps using it",
-		"/old/logs stays where it is", "Merge the two yourself"} {
+		"/old/logs stays", "/data/logs is there already", "Merge the two yourself"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the error popup has no %q:\n%s", want, s)
 		}
@@ -260,13 +260,13 @@ func TestDragReordersThePinnedKinds(t *testing.T) {
 // a fixed width, and the namespaces, the last dynamic field, come last.
 func TestStatusbarKeepsItsFields(t *testing.T) {
 	m := newTestModel(t)
-	bar := terminu.StripStyles(m.statusbar(120))
+	bar := plainSpans(m.statusbar(120))
 	if i, want := strings.Index(bar, "[N]amespace"), 1+len("[C]ontext: ")+24+2; i != want {
 		t.Errorf("[N]amespace at %d, want %d:\n%q", i, want, bar)
 	}
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "C")
-	bar = terminu.StripStyles(m.statusbar(120))
+	bar = plainSpans(m.statusbar(120))
 	if c, x := strings.Index(bar, "[C]ompare"), strings.Index(bar, "[C]ontext"); c < 0 || c > x {
 		t.Errorf("[C]ompare is not before [C]ontext:\n%q", bar)
 	}
@@ -420,5 +420,82 @@ func TestSessionState(t *testing.T) {
 	s := m.sessionState()
 	if s.Kind != "pod" || s.ObjectName != "b" || s.ObjectNamespace != "demo" || s.Panel != "detail" || s.Tab != "Logs" {
 		t.Errorf("state %+v", s)
+	}
+}
+
+// tdp E3: settings and a state kbu cannot read are asked about at the start,
+// MOVE ASIDE: Enter moves each to .bak and writes a new one, the settings
+// first, then the state.
+func TestUnreadableFilesMoveAside(t *testing.T) {
+	m := newTestModelWith(t, Options{ConfigErr: errors.New("yaml: line 3: bad"), StateErr: errors.New("yaml: line 1: bad")})
+	for _, p := range []string{config.ConfigPath(), config.StatePath()} {
+		if err := os.WriteFile(p, []byte("broken: ["), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s := m.screen_(); !strings.Contains(s, "MOVE ASIDE") || !strings.Contains(s, "config.yaml") {
+		t.Fatalf("no MOVE ASIDE for the settings:\n%s", s)
+	}
+	m.press("Enter")
+	if s := m.screen_(); !strings.Contains(s, "MOVE ASIDE") || !strings.Contains(s, "state.yaml") {
+		t.Fatalf("no MOVE ASIDE for the state:\n%s", s)
+	}
+	m.press("Enter")
+	for _, p := range []string{config.ConfigPath(), config.StatePath()} {
+		if b, err := os.ReadFile(p + ".bak"); err != nil || string(b) != "broken: [" {
+			t.Errorf("%s.bak: %q, %v", p, b, err)
+		}
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("no new %s: %v", p, err)
+		}
+	}
+	if !m.asideAsked {
+		t.Error("Run would not say it was a file kbu could not read")
+	}
+}
+
+// A toast is a short text: of kubectl's many lines only the first goes in it,
+// the whole in the App Log.
+func TestAToastTakesTheFirstLine(t *testing.T) {
+	m := newTestModel(t)
+	m.drive(m.toastErr("delete pod/a failed: exit status 1: Error from server (Forbidden)\nmore detail"))
+	if s := m.screen_(); strings.Contains(s, `\n`) || !strings.Contains(s, "Error from server (Forbidden)") {
+		t.Errorf("the toast:\n%s", s)
+	}
+	m.press("!")
+	if s := m.screen_(); !strings.Contains(s, "more detail") {
+		t.Errorf("the App Log has not the whole of it:\n%s", s)
+	}
+}
+
+// kbu's colours go as spans: a colour code left in a cell would show as its
+// name, \x1b (components, control characters). Panel 2 with a status in
+// colour and the anchor in Lavender, and the statusbar, show none.
+func TestNoColourCodeShows(t *testing.T) {
+	m := newTestModel(t)
+	bad := pod("demo", "b")
+	bad.Row[2] = "CrashLoopBackOff"
+	m.feed(pod("demo", "a"), bad)
+	m.press("Tab", "C")
+	if s := m.screen_(); strings.Contains(s, `\x1b`) || !strings.Contains(s, "CrashLoopBackOff") {
+		t.Errorf("a colour code shows:\n%s", s)
+	}
+}
+
+// A log line is reading content (components, control characters): colour
+// codes colour, a \r leaves its last state, another sequence is its name,
+// a \n starts another row.
+func TestLogRowsAreReadingContent(t *testing.T) {
+	if r := logRows("\x1b[32mok\x1b[0m"); len(r) != 1 || !strings.Contains(r[0], "\x1b[32m") {
+		t.Errorf("the colour went: %q", r)
+	}
+	if r := logRows("10%\r100%"); len(r) != 1 || terminu.StripStyles(r[0]) != "100%" {
+		t.Errorf("the progress: %q", r)
+	}
+	if r := logRows("x\x1b[2Jy"); len(r) != 1 || !strings.Contains(terminu.StripStyles(r[0]), `\x1b`) {
+		t.Errorf("a clear-screen is not named: %q", r)
+	}
+	if r := logRows("a\nb\n"); len(r) != 2 {
+		t.Errorf("a \\n is not two rows: %q", r)
 	}
 }

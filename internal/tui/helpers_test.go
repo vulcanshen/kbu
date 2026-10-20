@@ -131,3 +131,12 @@ func pod(ns, name string) k8s.ResourceItem {
 	return k8s.ResourceItem{Name: name, Namespace: ns, UID: string(p.UID), Raw: p,
 		Row: []string{name, "1/1", "Running", "0", "1h", "10.0.0.1", "node-1"}}
 }
+
+// plainSpans is spans as the text they show.
+func plainSpans(spans []terminu.Span) string {
+	var b strings.Builder
+	for _, s := range spans {
+		b.WriteString(s.Text)
+	}
+	return b.String()
+}
