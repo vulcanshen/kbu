@@ -147,11 +147,12 @@ there, `Esc` steps back, `q` leaves.
 
 | Key | What it does |
 |---|---|
-| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, the App log, quit) |
+| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, quit) |
 | `?` | The keys of whatever is in front: the panel, or the popup on top. `?` again or `Esc` closes it |
 | `Tab`, `Shift-Tab`, `1–3` | The next panel, the previous one, a panel by its number |
 | `Enter` | The obvious action: drill in (a workload into its Pods), open a YAML, switch to a context, a shell into a container, roll back to a Helm revision. On panel 1 it takes you to panel 2; on Logs, Events, Conditions and Info it is full screen |
 | `Esc` | One step back: clear the filter, drop the compare anchor, come back up a drill. It never leaves kbu |
+| `!` | The App Log: what kbu did and what went wrong, newest last. The footer says `!:2 errors` until you have looked |
 | `q`, `Ctrl-C` | Leave kbu (it remembers where you were) |
 | `j\|k`, `u\|d`, `gg\|G` | Down and up, half a page, the top and the end. On panel 3 `h\|l` switch tabs |
 
@@ -167,7 +168,7 @@ Every other key is a shortcut of a row of the `Space` menu, and the `?` of each 
 | Panel 2 | `.` | Show or hide what a Helm chart manages |
 | Any panel | `z` | Full screen; `z` again for the three |
 | Panel 3 | `B` | On Relatives, deep in a chain: the breadcrumb |
-| Anywhere on a panel | `N`, `C`, `Alt-t`, `!` | Namespaces, context (on panel 2 `C` is compare), Alterm, the App log |
+| Anywhere on a panel | `N`, `C`, `Alt-t` | Namespaces, context (on panel 2 `C` is compare), Alterm |
 
 When a popup opens over another, only the one you are in is bright; everything under it dims.
 
@@ -177,8 +178,9 @@ When a popup opens over another, only the one you are in is bright; everything u
 |---|---|
 | `Alt-Esc` | End the program, asked first |
 | `Alt-t` | Alterm only: hide it; the shell keeps running |
-| `PgUp\|PgDn` | Scroll back through what went off the top |
-| Any other key | To the program |
+| `PgUp` | Alterm and shell: History, back through what went off the top (`j\|k`, `u\|d`, `gg\|G`; `Esc` for the live screen) |
+| `Alt-v` | Alterm and shell: select text and copy it (`v`, then `y`) |
+| Any other key | To the program; in edit every key is the editor's, `PgUp` too |
 
 ### Helm
 
@@ -214,6 +216,10 @@ An older kbu kept the settings in `~/Library/Application Support/kbu` (macOS) or
 next to them. The first time you start this one, it moves them, one by one, to `~/.config/kbu` and `~/.kbu/logs`, and says
 so. What the new place has already stays where it was, and kbu shows both paths for you to merge them; if the settings
 cannot be moved, kbu keeps using the old place and shows both paths, so you can move them yourself.
+
+When kbu cannot read `config.yaml` or `state.yaml` (a broken file, no permission), it asks at the start: `Enter` renames
+it to `config.yaml.bak` (or `.bak.1`…, never over another) and starts again from the defaults; `Esc` leaves kbu and prints
+the path and the reason in the terminal.
 
 ### config.yaml
 
@@ -265,6 +271,7 @@ resource_kind_config:
 - **Some edits and deletes are not offered.** Events and nodes cannot be deleted from kbu; what a Helm chart manages is changed
   with `helm upgrade`, `rollback` and `uninstall`.
 - **Panel 3 has no `/` filter.** Open the YAML with `Y` and search there.
+- **Pod logs show no colours for now**: the colour codes a program writes are left out.
 - **On a narrow panel 2 long values are cut first**, names in the middle (`demo-app…66-gm72n`), and only then do whole
   columns go, the least needed first; the name never goes. `z` shows every column in full.
 

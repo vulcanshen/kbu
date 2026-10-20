@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.8.3/principle)（tdp v0.8.3），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.2.2）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.0/principle)（tdp v0.9.0），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.0）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -24,11 +24,11 @@
   | `list.go` | panel 2：欄位、排序、drill、compare anchor、helm 的篩選、zoom |
   | `detail.go` | panel 3：tab、Logs 與 Events、Relatives 的鏈、History、Conditions、Info |
   | `textbody.go` | panel 3 沒有 cursor 的 tab 用的 body：折行、表頭不捲、追尾、`N-M of T` |
-  | `popups.go` | YAML viewer（搜尋）、compare、App Log、namespace 與 context picker、兩步排序、breadcrumb |
+  | `popups.go` | YAML viewer（搜尋）、compare、namespace 與 context picker、兩步排序、breadcrumb |
   | `compare.go` | diff 的兩種版面 |
   | `ops.go` | 複製、edit、shell、delete、rollback、helm 文件、切換 context |
   | `pty.go` | Alterm |
-  | `applog.go` | App Log 的紀錄 |
+  | `applog.go` | 寫進 lib 的 App Log（`app.Log`） |
   | `splash.go` | splash（`icon.svg` 是 `docs/icon.svg` 的副本，測試守住兩份一樣） |
 
 - **`internal/k8s` 與 `internal/config` 沒換**：client-go 的包裝、各種資源的 fetcher / detailer / relatives、watcher、log 串流、
@@ -58,7 +58,7 @@
 | sort 的欄位與方向兩個 picker | 兩個 menu（tdp F1：一步一個 popup） |
 | namespace picker | checkbox popup（`App.Checks`）；第一列是 All Namespaces |
 | context picker | select（`App.Select`） |
-| YAML、compare、helm 文件、App Log | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`、`L`） |
+| YAML、compare、helm 文件 | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`、`L`） |
 | breadcrumb | menu，每一列先問（`Action.Ask`） |
 | confirm | lib 的（`App.Confirm`、`Action.Ask`） |
 | toast | lib 的 |
@@ -115,8 +115,17 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   一個都沒勾時沒有東西可以看，全部最接近使用者的意思。舊版「All 勾著時再勾一個就變成只有那一個」跟畫面對不上，改掉。
 - **context**：從 Contexts 清單按 `Enter` 先問；從 `[C]ontext` 的 select 選定不再問（tdp F6：經由 picker 明確選定的那一次算已確認）。
   切換時清掉 CRD 再重新探索，正在看的種類是能 drill 的或新叢集沒有的，就回到 Pods。
-- **錯誤**：toast（tdp F5）加 App Log；statusbar 右邊寫還沒看過的錯誤、警告數（Red、Peach 的字），打開 App Log 就算看過。
-  watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
+- **錯誤與 App Log**（tdp F5、K1）：App Log 是 lib 的，panel 上按 `!` 打開，toast 與 error popup 自己會進去，footer 寫還沒看過的錯誤、
+  警告數。kbu 用 `app.Log` 記其他的事：使用者做的動作與結果（切換種類、標 anchor、edit、exec、切 context）、背景的事（連上叢集、
+  找到的 CRD、namespace 選擇的修正、log 串流的狀況）、外面讀不到的細節。toast 已經記的不再記一次；toast 是短字，kubectl 或 API
+  給的多行訊息只放第一行，整段記進 App Log（`Model.toast`）。舊版自己的 App Log、statusbar 的錯誤數、`Clear the App log` 都拿掉
+  （lib 的只放在記憶體）。watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
+- **控制字元**（tdp v0.9.0 components「控制字元」）：清單的格子、statusbar、menu、toast 交給 lib，lib 照「名字與短字」畫；kbu 的顏色
+  改成 spans（`Row.Styled` 的狀態色、anchor 的 Lavender、Relatives 的箭頭、History 的 ●；statusbar 回傳 `[]Span`）。menu 的列沒有
+  上色的接口，breadcrumb 目前那一層的 Lavender 拿掉（color-9 現在只管位置列）。kbu 自己畫的 panel 3 表格（Events、Conditions）與
+  Info 的值是叢集給的字，用 `terminu.Escape`。pod 的 log 是拿來讀的內容（`logRows`）：`\n` 拆成兩列、`\r` 只留最後的狀態、Tab 是
+  `input_tab_width` 格空白、其他控制字元畫成紅色的名字；顏色碼與清畫面這類序列先拿掉，`TODO(lib KB24)`：lib 公開拿來讀的內容的
+  畫法後照它畫（log 的前綴與折行是 kbu 的 body 做的，換成 Pager 會失去它們）。
 - **statusbar 的順序**（tdp L2：一列裡最後一個動態欄位可以不補空白）：會出現、消失的 chip（`[Alt-t]erm`、`[C]ompare`）在最前面，
   接著 `[C]ontext`（固定 24 格，太長從中間截），`[N]amespace` 排最後、照名稱長度（最多 16 格）。舊版 context 與 namespace 都照名稱
   長度、後面的 chip 跟著移，是 user 2026-09-28 裁定的偏離（固定 24 格時短名字後面空一大格、80 欄把 chip 擠出去）；tdp L2（v0.8.0）
@@ -124,6 +133,12 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **split 版的 compare 不折行**（tdp v0.8.0 的 components/dialog/note：要對齊的內容 app 可以讓它不折行，截掉的加 `…`）：左右兩欄
   並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`），viewer 設 `NoWrap`，畫面變窄時也是截、不折
   （KB18）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看那一筆的 YAML。
+- **讀不了時**（tdp E3）：`config.yaml` 或 `state.yaml` 讀不了（格式錯、沒有權限），main 先用預設值，啟動時依序開
+  `MOVE ASIDE`（lib 的 `App.MoveAside`，`askAside`）：`Enter` 改名成 `.bak`，設定寫一份預設的、狀態寫一份空的；`Esc` 離開，
+  `Run` 回傳 `tui.NotRead`，main 把路徑與原因印到 stderr，不寫 crash log。kbu 沒有快取。
+- **設定與狀態怎麼分**（tdp E3）：`config.yaml` 是設定，`state.yaml` 是狀態（上次停在哪裡），log 是資料。釘選與排序是 kbu 從畫面上
+  寫進 `config.yaml` 的（`resource_kind_config`），算設定：它們是 kbu 怎麼排種類與清單的選項，刪了重新釘、重新排幾秒就回來，不是
+  使用者會備份的清單。**暫定**。
 - **設定位置照 tdp E3**：`~/.config/kbu`。舊版放在系統的設定目錄（macOS `~/Library/Application Support/kbu`、Windows
   `%APPDATA%\kbu`）。照 tdp E3（v0.8.1）的「換了位置時」逐項搬（`config.MoveOldPlaces`，啟動時、讀設定之前）：舊目錄裡的每一項
   用 `os.Rename` 搬到 `~/.config/kbu`，`logs/` 搬到資料目錄；新位置已經有的那一項留在舊位置（設定、資料都不刪）；搬完把空了的
@@ -145,7 +160,6 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **namespace picker 一按就開**（`App.LoadChecks`）：標題轉 loading，namespace 清單到了再填進去（KB8）；抓不到時 error popup 蓋在
   picker 上。
 - **啟動回到上次的 panel**：`App.Focus`（tdp K3：啟動是使用者按的，回到上次的地方是他預期的；KB5）。
-- **App Log 的清除在 Global operation**：note 只用來讀（tdp F1），清除是對整個 app 的動作。
 
 ### 環境變數
 
@@ -165,8 +179,9 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 
 - **滑鼠**：家族只用鍵盤（tdp X1 允許；KB4，user 2026-10-19），連帶 Settings popup 拿掉。`config.yaml` 的 `mouse_opt_config` 照樣
   讀進來、不作用。
-- **PTY 的歷史**：`PgUp` 進歷史模式（lib 的 `Terminal.History`：`j|k`、`u|d`、`gg|G` 捲、`Esc` 回即時）；`Home`／`End` 屬於 shell
-  （tdp K12），kbu 不另外綁（KB7，user 2026-10-19）。
+- **PTY**（components/dialog/terminal「哪些 PTY 有這兩種模式」）：Alterm 與 `kubectl exec` 是互動 terminal（`Terminal.Interactive`）：
+  `PgUp` 進歷史模式（`j|k`、`u|d`、`gg|G` 捲、`Esc` 回即時）、`Alt-v` 選取。`kubectl edit` 開的是編輯器，不標，按鍵全給它（`PgUp`
+  回到 vim）。`Home`／`End` 屬於 shell（tdp K12），kbu 不另外綁（KB7，user 2026-10-19）。
 - **PTY 只在 unix**：lib 的 terminal 在 Windows 開不了（舊版用的 creack/pty 在 Windows 也一樣）。
 - **彙總 log 的 Pod 汰換**：串流在選列當下取快照，rollout 之後要重新選那一列。
 - **Helm 沒有 watch**：release 清單每 3 秒 poll 一次。
@@ -177,15 +192,16 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 偏離 tdp
 
 目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法，移到「設計決定」。
-等 terminu-go 第三批的那些也都做了，`docs/kbu-terminu-fix.md` 拿掉（tdp E7：全部修完刪掉）。
+還沒符合、等 lib 的寫在 [`kbu-terminu-fix.md`](kbu-terminu-fix.md)。
 
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.8.3/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.0/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|
+| [`kbu-terminu-fix.md`](kbu-terminu-fix.md) | 還沒符合 tdp、等 lib 的地方（tdp E7） |
 | [`icon.svg`](icon.svg) | kbu 的 mark（tdp S5：U 框、K、B 各一段註解），README 與 splash 用 |
 | [`km8-icon.svg`](km8-icon.svg) | 改名前（km8）的圖示 |
 | [`social-preview.png`](social-preview.png) | GitHub 的 social preview |
@@ -228,6 +244,9 @@ make build        # → ./kbu（CGO_ENABLED=0 靜態、-trimpath、strip；版�
   把 lib 回傳的指令（動畫、debounce）跑完再餵回去。會存檔的測試設好暫存的 `KBU__CONFIG`、`KBU__STATE`；`Model.run` 換成會讓測試
   失敗的假的，測試絕對不會真的跑 kubectl delete。
 - 畫面測試（tdp L4）量 icon 與 powerline 符號佔一格、兩格的組合，在幾種尺寸、開幾種 popup 之後，每一列都剛好是終端機寬。
+- `tdp_test.go` 跑 terminu-go 的 tdptest：`Check` 照第一次啟動在很多尺寸、三種 icon 寬度下走過每個 panel 的 Space menu、global
+  operation、App Log、`?`，再縮到最低尺寸以下；另一個用 tdptest 的 `Tricky` 當 pod 名稱。kbu 自己的計時器（兩個 debounce）用
+  `app.Tick`，測試推得動時間。顏色碼漏在格子裡會畫成紅色的 `\x1b`，tdptest 抓不到，由 `TestNoColourCodeShows` 看畫面。
 - `internal/k8s` 有些測試要連真的叢集（開發時用 OrbStack），沒有叢集時跳過。
 
 在 tmux 裡實際跑：`.local/scripts/shot.sh -s 120x40 -- Tab Space`（不進版控；照 terminu-go 的 `scripts/tmux-shot.sh`，設定與狀態放在

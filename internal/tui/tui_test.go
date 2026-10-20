@@ -467,3 +467,17 @@ func TestAToastTakesTheFirstLine(t *testing.T) {
 		t.Errorf("the App Log has not the whole of it:\n%s", s)
 	}
 }
+
+// kbu's colours go as spans: a colour code left in a cell would show as its
+// name, \x1b (components, control characters). Panel 2 with a status in
+// colour and the anchor in Lavender, and the statusbar, show none.
+func TestNoColourCodeShows(t *testing.T) {
+	m := newTestModel(t)
+	bad := pod("demo", "b")
+	bad.Row[2] = "CrashLoopBackOff"
+	m.feed(pod("demo", "a"), bad)
+	m.press("Tab", "C")
+	if s := m.screen_(); strings.Contains(s, `\x1b`) || !strings.Contains(s, "CrashLoopBackOff") {
+		t.Errorf("a colour code shows:\n%s", s)
+	}
+}
