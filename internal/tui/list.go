@@ -360,7 +360,7 @@ func (m *Model) setListRows() {
 	m.listP.Label = rt.String()
 	cols := columnsOf(rt)
 	sorted := map[string]bool{}
-	for _, t := range m.cfg.GetSort(rt.KubectlName()) {
+	for _, t := range m.kindData.GetSort(rt.KubectlName()) {
 		sorted[t.Column] = true
 	}
 	m.list.Columns = listColumns(cols, sorted, m.oneNamespace())
@@ -416,7 +416,7 @@ func (m *Model) setListRows() {
 // longer has is skipped.
 func (m *Model) sortKeys(rt k8s.ResourceType, cols []k8s.Column) []terminu.SortKey {
 	var keys []terminu.SortKey
-	for _, t := range m.cfg.GetSort(rt.KubectlName()) {
+	for _, t := range m.kindData.GetSort(rt.KubectlName()) {
 		if i := slices.IndexFunc(cols, func(c k8s.Column) bool { return c.Title == t.Column }); i >= 0 {
 			keys = append(keys, terminu.SortKey{Col: i, Desc: t.Direction == config.SortDirectionDescending})
 		}

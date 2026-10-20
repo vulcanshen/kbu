@@ -30,6 +30,7 @@ func TestTDP(t *testing.T) {
 func TestTDPTrickyNames(t *testing.T) {
 	t.Setenv("KBU__CONFIG", t.TempDir())
 	t.Setenv("KBU__STATE", t.TempDir())
+	t.Setenv("KBU__DATA", t.TempDir())
 	d := tdptest.Start(t, tdpApp(), 120, 40)
 	items := make([]k8s.ResourceItem, len(tdptest.Tricky))
 	for i, name := range tdptest.Tricky {

@@ -247,9 +247,9 @@ func TestSaveLoadRoundtrip_ResourceKindConfig(t *testing.T) {
 		Editor:  "vim",
 		Compare: CompareConfig{Layout: "unified"},
 	}
-	cfg.SetPinned("pod", 10)
-	cfg.SetPinned("namespace", 20)
-	cfg.SetPinned("configmap", 30)
+	cfg.ResourceKindConfig.SetPinned("pod", 10)
+	cfg.ResourceKindConfig.SetPinned("namespace", 20)
+	cfg.ResourceKindConfig.SetPinned("configmap", 30)
 
 	if err := cfg.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
@@ -260,7 +260,7 @@ func TestSaveLoadRoundtrip_ResourceKindConfig(t *testing.T) {
 	}
 
 	wantOrdered := []string{"pod", "namespace", "configmap"}
-	got := loaded.PinnedOrdered()
+	got := loaded.ResourceKindConfig.PinnedOrdered()
 	if len(got) != len(wantOrdered) {
 		t.Fatalf("PinnedOrdered len = %d, want %d (got %v)", len(got), len(wantOrdered), got)
 	}
@@ -271,7 +271,7 @@ func TestSaveLoadRoundtrip_ResourceKindConfig(t *testing.T) {
 	}
 	// Order values survive the round-trip — important if the user
 	// hand-edits YAML to leave gaps.
-	if p := loaded.GetPinned("pod"); p == nil || p.Order != 10 {
+	if p := loaded.ResourceKindConfig.GetPinned("pod"); p == nil || p.Order != 10 {
 		t.Errorf("pod Order lost in roundtrip, got %+v", p)
 	}
 	if loaded.Editor != "vim" {
@@ -284,27 +284,27 @@ func TestSaveLoadRoundtrip_ResourceKindConfig(t *testing.T) {
 
 func TestPinnedHelpers_SetUnsetGet(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.IsPinned("pod") {
+	if cfg.ResourceKindConfig.IsPinned("pod") {
 		t.Error("fresh config should have no pins")
 	}
-	cfg.SetPinned("pod", 10)
-	if !cfg.IsPinned("pod") {
+	cfg.ResourceKindConfig.SetPinned("pod", 10)
+	if !cfg.ResourceKindConfig.IsPinned("pod") {
 		t.Error("IsPinned should report true after SetPinned")
 	}
-	if p := cfg.GetPinned("pod"); p == nil || p.Order != 10 {
+	if p := cfg.ResourceKindConfig.GetPinned("pod"); p == nil || p.Order != 10 {
 		t.Errorf("GetPinned returned %+v, want {Order:10}", p)
 	}
 
 	// SetPinned overwrites Order on existing entry.
-	cfg.SetPinned("pod", 25)
-	if p := cfg.GetPinned("pod"); p == nil || p.Order != 25 {
+	cfg.ResourceKindConfig.SetPinned("pod", 25)
+	if p := cfg.ResourceKindConfig.GetPinned("pod"); p == nil || p.Order != 25 {
 		t.Errorf("SetPinned must overwrite Order, got %+v", p)
 	}
 
 	// UnsetPinned drops the kind entry entirely when nothing else
 	// occupies it — keeps the YAML clean.
-	cfg.UnsetPinned("pod")
-	if cfg.IsPinned("pod") {
+	cfg.ResourceKindConfig.UnsetPinned("pod")
+	if cfg.ResourceKindConfig.IsPinned("pod") {
 		t.Error("IsPinned should be false after UnsetPinned")
 	}
 	if _, ok := cfg.ResourceKindConfig["pod"]; ok {
@@ -312,17 +312,17 @@ func TestPinnedHelpers_SetUnsetGet(t *testing.T) {
 	}
 
 	// UnsetPinned on a kind that isn't pinned is a no-op.
-	cfg.UnsetPinned("never-pinned")
+	cfg.ResourceKindConfig.UnsetPinned("never-pinned")
 }
 
 func TestSortHelpers_SetUnsetGet(t *testing.T) {
 	cfg := DefaultConfig()
-	if got := cfg.GetSort("pod"); len(got) != 0 {
+	if got := cfg.ResourceKindConfig.GetSort("pod"); len(got) != 0 {
 		t.Errorf("fresh config GetSort = %+v, want empty", got)
 	}
 
-	cfg.SetSort("pod", "Age", SortDirectionDescending)
-	chain := cfg.GetSort("pod")
+	cfg.ResourceKindConfig.SetSort("pod", "Age", SortDirectionDescending)
+	chain := cfg.ResourceKindConfig.GetSort("pod")
 	if len(chain) != 1 {
 		t.Fatalf("GetSort returned %d tiers after first SetSort, want 1", len(chain))
 	}
@@ -332,31 +332,31 @@ func TestSortHelpers_SetUnsetGet(t *testing.T) {
 
 	// SetSort on a NEW column appends — chain grows; priority is
 	// insertion order.
-	cfg.SetSort("pod", "Name", SortDirectionAscending)
-	chain = cfg.GetSort("pod")
+	cfg.ResourceKindConfig.SetSort("pod", "Name", SortDirectionAscending)
+	chain = cfg.ResourceKindConfig.GetSort("pod")
 	if len(chain) != 2 || chain[0].Column != "Age" || chain[1].Column != "Name" {
 		t.Errorf("chain after two distinct SetSort = %+v, want [{Age desc} {Name asc}]", chain)
 	}
 
 	// SetSort on a column ALREADY in the chain updates direction in
 	// place — priority is preserved.
-	cfg.SetSort("pod", "Age", SortDirectionAscending)
-	chain = cfg.GetSort("pod")
+	cfg.ResourceKindConfig.SetSort("pod", "Age", SortDirectionAscending)
+	chain = cfg.ResourceKindConfig.GetSort("pod")
 	if len(chain) != 2 || chain[0].Column != "Age" || chain[0].Direction != SortDirectionAscending {
 		t.Errorf("in-place direction update lost: chain=%+v", chain)
 	}
 
 	// UnsetSortColumn removes a single tier; remaining tiers shift up.
-	cfg.UnsetSortColumn("pod", "Age")
-	chain = cfg.GetSort("pod")
+	cfg.ResourceKindConfig.UnsetSortColumn("pod", "Age")
+	chain = cfg.ResourceKindConfig.GetSort("pod")
 	if len(chain) != 1 || chain[0].Column != "Name" {
 		t.Errorf("after removing Age, chain = %+v, want [{Name asc}]", chain)
 	}
 
 	// Removing the last tier on an entry with no other config drops
 	// the map entry.
-	cfg.UnsetSortColumn("pod", "Name")
-	if got := cfg.GetSort("pod"); len(got) != 0 {
+	cfg.ResourceKindConfig.UnsetSortColumn("pod", "Name")
+	if got := cfg.ResourceKindConfig.GetSort("pod"); len(got) != 0 {
 		t.Errorf("GetSort after removing last tier = %+v, want empty", got)
 	}
 	if _, ok := cfg.ResourceKindConfig["pod"]; ok {
@@ -364,21 +364,21 @@ func TestSortHelpers_SetUnsetGet(t *testing.T) {
 	}
 
 	// Operations on absent kinds / columns are silent no-ops.
-	cfg.UnsetSortColumn("never-sorted", "Age")
-	cfg.ResetSort("never-sorted")
+	cfg.ResourceKindConfig.UnsetSortColumn("never-sorted", "Age")
+	cfg.ResourceKindConfig.ResetSort("never-sorted")
 }
 
 func TestSortHelpers_ResetClearsEntireChain(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.SetSort("pod", "Age", SortDirectionDescending)
-	cfg.SetSort("pod", "Name", SortDirectionAscending)
-	cfg.SetSort("pod", "Restarts", SortDirectionDescending)
-	if got := cfg.GetSort("pod"); len(got) != 3 {
+	cfg.ResourceKindConfig.SetSort("pod", "Age", SortDirectionDescending)
+	cfg.ResourceKindConfig.SetSort("pod", "Name", SortDirectionAscending)
+	cfg.ResourceKindConfig.SetSort("pod", "Restarts", SortDirectionDescending)
+	if got := cfg.ResourceKindConfig.GetSort("pod"); len(got) != 3 {
 		t.Fatalf("setup: chain should have 3 tiers, got %d", len(got))
 	}
 
-	cfg.ResetSort("pod")
-	if got := cfg.GetSort("pod"); len(got) != 0 {
+	cfg.ResourceKindConfig.ResetSort("pod")
+	if got := cfg.ResourceKindConfig.GetSort("pod"); len(got) != 0 {
 		t.Errorf("ResetSort must clear chain, got %+v", got)
 	}
 }
@@ -388,21 +388,21 @@ func TestSortHelpers_EntrySharedWithPinned(t *testing.T) {
 	// Unsetting one must NOT drop the entry when the other is still
 	// active, otherwise the surviving config would silently disappear.
 	cfg := DefaultConfig()
-	cfg.SetPinned("pod", 10)
-	cfg.SetSort("pod", "Name", SortDirectionAscending)
+	cfg.ResourceKindConfig.SetPinned("pod", 10)
+	cfg.ResourceKindConfig.SetSort("pod", "Name", SortDirectionAscending)
 
-	cfg.ResetSort("pod")
-	if !cfg.IsPinned("pod") {
+	cfg.ResourceKindConfig.ResetSort("pod")
+	if !cfg.ResourceKindConfig.IsPinned("pod") {
 		t.Error("ResetSort must not drop the entry when Pinned is still set")
 	}
 
-	cfg.SetSort("pod", "Age", SortDirectionDescending)
-	cfg.UnsetPinned("pod")
-	if got := cfg.GetSort("pod"); len(got) == 0 {
+	cfg.ResourceKindConfig.SetSort("pod", "Age", SortDirectionDescending)
+	cfg.ResourceKindConfig.UnsetPinned("pod")
+	if got := cfg.ResourceKindConfig.GetSort("pod"); len(got) == 0 {
 		t.Error("UnsetPinned must not drop the entry when Sort chain is still set")
 	}
 
-	cfg.ResetSort("pod")
+	cfg.ResourceKindConfig.ResetSort("pod")
 	if _, ok := cfg.ResourceKindConfig["pod"]; ok {
 		t.Error("entry must be deleted once both Pinned and Sort are unset")
 	}
@@ -413,10 +413,10 @@ func TestSortRoundtrip_SurvivesSaveLoad(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 
 	cfg := DefaultConfig()
-	cfg.SetPinned("pod", 10)
-	cfg.SetSort("pod", "Age", SortDirectionDescending)
-	cfg.SetSort("pod", "Name", SortDirectionAscending) // second tier on pods
-	cfg.SetSort("deployment", "Name", SortDirectionAscending)
+	cfg.ResourceKindConfig.SetPinned("pod", 10)
+	cfg.ResourceKindConfig.SetSort("pod", "Age", SortDirectionDescending)
+	cfg.ResourceKindConfig.SetSort("pod", "Name", SortDirectionAscending) // second tier on pods
+	cfg.ResourceKindConfig.SetSort("deployment", "Name", SortDirectionAscending)
 
 	if err := cfg.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
@@ -426,7 +426,7 @@ func TestSortRoundtrip_SurvivesSaveLoad(t *testing.T) {
 		t.Fatalf("LoadFrom: %v", err)
 	}
 
-	got := loaded.GetSort("pod")
+	got := loaded.ResourceKindConfig.GetSort("pod")
 	want := SortChain{
 		{Column: "Age", Direction: SortDirectionDescending},
 		{Column: "Name", Direction: SortDirectionAscending},
@@ -439,10 +439,10 @@ func TestSortRoundtrip_SurvivesSaveLoad(t *testing.T) {
 			t.Errorf("pod chain tier %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
-	if d := loaded.GetSort("deployment"); len(d) != 1 || d[0].Column != "Name" || d[0].Direction != SortDirectionAscending {
+	if d := loaded.ResourceKindConfig.GetSort("deployment"); len(d) != 1 || d[0].Column != "Name" || d[0].Direction != SortDirectionAscending {
 		t.Errorf("deployment sort lost in roundtrip, got %+v", d)
 	}
-	if !loaded.IsPinned("pod") {
+	if !loaded.ResourceKindConfig.IsPinned("pod") {
 		t.Error("pod pin lost when round-tripped alongside sort")
 	}
 }
@@ -479,7 +479,7 @@ func TestSortChain_NullYAML_LoadsAsEmpty(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadFrom must tolerate %s, got err: %v", tc.name, err)
 			}
-			if got := cfg.GetSort("pod"); len(got) != 0 {
+			if got := cfg.ResourceKindConfig.GetSort("pod"); len(got) != 0 {
 				t.Errorf("expected empty chain for %s, got %+v", tc.name, got)
 			}
 		})
@@ -510,7 +510,7 @@ resource_kind_config:
 	if err != nil {
 		t.Fatalf("LoadFrom legacy: %v", err)
 	}
-	chain := cfg.GetSort("pod")
+	chain := cfg.ResourceKindConfig.GetSort("pod")
 	if len(chain) != 1 {
 		t.Fatalf("legacy single-mapping should lift to 1-tier chain, got %d tiers (%+v)", len(chain), chain)
 	}
@@ -583,15 +583,15 @@ func TestMouse_PartialMouseConfig(t *testing.T) {
 
 func TestNextPinOrder_MonotonicSparse(t *testing.T) {
 	cfg := DefaultConfig()
-	if got := cfg.NextPinOrder(); got != 10 {
+	if got := cfg.ResourceKindConfig.NextPinOrder(); got != 10 {
 		t.Errorf("NextPinOrder on empty config = %d, want 10", got)
 	}
-	cfg.SetPinned("pod", 10)
-	if got := cfg.NextPinOrder(); got != 20 {
+	cfg.ResourceKindConfig.SetPinned("pod", 10)
+	if got := cfg.ResourceKindConfig.NextPinOrder(); got != 20 {
 		t.Errorf("NextPinOrder after one pin = %d, want 20", got)
 	}
-	cfg.SetPinned("namespace", 55) // simulate user hand-edit
-	if got := cfg.NextPinOrder(); got != 65 {
+	cfg.ResourceKindConfig.SetPinned("namespace", 55) // simulate user hand-edit
+	if got := cfg.ResourceKindConfig.NextPinOrder(); got != 65 {
 		t.Errorf("NextPinOrder must be max+10 = 65, got %d", got)
 	}
 }
@@ -664,7 +664,7 @@ func TestSaveTo_Atomic_NoTempfileLeak(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	cfg := &Config{Editor: "vim"}
-	cfg.SetPinned("pod", 10)
+	cfg.ResourceKindConfig.SetPinned("pod", 10)
 	if err := cfg.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
 	}

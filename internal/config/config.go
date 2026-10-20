@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -66,14 +65,13 @@ type Config struct {
 	// upgrade.
 	Mouse *MouseConfig `yaml:"mouse_opt_config,omitempty"`
 
-	// ResourceKindConfig holds per-kind user preferences keyed by
-	// KubectlName (e.g. "pod" / "namespace" / "configmap"). Single
-	// home for everything kbu lets the user tune about a kind: pin
-	// state, sort, future column visibility / filter. Unknown kinds
-	// at load time stay in the map but are dropped from the sidebar
-	// (CRD uninstalled, etc.) — the entry is preserved so a re-install
-	// of the CRD silently restores the user's pin / sort.
-	ResourceKindConfig map[string]ResourceKindConfigEntry `yaml:"resource_kind_config,omitempty"`
+	// ResourceKindConfig is where an older kbu kept the pins and sorts.
+	// They are data now, in kinds.yaml (KindData; tdp E3), and
+	// MoveKindData moves them there at start. They are read here only
+	// while they could not be moved, kbu then using them here
+	// (KindDataInConfig), or while kinds.yaml was there already, left
+	// for the user to merge; either way a Save keeps them.
+	ResourceKindConfig KindData `yaml:"resource_kind_config,omitempty"`
 
 	// DeprecationWarnings collected during LoadFrom — populated when the
 	// loader migrates a deprecated yaml key (e.g. km8erm_shell →
@@ -514,183 +512,9 @@ func LoadFrom(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// GetPinned returns the pin state for kind, or nil when not pinned.
-func (c *Config) GetPinned(kind string) *PinnedConfig {
-	if c.ResourceKindConfig == nil {
-		return nil
-	}
-	entry, ok := c.ResourceKindConfig[kind]
-	if !ok {
-		return nil
-	}
-	return entry.Pinned
-}
-
-// IsPinned is the bool convenience wrapper.
-func (c *Config) IsPinned(kind string) bool {
-	return c.GetPinned(kind) != nil
-}
-
-// SetPinned upserts the pin entry for kind. Caller chooses Order —
-// typically via NextPinOrder() when appending, or any int when the
-// user manually moves a pin around. Pre-existing pin is overwritten.
-func (c *Config) SetPinned(kind string, order int) {
-	if c.ResourceKindConfig == nil {
-		c.ResourceKindConfig = make(map[string]ResourceKindConfigEntry)
-	}
-	entry := c.ResourceKindConfig[kind]
-	entry.Pinned = &PinnedConfig{Order: order}
-	c.ResourceKindConfig[kind] = entry
-}
-
-// UnsetPinned drops the pin state for kind. When the entry has no
-// other active config left (IsEmpty), the entire map entry is removed
-// so the YAML stays tidy. Without this housekeeping, unpinning the
-// only thing on a kind would leave `kind: {}` in the file.
-func (c *Config) UnsetPinned(kind string) {
-	if c.ResourceKindConfig == nil {
-		return
-	}
-	entry, ok := c.ResourceKindConfig[kind]
-	if !ok {
-		return
-	}
-	entry.Pinned = nil
-	if entry.IsEmpty() {
-		delete(c.ResourceKindConfig, kind)
-	} else {
-		c.ResourceKindConfig[kind] = entry
-	}
-}
-
-// PinnedOrdered returns kinds in display order — ascending Pinned.Order.
-// Empty slice when no pins exist. Stable across calls.
-func (c *Config) PinnedOrdered() []string {
-	if c.ResourceKindConfig == nil {
-		return nil
-	}
-	type kv struct {
-		kind  string
-		order int
-	}
-	pairs := make([]kv, 0, len(c.ResourceKindConfig))
-	for kind, entry := range c.ResourceKindConfig {
-		if entry.Pinned != nil {
-			pairs = append(pairs, kv{kind, entry.Pinned.Order})
-		}
-	}
-	sort.SliceStable(pairs, func(i, j int) bool {
-		return pairs[i].order < pairs[j].order
-	})
-	out := make([]string, len(pairs))
-	for i, p := range pairs {
-		out[i] = p.kind
-	}
-	return out
-}
-
-// GetSort returns the full sort chain for kind — nil/empty when no
-// sort is set. The returned slice is shared with the config struct,
-// callers MUST treat it as read-only.
-func (c *Config) GetSort(kind string) SortChain {
-	if c.ResourceKindConfig == nil {
-		return nil
-	}
-	entry, ok := c.ResourceKindConfig[kind]
-	if !ok {
-		return nil
-	}
-	return entry.Sort
-}
-
-// SetSort upserts a tier into the kind's chain. If `column` is
-// already in the chain, its direction is updated in place — priority
-// is preserved (no reorder). Otherwise the tier is appended as the
-// lowest-priority entry. Empty direction is rejected silently to
-// keep the chain well-formed.
-func (c *Config) SetSort(kind, column, direction string) {
-	if column == "" || direction == "" {
-		return
-	}
-	if c.ResourceKindConfig == nil {
-		c.ResourceKindConfig = make(map[string]ResourceKindConfigEntry)
-	}
-	entry := c.ResourceKindConfig[kind]
-	if idx := entry.Sort.IndexOf(column); idx >= 0 {
-		entry.Sort[idx].Direction = direction
-	} else {
-		entry.Sort = append(entry.Sort, SortConfig{Column: column, Direction: direction})
-	}
-	c.ResourceKindConfig[kind] = entry
-}
-
-// UnsetSortColumn removes a single tier from the kind's chain.
-// Other tiers shift up to fill the gap (priority N+1 becomes N).
-// When the chain becomes empty AND the entry has no other active
-// config, the entire map entry is dropped — same housekeeping as
-// UnsetPinned.
-func (c *Config) UnsetSortColumn(kind, column string) {
-	if c.ResourceKindConfig == nil {
-		return
-	}
-	entry, ok := c.ResourceKindConfig[kind]
-	if !ok {
-		return
-	}
-	idx := entry.Sort.IndexOf(column)
-	if idx < 0 {
-		return
-	}
-	entry.Sort = append(entry.Sort[:idx], entry.Sort[idx+1:]...)
-	if len(entry.Sort) == 0 {
-		entry.Sort = nil
-	}
-	if entry.IsEmpty() {
-		delete(c.ResourceKindConfig, kind)
-	} else {
-		c.ResourceKindConfig[kind] = entry
-	}
-}
-
-// ResetSort clears the entire sort chain for kind. Same housekeeping
-// as UnsetSortColumn (drops the map entry when nothing else lives
-// there). Backs the "Reset" shortcut in the column picker.
-func (c *Config) ResetSort(kind string) {
-	if c.ResourceKindConfig == nil {
-		return
-	}
-	entry, ok := c.ResourceKindConfig[kind]
-	if !ok {
-		return
-	}
-	entry.Sort = nil
-	if entry.IsEmpty() {
-		delete(c.ResourceKindConfig, kind)
-	} else {
-		c.ResourceKindConfig[kind] = entry
-	}
-}
-
-// NextPinOrder returns the next sparse Order to use when appending a
-// new pin (max existing + 10). Sparse increment lets the user wedge a
-// kind between two existing pins by manually editing YAML without
-// having to renumber the rest.
-func (c *Config) NextPinOrder() int {
-	max := 0
-	if c.ResourceKindConfig == nil {
-		return 10
-	}
-	for _, entry := range c.ResourceKindConfig {
-		if entry.Pinned != nil && entry.Pinned.Order > max {
-			max = entry.Pinned.Order
-		}
-	}
-	return max + 10
-}
-
 // Save persists the config to the default path via atomic write
 // (write to a tempfile in the same dir, then rename). The atomic step
-// matters because kbu mutates the file during use (pin / unpin) and a
+// matters because kbu mutates the file during use (the compare layout) and a
 // crash mid-write must not leave a half-written config that fails to
 // parse on next startup.
 //
