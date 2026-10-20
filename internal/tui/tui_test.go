@@ -422,3 +422,34 @@ func TestSessionState(t *testing.T) {
 		t.Errorf("state %+v", s)
 	}
 }
+
+// tdp E3: settings and a state kbu cannot read are asked about at the start,
+// MOVE ASIDE: Enter moves each to .bak and writes a new one, the settings
+// first, then the state.
+func TestUnreadableFilesMoveAside(t *testing.T) {
+	m := newTestModelWith(t, Options{ConfigErr: errors.New("yaml: line 3: bad"), StateErr: errors.New("yaml: line 1: bad")})
+	for _, p := range []string{config.ConfigPath(), config.StatePath()} {
+		if err := os.WriteFile(p, []byte("broken: ["), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s := m.screen_(); !strings.Contains(s, "MOVE ASIDE") || !strings.Contains(s, "config.yaml") {
+		t.Fatalf("no MOVE ASIDE for the settings:\n%s", s)
+	}
+	m.press("Enter")
+	if s := m.screen_(); !strings.Contains(s, "MOVE ASIDE") || !strings.Contains(s, "state.yaml") {
+		t.Fatalf("no MOVE ASIDE for the state:\n%s", s)
+	}
+	m.press("Enter")
+	for _, p := range []string{config.ConfigPath(), config.StatePath()} {
+		if b, err := os.ReadFile(p + ".bak"); err != nil || string(b) != "broken: [" {
+			t.Errorf("%s.bak: %q, %v", p, b, err)
+		}
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("no new %s: %v", p, err)
+		}
+	}
+	if !m.asideAsked {
+		t.Error("Run would not say it was a file kbu could not read")
+	}
+}

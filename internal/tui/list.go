@@ -120,7 +120,7 @@ func (m *Model) selectKind(rt k8s.ResourceType, debounce bool) tea.Cmd {
 		return m.startWatch()
 	}
 	seq := m.kindSeq
-	return tea.Tick(kindDebounce, func(time.Time) tea.Msg { return kindTickMsg{seq: seq} })
+	return m.app.Tick(kindDebounce, func(time.Time) tea.Msg { return kindTickMsg{seq: seq} })
 }
 
 // startWatch starts watching the kind panel 1 shows.

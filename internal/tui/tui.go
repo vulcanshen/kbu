@@ -22,10 +22,13 @@ import (
 
 // Options is what kbu starts with.
 type Options struct {
-	Client   *k8s.Client // nil in tests: nothing is fetched
-	Config   *config.Config
-	State    *config.State
-	StateErr error
+	Client *k8s.Client // nil in tests: nothing is fetched
+	Config *config.Config
+	State  *config.State
+	// ConfigErr and StateErr are why the settings or the state could not
+	// be read: kbu starts on the defaults and asks to move the file aside
+	// (tdp E3).
+	ConfigErr, StateErr error
 	// Notices go into the App Log at start (a migrated config directory, a
 	// deprecated key).
 	Notices []string
@@ -92,6 +95,11 @@ type Model struct {
 
 	// fillNamespaces puts the namespaces in the open namespace picker.
 	fillNamespaces func([]string)
+
+	// cfgErr and stateErr are the files kbu could not read; asideAsked is
+	// the start asking to move one aside (tdp E3).
+	cfgErr, stateErr error
+	asideAsked       bool
 }
 
 // New builds kbu's UI.
@@ -103,6 +111,7 @@ func New(o Options) *Model {
 		status: o.Status,
 		run:    runCommand,
 		moved:  o.Moved,
+		cfgErr: o.ConfigErr, stateErr: o.StateErr,
 	}
 	if m.cfg == nil {
 		m.cfg = config.DefaultConfig()
@@ -153,9 +162,6 @@ func New(o Options) *Model {
 			}
 		}
 	}
-	if o.StateErr != nil {
-		m.log.warn("state: " + o.StateErr.Error() + " — starting from the defaults")
-	}
 	for _, w := range m.cfg.DeprecationWarnings {
 		m.log.warn(w)
 	}
@@ -168,8 +174,18 @@ func New(o Options) *Model {
 func (m *Model) Run() error {
 	err := m.app.Run()
 	m.shutdown()
+	if err != nil && m.asideAsked && !errors.Is(err, tea.ErrProgramPanic) {
+		return NotRead{err}
+	}
 	return err
 }
+
+// NotRead is Run's error when the user left at a file kbu could not read,
+// not moving it aside (tdp E3): main writes it to stderr, and it is no crash.
+type NotRead struct{ Err error }
+
+func (e NotRead) Error() string { return e.Err.Error() }
+func (e NotRead) Unwrap() error { return e.Err }
 
 // shutdown stops the watcher, the log stream and the PTYs, and saves the
 // session state. A save that fails does not keep the user from leaving.
@@ -234,13 +250,41 @@ func (m *Model) start() tea.Cmd {
 		}
 		cmds = append(cmds, fetchNamespaces(m.client, true), discoverCRDs(m.client))
 	}
-	cmds = append(cmds, m.sayMoved())
+	cmds = append(cmds, m.sayMoved(), m.askAside())
 	// Back on the panel the user left from: starting kbu is what they did,
 	// and where it starts is what they expect (tdp K3).
 	if p := map[string]*terminu.Panel{"table": m.listP, "detail": m.detailP}[m.startPanel]; p != nil {
 		cmds = append(cmds, m.app.Focus(p))
 	}
 	return tea.Batch(cmds...)
+}
+
+// askAside asks about the files of kbu's own it could not read (tdp E3):
+// moved aside, the settings start again from the defaults and the state
+// from nothing; or the user leaves. kbu runs on the defaults meanwhile.
+func (m *Model) askAside() tea.Cmd {
+	state := func() tea.Cmd {
+		if m.stateErr == nil {
+			return nil
+		}
+		m.asideAsked = true
+		return m.app.MoveAside(config.StatePath(), m.stateErr, func() tea.Cmd {
+			if err := config.DefaultState().Save(); err != nil {
+				return m.toastErr("state not written: " + err.Error())
+			}
+			return nil
+		})
+	}
+	if m.cfgErr == nil {
+		return state()
+	}
+	m.asideAsked = true
+	return m.app.MoveAside(config.ConfigPath(), m.cfgErr, func() tea.Cmd {
+		if err := m.cfg.Save(); err != nil {
+			return tea.Batch(m.toastErr("settings not written: "+err.Error()), state())
+		}
+		return state()
+	})
 }
 
 // sayMoved says what was moved at start (tdp E3): an Info toast from where

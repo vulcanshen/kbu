@@ -224,7 +224,7 @@ func (m *Model) rowMoved(key string) tea.Cmd {
 	m.setListActions() // the descriptions name the row's own (an HPA's target)
 	m.rowSeq++
 	seq := m.rowSeq
-	return tea.Tick(rowDebounce, func(time.Time) tea.Msg { return rowTickMsg{seq: seq} })
+	return m.app.Tick(rowDebounce, func(time.Time) tea.Msg { return rowTickMsg{seq: seq} })
 }
 
 // rowMovedNow is rowMoved without the wait, for a drill: the user asked for

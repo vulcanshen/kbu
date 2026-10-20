@@ -88,14 +88,12 @@ func main() {
 	}
 	notices = append(notices, migrated)
 
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
-		os.Exit(1)
+	// tdp E3: settings or a state kbu cannot read are not used; kbu starts
+	// on its defaults and the UI asks to move the file aside, or to leave.
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		cfg = config.DefaultConfig()
 	}
-
-	// Session state is best-effort: a corrupt or unreadable state file must
-	// not lock the user out of kbu; the App Log says what went wrong.
 	state, stateErr := config.LoadState()
 	if stateErr != nil {
 		state = config.DefaultState()
@@ -127,9 +125,15 @@ func main() {
 	// The Helm Releases category is there only when `helm` is on PATH.
 	k8s.RegisterHelmIfAvailable()
 
-	ui := tui.New(tui.Options{Client: client, Config: cfg, State: state, StateErr: stateErr,
+	ui := tui.New(tui.Options{Client: client, Config: cfg, ConfigErr: cfgErr, State: state, StateErr: stateErr,
 		Notices: notices, Moved: moved, Status: theme.DefaultTheme().Status, Version: version.Display()})
 	if err := ui.Run(); err != nil {
+		// The user left at a file kbu could not read: why, and no crash.
+		var notRead tui.NotRead
+		if errors.As(err, &notRead) {
+			fmt.Fprintf(os.Stderr, "kbu: %v\n", err)
+			os.Exit(1)
+		}
 		// bubbletea catches panics, restores the terminal, then returns
 		// tea.ErrProgramPanic.
 		path := config.WriteCrashLog(err)
