@@ -119,7 +119,7 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 			// An empty tab says why it is empty (components/layout/panel,
 			// errors); the App Log keeps it.
 			fact, _, _ := strings.Cut(msg.err.Error(), "\n")
-			m.log.warn("details: " + fact)
+			m.log.warn("Details: " + fact)
 			m.detailP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu asks again with the next change; [!] shows the App Log"}
 		}
 		return nil
@@ -188,10 +188,11 @@ func (m *Model) waitWatch() tea.Cmd {
 // toast says it (tdp F5), and an empty panel 2 says why it is empty
 // (components/layout/panel, errors). The watcher tries again on its own.
 func (m *Model) onWatchErr(err error) tea.Cmd {
-	m.log.err(err.Error())
+	text := capital(err.Error()) // "listing pods: …", as Go errors are written
+	m.log.err(text)
 	cmds := []tea.Cmd{m.waitWatch()}
 	if m.listP.Fail == nil {
-		fact, _, _ := strings.Cut(err.Error(), "\n")
+		fact, _, _ := strings.Cut(text, "\n")
 		m.listP.Loading = false
 		m.listP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu tries again on its own; [!] shows the App Log"}
 		cmds = append(cmds, m.app.Toast(terminu.Error, fact))
@@ -282,7 +283,7 @@ func (m *Model) onCRDs(msg crdsMsg) tea.Cmd {
 		return nil
 	}
 	if msg.count > 0 {
-		m.log.info(fmt.Sprintf("discovered %d CRDs", msg.count))
+		m.log.info(fmt.Sprintf("Discovered %d CRDs", msg.count))
 	}
 	m.pinned = m.loadPinned()
 	m.refreshKinds()
@@ -313,7 +314,7 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 		return nil
 	}
 	if msg.err != nil {
-		m.log.warn("namespaces: " + msg.err.Error())
+		m.log.warn("Namespaces: " + msg.err.Error())
 		return nil
 	}
 	if m.client == nil {
@@ -327,7 +328,7 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if kept.Count() == sel.Count() {
 		return nil
 	}
-	m.log.info(fmt.Sprintf("namespace selection: %d no longer exist, now %s", sel.Count()-kept.Count(), selectionText(kept)))
+	m.log.info(fmt.Sprintf("Namespace selection: %d no longer exist, now %s", sel.Count()-kept.Count(), selectionText(kept)))
 	return m.setNamespaces(kept)
 }
 
@@ -351,7 +352,7 @@ func (m *Model) restore() {
 				m.pendingSel = &k8s.RefTarget{Type: rt, Name: s.ObjectName, Namespace: s.ObjectNamespace}
 			}
 		} else {
-			m.log.info(fmt.Sprintf("state: recorded kind %q not known yet, starting on Pods", s.Kind))
+			m.log.info(fmt.Sprintf("State: recorded kind %q not known yet, starting on Pods", s.Kind))
 		}
 		m.startTab, m.startPanel = s.Tab, s.Panel
 	}

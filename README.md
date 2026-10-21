@@ -226,8 +226,8 @@ leaves the rest of `config.yaml` as it was. When `kinds.yaml` is there already, 
 merge; when they cannot be moved, kbu keeps using them there; either way it shows both paths.
 
 When kbu cannot read `config.yaml`, `state.yaml` or `kinds.yaml` (a broken file, no permission), it asks at the start:
-`Enter` renames it to `config.yaml.bak` (or `.bak.1`…, never over another) and starts again from the defaults, or with no
-pins and sorts; `Esc` leaves kbu and prints the path and the reason in the terminal.
+`Enter` renames it to `config.yaml.bak` (or `.bak.1`…, never over another) and kbu starts as on its first start, from the
+defaults, or with no pins and sorts; `Esc` leaves kbu and prints the path and the reason in the terminal.
 
 ### config.yaml
 

@@ -242,11 +242,11 @@ func TestNamespacePickerLoads(t *testing.T) {
 // and a toast is too, by itself.
 func TestTheAppLog(t *testing.T) {
 	m := newTestModel(t)
-	m.log.info("compare: anchor set on pod/a")
-	m.drive(m.toastErr("drill failed: forbidden"))
+	m.log.info("Compare: anchor set on pod/a")
+	m.drive(m.toastErr("Drill failed: forbidden"))
 	m.press("!")
 	s := m.screen_()
-	for _, want := range []string{"APP LOG", "compare: anchor set on pod/a", "drill failed: forbidden", "kbu started"} {
+	for _, want := range []string{"APP LOG", "Compare: anchor set on pod/a", "Drill failed: forbidden", "Started kbu"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the App Log has no %q:\n%s", want, s)
 		}

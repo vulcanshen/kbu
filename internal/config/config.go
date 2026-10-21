@@ -494,7 +494,7 @@ func LoadFrom(path string) (*Config, error) {
 				}
 			}
 			cfg.DeprecationWarnings = append(cfg.DeprecationWarnings,
-				"config: 'km8erm_shell' is deprecated, rename to 'alterm_shell' (auto-migrated this session — the next kbu save will rewrite your config.yaml with the new key)")
+				"Config: 'km8erm_shell' is deprecated, rename to 'alterm_shell' (auto-migrated this session — the next kbu save will rewrite your config.yaml with the new key)")
 		}
 
 		_, newLoginPresent := raw["alterm_login_shell"]
@@ -505,7 +505,7 @@ func LoadFrom(path string) (*Config, error) {
 				}
 			}
 			cfg.DeprecationWarnings = append(cfg.DeprecationWarnings,
-				"config: 'km8erm_login_shell' is deprecated, rename to 'alterm_login_shell' (auto-migrated this session — the next kbu save will rewrite your config.yaml with the new key)")
+				"Config: 'km8erm_login_shell' is deprecated, rename to 'alterm_login_shell' (auto-migrated this session — the next kbu save will rewrite your config.yaml with the new key)")
 		}
 	}
 

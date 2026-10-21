@@ -291,9 +291,9 @@ func (m *Model) onPods(msg podsMsg) tea.Cmd {
 	}
 	if msg.err != nil || len(msg.targets) == 0 {
 		if msg.err != nil {
-			m.log.warn("aggregate logs: " + msg.err.Error())
+			m.log.warn("Aggregate logs: " + msg.err.Error())
 		} else {
-			m.log.info("aggregate logs: no pods running")
+			m.log.info("Aggregate logs: no pods running")
 		}
 		m.det.logsOn = false
 		m.det.nextRetry = time.Now().Add(aggregateRetry)
@@ -666,7 +666,7 @@ func (m *Model) relDrill() tea.Cmd {
 	ref := *e.ref
 	for _, f := range m.chainRefs() {
 		if f.Type == ref.Type && f.Name == ref.Name && f.Namespace == ref.Namespace {
-			return m.toastErr(fmt.Sprintf("cycle blocked: %s/%s already in chain", ref.Type, ref.Name))
+			return m.toastErr(fmt.Sprintf("Cycle blocked: %s/%s already in chain", ref.Type, ref.Name))
 		}
 	}
 	src := m.det.uid
@@ -689,7 +689,7 @@ func (m *Model) onRelative(msg relativeMsg) tea.Cmd {
 		return nil // the user moved on
 	}
 	if msg.err != nil {
-		return m.toastErr(fmt.Sprintf("drill failed: %v", msg.err))
+		return m.toastErr(fmt.Sprintf("Drill failed: %v", msg.err))
 	}
 	m.det.chain = append(m.det.chain, relFrame{ref: msg.ref, item: msg.item, detail: msg.detail})
 	m.refreshRelatives()

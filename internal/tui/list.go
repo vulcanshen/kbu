@@ -102,7 +102,7 @@ func (m *Model) selectKind(rt k8s.ResourceType, debounce bool) tea.Cmd {
 	if rt == "" || (rt == m.current && m.kindSeq > 0) {
 		return nil
 	}
-	m.log.info("switched to " + rt.String())
+	m.log.info("Switched to " + rt.String())
 	m.current = rt
 	m.drill, m.anchor = nil, nil
 	m.rootItems = nil
@@ -146,7 +146,7 @@ func (m *Model) onWatchData(msg watchDataMsg) tea.Cmd {
 	}
 	if m.anchor != nil && indexOfKey(m.rootItems, m.anchor.key) < 0 {
 		m.anchor = nil
-		cmds = append(cmds, m.toastWarn("compare: locked item gone"))
+		cmds = append(cmds, m.toastWarn("Compare: locked item gone"))
 	}
 	m.setListRows()
 	if p := m.pendingSel; p != nil && p.Type == m.current {
@@ -685,14 +685,14 @@ func (m *Model) drillIn() tea.Cmd {
 // F5: a failure is seen at once; an empty result is not an ignored Enter).
 func (m *Model) onChildren(msg childrenMsg) tea.Cmd {
 	if msg.err != nil {
-		return m.toastErr(fmt.Sprintf("drill failed: %v", msg.err))
+		return m.toastErr(fmt.Sprintf("Drill failed: %v", msg.err))
 	}
 	if len(msg.children) == 0 {
 		what := "children"
 		if msg.kind != "" {
 			what = msg.kind.String()
 		}
-		return m.app.Toast(terminu.Info, "no "+what+" under "+msg.parent.Name)
+		return m.app.Toast(terminu.Info, "No "+what+" under "+msg.parent.Name)
 	}
 	items := filterHelm(msg.children, msg.kind)
 	sortDefault(items)
@@ -740,7 +740,7 @@ func (m *Model) markAnchor() tea.Cmd {
 		return nil
 	}
 	m.anchor = &anchorRef{kind: m.shownKind(), key: itemKey(item), item: item}
-	m.log.info(fmt.Sprintf("compare: anchor set on %s/%s", m.shownKind().KubectlName(), item.Name))
+	m.log.info(fmt.Sprintf("Compare: anchor set on %s/%s", m.shownKind().KubectlName(), item.Name))
 	m.setListRows()
 	return nil
 }
@@ -750,7 +750,7 @@ func (m *Model) clearAnchor() {
 		return
 	}
 	m.anchor = nil
-	m.log.info("compare: anchor cleared")
+	m.log.info("Compare: anchor cleared")
 	m.setListRows()
 }
 

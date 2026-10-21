@@ -106,7 +106,7 @@ func (m *Model) compareHere() tea.Cmd {
 	if i := indexOfKey(m.shownItems(), m.anchor.key); i >= 0 {
 		anchor = m.shownItems()[i]
 	} else {
-		return m.toastErr("compare: anchor item gone")
+		return m.toastErr("Compare: anchor item gone")
 	}
 	left, right := k8s.MarshalItemYAMLForCompare(anchor), k8s.MarshalItemYAMLForCompare(item)
 	ll, rl := diffLabel(anchor), diffLabel(item)
@@ -205,7 +205,7 @@ func (m *Model) setNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
 		return nil
 	}
 	m.client.SetSelection(sel)
-	m.log.info("namespace selection → " + selectionText(sel))
+	m.log.info("Namespace selection → " + selectionText(sel))
 	m.stopLogs()
 	if m.watcher != nil {
 		m.watcher.Stop()
@@ -309,7 +309,7 @@ func (m *Model) sortSaved(rt k8s.ResourceType) tea.Cmd {
 		m.list.SortBy(m.sortKeys(rt, columnsOf(rt))...)
 	}
 	if err := m.saveKinds(); err != nil {
-		return m.toastErr("sort save failed: " + err.Error())
+		return m.toastErr("Sort save failed: " + err.Error())
 	}
 	return nil
 }

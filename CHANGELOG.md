@@ -19,7 +19,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.9.1: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.9.2: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -36,7 +36,8 @@ The rest:
   - **The App Log is the family's**: `!` on any panel opens it, oldest first,
     every toast and error in it by itself; the footer says `!:2 errors` until
     you have looked. The statusbar no longer counts them, and the App Log is
-    no longer cleared by hand: it is kept only while kbu runs.
+    no longer cleared by hand: it is kept only while kbu runs. Its entries
+    start with a capital, as toasts do.
   - **A name or a message with a control character** (a tab, a line break, a
     colour code) shows it by its name in red, in lists, menus, toasts and
     the statusbar; a toast of many lines shows the first, the App Log the
@@ -45,7 +46,8 @@ The rest:
   - **In Alterm and a shell** `Alt-v` selects text to copy, as in a viewer;
     in `kubectl edit` every key is the editor's, `PgUp` too.
   - **Settings, a state or pins and sorts kbu cannot read** are asked about at the start:
-    `Enter` moves the file to `.bak` and starts from the defaults, `Esc`
+    `Enter` moves the file to `.bak` and starts as on a first start, from
+    the defaults, `Esc`
     leaves kbu and says why. kbu used to stop on broken settings, and start
     over a broken state without a word.
   - **A failure is an error toast**, in Red, always; a warning is for something
