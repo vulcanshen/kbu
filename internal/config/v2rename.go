@@ -57,7 +57,7 @@ func MigrateLegacyConfigDir() (string, error) {
 	}
 
 	return fmt.Sprintf(
-		"config: migrated %s → %s (v2.0 km8 → kbu rename). The old directory is left in place — delete it once you're satisfied the new setup works.",
+		"Config: migrated %s → %s (v2.0 km8 → kbu rename). The old directory is left in place — delete it once you're satisfied the new setup works.",
 		oldDir, newDir,
 	), nil
 }

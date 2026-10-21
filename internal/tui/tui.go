@@ -166,7 +166,7 @@ func New(o Options) *Model {
 		a.Splash = s
 	}
 
-	m.log.info("kbu started")
+	m.log.info("Started kbu")
 	for _, n := range o.Notices {
 		for _, line := range strings.Split(n, "\n") {
 			if line = strings.TrimSpace(line); line != "" {
@@ -256,9 +256,9 @@ func (m *Model) start() tea.Cmd {
 	cmds := []tea.Cmd{m.selectKind(m.kindAt, false)}
 	if m.client != nil {
 		info := m.client.GetClusterInfo()
-		m.log.info(fmt.Sprintf("connected to %s (%s)", info.ContextName, info.ServerURL))
+		m.log.info(fmt.Sprintf("Connected to %s (%s)", info.ContextName, info.ServerURL))
 		if !k8s.HelmAvailable() {
-			m.log.info("helm CLI not found — Helm Releases category hidden")
+			m.log.info("Helm CLI not found — Helm Releases category hidden")
 		}
 		cmds = append(cmds, fetchNamespaces(m.client, true), discoverCRDs(m.client))
 	}
@@ -272,18 +272,18 @@ func (m *Model) start() tea.Cmd {
 }
 
 // askAside asks about the files of kbu's own it could not read (tdp E3), one
-// after the other: moved aside, the settings start again from the defaults,
-// the state and the pins and sorts from nothing; or the user leaves. kbu
-// runs on the defaults meanwhile.
+// after the other: moved aside, kbu goes on as on its first start, the
+// settings on their defaults, the state and the pins and sorts empty, and
+// none of them written until it is saved, as the first start writes none
+// (tdp E3-18); or the user leaves. kbu runs on the defaults meanwhile.
 func (m *Model) askAside() tea.Cmd {
 	files := []struct {
-		path, what string
-		err        error
-		fresh      func() error
+		path string
+		err  error
 	}{
-		{config.ConfigPath(), "settings", m.cfgErr, m.cfg.Save},
-		{config.StatePath(), "state", m.stateErr, config.DefaultState().Save},
-		{config.KindDataPath(), "pins and sorts", m.kindsErr, config.KindData{}.Save},
+		{config.ConfigPath(), m.cfgErr},
+		{config.StatePath(), m.stateErr},
+		{config.KindDataPath(), m.kindsErr},
 	}
 	var ask func(i int) tea.Cmd
 	ask = func(i int) tea.Cmd {
@@ -295,12 +295,8 @@ func (m *Model) askAside() tea.Cmd {
 		}
 		f := files[i]
 		m.asideAsked = true
-		return m.app.MoveAside(f.path, f.err, func() tea.Cmd {
-			if err := f.fresh(); err != nil {
-				return tea.Batch(m.toastErr(f.what+" not written: "+err.Error()), ask(i+1))
-			}
-			return ask(i + 1)
-		})
+		// TODO(lib KB25): v0.4.0 logs the move as "moved …", v0.4.3 as "Moved …" (tdp note-78).
+		return m.app.MoveAside(f.path, f.err, func() tea.Cmd { return ask(i + 1) })
 	}
 	return ask(0)
 }

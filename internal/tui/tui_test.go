@@ -475,8 +475,10 @@ func TestSessionState(t *testing.T) {
 }
 
 // tdp E3: settings, a state and pins and sorts kbu cannot read are asked
-// about at the start, MOVE ASIDE: Enter moves each to .bak and writes a new
-// one, the settings first, then the state, then the pins and sorts.
+// about at the start, MOVE ASIDE: Enter moves each to .bak, the settings
+// first, then the state, then the pins and sorts, and kbu goes on as on its
+// first start, which writes none of them (E3-18): each is made at its first
+// save, the pins and sorts at a pin.
 func TestUnreadableFilesMoveAside(t *testing.T) {
 	m := newTestModelWith(t, Options{ConfigErr: errors.New("yaml: line 3: bad"), StateErr: errors.New("yaml: line 1: bad"),
 		KindsErr: errors.New("yaml: line 2: bad")})
@@ -499,12 +501,16 @@ func TestUnreadableFilesMoveAside(t *testing.T) {
 		if b, err := os.ReadFile(p + ".bak"); err != nil || string(b) != "broken: [" {
 			t.Errorf("%s.bak: %q, %v", p, b, err)
 		}
-		if _, err := os.Stat(p); err != nil {
-			t.Errorf("no new %s: %v", p, err)
+		if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("a new %s before any save: %v", p, err)
 		}
 	}
 	if !m.asideAsked {
 		t.Error("Run would not say it was a file kbu could not read")
+	}
+	m.press("P")
+	if saved, err := config.LoadKindData(); err != nil || !saved.IsPinned("pod") {
+		t.Errorf("the first pin not saved: %v, %v", saved, err)
 	}
 }
 
@@ -512,13 +518,26 @@ func TestUnreadableFilesMoveAside(t *testing.T) {
 // the whole in the App Log.
 func TestAToastTakesTheFirstLine(t *testing.T) {
 	m := newTestModel(t)
-	m.drive(m.toastErr("delete pod/a failed: exit status 1: Error from server (Forbidden)\nmore detail"))
+	m.drive(m.toastErr("Delete pod/a failed: exit status 1: Error from server (Forbidden)\nmore detail"))
 	if s := m.screen_(); strings.Contains(s, `\n`) || !strings.Contains(s, "Error from server (Forbidden)") {
 		t.Errorf("the toast:\n%s", s)
 	}
 	m.press("!")
 	if s := m.screen_(); !strings.Contains(s, "more detail") {
 		t.Errorf("the App Log has not the whole of it:\n%s", s)
+	}
+}
+
+// A toast and an App Log entry start with a capital (tdp note-78), a Go
+// error from the watch too.
+func TestTheWatchErrorStartsWithACapital(t *testing.T) {
+	if capital("") != "" || capital("é") != "É" {
+		t.Errorf("capital: %q, %q", capital(""), capital("é"))
+	}
+	m := newTestModel(t)
+	m.drive(m.onWatchErr(errors.New("listing pods: forbidden")))
+	if s := m.screen_(); strings.Contains(s, "listing pods") || !strings.Contains(s, "Listing pods: forbidden") {
+		t.Errorf("the toast:\n%s", s)
 	}
 }
 

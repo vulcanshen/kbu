@@ -157,13 +157,13 @@ func (m *Model) runEdit(rt k8s.ResourceType, item k8s.ResourceItem, then func() 
 		return m.app.Error("Edit", "An edit or a shell is open already: close it first.")
 	}
 	_ = config.WriteAuditEntry("edit", rt.KubectlName()+"/"+item.Name, item.Namespace, "started")
-	m.log.info("edit: " + rt.KubectlName() + "/" + item.Name)
+	m.log.info("Edit: " + rt.KubectlName() + "/" + item.Name)
 	var env []string
 	if m.cfg.Editor != "" {
 		env = append(env, "KUBE_EDITOR="+m.cfg.Editor)
 	}
 	m.tx = &terminu.Terminal{Title: "Edit", Subject: subject(rt, item), Command: append([]string{"kubectl"}, m.editArgs(rt, item)...),
-		Env: env, Ends: true, OnExit: m.txExited("edit", then)} // an editor: every key is its own
+		Env: env, Ends: true, OnExit: m.txExited("Edit", then)} // an editor: every key is its own
 	return m.app.OpenTerminal(m.tx)
 }
 
@@ -254,9 +254,9 @@ func (m *Model) runShell() tea.Cmd {
 		return m.app.Error("Shell", "An edit or a shell is open already: close it first.")
 	}
 	args := m.shellArgs(pod, container)
-	m.log.info("exec shell: kubectl " + strings.Join(args, " "))
+	m.log.info("Exec shell: kubectl " + strings.Join(args, " "))
 	m.tx = &terminu.Terminal{Title: "Shell", Subject: "pod/" + pod.Name + " → " + container,
-		Command: append([]string{"kubectl"}, args...), Ends: true, Interactive: true, OnExit: m.txExited("shell", nil)}
+		Command: append([]string{"kubectl"}, args...), Ends: true, Interactive: true, OnExit: m.txExited("Shell", nil)}
 	return m.app.OpenTerminal(m.tx)
 }
 
@@ -319,7 +319,7 @@ func (m *Model) onCommandDone(msg commandDoneMsg) tea.Cmd {
 		if out != "" {
 			out = ": " + out
 		}
-		return m.toastErr(fmt.Sprintf("%s %s failed: %v%s", msg.what, target, msg.err, out))
+		return m.toastErr(fmt.Sprintf("%s %s failed: %v%s", capital(msg.what), target, msg.err, out))
 	}
 	switch msg.what {
 	case "delete":
@@ -362,7 +362,7 @@ func (m *Model) fetchHelmDoc(d helmDoc) tea.Cmd {
 
 func (m *Model) onHelmDoc(msg helmDocMsg) tea.Cmd {
 	if msg.err != nil {
-		return m.toastErr(fmt.Sprintf("helm %s of %s: %v", strings.ToLower(msg.label), msg.release, msg.err))
+		return m.toastErr(fmt.Sprintf("Helm %s of %s: %v", strings.ToLower(msg.label), msg.release, msg.err))
 	}
 	lang := "yaml"
 	if msg.label == "Creator Notes" {
@@ -419,9 +419,9 @@ func contextAsk(item k8s.ResourceItem) *terminu.Ask {
 func (m *Model) switchContext(name string) tea.Cmd {
 	c, err := k8s.NewClient(name)
 	if err != nil {
-		return m.toastErr("context switch failed: " + err.Error())
+		return m.toastErr("Context switch failed: " + err.Error())
 	}
-	m.log.info("context switched to " + name)
+	m.log.info("Context switched to " + name)
 	if m.watcher != nil {
 		m.watcher.Stop()
 	}

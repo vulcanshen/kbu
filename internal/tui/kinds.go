@@ -137,7 +137,7 @@ func (m *Model) togglePin() tea.Cmd {
 	m.kinds.Select(string(rt))
 	m.setKindActions()
 	if err := m.savePinned(); err != nil {
-		return m.toastErr("pin save failed: " + err.Error())
+		return m.toastErr("Pin save failed: " + err.Error())
 	}
 	return nil
 }
@@ -194,7 +194,7 @@ func (m *Model) dropDragged() tea.Cmd {
 	m.kindsP.LeaveMode()
 	m.endDrag()
 	if err := m.savePinned(); err != nil {
-		return m.toastErr("pin order save failed: " + err.Error())
+		return m.toastErr("Pin order save failed: " + err.Error())
 	}
 	return nil
 }
