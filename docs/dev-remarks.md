@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.2/principle)（tdp v0.9.2），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.3）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.3/principle)（tdp v0.9.3），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.4）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -139,6 +139,11 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   排序從空的開始。kbu 第一次打開一個檔都不建，所以這時也不建，等第一次存檔才有：設定在 compare 按 `L`、狀態在離開時、釘選排序在
   第一次釘選或排序（資料只有 `kinds.yaml` 一個檔，沒有一筆一個檔的，E3-22 不適用）；`Esc` 離開，
   `Run` 回傳 `tui.NotRead`，main 把路徑與原因印到 stderr，不寫 crash log。kbu 沒有快取。
+- **不再用的檔**（tdp E3-23）：`theme.yaml`（KB3 拿掉，畫面用家族的顏色）與 km8 的目錄（v2.0 複製到 kbu 的之後留在原地）還在時，
+  每次啟動由 lib 的 `App.NoLongerUsed` 在 App Log 記一筆 INFO（路徑來自 `config.NoLongerUsed`），不刪、不跳 toast。`theme.yaml` 找
+  設定目錄的：舊位置搬家時它跟著其他設定逐項搬過去，搬不動時 kbu 照舊用舊目錄，`ConfigDir` 兩種都對。km8 的目錄看平台的與
+  `~/.config` 兩處；kbu 的設定目錄還沒有時不記，那時它還要拿來複製。`config.yaml.old.<版本>`（v1.7.5 改 key 前留的備份）是留給
+  使用者的，跟 `.bak` 一樣不算。
 - **設定、狀態、資料怎麼分**（tdp E3）：`config.yaml` 是設定，`state.yaml` 是狀態（上次停在哪裡），log 與釘選、排序是資料。釘選與
   排序是使用者一個種類一個種類寫給 kbu 的清單，就算內容是 kbu 怎麼排的選項，照 tdp v0.9.1 也是資料（user 2026-10-20 定）；排序
   是每個種類一串多層的欄位，不是一個清單只記一個排序欄的單一選項。兩者放在 `~/.kbu/kinds.yaml`（`config.KindData`，跟舊的
@@ -206,7 +211,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.2/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.3/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

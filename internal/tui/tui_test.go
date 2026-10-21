@@ -474,6 +474,49 @@ func TestSessionState(t *testing.T) {
 	}
 }
 
+// tdp E3-23: a theme.yaml kbu no longer reads, and km8's directory, are
+// noted in the App Log at every start while they are there: not deleted,
+// no toast. A file that is not there is not noted.
+func TestFilesNoLongerUsedAreNoted(t *testing.T) {
+	testDirs(t)
+	theme := filepath.Join(config.ConfigDir(), "theme.yaml")
+	if err := os.WriteFile(theme, []byte("status: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	km8 := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "km8")
+	for range 2 { // every start
+		m := startTestModel(t, Options{})
+		if s := m.screen_(); strings.Contains(s, "No longer used") {
+			t.Fatalf("a toast:\n%s", s)
+		}
+		m.press("!")
+		s := flat(m.screen_())
+		if !strings.Contains(s, "No longer used: "+theme+"; delete it if you don't need it") {
+			t.Errorf("theme.yaml not noted:\n%s", s)
+		}
+		if strings.Contains(s, "km8") {
+			t.Errorf("km8's directory noted while not there:\n%s", s)
+		}
+	}
+	if _, err := os.Stat(theme); err != nil {
+		t.Errorf("theme.yaml went: %v", err)
+	}
+	if err := os.Mkdir(km8, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := startTestModel(t, Options{})
+	m.press("!")
+	if s := flat(m.screen_()); !strings.Contains(s, "No longer used: "+km8+"; delete it if you don't need it") {
+		t.Errorf("km8's directory not noted:\n%s", s)
+	}
+}
+
+// flat is a screen's words with its rows and the frames between them run
+// together, for an entry the App Log folds.
+func flat(s string) string {
+	return strings.Join(strings.FieldsFunc(s, func(r rune) bool { return strings.ContainsRune(" \n┃│", r) }), " ")
+}
+
 // tdp E3: settings, a state and pins and sorts kbu cannot read are asked
 // about at the start, MOVE ASIDE: Enter moves each to .bak, the settings
 // first, then the state, then the pins and sorts, and kbu goes on as on its

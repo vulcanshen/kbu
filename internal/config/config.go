@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -444,6 +445,26 @@ func legacyConfigDir() string {
 		return old
 	}
 	return familyConfigDir(legacyAppName)
+}
+
+// NoLongerUsed is what an older kbu kept that this one no longer reads, for
+// the App Log at every start while it is there (tdp E3, files no longer
+// used): theme.yaml, whose colours the family's took over, where the
+// settings are (the old directory's moved with them); and km8's directory,
+// which v2.0 copied to kbu's and left in place. Nothing is deleted: what to
+// do with them is the user's call.
+func NoLongerUsed() []string {
+	dir := ConfigDir()
+	paths := []string{filepath.Join(dir, "theme.yaml")}
+	if !exists(dir) {
+		return paths // km8's is still to be copied (MigrateLegacyConfigDir)
+	}
+	for _, old := range []string{platformConfigDir(legacyAppName), familyConfigDir(legacyAppName)} {
+		if old != "" && old != dir && !slices.Contains(paths, old) {
+			paths = append(paths, old)
+		}
+	}
+	return paths
 }
 
 // ConfigPath returns the full path to the kbu config file: config.yaml

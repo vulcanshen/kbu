@@ -29,9 +29,24 @@ func newTestModel(t *testing.T) *Model {
 // for the settings and the state when it gives none.
 func newTestModelWith(t *testing.T, o Options) *Model {
 	t.Helper()
+	testDirs(t)
+	return startTestModel(t, o)
+}
+
+// testDirs puts kbu's settings, state and data in temp directories, and
+// $XDG_CONFIG_HOME, where km8's would be, too: the real ones stay untouched.
+func testDirs(t *testing.T) {
+	t.Helper()
 	t.Setenv("KBU__CONFIG", t.TempDir())
 	t.Setenv("KBU__STATE", t.TempDir())
 	t.Setenv("KBU__DATA", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+}
+
+// startTestModel is newTestModelWith in the directories already set, for a
+// test that puts files in them first.
+func startTestModel(t *testing.T, o Options) *Model {
+	t.Helper()
 	terminu.SetIconWidth(1, 1)
 	if o.Config == nil {
 		o.Config = config.DefaultConfig()

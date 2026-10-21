@@ -177,6 +177,9 @@ func New(o Options) *Model {
 	for _, w := range m.cfg.DeprecationWarnings {
 		m.log.warn(w)
 	}
+	// What an older kbu kept that this one no longer reads: an INFO for
+	// each still there, at every start, and nothing else (tdp E3-23).
+	a.NoLongerUsed(config.NoLongerUsed()...)
 	m.restore()
 	return m
 }
