@@ -295,7 +295,6 @@ func (m *Model) askAside() tea.Cmd {
 		}
 		f := files[i]
 		m.asideAsked = true
-		// TODO(lib KB25): v0.4.0 logs the move as "moved …", v0.4.3 as "Moved …" (tdp note-78).
 		return m.app.MoveAside(f.path, f.err, func() tea.Cmd { return ask(i + 1) })
 	}
 	return ask(0)

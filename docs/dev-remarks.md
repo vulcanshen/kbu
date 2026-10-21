@@ -2,7 +2,7 @@
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.2/principle)（tdp v0.9.2），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.0）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.3）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -201,7 +201,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 偏離 tdp
 
 目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法，移到「設計決定」。
-還沒符合的在 [`kbu-terminu-fix.md`](kbu-terminu-fix.md)（tdp E7）。
+還沒符合的也沒有了：`docs/kbu-terminu-fix.md` 全部修完，拿掉（tdp E7）。
 
 ## 設計文件導讀
 
