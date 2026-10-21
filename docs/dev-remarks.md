@@ -1,7 +1,7 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.1/principle)（tdp v0.9.1），畫面建在
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.2/principle)（tdp v0.9.2），畫面建在
 [terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.0）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
@@ -118,8 +118,9 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **錯誤與 App Log**（tdp F5、K1）：App Log 是 lib 的，panel 上按 `!` 打開，toast 與 error popup 自己會進去，footer 寫還沒看過的錯誤、
   警告數。kbu 用 `app.Log` 記其他的事：使用者做的動作與結果（切換種類、標 anchor、edit、exec、切 context）、背景的事（連上叢集、
   找到的 CRD、namespace 選擇的修正、log 串流的狀況）、外面讀不到的細節。toast 已經記的不再記一次；toast 是短字，kubectl 或 API
-  給的多行訊息只放第一行，整段記進 App Log（`Model.toast`）。舊版自己的 App Log、statusbar 的錯誤數、`Clear the App log` 都拿掉
-  （lib 的只放在記憶體）。watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
+  給的多行訊息只放第一行，整段記進 App Log（`Model.toast`）。每一筆跟 toast 一樣大寫開頭（note-78）：kbu 寫的字大寫開頭，名稱開頭的
+  句子改成動詞在前（`Started kbu`），名稱照原樣；Go error 整句拿來用的（watch 的 `listing pods: …`）由 `capital` 把第一個字改大寫。
+  舊版自己的 App Log、statusbar 的錯誤數、`Clear the App log` 都拿掉（lib 的只放在記憶體）。watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
 - **控制字元**（tdp v0.9.0 components「控制字元」）：清單的格子、statusbar、menu、toast 交給 lib，lib 照「名字與短字」畫；kbu 的顏色
   改成 spans（`Row.Styled` 的狀態色、anchor 的 Lavender、Relatives 的箭頭、History 的 ●；statusbar 回傳 `[]Span`）。menu 的列沒有
   上色的接口，breadcrumb 目前那一層的 Lavender 拿掉（color-9 現在只管位置列）。kbu 自己畫的 panel 3 表格（Events、Conditions）與
@@ -134,8 +135,9 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`），viewer 設 `NoWrap`，畫面變窄時也是截、不折
   （KB18）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看那一筆的 YAML。
 - **讀不了時**（tdp E3）：`config.yaml`、`state.yaml` 或 `kinds.yaml` 讀不了（格式錯、沒有權限），main 先用預設值，啟動時依序開
-  `MOVE ASIDE`（lib 的 `App.MoveAside`，`askAside`）：`Enter` 改名成 `.bak`，設定寫一份預設的、狀態與釘選排序寫一份空的（資料只有
-  `kinds.yaml` 一個檔，沒有一筆一個檔的，E3-22 不適用）；`Esc` 離開，
+  `MOVE ASIDE`（lib 的 `App.MoveAside`，`askAside`）：`Enter` 改名成 `.bak`，像第一次打開一樣照常開始（E3-18）：設定用預設值、狀態與釘選
+  排序從空的開始。kbu 第一次打開一個檔都不建，所以這時也不建，等第一次存檔才有：設定在 compare 按 `L`、狀態在離開時、釘選排序在
+  第一次釘選或排序（資料只有 `kinds.yaml` 一個檔，沒有一筆一個檔的，E3-22 不適用）；`Esc` 離開，
   `Run` 回傳 `tui.NotRead`，main 把路徑與原因印到 stderr，不寫 crash log。kbu 沒有快取。
 - **設定、狀態、資料怎麼分**（tdp E3）：`config.yaml` 是設定，`state.yaml` 是狀態（上次停在哪裡），log 與釘選、排序是資料。釘選與
   排序是使用者一個種類一個種類寫給 kbu 的清單，就算內容是 kbu 怎麼排的選項，照 tdp v0.9.1 也是資料（user 2026-10-20 定）；排序
@@ -199,12 +201,12 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 偏離 tdp
 
 目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法，移到「設計決定」。
-還沒符合的也沒有了：`docs/kbu-terminu-fix.md` 全部修完，拿掉（tdp E7）。
+還沒符合的在 [`kbu-terminu-fix.md`](kbu-terminu-fix.md)（tdp E7）。
 
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.1/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.2/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

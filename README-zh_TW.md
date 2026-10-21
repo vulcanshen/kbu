@@ -207,7 +207,7 @@ kbu 的資料在 **`~/.kbu`**（`KBU__DATA` 可以改到別的目錄）。需要
 （`resource_kind_config`）：第一次啟動時搬到 `~/.kbu/kinds.yaml`，`config.yaml` 其他的內容照舊。`kinds.yaml` 已經有了的話，
 它們留在 `config.yaml` 讓你自己合併；搬不動時 kbu 照舊用 `config.yaml` 裡的；兩種都會寫出兩個路徑。
 
-kbu 讀不了 `config.yaml`、`state.yaml` 或 `kinds.yaml`（檔案壞了、沒有權限）時，啟動時會問：`Enter` 把它改名成 `config.yaml.bak`（已經有了就是 `.bak.1`……，不會蓋掉），從預設值、或沒有釘選與排序重新開始；`Esc` 離開 kbu，把路徑與原因印在終端機上。
+kbu 讀不了 `config.yaml`、`state.yaml` 或 `kinds.yaml`（檔案壞了、沒有權限）時，啟動時會問：`Enter` 把它改名成 `config.yaml.bak`（已經有了就是 `.bak.1`……，不會蓋掉），像第一次打開一樣，從預設值、或沒有釘選與排序重新開始；`Esc` 離開 kbu，把路徑與原因印在終端機上。
 
 ### config.yaml
 
