@@ -8,7 +8,8 @@ Not compatible with the last release in three ways:
 
 - **`theme.yaml` is gone.** kbu no longer reads it, and the screen is drawn in
   the terminu family's colours. A theme for the whole family may come later.
-  You can delete the file.
+  You can delete the file; while it is there, the App Log says so at every
+  start (`No longer used: …`), and kbu leaves it alone.
 - **The mouse is gone**, and with it the Settings popup (`>`), which only held
   the mouse's two settings: the terminu family is keyboard only.
   `mouse_opt_config` in `config.yaml` is still read and does nothing.
@@ -19,7 +20,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.9.2: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.9.3: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -88,6 +89,9 @@ The rest:
   kbu's `resource_kind_config` out of `config.yaml`, the rest of the file
   left as it was; if they cannot be moved, kbu keeps using them in
   `config.yaml` and shows both paths.
+- **km8's old settings directory**, which kbu 2.0 copied and left in place,
+  is no longer used either: while it is there, the App Log says so at every
+  start. kbu does not delete it.
 - **`input_tab_width`** in `config.yaml`, shared by the terminu family: how
   many cells a tab takes in the viewers (default 4).
 - **`kbu help`** prints how to run kbu (also `--help`, `-h`).
