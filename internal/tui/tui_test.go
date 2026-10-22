@@ -292,6 +292,11 @@ func TestDragReordersThePinnedKinds(t *testing.T) {
 	if m.kindsP.InMode() == nil {
 		t.Fatal("D did not enter the Drag mode")
 	}
+	m.press("Space") // the mode's Space menu (tdp K11): Drop, then the mode's own
+	if s := m.screen_(); !strings.Contains(s, "Drop") || !strings.Contains(s, "DRAG MODE") {
+		t.Errorf("the Drag mode's Space menu:\n%s", s)
+	}
+	m.press("Esc")
 	m.press("j") // Deployments is last: it wraps to the top
 	if got := []k8s.ResourceType{k8s.ResourceDeployments, k8s.ResourcePods}; !slices.Equal(m.pinned, got) {
 		t.Errorf("after j: %v, want %v", m.pinned, got)

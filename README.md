@@ -148,7 +148,7 @@ there, `Esc` steps back, `q` leaves.
 
 | Key | What it does |
 |---|---|
-| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, quit) |
+| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, quit). In a mode (Compare, Drag), what the mode can do |
 | `?` | The keys of whatever is in front: the panel, or the popup on top. `?` again or `Esc` closes it |
 | `Tab`, `Shift-Tab`, `1–3` | The next panel, the previous one, a panel by its number |
 | `Enter` | The obvious action: drill in (a workload into its Pods), open a YAML, switch to a context, a shell into a container, roll back to a Helm revision. On panel 1 it takes you to panel 2; on Logs, Events, Conditions and Info it is full screen |
