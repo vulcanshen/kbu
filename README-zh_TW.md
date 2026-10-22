@@ -41,7 +41,7 @@ Relatives 導覽、YAML 比對與內嵌的 shell 都是內建的；kbu 沒做的
 - **Events** —— workload 自己的 events 加上它的 Pod 的（CronJob 再加上它的 Job 的），新的在前。
 - **Conditions** —— `.status.conditions` 的表，跟 `kubectl describe` 看到的一樣；events 過期之後還在。
 - **YAML viewer**（`[Y]AML`）—— 有行號與語法顏色；`/` 搜尋，`n` / `N` 到下一個、上一個符合，`v` 選取，`y` 複製。
-- **Compare** —— 比對同一種的兩個資源，unified 或左右並排（`L` 切換，kbu 會記住）。status 與 server 管的欄位會先拿掉，只看寫下的內容。
+- **Compare** —— 比對同一種的兩個資源，只列出不同的地方，unified 或左右並排（`h|l` 切換，kbu 會記住）。status 與 server 管的欄位會先拿掉，只看寫下的內容。
 - **問題一眼看得到** —— 狀態欄只在需要注意時上色：pending 或降級中，或失敗。
 - **Helm releases** —— `helm` 在 `PATH` 上時：每個 release 的 manifest、values、notes 與 hooks；revision 歷史與 rollback。
   chart 管理的物件有標記、不讓你誤改，想看清楚時按 `.` 藏起來。
@@ -150,7 +150,7 @@ kbu
 | Panel 1 | `P` | 釘選或取消釘選這個種類 |
 | Panel 1 | `D` | 把釘選的種類拖到位置：`j\|k`，然後 `Enter`；`Esc` 放回原處 |
 | Panel 2 | `Y`、`E`、`S`、`D` | YAML、edit、shell、delete |
-| Panel 2 | `C` | 比對：這一列成為基準，panel 2 進入 Compare 模式。移到另一列按 `C` 或 `Enter` 比對兩者，要比幾次都可以；`Esc` 離開模式 |
+| Panel 2 | `C` | 比對：這一列成為基準，panel 2 進入 Compare 模式。移到另一列按 `C` 或 `Enter` 看兩者哪裡不同，要比幾次都可以；`Esc` 離開模式 |
 | Panel 2 | `Alt-S` | 依一欄、再選方向排序清單 |
 | Panel 2 | `.` | 顯示或藏起 Helm chart 管理的物件 |
 | 任何 panel | `z` | 全螢幕；再按 `z` 回到三個 |
@@ -190,8 +190,8 @@ kbu 的設定與上次停在哪裡都在 **`~/.config/kbu`**（有設 `$XDG_CONF
 
 | 檔案 | 是什麼 |
 |---|---|
-| `config.yaml` | 你的設定（見下面）。切換比對版面時 kbu 會寫它 |
-| `state.yaml` | 上次停在哪裡；離開時寫入。`KBU__STATE` 可以放到別的目錄 |
+| `config.yaml` | 你的設定（見下面） |
+| `state.yaml` | 上次停在哪裡，以及比對看的是 unified 還是左右並排；離開時寫入。`KBU__STATE` 可以放到別的目錄 |
 
 kbu 的資料在 **`~/.kbu`**（`KBU__DATA` 可以改到別的目錄）。需要的話自己備份：刪掉就找不回來了。
 
@@ -217,8 +217,6 @@ default_namespace: ""     # 啟動用的 namespace（預設：全部）
 editor: ""                # 以 $KUBE_EDITOR 交給 kubectl
 alterm_shell: ""          # Alterm 的 shell（預設：$SHELL，再來 /bin/sh）；只寫名字時從 PATH 找
 alterm_login_shell: false # true 時 Alterm 的 shell 加 -l，讀 ~/.zprofile / ~/.bash_profile
-compare:
-  layout: unified         # "unified" 或 "split"；在比對的 popup 按 L 會寫回來
 input_tab_width: 4        # viewer（YAML、log）裡一個 tab 佔幾格；terminu 家族共用
 ```
 

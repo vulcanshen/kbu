@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -29,13 +30,6 @@ type drillLevel struct {
 	kind       k8s.ResourceType // the children's kind; "" for a pod's containers
 	items      []k8s.ResourceItem
 	containers []k8s.ContainerInfo
-}
-
-// anchorRef is the compare anchor: the row a later C compares against.
-type anchorRef struct {
-	kind k8s.ResourceType
-	key  string
-	item k8s.ResourceItem
 }
 
 func (m *Model) buildList() {
@@ -104,7 +98,7 @@ func (m *Model) selectKind(rt k8s.ResourceType, debounce bool) tea.Cmd {
 	}
 	m.log.info("Switched to " + rt.String())
 	m.current = rt
-	m.drill, m.anchor = nil, nil
+	m.drill = nil
 	m.rootItems = nil
 	m.stopLogs()
 	if m.watcher != nil {
@@ -143,11 +137,6 @@ func (m *Model) onWatchData(msg watchDataMsg) tea.Cmd {
 	cmds := []tea.Cmd{m.waitWatch()}
 	if len(m.drill) > 0 {
 		return tea.Batch(cmds...)
-	}
-	if m.anchor != nil && indexOfKey(m.rootItems, m.anchor.key) < 0 {
-		m.anchor = nil
-		m.listP.LeaveMode() // the Compare mode has nothing left to compare with
-		cmds = append(cmds, m.toastWarn("Compare: locked item gone"))
 	}
 	m.setListRows()
 	if p := m.pendingSel; p != nil && p.Type == m.current {
@@ -332,12 +321,6 @@ func (m *Model) oneNamespace() bool {
 // rows, sort and actions.
 func (m *Model) setListRows() {
 	m.list.Location = m.drillPath()
-	// The Compare mode's anchor: the row whole on Yellow, the cursor over it
-	// (components/color: what is picked in a mode).
-	m.list.Anchor = ""
-	if m.anchor != nil {
-		m.list.Anchor = m.anchor.key
-	}
 	m.listP.Name = ""
 	if n := len(m.drill); n > 0 {
 		// What the level is in: [2] PODS: nginx-7d4f, the path above the
@@ -569,9 +552,7 @@ func (m *Model) setListActions() {
 				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Clear: true, Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
 		item = append(item,
-			terminu.Action{Key: "C", Label: "Mark as Compare anchor", Desc: "this row as the baseline, then pick another to compare", Scope: terminu.ItemScope,
-				Disabled: func() bool { return len(m.shownItems()) < 2 },
-				Do:       m.markAnchor},
+			m.app.CompareAction(m.listP, m.list, terminu.Compare{Key: "C", Name: m.rowLabel, Text: m.rowYAML, Split: &m.compareSplit}),
 			terminu.Action{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
 		)
 	}
@@ -682,7 +663,6 @@ func (m *Model) onChildren(msg childrenMsg) tea.Cmd {
 	items := filterHelm(msg.children, msg.kind)
 	sortDefault(items)
 	m.drill = append(m.drill, drillLevel{parentKind: m.shownKind(), parent: msg.parent, kind: msg.kind, items: items})
-	m.anchor = nil
 	m.stopLogs()
 	m.list.ClearFilter()
 	m.setListRows()
@@ -698,7 +678,6 @@ func (m *Model) drillOut() tea.Cmd {
 	}
 	back := m.drill[n-1].parent
 	m.drill = m.drill[:n-1]
-	m.anchor = nil
 	m.stopLogs()
 	m.list.ClearFilter()
 	m.setListRows()
@@ -709,52 +688,31 @@ func (m *Model) drillOut() tea.Cmd {
 
 // --- compare --------------------------------------------------------------
 
-func (m *Model) onAnchor() bool {
-	r, ok := m.list.Current()
-	return ok && m.anchor != nil && r.ID == m.anchor.key
+// The Compare mode and its DIFF are the lib's (tdp K11, panel's compare mode,
+// note's compare): kbu names a row by its namespace and name, and compares
+// rows by their YAML cleaned of what the server writes, from the list it has.
+
+func (m *Model) rowItem(r terminu.Row) (k8s.ResourceItem, bool) {
+	items := m.shownItems()
+	if i := indexOfKey(items, r.ID); i >= 0 {
+		return items[i], true
+	}
+	return k8s.ResourceItem{}, false
 }
 
-func (m *Model) markAnchor() tea.Cmd {
-	item, ok := m.currentItem()
-	if !ok || len(m.shownItems()) < 2 {
-		return nil
+func (m *Model) rowLabel(r terminu.Row) string {
+	if it, ok := m.rowItem(r); ok {
+		return diffLabel(it)
 	}
-	m.anchor = &anchorRef{kind: m.shownKind(), key: itemKey(item), item: item}
-	m.log.info(fmt.Sprintf("Compare: anchor set on %s/%s", m.shownKind().KubectlName(), item.Name))
-	m.setListRows()
-	m.listP.EnterMode(m.compareMode())
-	return nil
+	return r.ID
 }
 
-// compareMode is the Compare mode (tdp K11), entered with the anchor marked:
-// j|k and the like move to another row, C or Enter compares the two, as
-// many times as wanted, and Esc leaves, the anchor dropped. Tab and the
-// digits wait until it is left.
-func (m *Model) compareMode() *terminu.Mode {
-	move := func(key string) tea.Cmd { m.list.Key(key, tea.KeyMsg{}); return nil }
-	return &terminu.Mode{Name: "Compare", Pause: true,
-		Keys: []terminu.ModeKey{
-			{Key: "j|k", Keys: []string{"j", "k", "↓", "↑"}, Desc: "down, up", NoFooter: true, Do: move},
-			{Key: "u|d", Keys: []string{"u", "d", "PgUp", "PgDn"}, Desc: "half a page up, down", NoFooter: true, Do: move},
-			{Key: "gg|G", Keys: []string{"gg", "G"}, Desc: "to the top, the bottom", NoFooter: true, Do: move},
-			{Key: "C|Enter", Keys: []string{"C", "Enter"}, Desc: "compare with the anchor", Do: func(string) tea.Cmd {
-				if m.onAnchor() {
-					return m.app.Toast(terminu.Info, "Pick another row to compare with")
-				}
-				return m.compareHere()
-			}},
-		},
-		OnExit: func() tea.Cmd { m.clearAnchor(); return nil },
+func (m *Model) rowYAML(r terminu.Row) (string, error) {
+	it, ok := m.rowItem(r)
+	if !ok {
+		return "", errors.New("no longer in the list")
 	}
-}
-
-func (m *Model) clearAnchor() {
-	if m.anchor == nil {
-		return
-	}
-	m.anchor = nil
-	m.log.info("Compare: anchor cleared")
-	m.setListRows()
+	return k8s.MarshalItemYAMLForCompare(it), nil
 }
 
 // --- the helm filter and zoom ----------------------------------------------

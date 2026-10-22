@@ -243,10 +243,7 @@ func TestSaveLoadRoundtrip_ResourceKindConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 
-	cfg := &Config{
-		Editor:  "vim",
-		Compare: CompareConfig{Layout: "unified"},
-	}
+	cfg := &Config{Editor: "vim"}
 	cfg.ResourceKindConfig.SetPinned("pod", 10)
 	cfg.ResourceKindConfig.SetPinned("namespace", 20)
 	cfg.ResourceKindConfig.SetPinned("configmap", 30)
@@ -276,9 +273,6 @@ func TestSaveLoadRoundtrip_ResourceKindConfig(t *testing.T) {
 	}
 	if loaded.Editor != "vim" {
 		t.Errorf("Editor lost in roundtrip: %q", loaded.Editor)
-	}
-	if loaded.Compare.Layout != "unified" {
-		t.Errorf("Compare.Layout lost in roundtrip: %q", loaded.Compare.Layout)
 	}
 }
 

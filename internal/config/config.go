@@ -55,9 +55,6 @@ type Config struct {
 	// family's default, 4.
 	InputTabWidth int `yaml:"input_tab_width,omitempty"`
 
-	// Compare carries settings for the YAML compare popup.
-	Compare CompareConfig `yaml:"compare"`
-
 	// Mouse carries app-level mouse settings (enable toggle + scroll
 	// direction). Nested so future mouse options (double-click
 	// threshold, edge-pan, ...) drop in here without polluting the
@@ -195,17 +192,6 @@ func (s SortChain) IndexOf(column string) int {
 		}
 	}
 	return -1
-}
-
-// CompareConfig holds settings for the YAML compare popup. Currently
-// only the default layout. Read at startup; in-session toggle does
-// NOT persist back (the popup's Space-menu toggle is session-local).
-type CompareConfig struct {
-	// Layout is the default diff layout for new compare popups.
-	// Valid values: "unified" (single column with -/+ markers,
-	// default) | "split" (side-by-side). Empty or unrecognised value
-	// falls back to "unified".
-	Layout string `yaml:"layout"`
 }
 
 // Mouse scroll direction constants — written verbatim to YAML and

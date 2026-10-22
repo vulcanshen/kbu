@@ -17,11 +17,10 @@ import (
 // Title glyphs kbu chooses (components/layout/popup: an input's, a form's
 // and a note's glyph is the app's).
 const (
-	glyphYAML    = "\U0000F48A" // nf-oct-file_code
-	glyphCompare = "\U000F08AA" // nf-md-vector_difference
-	glyphNS      = "\U0000F51E" // nf-oct-stack
-	glyphCtx     = "\U000F0237" // nf-md-folder_network
-	glyphSearch  = "\U000F0233" // nf-md-file_find
+	glyphYAML   = "\U0000F48A" // nf-oct-file_code
+	glyphNS     = "\U0000F51E" // nf-oct-stack
+	glyphCtx    = "\U000F0237" // nf-md-folder_network
+	glyphSearch = "\U000F0233" // nf-md-file_find
 )
 
 // selection is the viewers' selection mode (tdp K11): v, then v again
@@ -95,49 +94,6 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 
 // --- compare -------------------------------------------------------------------
 
-// compareHere diffs the anchor against the row under the cursor, their YAML
-// cleaned of what the server writes.
-func (m *Model) compareHere() tea.Cmd {
-	item, ok := m.currentItem()
-	if !ok || m.anchor == nil {
-		return nil
-	}
-	anchor := m.anchor.item
-	if i := indexOfKey(m.shownItems(), m.anchor.key); i >= 0 {
-		anchor = m.shownItems()[i]
-	} else {
-		return m.toastErr("Compare: anchor item gone")
-	}
-	left, right := k8s.MarshalItemYAMLForCompare(anchor), k8s.MarshalItemYAMLForCompare(item)
-	ll, rl := diffLabel(anchor), diffLabel(item)
-	split := m.cfg.Compare.Layout == "split"
-	v := &terminu.Viewer{Title: "Compare", Subject: ll + " vs " + rl, Glyph: glyphCompare, Select: m.selection()}
-	fill := func() {
-		w, _ := m.app.Size()
-		inner := max(min(w-2, 120)-4-5, 20) // the frame, its margins, the line numbers
-		if split {
-			v.Lines, v.Lang, v.NoWrap = splitDiff(left, right, ll, rl, inner), "", true
-		} else {
-			v.Lines, v.Lang, v.NoWrap = unifiedDiff(left, right, ll, rl, inner), "diff", false
-		}
-	}
-	fill()
-	v.Keys = []terminu.ViewerKey{{Key: "L", Desc: "layout", Do: func() tea.Cmd {
-		split = !split
-		fill()
-		m.cfg.Compare.Layout = "unified"
-		if split {
-			m.cfg.Compare.Layout = "split"
-		}
-		if err := m.cfg.Save(); err != nil {
-			// A popup's action failed: an error popup over it (tdp F7).
-			return m.app.Error("Save failed", "The layout could not be saved to config.yaml: "+err.Error())
-		}
-		return nil
-	}}}
-	return m.app.Viewer(v)
-}
-
 func diffLabel(it k8s.ResourceItem) string {
 	if it.Namespace != "" {
 		return it.Namespace + "/" + it.Name
@@ -210,7 +166,7 @@ func (m *Model) setNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
 	if m.watcher != nil {
 		m.watcher.Stop()
 	}
-	m.drill, m.anchor, m.rootItems = nil, nil, nil
+	m.drill, m.rootItems = nil, nil
 	m.setListRows()
 	m.listP.Loading = true
 	m.resetDetail(m.current)

@@ -20,7 +20,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.9.5: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.9.6: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -65,6 +65,11 @@ The rest:
     in the Compare mode (its frame Yellow, `Compare` on it, the anchor's row
     on Yellow). Move to another row and press `C` or `Enter` to compare, as
     often as you like; `Esc` leaves. The menu and the other keys wait until you leave.
+    The comparison shows only where the two differ, three lines around, in
+    `UNIFIED` and `SPLIT` tabs (`h|l`; `L` is gone; under 96 columns it is
+    `UNIFIED`); two the same say so in a toast. Which tab you chose is kept
+    in `state.yaml`: `compare.layout` in `config.yaml` is no longer read, so
+    it starts from `UNIFIED` once.
   - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.
     `z` zooms back from any panel.
   - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.

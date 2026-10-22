@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.5/principle)（tdp v0.9.5），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.6）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.6/principle)（tdp v0.9.6），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.8）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -21,11 +21,10 @@
   | `tui.go` | `Model`、`New`、`Run`（lib 的 `Run` 回來後停 watcher、log、PTY 並存 `state.yaml`）、啟動、statusbar、global 動作、版面 |
   | `data.go` | 叢集資料的訊息與非同步指令、`onMsg` 分派、session state 的恢復與儲存 |
   | `kinds.go` | panel 1：分組清單、Pinned、Drag mode |
-  | `list.go` | panel 2：欄位、排序、drill、compare anchor、helm 的篩選、zoom |
+  | `list.go` | panel 2：欄位、排序、drill、compare（lib 的 `CompareAction`）、helm 的篩選、zoom |
   | `detail.go` | panel 3：tab、Logs 與 Events、Relatives 的鏈、History、Conditions、Info |
   | `textbody.go` | panel 3 沒有 cursor 的 tab 用的 body：折行、表頭不捲、追尾、`N-M of T` |
-  | `popups.go` | YAML viewer（搜尋）、compare、namespace 與 context picker、兩步排序、breadcrumb |
-  | `compare.go` | diff 的兩種版面 |
+  | `popups.go` | YAML viewer（搜尋）、namespace 與 context picker、兩步排序、breadcrumb |
   | `ops.go` | 複製、edit、shell、delete、rollback、helm 文件、切換 context |
   | `pty.go` | Alterm |
   | `applog.go` | 寫進 lib 的 App Log（`app.Log`） |
@@ -58,7 +57,8 @@
 | sort 的欄位與方向兩個 picker | 兩個 menu（tdp F1：一步一個 popup） |
 | namespace picker | checkbox popup（`App.Checks`）；第一列是 All Namespaces |
 | context picker | select（`App.Select`） |
-| YAML、compare、helm 文件 | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`、`L`） |
+| YAML、helm 文件 | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`） |
+| compare | lib 的比較模式與 DIFF（`App.CompareAction`）：kbu 給列的名稱（`rowLabel`）與 YAML（`rowYAML`），UNIFIED／SPLIT 記在 state |
 | breadcrumb | menu，每一列先問（`Action.Ask`） |
 | confirm | lib 的（`App.Confirm`、`Action.Ask`） |
 | toast | lib 的 |
@@ -84,10 +84,12 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   「由 Helm 管」是那個物件現在的狀態，不是這個種類做不到。種類本身沒有的動作不列（Events、Contexts、Releases 的 Edit，加上
   Nodes 的 Delete）。
 - **離開不先問**（tdp K9：由 app 決定）：跟舊版一樣直接離開，離開時存 state。
-- **Compare 是模式**（tdp K11，user 2026-10-22 定）：`C` 標 anchor 並進 Compare 模式（`compareMode`），`j|k`、`u|d`、`gg|G` 轉給清單，
-  `C|Enter` 比對、比完回到模式，`Esc` 離開並拿掉 anchor，Pause `Tab` 與數字；anchor 那列被刪掉時離開模式。anchor 那列照
-  components/color 的「模式裡選起來的範圍」：整列 Yellow 底、字 Base、不加粗、沒有箭頭，cursor 蓋過它（lib v0.4.6 的 `List.Anchor`，
-  KB27；`setListRows` 依 `m.anchor` 設）。舊版 menu 的「Exit compare mode」自稱模式卻不是，拿掉。
+- **Compare 是模式**（user 2026-10-22 定，KB27 寫進 tdp v0.9.6 的 panel「比較模式」、note「比較」）：整套是 lib 的
+  `App.CompareAction`（terminu-go v0.4.7）：模式、anchor 整列 Yellow、移動鍵、`C|Enter` 比對、只列差異的 DIFF、UNIFIED／SPLIT。kbu
+  只給 `Name`（`diffLabel`，namespace/name）、`Text`（`MarshalItemYAMLForCompare`，用手上已有的 item，同步不打叢集）與 `Split`
+  （`m.compareSplit`，存在 state.yaml 的 `compare_split`，note-84：選了哪一種是狀態）。舊的 `config.yaml` `compare.layout` 不再讀：
+  帶過來的話分不出「舊的寫 split」和「之後選了 UNIFIED」，所以從 UNIFIED 重新開始一次。kbu 自己的 diff（`compare.go`）、`L`、
+  anchor 狀態都拿掉了。
 - **Esc 在 panel 2 的上一層**：退出 drill（tdp K4 一次一層）；Compare 模式的 `Esc` 由 lib 處理。panel 3：Relatives 的鏈退一層。
 - **Logs 與 Events 是串流**（tdp T2），panel 3 失焦時不變暗；tab 名後面的 glyph 說它現在是不是跟著最新的一行（播放 / 暫停，
   同寬，tdp L2）。舊版 Events 失焦會變暗、寫成偏離；換到 lib 之後照 tdp T2 做，偏離拿掉。
@@ -135,13 +137,10 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   接著 `[C]ontext`（固定 24 格，太長從中間截），`[N]amespace` 排最後、照名稱長度（最多 16 格）。舊版 context 與 namespace 都照名稱
   長度、後面的 chip 跟著移，是 user 2026-09-28 裁定的偏離（固定 24 格時短名字後面空一大格、80 欄把 chip 擠出去）；tdp L2（v0.8.0）
   補了這個做法（KB6，user 2026-10-19 選 C），偏離拿掉。
-- **split 版的 compare 不折行**（tdp v0.8.0 的 components/dialog/note：要對齊的內容 app 可以讓它不折行，截掉的加 `…`）：左右兩欄
-  並排，打開時照 viewer 的寬度把每一側截到欄寬（`splitDiff` 的 `terminu.Fit`），viewer 設 `NoWrap`，畫面變窄時也是截、不折
-  （KB18）；要看完整的一行，用 `L` 換成 unified 或 `Y` 看那一筆的 YAML。
 - **讀不了時**（tdp E3）：`config.yaml`、`state.yaml` 或 `kinds.yaml` 讀不了（格式錯、沒有權限），main 先用預設值，啟動時依序開
   `MOVE ASIDE`（lib 的 `App.MoveAside`，`askAside`）：`Enter` 改名成 `.bak`，像第一次打開一樣照常開始（E3-18）：設定用預設值、狀態與釘選
-  排序從空的開始。kbu 第一次打開一個檔都不建，所以這時也不建，等第一次存檔才有：設定在 compare 按 `L`、狀態在離開時、釘選排序在
-  第一次釘選或排序（資料只有 `kinds.yaml` 一個檔，沒有一筆一個檔的，E3-22 不適用）；`Esc` 離開，
+  排序從空的開始。kbu 第一次打開一個檔都不建，所以這時也不建，等第一次存檔才有：狀態在離開時、釘選排序在第一次釘選或排序（設定只有
+  釘選排序還留在 config.yaml 時才寫）（資料只有 `kinds.yaml` 一個檔，沒有一筆一個檔的，E3-22 不適用）；`Esc` 離開，
   `Run` 回傳 `tui.NotRead`，main 把路徑與原因印到 stderr，不寫 crash log。kbu 沒有快取。
 - **不再用的檔**（tdp E3-23）：`theme.yaml`（KB3 拿掉，畫面用家族的顏色）與 km8 的目錄（v2.0 複製到 kbu 的之後留在原地）還在時，
   每次啟動由 lib 的 `App.NoLongerUsed` 在 App Log 記一筆 INFO（路徑來自 `config.NoLongerUsed`），不刪、不跳 toast。`theme.yaml` 找
@@ -209,13 +208,13 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 
 ## 偏離 tdp
 
-目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法，移到「設計決定」。
+目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法；compare 後來整個交給 lib。
 還沒符合的也沒有了：`docs/kbu-terminu-fix.md` 全部修完，拿掉（tdp E7）。
 
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.5/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.6/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

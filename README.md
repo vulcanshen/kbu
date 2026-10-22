@@ -47,7 +47,8 @@ an embedded shell are built in; any other tool you trust rides along in that she
 - **Conditions** — `.status.conditions` as a table, as `kubectl describe` shows them; still there after the events expire.
 - **YAML viewer** (`[Y]AML`) — line numbers and colours; `/` searches, `n` / `N` go to the next and the previous match, `v`
   selects, `y` copies.
-- **Compare** — diff two resources of the same kind, unified or side by side (`L` switches, and kbu keeps your choice).
+- **Compare** — diff two resources of the same kind, only where they differ, unified or side by side (`h|l` switches, and
+  kbu keeps your choice).
   Status and server-managed fields are left out, so you see only what was written.
 - **Problems stand out** — a status cell is coloured only when it needs a look: pending or degraded, or failed.
 - **Helm releases** — when `helm` is on your `PATH`: each release's manifest, values, notes and hooks; its revision history
@@ -163,7 +164,7 @@ Every other key is a shortcut of a row of the `Space` menu, and the `?` of each 
 | Panel 1 | `P` | Pin or unpin the kind |
 | Panel 1 | `D` | Drag the pinned kind into place: `j\|k`, then `Enter`; `Esc` puts it back |
 | Panel 2 | `Y`, `E`, `S`, `D` | YAML, edit, shell, delete |
-| Panel 2 | `C` | Compare: the row becomes the anchor and panel 2 goes into the Compare mode. Move to another row and press `C` or `Enter` to compare the two, as often as you like; `Esc` leaves the mode |
+| Panel 2 | `C` | Compare: the row becomes the anchor and panel 2 goes into the Compare mode. Move to another row and press `C` or `Enter` to see where the two differ, as often as you like; `Esc` leaves the mode |
 | Panel 2 | `Alt-S` | Sort the list by a column, then a direction |
 | Panel 2 | `.` | Show or hide what a Helm chart manages |
 | Any panel | `z` | Full screen; `z` again for the three |
@@ -206,8 +207,8 @@ defaults.
 
 | File | What it is |
 |---|---|
-| `config.yaml` | Your settings (below). kbu writes it when you switch the compare layout |
-| `state.yaml` | Where you left off; written when you quit. `KBU__STATE` keeps it in another directory |
+| `config.yaml` | Your settings (below) |
+| `state.yaml` | Where you left off, and whether the compare was unified or side by side; written when you quit. `KBU__STATE` keeps it in another directory |
 
 kbu's data is in **`~/.kbu`** (`KBU__DATA` points it elsewhere). Back it up if you need it: deleted, it is gone.
 
@@ -237,8 +238,6 @@ default_namespace: ""     # the namespace to start on (default: all)
 editor: ""                # given to kubectl as $KUBE_EDITOR
 alterm_shell: ""          # Alterm's shell (default: $SHELL, then /bin/sh); a bare name is looked up on PATH
 alterm_login_shell: false # true starts Alterm's shell with -l, reading ~/.zprofile / ~/.bash_profile
-compare:
-  layout: unified         # "unified" or "split"; L in the compare popup writes it back
 input_tab_width: 4        # the cells a tab takes in the viewers (YAML, logs); shared by the terminu family
 ```
 

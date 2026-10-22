@@ -77,13 +77,13 @@ type Model struct {
 	drag   *dragState
 
 	// panel 2
-	current    k8s.ResourceType // the kind panel 1 shows in panel 2, watched
-	rootItems  []k8s.ResourceItem
-	drill      []drillLevel // panel 2's drill chain, below current
-	anchor     *anchorRef   // the compare anchor
-	pendingSel *k8s.RefTarget
-	kindSeq    int // invalidates a kind switch still waiting out its debounce
-	rowSeq     int // the same for a row switch
+	current      k8s.ResourceType // the kind panel 1 shows in panel 2, watched
+	rootItems    []k8s.ResourceItem
+	drill        []drillLevel // panel 2's drill chain, below current
+	compareSplit bool         // the compare shows SPLIT, not UNIFIED: kept with the state
+	pendingSel   *k8s.RefTarget
+	kindSeq      int // invalidates a kind switch still waiting out its debounce
+	rowSeq       int // the same for a row switch
 
 	// panel 3
 	det detailState
@@ -123,6 +123,9 @@ func New(o Options) *Model {
 	}
 	if m.cfg == nil {
 		m.cfg = config.DefaultConfig()
+	}
+	if o.State != nil {
+		m.compareSplit = o.State.CompareSplit
 	}
 	m.kindData = &o.Kinds
 	if m.kindsInConfig = config.KindDataInConfig(m.cfg); m.kindsInConfig {
@@ -385,7 +388,7 @@ func (m *Model) statusbar(int) []terminu.Span {
 		// A live session is in effect (components/color: Green).
 		add(terminu.Span{Text: "[Alt-t]", Style: lit}, terminu.Span{Text: "erm", Style: terminu.Fg(terminu.Green)})
 	}
-	if m.anchor != nil {
+	if m.list.Anchor != "" { // in the Compare mode
 		cmpKey := unlit
 		if compareC {
 			cmpKey = lit
