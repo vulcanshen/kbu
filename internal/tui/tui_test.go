@@ -323,50 +323,39 @@ func TestStatusbarKeepsItsFields(t *testing.T) {
 	}
 }
 
-// C marks the compare anchor and enters the Compare mode (tdp K11): Space
-// opens nothing, Tab waits, C on the anchor asks for another row, C or
-// Enter on another row compares (a viewer opens) and comes back to the
-// mode; Esc leaves it, the anchor dropped.
+// C enters the lib's Compare mode (tdp K11, panel's compare mode), the row
+// the anchor, drawn whole on Yellow: on the anchor C is off, on another row
+// C or Enter opens the DIFF of their YAML and comes back to the mode; Esc
+// leaves, the anchor gone. UNIFIED or SPLIT is kept with the state.
 func TestCompareMode(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "C")
-	if m.anchor == nil || m.anchor.item.Name != "a" {
-		t.Fatalf("anchor %+v, want on a", m.anchor)
+	if md := m.listP.InMode(); md == nil || md.Name != "Compare" || m.list.Anchor == "" {
+		t.Fatalf("panel 2 in mode %+v, anchor %q", md, m.list.Anchor)
 	}
-	if md := m.listP.InMode(); md == nil || md.Name != "Compare" {
-		t.Fatalf("panel 2 in mode %+v, want Compare", md)
+	if !strings.Contains(m.screen_(), "[C]ompare") {
+		t.Errorf("no [C]ompare on the statusbar:\n%s", m.screen_())
 	}
-	if m.list.Anchor != m.anchor.key {
-		t.Errorf("the list draws %q as the anchor, want %q", m.list.Anchor, m.anchor.key)
-	}
-	if s := m.screen_(); !strings.Contains(s, "[C]ompare") || !strings.Contains(s, "Compare") {
-		t.Errorf("no [C]ompare on the statusbar or no mode name:\n%s", s)
-	}
-	m.press("Space")
-	if strings.Contains(m.screen_(), "ITEM OPERATION") {
-		t.Errorf("Space opened the menu in the mode:\n%s", m.screen_())
-	}
-	m.press("Tab")
-	if m.app.Screen().Focused() != m.listP {
-		t.Error("Tab left the mode's panel")
-	}
-	m.press("Esc") // the toast that says to leave first (K4)
 	m.press("C")
-	if s := m.screen_(); !strings.Contains(s, "Pick another row") || strings.Contains(s, "COMPARE") {
-		t.Errorf("C on the anchor:\n%s", s)
+	if strings.Contains(m.screen_(), "DIFF") {
+		t.Errorf("C on the anchor compared:\n%s", m.screen_())
 	}
-	m.press("Esc", "j", "Enter")
-	if !strings.Contains(m.screen_(), "COMPARE") {
-		t.Fatalf("Enter on another row opened no compare:\n%s", m.screen_())
+	m.press("j", "Enter")
+	if s := m.screen_(); !strings.Contains(s, "DIFF") || !strings.Contains(s, "demo/a ↔ demo/b") {
+		t.Fatalf("Enter on another row opened no DIFF:\n%s", s)
+	}
+	m.press("l") // SPLIT: 120 wide
+	m.press("Esc")
+	if m.listP.InMode() == nil || m.list.Anchor == "" {
+		t.Fatal("closing the DIFF left the mode")
 	}
 	m.press("Esc")
-	if m.listP.InMode() == nil || m.anchor == nil {
-		t.Fatal("closing the compare left the mode")
+	if m.listP.InMode() != nil || m.list.Anchor != "" {
+		t.Errorf("Esc kept the mode %v or the anchor %q", m.listP.InMode(), m.list.Anchor)
 	}
-	m.press("Esc")
-	if m.listP.InMode() != nil || m.anchor != nil || m.list.Anchor != "" {
-		t.Errorf("Esc kept the mode %v or the anchor %v %q", m.listP.InMode(), m.anchor, m.list.Anchor)
+	if !m.sessionState().CompareSplit {
+		t.Error("SPLIT is not kept with the state")
 	}
 }
 

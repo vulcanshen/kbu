@@ -77,11 +77,11 @@ func TestMoveKindDataMovesThemOut(t *testing.T) {
 		t.Fatalf("kinds.yaml: %v, %v", k, err)
 	}
 	b, _ := os.ReadFile(cfgPath)
-	if s := string(b); strings.Contains(s, "resource_kind_config") || !strings.Contains(s, "# my settings") || !strings.Contains(s, "# for kubectl edit") {
+	if s := string(b); strings.Contains(s, "resource_kind_config") || !strings.Contains(s, "# my settings") || !strings.Contains(s, "# for kubectl edit") || !strings.Contains(s, "layout: split") {
 		t.Errorf("config.yaml after the move:\n%s", s)
 	}
 	cfg, err := LoadFrom(cfgPath)
-	if err != nil || cfg.Editor != "vim" || cfg.Compare.Layout != "split" || cfg.ResourceKindConfig != nil {
+	if err != nil || cfg.Editor != "vim" || cfg.ResourceKindConfig != nil {
 		t.Errorf("config.yaml reads %+v, %v", cfg, err)
 	}
 	if again := moveKindData(cfgPath, to); again != nil {

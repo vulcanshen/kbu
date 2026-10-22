@@ -80,6 +80,10 @@ type State struct {
 	// the recorded index wouldn't survive a kind switch. Tab names
 	// are stable across kbu upgrades AND kinds.
 	Tab string `yaml:"tab,omitempty"`
+
+	// CompareSplit is which the compare showed last, SPLIT rather than
+	// UNIFIED (tdp note, compare: kept with the state).
+	CompareSplit bool `yaml:"compare_split,omitempty"`
 }
 
 // DefaultState returns an empty State. Used both as the load-file-missing

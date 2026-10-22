@@ -362,7 +362,7 @@ func (m *Model) restore() {
 
 // sessionState is where the user is, for state.yaml.
 func (m *Model) sessionState() *config.State {
-	s := &config.State{Kind: m.current.KubectlName(), Tab: m.currentTab()}
+	s := &config.State{Kind: m.current.KubectlName(), Tab: m.currentTab(), CompareSplit: m.compareSplit}
 	if m.client != nil {
 		s.Context = m.client.ContextName()
 		s.Namespaces = m.client.Selection().List()
