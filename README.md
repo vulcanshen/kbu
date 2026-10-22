@@ -151,7 +151,7 @@ there, `Esc` steps back, `q` leaves.
 | `?` | The keys of whatever is in front: the panel, or the popup on top. `?` again or `Esc` closes it |
 | `Tab`, `Shift-Tab`, `1–3` | The next panel, the previous one, a panel by its number |
 | `Enter` | The obvious action: drill in (a workload into its Pods), open a YAML, switch to a context, a shell into a container, roll back to a Helm revision. On panel 1 it takes you to panel 2; on Logs, Events, Conditions and Info it is full screen |
-| `Esc` | One step back: clear the filter, drop the compare anchor, come back up a drill. It never leaves kbu |
+| `Esc` | One step back: clear the filter, leave a mode (Compare, Drag), come back up a drill. It never leaves kbu |
 | `!` | The App Log: what kbu did and what went wrong, newest last. The footer says `!:2 errors` until you have looked |
 | `q`, `Ctrl-C` | Leave kbu (it remembers where you were) |
 | `j\|k`, `u\|d`, `gg\|G` | Down and up, half a page, the top and the end. On panel 3 `h\|l` switch tabs |
@@ -163,7 +163,7 @@ Every other key is a shortcut of a row of the `Space` menu, and the `?` of each 
 | Panel 1 | `P` | Pin or unpin the kind |
 | Panel 1 | `D` | Drag the pinned kind into place: `j\|k`, then `Enter`; `Esc` puts it back |
 | Panel 2 | `Y`, `E`, `S`, `D` | YAML, edit, shell, delete |
-| Panel 2 | `C` | Mark the row as the compare anchor; on another row, compare the two |
+| Panel 2 | `C` | Compare: the row becomes the anchor and panel 2 goes into the Compare mode. Move to another row and press `C` or `Enter` to compare the two, as often as you like; `Esc` leaves the mode |
 | Panel 2 | `Alt-S` | Sort the list by a column, then a direction |
 | Panel 2 | `.` | Show or hide what a Helm chart manages |
 | Any panel | `z` | Full screen; `z` again for the three |

@@ -2,7 +2,7 @@
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.5/principle)（tdp v0.9.5），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.5）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.6）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -84,7 +84,11 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   「由 Helm 管」是那個物件現在的狀態，不是這個種類做不到。種類本身沒有的動作不列（Events、Contexts、Releases 的 Edit，加上
   Nodes 的 Delete）。
 - **離開不先問**（tdp K9：由 app 決定）：跟舊版一樣直接離開，離開時存 state。
-- **Esc 在 panel 2 的上一層**：先放掉 compare anchor，再退出 drill（tdp K4 一次一層）。panel 3：Relatives 的鏈退一層。
+- **Compare 是模式**（tdp K11，user 2026-10-22 定）：`C` 標 anchor 並進 Compare 模式（`compareMode`），`j|k`、`u|d`、`gg|G` 轉給清單，
+  `C|Enter` 比對、比完回到模式，`Esc` 離開並拿掉 anchor，Pause `Tab` 與數字；anchor 那列被刪掉時離開模式。anchor 那列照
+  components/color 的「模式裡選起來的範圍」：整列 Yellow 底、字 Base、不加粗、沒有箭頭，cursor 蓋過它（lib v0.4.6 的 `List.Anchor`，
+  KB27；`setListRows` 依 `m.anchor` 設）。舊版 menu 的「Exit compare mode」自稱模式卻不是，拿掉。
+- **Esc 在 panel 2 的上一層**：退出 drill（tdp K4 一次一層）；Compare 模式的 `Esc` 由 lib 處理。panel 3：Relatives 的鏈退一層。
 - **Logs 與 Events 是串流**（tdp T2），panel 3 失焦時不變暗；tab 名後面的 glyph 說它現在是不是跟著最新的一行（播放 / 暫停，
   同寬，tdp L2）。舊版 Events 失焦會變暗、寫成偏離；換到 lib 之後照 tdp T2 做，偏離拿掉。
 - **Alterm 的隱藏只有 `Alt-t`**：舊版另有一個不揭露的 `Ctrl-T`（錄 demo 的 VHS 送不出 Alt），但它在 panel 上不會叫出 Alterm，
@@ -122,7 +126,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   句子改成動詞在前（`Started kbu`），名稱照原樣；Go error 整句拿來用的（watch 的 `listing pods: …`）由 `capital` 把第一個字改大寫。
   舊版自己的 App Log、statusbar 的錯誤數、`Clear the App log` 都拿掉（lib 的只放在記憶體）。watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
 - **控制字元**（tdp v0.9.0 components「控制字元」）：清單的格子、statusbar、menu、toast 交給 lib，lib 照「名字與短字」畫；kbu 的顏色
-  改成 spans（`Row.Styled` 的狀態色、anchor 的 Lavender、Relatives 的箭頭、History 的 ●；statusbar 回傳 `[]Span`）。menu 的列沒有
+  改成 spans（`Row.Styled` 的狀態色、Relatives 的箭頭、History 的 ●；statusbar 回傳 `[]Span`）。menu 的列沒有
   上色的接口，breadcrumb 目前那一層的 Lavender 拿掉（color-9 現在只管位置列）。kbu 自己畫的 panel 3 表格（Events、Conditions）與
   Info 的值是叢集給的字，用 `terminu.Escape`。pod 的 log 是拿來讀的內容，用 lib 的 `terminu.Reading` 畫（`logRows`，KB24）：
   `\n` 拆成兩列、`\r` 只留最後的狀態、顏色碼照著上色、Tab 是 `input_tab_width` 格空白、其他控制字元畫成紅色的名字；容器的前綴與

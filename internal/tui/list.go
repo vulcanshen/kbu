@@ -146,6 +146,7 @@ func (m *Model) onWatchData(msg watchDataMsg) tea.Cmd {
 	}
 	if m.anchor != nil && indexOfKey(m.rootItems, m.anchor.key) < 0 {
 		m.anchor = nil
+		m.listP.LeaveMode() // the Compare mode has nothing left to compare with
 		cmds = append(cmds, m.toastWarn("Compare: locked item gone"))
 	}
 	m.setListRows()
@@ -331,6 +332,12 @@ func (m *Model) oneNamespace() bool {
 // rows, sort and actions.
 func (m *Model) setListRows() {
 	m.list.Location = m.drillPath()
+	// The Compare mode's anchor: the row whole on Yellow, the cursor over it
+	// (components/color: what is picked in a mode).
+	m.list.Anchor = ""
+	if m.anchor != nil {
+		m.list.Anchor = m.anchor.key
+	}
 	m.listP.Name = ""
 	if n := len(m.drill); n > 0 {
 		// What the level is in: [2] PODS: nginx-7d4f, the path above the
@@ -389,15 +396,6 @@ func (m *Model) setListRows() {
 			if st, ok := m.cellStyle(rt, title, cells[c]); ok {
 				styled[c] = []terminu.Span{{Text: cells[c], Style: st}}
 			}
-		}
-		if m.anchor != nil && itemKey(it) == m.anchor.key && len(cells) > 0 {
-			// The anchor's row is the user's footprint (components/color):
-			// its name in Lavender.
-			name := 0
-			if len(cols) > 1 && cols[0].Title == "Namespace" {
-				name = 1
-			}
-			styled[name] = []terminu.Span{{Text: cells[name], Style: terminu.Fg(terminu.Lavender)}}
 		}
 		rows[i] = terminu.Row{ID: itemKey(it), Cells: cells, Styled: styled, Sort: sortVals}
 	}
@@ -481,14 +479,10 @@ func statusColor(status, pending, failed string) string {
 	return ""
 }
 
-// listEsc is Esc on panel 2, one level at a time (tdp K4): the compare
-// anchor, then the drill.
+// listEsc is Esc on panel 2, one level up (tdp K4): out of the drill. Esc in
+// the Compare mode leaves the mode (the lib's, K11).
 func (m *Model) listEsc() tea.Cmd {
-	switch {
-	case m.anchor != nil:
-		m.clearAnchor()
-		return nil
-	case len(m.drill) > 0:
+	if len(m.drill) > 0 {
 		return m.drillOut()
 	}
 	return nil
@@ -553,10 +547,6 @@ func (m *Model) setListActions() {
 				},
 				Do: func() tea.Cmd { return m.switchContext(cur.Name) }})
 		}
-		item = append(item,
-			terminu.Action{Key: "C", Label: "Compare to anchor", Desc: "open the YAML diff popup", Scope: terminu.ItemScope,
-				Hidden: func() bool { return !m.canCompare() }, Stay: true, Do: m.compareHere},
-		)
 		switch {
 		case rt.SupportsDrillDown():
 			item = append(item, terminu.Action{Key: "Enter", Label: "Drill in", Desc: "into its " + drillLabel(rt, cur),
@@ -579,18 +569,13 @@ func (m *Model) setListActions() {
 				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Clear: true, Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
 		item = append(item,
-			terminu.Action{Key: "C", Label: "Unmark Compare anchor", Desc: "cancel anchor, exit compare mode", Scope: terminu.ItemScope,
-				Hidden: func() bool { return !m.onAnchor() }, Do: func() tea.Cmd { m.clearAnchor(); return nil }},
-			terminu.Action{Key: "C", Label: "Mark as Compare anchor", Desc: "set this row as the diff baseline", Scope: terminu.ItemScope,
-				Hidden:   func() bool { return m.anchor != nil },
+			terminu.Action{Key: "C", Label: "Mark as Compare anchor", Desc: "this row as the baseline, then pick another to compare", Scope: terminu.ItemScope,
 				Disabled: func() bool { return len(m.shownItems()) < 2 },
 				Do:       m.markAnchor},
 			terminu.Action{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
 		)
 	}
 	panel := []terminu.Action{
-		{Label: "Exit compare mode", Desc: "drop the compare anchor ([Esc])", Scope: terminu.PanelScope,
-			Hidden: func() bool { return m.anchor == nil }, Do: func() tea.Cmd { m.clearAnchor(); return nil }},
 		{Label: "Back", Desc: "to the " + m.drillParentLabel() + " list ([Esc])", Scope: terminu.PanelScope,
 			Hidden: func() bool { return len(m.drill) == 0 }, Do: m.drillOut},
 		{Key: "Alt-S", Label: "Sort panel 2 list", Desc: "order the rows by a column", Scope: terminu.PanelScope,
@@ -606,10 +591,10 @@ func (m *Model) setListActions() {
 		{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom},
 	}
 	m.listP.Actions = append(item, panel...)
-	// Esc is one level up only when there is one (tdp K4): the anchor,
-	// then the drill; otherwise ? does not list it.
+	// Esc is one level up only when there is one (tdp K4): out of the drill;
+	// otherwise ? does not list it.
 	m.listP.OnEsc = nil
-	if m.anchor != nil || len(m.drill) > 0 {
+	if len(m.drill) > 0 {
 		m.listP.OnEsc = m.listEsc
 	}
 }
@@ -729,11 +714,6 @@ func (m *Model) onAnchor() bool {
 	return ok && m.anchor != nil && r.ID == m.anchor.key
 }
 
-func (m *Model) canCompare() bool {
-	r, ok := m.list.Current()
-	return ok && m.anchor != nil && m.anchor.kind == m.shownKind() && r.ID != m.anchor.key
-}
-
 func (m *Model) markAnchor() tea.Cmd {
 	item, ok := m.currentItem()
 	if !ok || len(m.shownItems()) < 2 {
@@ -742,7 +722,30 @@ func (m *Model) markAnchor() tea.Cmd {
 	m.anchor = &anchorRef{kind: m.shownKind(), key: itemKey(item), item: item}
 	m.log.info(fmt.Sprintf("Compare: anchor set on %s/%s", m.shownKind().KubectlName(), item.Name))
 	m.setListRows()
+	m.listP.EnterMode(m.compareMode())
 	return nil
+}
+
+// compareMode is the Compare mode (tdp K11), entered with the anchor marked:
+// j|k and the like move to another row, C or Enter compares the two, as
+// many times as wanted, and Esc leaves, the anchor dropped. Tab and the
+// digits wait until it is left.
+func (m *Model) compareMode() *terminu.Mode {
+	move := func(key string) tea.Cmd { m.list.Key(key, tea.KeyMsg{}); return nil }
+	return &terminu.Mode{Name: "Compare", Pause: true,
+		Keys: []terminu.ModeKey{
+			{Key: "j|k", Keys: []string{"j", "k", "↓", "↑"}, Desc: "down, up", NoFooter: true, Do: move},
+			{Key: "u|d", Keys: []string{"u", "d", "PgUp", "PgDn"}, Desc: "half a page up, down", NoFooter: true, Do: move},
+			{Key: "gg|G", Keys: []string{"gg", "G"}, Desc: "to the top, the bottom", NoFooter: true, Do: move},
+			{Key: "C|Enter", Keys: []string{"C", "Enter"}, Desc: "compare with the anchor", Do: func(string) tea.Cmd {
+				if m.onAnchor() {
+					return m.app.Toast(terminu.Info, "Pick another row to compare with")
+				}
+				return m.compareHere()
+			}},
+		},
+		OnExit: func() tea.Cmd { m.clearAnchor(); return nil },
+	}
 }
 
 func (m *Model) clearAnchor() {

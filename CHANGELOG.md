@@ -61,6 +61,10 @@ The rest:
     `u|d` and `gg|G` scroll back, `Esc` goes back to the live screen. `Home` and `End` go to the program now, as in every terminu app.
     Leaving asks with the library's question.
   - **Alterm hides with `Alt-t` only**; `Ctrl-T` goes to the shell.
+  - **Compare is a mode**: `C` makes the row the anchor and puts panel 2
+    in the Compare mode (its frame Yellow, `Compare` on it, the anchor's row
+    on Yellow). Move to another row and press `C` or `Enter` to compare, as
+    often as you like; `Esc` leaves. The menu and the other keys wait until you leave.
   - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.
     `z` zooms back from any panel.
   - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
