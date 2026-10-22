@@ -156,7 +156,8 @@ func (m *Model) startDrag() tea.Cmd {
 		Keys: []terminu.ModeKey{
 			{Key: "j|k", Keys: []string{"j", "k", "↓", "↑"}, Desc: "move it down, up among the pinned kinds", NoFooter: true,
 				Do: func(key string) tea.Cmd { m.moveDragged(key == "j" || key == "↓"); return nil }},
-			{Key: "Enter", Desc: "drop it here", Do: func(string) tea.Cmd { return m.dropDragged() }},
+			{Key: "Enter", Desc: "drop it here", Item: true, Label: "Drop", MenuDesc: "the kind held, here; the order is saved",
+				Do: func(string) tea.Cmd { return m.dropDragged() }},
 		},
 		OnExit: func() tea.Cmd {
 			m.pinned = m.drag.before

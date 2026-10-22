@@ -134,7 +134,7 @@ kbu
 
 | 鍵 | 做什麼 |
 |---|---|
-| `Space` | 這裡能做什麼：先是這一項，再是這個 panel，最後是 `Global operation`（namespace、context、Alterm、離開） |
+| `Space` | 這裡能做什麼：先是這一項，再是這個 panel，最後是 `Global operation`（namespace、context、Alterm、離開）。在模式裡（Compare、Drag）列出模式能做的 |
 | `?` | 最前面那個東西的按鍵：panel，或最上層的 popup。再按 `?` 或 `Esc` 關掉 |
 | `Tab`、`Shift-Tab`、`1–3` | 下一個 panel、上一個、照編號跳 |
 | `Enter` | 最直觀的動作：drill 進去（workload 進它的 Pods）、打開 YAML、切到某個 context、shell 進 container、rollback 到某個 Helm revision。在 panel 1 上是到 panel 2；在 Logs、Events、Conditions、Info 上是全螢幕 |
