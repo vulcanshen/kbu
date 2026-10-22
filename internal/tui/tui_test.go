@@ -576,6 +576,20 @@ func TestUnreadableFilesMoveAside(t *testing.T) {
 	}
 }
 
+// tdp K9-6: with a popup open the first q does not leave, it asks; Esc goes
+// back to the popup.
+func TestQWithAPopupAsks(t *testing.T) {
+	m := newTestModel(t)
+	m.press("Space", "q")
+	if s := m.screen_(); !strings.Contains(s, "Quit kbu?") {
+		t.Fatalf("q over the menu did not ask:\n%s", s)
+	}
+	m.press("Esc")
+	if s := m.screen_(); strings.Contains(s, "Quit kbu?") || !strings.Contains(s, "Global operation") {
+		t.Errorf("Esc did not go back to the menu:\n%s", s)
+	}
+}
+
 // A toast is a short text: of kubectl's many lines only the first goes in it,
 // the whole in the App Log.
 func TestAToastTakesTheFirstLine(t *testing.T) {
