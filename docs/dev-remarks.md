@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.3/principle)（tdp v0.9.3），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.4）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.5/principle)（tdp v0.9.5），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.5）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -211,7 +211,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.3/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.5/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|
@@ -239,6 +239,7 @@ git clone https://github.com/vulcanshen/kbu.git
 cd kbu
 make build        # → ./kbu（CGO_ENABLED=0 靜態、-trimpath、strip；版本是 dev）
 ./kbu
+make dev          # build 再跑 ./kbu（讀真正的設定與資料）
 ./kbu iconwidth   # 啟動時量到 icon 佔幾格（tdp E5）
 ./kbu version
 ./kbu help
