@@ -323,25 +323,50 @@ func TestStatusbarKeepsItsFields(t *testing.T) {
 	}
 }
 
-// C marks the compare anchor, C on another row compares (a viewer opens),
-// Esc on the panel drops the anchor first (tdp K4).
-func TestCompareAnchor(t *testing.T) {
+// C marks the compare anchor and enters the Compare mode (tdp K11): Space
+// opens nothing, Tab waits, C on the anchor asks for another row, C or
+// Enter on another row compares (a viewer opens) and comes back to the
+// mode; Esc leaves it, the anchor dropped.
+func TestCompareMode(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "C")
 	if m.anchor == nil || m.anchor.item.Name != "a" {
 		t.Fatalf("anchor %+v, want on a", m.anchor)
 	}
-	if !strings.Contains(m.screen_(), "[C]ompare") {
-		t.Errorf("the statusbar has no [C]ompare:\n%s", m.screen_())
+	if md := m.listP.InMode(); md == nil || md.Name != "Compare" {
+		t.Fatalf("panel 2 in mode %+v, want Compare", md)
 	}
-	m.press("j", "C")
+	if m.list.Anchor != m.anchor.key {
+		t.Errorf("the list draws %q as the anchor, want %q", m.list.Anchor, m.anchor.key)
+	}
+	if s := m.screen_(); !strings.Contains(s, "[C]ompare") || !strings.Contains(s, "Compare") {
+		t.Errorf("no [C]ompare on the statusbar or no mode name:\n%s", s)
+	}
+	m.press("Space")
+	if strings.Contains(m.screen_(), "ITEM OPERATION") {
+		t.Errorf("Space opened the menu in the mode:\n%s", m.screen_())
+	}
+	m.press("Tab")
+	if m.app.Screen().Focused() != m.listP {
+		t.Error("Tab left the mode's panel")
+	}
+	m.press("Esc") // the toast that says to leave first (K4)
+	m.press("C")
+	if s := m.screen_(); !strings.Contains(s, "Pick another row") || strings.Contains(s, "COMPARE") {
+		t.Errorf("C on the anchor:\n%s", s)
+	}
+	m.press("Esc", "j", "Enter")
 	if !strings.Contains(m.screen_(), "COMPARE") {
-		t.Fatalf("C on another row opened no compare:\n%s", m.screen_())
+		t.Fatalf("Enter on another row opened no compare:\n%s", m.screen_())
 	}
-	m.press("Esc", "Esc")
-	if m.anchor != nil {
-		t.Errorf("Esc kept the anchor")
+	m.press("Esc")
+	if m.listP.InMode() == nil || m.anchor == nil {
+		t.Fatal("closing the compare left the mode")
+	}
+	m.press("Esc")
+	if m.listP.InMode() != nil || m.anchor != nil || m.list.Anchor != "" {
+		t.Errorf("Esc kept the mode %v or the anchor %v %q", m.listP.InMode(), m.anchor, m.list.Anchor)
 	}
 }
 
@@ -586,7 +611,7 @@ func TestTheWatchErrorStartsWithACapital(t *testing.T) {
 
 // kbu's colours go as spans: a colour code left in a cell would show as its
 // name, \x1b (components, control characters). Panel 2 with a status in
-// colour and the anchor in Lavender, and the statusbar, show none.
+// colour and the Compare anchor on Yellow, and the statusbar, show none.
 func TestNoColourCodeShows(t *testing.T) {
 	m := newTestModel(t)
 	bad := pod("demo", "b")

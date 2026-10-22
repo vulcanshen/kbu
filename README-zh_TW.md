@@ -138,7 +138,7 @@ kbu
 | `?` | 最前面那個東西的按鍵：panel，或最上層的 popup。再按 `?` 或 `Esc` 關掉 |
 | `Tab`、`Shift-Tab`、`1–3` | 下一個 panel、上一個、照編號跳 |
 | `Enter` | 最直觀的動作：drill 進去（workload 進它的 Pods）、打開 YAML、切到某個 context、shell 進 container、rollback 到某個 Helm revision。在 panel 1 上是到 panel 2；在 Logs、Events、Conditions、Info 上是全螢幕 |
-| `Esc` | 退一步：清掉篩選、放掉比對的基準列、從 drill 退回一層。永遠不會離開 kbu |
+| `Esc` | 退一步：清掉篩選、離開模式（Compare、Drag）、從 drill 退回一層。永遠不會離開 kbu |
 | `!` | App Log：kbu 做過的事與出問題的事，最新的在最下面。還沒看過的錯誤，footer 會寫 `!:2 errors`，打開看過就回去 |
 | `q`、`Ctrl-C` | 離開 kbu（會記住你在哪裡） |
 | `j\|k`、`u\|d`、`gg\|G` | 下、上，半頁，到頭、到尾。panel 3 上 `h\|l` 切 tab |
@@ -150,7 +150,7 @@ kbu
 | Panel 1 | `P` | 釘選或取消釘選這個種類 |
 | Panel 1 | `D` | 把釘選的種類拖到位置：`j\|k`，然後 `Enter`；`Esc` 放回原處 |
 | Panel 2 | `Y`、`E`、`S`、`D` | YAML、edit、shell、delete |
-| Panel 2 | `C` | 把這一列標成比對的基準；在另一列上按就比對兩者 |
+| Panel 2 | `C` | 比對：這一列成為基準，panel 2 進入 Compare 模式。移到另一列按 `C` 或 `Enter` 比對兩者，要比幾次都可以；`Esc` 離開模式 |
 | Panel 2 | `Alt-S` | 依一欄、再選方向排序清單 |
 | Panel 2 | `.` | 顯示或藏起 Helm chart 管理的物件 |
 | 任何 panel | `z` | 全螢幕；再按 `z` 回到三個 |
