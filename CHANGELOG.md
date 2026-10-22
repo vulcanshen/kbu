@@ -20,7 +20,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.9.7: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.9.8: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -61,6 +61,9 @@ The rest:
     `u|d` and `gg|G` scroll back, `Esc` goes back to the live screen. `Home` and `End` go to the program now, as in every terminu app.
     Leaving asks with the library's question.
   - **Alterm hides with `Alt-t` only**; `Ctrl-T` goes to the shell.
+  - **`q` with a popup open asks first** (`Quit kbu?`, `Esc` goes back to the
+    popup), so a stray `q` mid-way loses nothing; on a panel it still leaves
+    at once.
   - **Compare is a mode**: `C` makes the row the anchor and puts panel 2
     in the Compare mode (its frame Yellow, `Compare` on it, the anchor's row
     on Yellow). Move to another row and press `C` or `Enter` to compare, as

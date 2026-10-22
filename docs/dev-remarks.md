@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.7/principle)（tdp v0.9.7），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.9）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.8/principle)（tdp v0.9.8），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.10）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -83,7 +83,8 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **panel 2 的動作作用在游標那一列**；名稱與說明寫對什麼做什麼（tdp M5）。helm 管理的物件 Edit、Delete 列出但停用（tdp M6）：
   「由 Helm 管」是那個物件現在的狀態，不是這個種類做不到。種類本身沒有的動作不列（Events、Contexts、Releases 的 Edit，加上
   Nodes 的 Delete）。
-- **離開不先問**（tdp K9：由 app 決定）：跟舊版一樣直接離開，離開時存 state。
+- **離開不先問**（tdp K9：由 app 決定）：在 panel 上（含模式）跟舊版一樣直接離開，離開時存 state。有 popup 開著時第一下 `q`／`Ctrl-C`
+  先開 `Quit kbu?`（K9-6，KB29，user 2026-10-22 定、app 不能關掉；lib v0.4.10 自動做）。
 - **Compare 是模式**（user 2026-10-22 定，KB27 寫進 tdp v0.9.6 的 panel「比較模式」、note「比較」）：整套是 lib 的
   `App.CompareAction`（terminu-go v0.4.7）：模式、anchor 整列 Yellow、移動鍵、`C|Enter` 比對、只列差異的 DIFF、UNIFIED／SPLIT。kbu
   只給 `Name`（`diffLabel`，namespace/name）、`Text`（`MarshalItemYAMLForCompare`，用手上已有的 item，同步不打叢集）與 `Split`
@@ -214,7 +215,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.7/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.8/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

@@ -140,7 +140,7 @@ kbu
 | `Enter` | 最直觀的動作：drill 進去（workload 進它的 Pods）、打開 YAML、切到某個 context、shell 進 container、rollback 到某個 Helm revision。在 panel 1 上是到 panel 2；在 Logs、Events、Conditions、Info 上是全螢幕 |
 | `Esc` | 退一步：清掉篩選、離開模式（Compare、Drag）、從 drill 退回一層。永遠不會離開 kbu |
 | `!` | App Log：kbu 做過的事與出問題的事，最新的在最下面。還沒看過的錯誤，footer 會寫 `!:2 errors`，打開看過就回去 |
-| `q`、`Ctrl-C` | 離開 kbu（會記住你在哪裡） |
+| `q`、`Ctrl-C` | 離開 kbu（會記住你在哪裡）。有 popup 開著時會先問 |
 | `j\|k`、`u\|d`、`gg\|G` | 下、上，半頁，到頭、到尾。panel 3 上 `h\|l` 切 tab |
 
 其他的鍵都是 `Space` menu 裡某一列的捷徑，每個 panel 的 `?` 都列得出來。最常用的：
