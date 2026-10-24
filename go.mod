@@ -6,7 +6,7 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/go-logr/logr v1.4.3
-	github.com/vulcanshen/terminu-go v0.4.16
+	github.com/vulcanshen/terminu-go v0.4.17
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.1
 	k8s.io/apimachinery v0.36.1
