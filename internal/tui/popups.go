@@ -121,6 +121,8 @@ func (m *Model) namespacePicker(sel k8s.NamespaceSelection) tea.Cmd {
 	c := &terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Options: []string{"All Namespaces"},
 		Checked: []bool{sel.IsAll()}, Loading: true,
 		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(names, now)) }}
+	// TODO(lib KB31): All Namespaces should tick every row and untick when one
+	// is unticked (user 2026-10-24); Checks flips only the cursor's row.
 	m.fillNamespaces = func(got []string) {
 		names = got
 		for _, n := range got {
