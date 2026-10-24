@@ -20,12 +20,13 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.9.10: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.9.11: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
-    `Enter` shows the ones checked. All Namespaces checked means all of them,
-    whatever else is checked.
+    `Enter` shows the ones checked, and `Select all` at the top checks or
+    unchecks them all. Every one checked (or none) is the whole cluster,
+    namespaces made later included. The All Namespaces option is gone.
   - **What you open from the `Space` menu** (the YAML, a compare, Helm's
     documents, the App Log, an edit) keeps the menu: `Esc` goes back to it.
     A shell, a drill, a delete or a context switch closes it. A confirm

@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.10/principle)（tdp v0.9.10），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.12）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.11/principle)（tdp v0.9.11），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.13）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -55,7 +55,7 @@
 | Space menu、global operation popup | lib 的（從 panel 的 `Actions` 與 `App.Global` 產生） |
 | key reference（`?`） | lib 的（從同一份登記產生） |
 | sort 的欄位與方向兩個 picker | 兩個 menu（tdp F1：一步一個 popup） |
-| namespace picker | checkbox popup（`App.Checks`）；第一列是 All Namespaces |
+| namespace picker | checkbox popup（`App.Checks`）；第一列是 lib 的 `Select all` |
 | context picker | select（`App.Select`） |
 | YAML、helm 文件 | viewer（`App.Viewer`）：行號、折行、選取模式 `v`、kbu 自己的鍵（`/`、`n`、`N`、`y`、`E`） |
 | compare | lib 的比較模式與 DIFF（`App.CompareAction`）：kbu 給列的名稱（`rowLabel`）與 YAML（`rowYAML`），UNIFIED／SPLIT 記在 state |
@@ -117,9 +117,10 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   沒有 ref 的列照樣停得到，`Enter` 停用。**暫定**：欄名。
 - **狀態欄的顏色是 kbu 的內容**（tdp P4）：只有需要注意的才上色，pending 與 error 兩色，寫死在 `internal/theme`。
   `theme.yaml` 整個拿掉（KB3，user 2026-10-19）：介面元素是家族的配色，改不了；之後要有 theme，是全家族一起重新設計的題目。
-- **namespace picker 的 All Namespaces**：All 勾著就是全部，沒勾 All 就是勾起來的那幾個，一個都沒勾也是全部。理由：checkbox popup
-  裡的 Green 讀成「按 `Enter` 就是這個值」（components/input/finder），All 跟幾個 namespace 都是 Green 時，結果只能是全部；
-  一個都沒勾時沒有東西可以看，全部最接近使用者的意思。舊版「All 勾著時再勾一個就變成只有那一個」跟畫面對不上，改掉。
+- **namespace picker 的全選**：tdp v0.9.11 起每個 checkbox 組由 lib 自帶 `Select all` 列，app 自己放「All」選項是用錯，所以 kbu
+  的 All Namespaces 選項拿掉（KB31）。每一個都勾著寫回時讀成整個 cluster，之後新建的 namespace 也算（tdp 讓 app 自己解讀）；一個都沒勾
+  也是整個 cluster：沒有東西可以看，全部最接近使用者的意思。開啟時是整個 cluster，就每一個都勾。拿掉的理由：自己的 All 勾著時再勾
+  `default`，寫回的還是全部，`default` 被默默丟掉。
 - **context**：從 Contexts 清單按 `Enter` 先問；從 `[C]ontext` 的 select 選定不再問（tdp F6：經由 picker 明確選定的那一次算已確認）。
   切換時清掉 CRD 再重新探索，正在看的種類是能 drill 的或新叢集沒有的，就回到 Pods。
 - **錯誤與 App Log**（tdp F5、K1）：App Log 是 lib 的，panel 上按 `!` 打開，toast 與 error popup 自己會進去，footer 寫還沒看過的錯誤、
@@ -210,12 +211,12 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 偏離 tdp
 
 目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法；compare 後來整個交給 lib。
-還沒符合的列在 [`kbu-terminu-fix.md`](kbu-terminu-fix.md)（tdp E7）：namespace popup 的全選（KB31，tdp v0.9.11 定了，等 terminu-go v0.4.13）。
+還沒符合的也沒有了：`docs/kbu-terminu-fix.md` 全部修完，拿掉（tdp E7）。
 
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.10/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.11/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

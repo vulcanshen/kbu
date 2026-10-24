@@ -14,7 +14,7 @@ import (
 	"github.com/vulcanshen/kbu/internal/k8s"
 )
 
-// The namespace picker's checks mean what the popup shows in Green.
+// The namespace picker's checks: every one checked is the whole cluster.
 func TestPickedSelection(t *testing.T) {
 	names := []string{"a", "b", "c"}
 	cases := []struct {
@@ -22,10 +22,10 @@ func TestPickedSelection(t *testing.T) {
 		now  []bool
 		want []string // nil for All
 	}{
-		{"All checked, a too", []bool{true, true, false, false}, nil},
-		{"only a", []bool{false, true, false, false}, []string{"a"}},
-		{"a and b", []bool{false, true, true, false}, []string{"a", "b"}},
-		{"nothing checked", []bool{false, false, false, false}, nil},
+		{"every one checked", []bool{true, true, true}, nil},
+		{"only a", []bool{true, false, false}, []string{"a"}},
+		{"a and b", []bool{true, true, false}, []string{"a", "b"}},
+		{"nothing checked", []bool{false, false, false}, nil},
 	}
 	for _, c := range cases {
 		got := pickedSelection(names, c.now)
@@ -225,7 +225,8 @@ func TestStartsOnThePanelLeftFrom(t *testing.T) {
 }
 
 // The namespace picker opens at once, loading (tdp F7), and the namespaces
-// fill it when they come.
+// fill it when they come. Every checkbox group has the lib's Select all; kbu
+// adds no All of its own (components/input/checkbox, KB31).
 func TestNamespacePickerLoads(t *testing.T) {
 	m := newTestModel(t)
 	m.drive(m.namespacePicker(k8s.AllNamespaces()))
@@ -233,8 +234,14 @@ func TestNamespacePickerLoads(t *testing.T) {
 		t.Fatalf("the picker did not open before its namespaces:\n%s", s)
 	}
 	m.drive(m.onMsg(namespacesMsg{names: []string{"alpha", "beta"}}))
-	if s := m.screen_(); !strings.Contains(s, "alpha") || !strings.Contains(s, "beta") {
+	s := m.screen_()
+	if !strings.Contains(s, "alpha") || !strings.Contains(s, "beta") {
 		t.Errorf("the namespaces did not fill the picker:\n%s", s)
+	}
+	// The status bar says All Namespaces; the popup below it does not.
+	popup := s[strings.Index(s, "NAMESPACES"):]
+	if !strings.Contains(popup, "Select all") || strings.Contains(popup, "All Namespaces") {
+		t.Errorf("not the lib's Select all alone:\n%s", s)
 	}
 }
 
