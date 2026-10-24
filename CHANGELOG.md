@@ -74,6 +74,13 @@ The rest:
     `UNIFIED`); two the same say so in a toast. Which tab you chose is kept
     in `state.yaml`: `compare.layout` in `config.yaml` is no longer read, so
     it starts from `UNIFIED` once.
+  - **`Space` in a mode opens a menu of that mode's keys** (in the Drag mode
+    `Drop` and `Cancel`), so you need not press `?` to find them; the other
+    keys still wait until you leave.
+  - **Selecting in a viewer goes back a step at a time**: once the range
+    starts the mode is `Visual>select`; `Esc` takes the range off and leaves
+    you in `Visual`, and a second `Esc` leaves. `y` copies and leaves at
+    once, as before. The same in Alterm and a shell.
   - **Panel 1 no longer sorts**: `Alt-S` on panel 2 sorts the list it shows.
     `z` zooms back from any panel.
   - `[` and `]` no longer switch panel 3's tabs: `h` and `l` do.
