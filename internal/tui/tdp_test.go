@@ -32,6 +32,7 @@ func TestTDPTrickyNames(t *testing.T) {
 	t.Setenv("KBU__STATE", t.TempDir())
 	t.Setenv("KBU__DATA", t.TempDir())
 	d := tdptest.Start(t, tdpApp(), 120, 40)
+	d.AllowLineBreaks = true // Tricky has names with line breaks, on purpose
 	items := make([]k8s.ResourceItem, len(tdptest.Tricky))
 	for i, name := range tdptest.Tricky {
 		items[i] = pod("tricky", name)

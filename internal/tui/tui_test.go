@@ -193,6 +193,16 @@ func TestTheMovedSettingsAreTold(t *testing.T) {
 			t.Errorf("the error popup has no %q:\n%s", want, s)
 		}
 	}
+	// One row a sentence (components, control characters): the second
+	// starts a row of its own, right after the popup's frame.
+	for _, line := range strings.Split(s, "\n") {
+		if i := strings.Index(line, "/old/logs stays"); i >= 0 {
+			before := line[:i]
+			if j := strings.LastIndex(before, "┃"); j < 0 || strings.TrimSpace(before[j+len("┃"):]) != "" {
+				t.Errorf("the second sentence does not start a row: %q", line)
+			}
+		}
+	}
 	if m = newTestModel(t); strings.Contains(m.screen_(), "Moved") {
 		t.Errorf("nothing moved, yet the screen talks about it:\n%s", m.screen_())
 	}
@@ -600,6 +610,22 @@ func TestAToastTakesTheFirstLine(t *testing.T) {
 	}
 	m.press("!")
 	if s := m.screen_(); !strings.Contains(s, "more detail") {
+		t.Errorf("the App Log has not the whole of it:\n%s", s)
+	}
+}
+
+// An error popup of the API's error is short as a toast is: its first
+// line, the whole in the App Log (components, control characters).
+func TestAnErrorPopupTakesTheFirstLine(t *testing.T) {
+	m := newTestModel(t)
+	m.drive(m.namespacePicker(k8s.AllNamespaces()))
+	m.drive(m.onMsg(namespacesMsg{err: errors.New("getting credentials: exec: exit status 1\ntoken expired")}))
+	if s := m.screen_(); !strings.Contains(s, "NAMESPACES NOT READ") || strings.Contains(s, `\n`) ||
+		!strings.Contains(s, "getting credentials") || strings.Contains(s, "token expired") {
+		t.Errorf("the error popup:\n%s", s)
+	}
+	m.press("Esc", "Esc", "!")
+	if s := m.screen_(); !strings.Contains(s, "token expired") {
 		t.Errorf("the App Log has not the whole of it:\n%s", s)
 	}
 }
