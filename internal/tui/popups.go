@@ -112,43 +112,37 @@ func (m *Model) openNamespaces() tea.Cmd {
 	return tea.Batch(m.namespacePicker(m.client.Selection()), fetchNamespaces(m.client, false))
 }
 
-// namespacePicker picks which namespaces panel 2 shows: All Namespaces or
-// any set of them (components/input/checkbox: Space checks a row, Enter
-// takes the set). It opens loading (tdp F7); fillNamespaces puts the
-// namespaces in.
+// namespacePicker picks which namespaces panel 2 shows, any set of them
+// (components/input/checkbox: Space checks a row, Enter takes the set; the
+// lib's Select all row checks them all). All of them shows every one
+// checked. It opens loading (tdp F7); fillNamespaces puts the namespaces in.
 func (m *Model) namespacePicker(sel k8s.NamespaceSelection) tea.Cmd {
 	var names []string
-	c := &terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Options: []string{"All Namespaces"},
-		Checked: []bool{sel.IsAll()}, Loading: true,
+	c := &terminu.Checks{Title: "Namespaces", Glyph: glyphNS, Loading: true,
 		Done: func(now []bool) tea.Cmd { return m.setNamespaces(pickedSelection(names, now)) }}
-	// TODO(lib KB31): tdp v0.9.11 gives every checkbox group its own Select
-	// all row; with terminu-go v0.4.13 the All Namespaces option goes.
 	m.fillNamespaces = func(got []string) {
 		names = got
 		for _, n := range got {
 			c.Options = append(c.Options, n)
-			c.Checked = append(c.Checked, !sel.IsAll() && sel.Contains(n))
+			c.Checked = append(c.Checked, sel.IsAll() || sel.Contains(n))
 		}
 		c.Loading = false
 	}
 	return m.app.LoadChecks(c)
 }
 
-// pickedSelection is what the namespace picker's checks mean, as the
-// popup shows them in Green (components/input/finder: Green is what Enter
-// gives): All Namespaces checked is all of them; otherwise the namespaces
-// checked; nothing checked shows all, there being nothing else to show.
+// pickedSelection is what the namespace picker's checks mean: every one
+// checked is the whole cluster, namespaces made later too (kbu's reading,
+// components/input/checkbox, Select all); nothing checked shows all too,
+// there being nothing else to show; otherwise the namespaces checked.
 func pickedSelection(names []string, now []bool) k8s.NamespaceSelection {
-	if now[0] {
-		return k8s.AllNamespaces()
-	}
 	var picked []string
-	for i, c := range now[1:] {
+	for i, c := range now {
 		if c {
 			picked = append(picked, names[i])
 		}
 	}
-	if len(picked) == 0 {
+	if len(picked) == 0 || len(picked) == len(names) {
 		return k8s.AllNamespaces()
 	}
 	return k8s.SelectedNamespaces(picked...)

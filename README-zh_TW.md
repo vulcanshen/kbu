@@ -29,7 +29,7 @@ Relatives 導覽、YAML 比對與內嵌的 shell 都是內建的；kbu 沒做的
 - **Drill-down** —— Deployment / StatefulSet / DaemonSet / Job → Pods → Containers、CronJob → Jobs、HPA → 它的目標、
   Helm release → chart 部署的每一個物件。
 - **28 種內建資源，加上你的 CRD** —— 啟動時找出 Custom Resources，每一份清單都透過 Kubernetes 的 watch 即時更新。
-- **一次看好幾個 namespace** —— 在 `[N]amespace` picker 勾任意幾個，或是 All Namespaces。kbu 記得你的選擇。
+- **一次看好幾個 namespace** —— 在 `[N]amespace` picker 勾任意幾個，或按 `Select all` 看整個 cluster。kbu 記得你的選擇。
 - **釘選與排序** —— 把常用的種類釘在 panel 1 最上面、拖成你要的順序；任何清單都能依一欄或好幾欄排序。兩者都依種類保存。
 - **篩選** —— `/` 在 panel 1、panel 2 邊打邊篩，namespace 與 context 的 picker 也可以。
 - **從上次離開的地方接著用** —— 離開再開：同一個 context、namespace、種類、那一列、panel 與 tab。

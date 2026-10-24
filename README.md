@@ -32,8 +32,8 @@ an embedded shell are built in; any other tool you trust rides along in that she
   release → every object the chart deployed.
 - **28 built-in resource types plus your CRDs** — Custom Resources are found at start, and every list updates live through
   the Kubernetes watch.
-- **Several namespaces at once** — check any set of namespaces in the `[N]amespace` picker, or All Namespaces. kbu remembers
-  the choice.
+- **Several namespaces at once** — check any set of namespaces in the `[N]amespace` picker, or `Select all` for the whole
+  cluster. kbu remembers the choice.
 - **Pin and sort** — pin the kinds you use most to the top of panel 1 and drag them into order; sort any list by one or more
   columns. Both are kept per kind.
 - **Filter** — `/` narrows panel 1 and panel 2 as you type, and the namespace and context pickers too.
