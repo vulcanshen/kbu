@@ -210,7 +210,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 偏離 tdp
 
 目前沒有。舊的兩條（statusbar 依名稱長度、split compare 不折行）在 tdp v0.8.0 都成了規範允許的做法；compare 後來整個交給 lib。
-還沒符合的也沒有了：`docs/kbu-terminu-fix.md` 全部修完，拿掉（tdp E7）。
+還沒符合的列在 [`kbu-terminu-fix.md`](kbu-terminu-fix.md)（tdp E7）：namespace popup 的全選（KB31，等 tdp 與 lib）。
 
 ## 設計文件導讀
 
