@@ -309,7 +309,7 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 		fill(msg.names)
 		if msg.err != nil {
 			// The picker's own load failed: an error popup over it (tdp F7).
-			return m.app.Error("Namespaces not read", msg.err.Error())
+			return m.errorPopup("Namespaces not read", msg.err.Error())
 		}
 		return nil
 	}

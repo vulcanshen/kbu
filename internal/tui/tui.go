@@ -341,7 +341,7 @@ func (m *Model) sayMoved() tea.Cmd {
 		cmds = append(cmds, m.app.Toast(terminu.Info, "Moved kbu's "+strings.Join(done, ", and its ")))
 	}
 	if len(left) > 0 {
-		cmds = append(cmds, m.app.Error("Not moved", strings.Join(left, " ")))
+		cmds = append(cmds, m.app.Error("Not moved", left...))
 	}
 	return tea.Batch(cmds...)
 }
@@ -462,4 +462,16 @@ func (m *Model) toast(kind terminu.ToastKind, text string) tea.Cmd {
 		text = strings.TrimSpace(first)
 	}
 	return m.app.Toast(kind, text)
+}
+
+// errorPopup is an error popup of a text from outside (the API's error), as
+// toast is a toast of one: its first line in the popup, the whole of it in
+// the App Log (components, control characters).
+func (m *Model) errorPopup(title, text string) tea.Cmd {
+	text = strings.TrimSpace(text)
+	if first, rest, ok := strings.Cut(text, "\n"); ok && strings.TrimSpace(rest) != "" {
+		m.log.app.Log(terminu.Error, text)
+		text = strings.TrimSpace(first)
+	}
+	return m.app.Error(title, text)
 }

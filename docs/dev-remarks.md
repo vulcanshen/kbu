@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.14/principle)（tdp v0.9.14），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.17）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.15/principle)（tdp v0.9.15），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.20）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -126,7 +126,9 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **錯誤與 App Log**（tdp F5、K1）：App Log 是 lib 的，panel 上按 `!` 打開，toast 與 error popup 自己會進去，footer 寫還沒看過的錯誤、
   警告數。kbu 用 `app.Log` 記其他的事：使用者做的動作與結果（切換種類、標 anchor、edit、exec、切 context）、背景的事（連上叢集、
   找到的 CRD、namespace 選擇的修正、log 串流的狀況）、外面讀不到的細節。toast 已經記的不再記一次；toast 是短字，kubectl 或 API
-  給的多行訊息只放第一行，整段記進 App Log（`Model.toast`）。每一筆跟 toast 一樣大寫開頭（note-78）：kbu 寫的字大寫開頭，名稱開頭的
+  給的多行訊息只放第一行，整段記進 App Log（`Model.toast`；error popup 是 `Model.errorPopup`，tdp v0.9.15 components-32）。kbu 自己的
+  字不放 `\n`：好幾句的訊息一句一列給（`app.Error(title, rows...)`，例如 `Not moved`；components-30、31），所以畫面上紅色的 `\n`
+  一定是外面來的。tdptest 的 Driver 預設會抓紅色的 `\n`，故意用 `Tricky` 當名字的測試設 `AllowLineBreaks`。每一筆跟 toast 一樣大寫開頭（note-78）：kbu 寫的字大寫開頭，名稱開頭的
   句子改成動詞在前（`Started kbu`），名稱照原樣；Go error 整句拿來用的（watch 的 `listing pods: …`）由 `capital` 把第一個字改大寫。
   舊版自己的 App Log、statusbar 的錯誤數、`Clear the App log` 都拿掉（lib 的只放在記憶體）。watch 失敗而 panel 2 是空的時，panel 中間照 components/layout/panel 寫兩句。
 - **控制字元**（tdp v0.9.0 components「控制字元」）：清單的格子、statusbar、menu、toast 交給 lib，lib 照「名字與短字」畫；kbu 的顏色
@@ -216,7 +218,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.14/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.15/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|
