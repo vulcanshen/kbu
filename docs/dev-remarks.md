@@ -2,7 +2,7 @@
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
 [terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.16/principle)（tdp v0.9.16），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.21）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.22）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
