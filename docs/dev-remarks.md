@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.15/principle)（tdp v0.9.15），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.20）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.9.16/principle)（tdp v0.9.16），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.4.21）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -121,6 +121,9 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
   的 All Namespaces 選項拿掉（KB31）。每一個都勾著寫回時讀成整個 cluster，之後新建的 namespace 也算（tdp 讓 app 自己解讀）；一個都沒勾
   也是整個 cluster：沒有東西可以看，全部最接近使用者的意思。開啟時是整個 cluster，就每一個都勾。拿掉的理由：自己的 All 勾著時再勾
   `default`，寫回的還是全部，`default` 被默默丟掉。
+- **不用「被指到的 panel」**（tdp v0.9.16，`List.Points`，app 選用）：那是給一列代表畫面上一個 panel 的清單（sshu 的 sessions 與
+  它的格子），每一列指不同的格子。kbu 的 panel 1、panel 2 是 details 的關係（components/layout/panel）：每一列都對著同一個下一格，
+  用了只會讓 panel 2、panel 3 在 focus 在前一格時一直是 Lavender，不多說什麼，所以不設。
 - **context**：從 Contexts 清單按 `Enter` 先問；從 `[C]ontext` 的 select 選定不再問（tdp F6：經由 picker 明確選定的那一次算已確認）。
   切換時清掉 CRD 再重新探索，正在看的種類是能 drill 的或新叢集沒有的，就回到 Pods。
 - **錯誤與 App Log**（tdp F5、K1）：App Log 是 lib 的，panel 上按 `!` 打開，toast 與 error popup 自己會進去，footer 寫還沒看過的錯誤、
@@ -218,7 +221,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.15/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.9.16/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|
