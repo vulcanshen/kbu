@@ -625,8 +625,20 @@ func TestAnErrorPopupTakesTheFirstLine(t *testing.T) {
 		t.Errorf("the error popup:\n%s", s)
 	}
 	m.press("Esc", "Esc", "!")
-	if s := m.screen_(); !strings.Contains(s, "token expired") {
-		t.Errorf("the App Log has not the whole of it:\n%s", s)
+	if s := m.screen_(); !strings.Contains(s, "token expired") || !strings.Contains(s, "Getting credentials") {
+		t.Errorf("the App Log has not the whole of it, with a capital:\n%s", s)
+	}
+}
+
+// tdp toast.2: a toast starts with a capital, but a row starting with a name
+// keeps it: what kbu says of a delete, and kubectl's own words as they are.
+func TestADeleteToastStartsWithACapital(t *testing.T) {
+	for out, want := range map[string]string{"": "Deleted pod/a", `pod "a" deleted`: `pod "a" deleted`} {
+		m := newTestModel(t)
+		m.drive(m.onCommandDone(commandDoneMsg{what: "delete", target: "pod/a\x00demo", out: out}))
+		if s := m.screen_(); !strings.Contains(s, want) {
+			t.Errorf("kubectl said %q: no %q:\n%s", out, want, s)
+		}
 	}
 }
 

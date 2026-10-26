@@ -325,7 +325,7 @@ func (m *Model) onCommandDone(msg commandDoneMsg) tea.Cmd {
 	case "delete":
 		_ = config.WriteAuditEntry("delete", target, ns, msg.out)
 		if out == "" {
-			out = "deleted " + target
+			out = "Deleted " + target
 		}
 		return m.toastDone(out)
 	case "rollback":
