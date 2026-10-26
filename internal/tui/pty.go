@@ -9,7 +9,7 @@ import (
 	terminu "github.com/vulcanshen/terminu-go"
 )
 
-// Alterm: a shell that lives inside kbu (components/dialog/terminal). It
+// Alterm: a shell that lives inside kbu (tdp terminal). It
 // keeps running while it is hidden — its directory, history and jobs stay —
 // and Alt-t brings it back. Alt-Esc ends it, asked first (tdp K10).
 
@@ -22,7 +22,7 @@ func (m *Model) showAlterm() tea.Cmd {
 }
 
 func (m *Model) newAlterm() *terminu.Terminal {
-	// An interactive terminal, the user types in it (components/dialog/terminal):
+	// An interactive terminal, the user types in it (tdp terminal):
 	// PgUp goes into the History mode, gg|G to the oldest line and back to
 	// live, and Alt-v selects; Home and End stay the shell's (tdp K12).
 	t := &terminu.Terminal{Title: "Alterm", Subject: hostname(), Command: altermCommand(m.cfg.AltermShell, m.cfg.AltermLoginShell),

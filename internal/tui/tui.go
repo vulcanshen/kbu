@@ -1,4 +1,4 @@
-// Package tui is kbu's terminal UI, built on terminu-go (tdp v0.8.3): the lib
+// Package tui is kbu's terminal UI, built on terminu-go: the lib
 // draws the screen and drives the core keys — the Space menu, the key
 // reference, the hints, confirms, dimming, Esc one layer at a time — and
 // this package registers kbu's three panels, their actions and popups, and
@@ -158,7 +158,7 @@ func New(o Options) *Model {
 	m.buildList()
 	m.buildDetail()
 	// Each panel shows the details of the one before it
-	// (components/layout/panel): panel 2 the kind under panel 1's cursor,
+	// (tdp panel.13): panel 2 the kind under panel 1's cursor,
 	// panel 3 the row under panel 2's.
 	m.kindsP.Details, m.listP.Details = m.listP, m.detailP
 	m.screen = &terminu.Screen{Name: "kbu", Panels: []*terminu.Panel{m.kindsP, m.listP, m.detailP},
@@ -346,7 +346,7 @@ func (m *Model) sayMoved() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// statusbar is the row at the top (components/layout/screen): the context
+// statusbar is the row at the top (tdp screen.4): the context
 // and the namespaces with their hotkeys, the Alterm in the background, the
 // compare anchor, and on the right the errors and warnings not seen yet.
 // When panel 2 has the focus its C (Compare) is the C that fires: [C]ompare
@@ -385,7 +385,7 @@ func (m *Model) statusbar(int) []terminu.Span {
 		out = append(out, spans...)
 	}
 	if m.alterm != nil && m.alterm.Running() {
-		// A live session is in effect (components/color: Green).
+		// A live session is in effect (tdp color.2: Green).
 		add(terminu.Span{Text: "[Alt-t]", Style: lit}, terminu.Span{Text: "erm", Style: terminu.Fg(terminu.Green)})
 	}
 	if m.list.Anchor != "" { // in the Compare mode
@@ -444,16 +444,16 @@ func (m *Model) kubectlArgs(args ...string) []string {
 func (m *Model) toastErr(text string) tea.Cmd { return m.toast(terminu.Error, text) }
 
 // toastWarn is toastErr for something done, or still usable, that is worth
-// a look (components/dialog/toast).
+// a look (tdp toast.2).
 func (m *Model) toastWarn(text string) tea.Cmd { return m.toast(terminu.Warning, text) }
 
 // toastDone says an action the user asked for is done: a Success toast, in
-// Green (components/dialog/toast).
+// Green (tdp toast.2).
 func (m *Model) toastDone(text string) tea.Cmd { return m.toast(terminu.Success, text) }
 
 // toast is a toast of a text from outside too (kubectl's output, the API's
 // error): a toast is a short text, a line break in it drawn by its name
-// (components, control characters), so its first line goes in the toast
+// (tdp components.5), so its first line goes in the toast
 // and the whole of it in the App Log.
 func (m *Model) toast(kind terminu.ToastKind, text string) tea.Cmd {
 	text = strings.TrimSpace(text)
@@ -466,7 +466,7 @@ func (m *Model) toast(kind terminu.ToastKind, text string) tea.Cmd {
 
 // errorPopup is an error popup of a text from outside (the API's error), as
 // toast is a toast of one: its first line in the popup, the whole of it in
-// the App Log (components, control characters).
+// the App Log (tdp components.5).
 func (m *Model) errorPopup(title, text string) tea.Cmd {
 	text = strings.TrimSpace(text)
 	if first, rest, ok := strings.Cut(text, "\n"); ok && strings.TrimSpace(rest) != "" {

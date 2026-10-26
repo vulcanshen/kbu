@@ -12,7 +12,7 @@ import (
 // MigrateLegacyConfigDir copies the contents of ~/.config/km8/ into it
 // (one-shot; subsequent launches skip because ~/.config/kbu/ now exists).
 //
-// The legacy $KM8__* environment variables are no longer read: tdp D6
+// The legacy $KM8__* environment variables are no longer read: tdp E2
 // renames without keeping old names (user ruling 2026-09-29).
 
 // MigrateLegacyConfigDir copies the pre-v2.0 config directory

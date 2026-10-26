@@ -12,7 +12,7 @@ import (
 // Panel 1, KINDS: the resource kinds in their categories, the pinned ones in
 // a Pinned group at the top (a pinned kind moves there; it is not copied).
 // Panel 2 is its details: it shows the kind under the cursor at once
-// (components/layout/panel, details), and Enter takes the focus there.
+// (tdp panel.13), and Enter takes the focus there.
 
 const pinnedGroup = "Pinned"
 

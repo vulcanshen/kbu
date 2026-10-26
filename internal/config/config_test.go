@@ -94,7 +94,7 @@ func TestConfigPath_EmptyEnvFallsBack(t *testing.T) {
 	}
 }
 
-// tdp D6: a rename keeps no old name. $KBU__CONFIGPATH (a file, v2.x) and
+// tdp E2: a rename keeps no old name. $KBU__CONFIGPATH (a file, v2.x) and
 // the pre-v2.0 $KM8__CONFIGPATH are not read.
 func TestConfigPath_OldNamesAreNotRead(t *testing.T) {
 	t.Setenv("KBU__CONFIG", "")

@@ -14,7 +14,7 @@ import (
 
 // The popups kbu opens; the lib draws, animates, stacks and dims them.
 
-// Title glyphs kbu chooses (components/layout/popup: an input's, a form's
+// Title glyphs kbu chooses (tdp popup.1: an input's, a form's
 // and a note's glyph is the app's).
 const (
 	glyphYAML   = "\U0000F48A" // nf-oct-file_code
@@ -33,7 +33,7 @@ func (m *Model) selection() *terminu.Selection {
 
 // yamlSearch is the YAML viewer's search: the viewer draws its hits, every
 // one underlined and the one it is on as the cursor block
-// (components/dialog/note).
+// (tdp note.2).
 type yamlSearch struct{ v *terminu.Viewer }
 
 func (s *yamlSearch) find(q string) tea.Cmd {
@@ -51,7 +51,7 @@ func (s *yamlSearch) go_(step int) tea.Cmd {
 	return nil
 }
 
-// openYAML shows a resource's YAML (components/dialog/note): / searches,
+// openYAML shows a resource's YAML (tdp note): / searches,
 // n|N go to the next and the previous match, v selects, y copies, E edits.
 func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string) tea.Cmd {
 	if yaml == "" {
@@ -67,7 +67,7 @@ func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string
 	v.Keys = []terminu.ViewerKey{
 		{Key: "/", Desc: "search", Do: func() tea.Cmd {
 			// Search: a pasted control character is only drawn, not refused
-			// (components/input/README).
+			// (tdp input.8).
 			return m.app.Text(terminu.TextInput{Title: "Search", Subject: subject(rt, item), Glyph: glyphSearch,
 				Name: "The text to find", Search: true,
 				Prompt: "Find in the YAML; [n] and [N] go to the next and the previous", Verb: "search",
@@ -113,7 +113,7 @@ func (m *Model) openNamespaces() tea.Cmd {
 }
 
 // namespacePicker picks which namespaces panel 2 shows, any set of them
-// (components/input/checkbox: Space checks a row, Enter takes the set; the
+// (tdp checkbox: Space checks a row, Enter takes the set; the
 // lib's Select all row checks them all). All of them shows every one
 // checked. It opens loading (tdp F7); fillNamespaces puts the namespaces in.
 func (m *Model) namespacePicker(sel k8s.NamespaceSelection) tea.Cmd {
@@ -133,7 +133,7 @@ func (m *Model) namespacePicker(sel k8s.NamespaceSelection) tea.Cmd {
 
 // pickedSelection is what the namespace picker's checks mean: every one
 // checked is the whole cluster, namespaces made later too (kbu's reading,
-// components/input/checkbox, Select all); nothing checked shows all too,
+// tdp checkbox.3); nothing checked shows all too,
 // there being nothing else to show; otherwise the namespaces checked.
 func pickedSelection(names []string, now []bool) k8s.NamespaceSelection {
 	var picked []string
@@ -171,7 +171,7 @@ func (m *Model) setNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
 
 // --- contexts ------------------------------------------------------------------
 
-// openContexts picks the context kbu talks to (components/input/select),
+// openContexts picks the context kbu talks to (tdp select),
 // the one now chosen; picking it is the confirmation (tdp F6).
 func (m *Model) openContexts() tea.Cmd {
 	if m.client == nil {
@@ -214,7 +214,7 @@ func (m *Model) openSort(rt k8s.ResourceType) tea.Cmd {
 			m.kindData.ResetSort(rt.KubectlName())
 			return m.sortSaved(rt)
 		}}
-	// What the menu acts on goes after ": ", as it is (components/layout/popup,
+	// What the menu acts on goes after ": ", as it is (tdp popup.1,
 	// the title).
 	return m.app.MenuAbout("Sort by", rt.String(), terminu.MenuSection{Title: "fields", Actions: fields},
 		terminu.MenuSection{Title: "all", Actions: []terminu.Action{reset}})
@@ -302,7 +302,7 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 		label := fmt.Sprintf("%d. %s", i+1, text)
 		if i == len(refs)-1 {
 			// Where the user is; a menu row is a short text, in no colour
-			// of the app's own (components, control characters).
+			// of the app's own (tdp components.5).
 			desc = "where the tab is now"
 		}
 		details := []string{ref.Type.KubectlName() + "/" + ref.Name}
