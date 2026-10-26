@@ -188,7 +188,9 @@ func (m *Model) waitWatch() tea.Cmd {
 // toast says it (tdp F5), and an empty panel 2 says why it is empty
 // (tdp panel.15, errors). The watcher tries again on its own.
 func (m *Model) onWatchErr(err error) tea.Cmd {
-	text := capital(err.Error()) // "listing pods: …", as Go errors are written
+	// The watcher's own "listing pods: " or "watching pods: " starts it, the
+	// API's words after it kept as they are (tdp toast.2).
+	text := capital(err.Error())
 	m.log.err(text)
 	cmds := []tea.Cmd{m.waitWatch()}
 	if m.listP.Fail == nil {

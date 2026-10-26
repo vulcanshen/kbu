@@ -615,18 +615,19 @@ func TestAToastTakesTheFirstLine(t *testing.T) {
 }
 
 // An error popup of the API's error is short as a toast is: its first
-// line, the whole in the App Log (tdp components.5).
+// line, the whole in the App Log (tdp components.5), after kbu's title and
+// as it is: x509 is a name (tdp toast.2).
 func TestAnErrorPopupTakesTheFirstLine(t *testing.T) {
 	m := newTestModel(t)
 	m.drive(m.namespacePicker(k8s.AllNamespaces()))
-	m.drive(m.onMsg(namespacesMsg{err: errors.New("getting credentials: exec: exit status 1\ntoken expired")}))
+	m.drive(m.onMsg(namespacesMsg{err: errors.New("x509: certificate signed by unknown authority\ntoken expired")}))
 	if s := m.screen_(); !strings.Contains(s, "NAMESPACES NOT READ") || strings.Contains(s, `\n`) ||
-		!strings.Contains(s, "getting credentials") || strings.Contains(s, "token expired") {
+		!strings.Contains(s, "x509: certificate") || strings.Contains(s, "token expired") {
 		t.Errorf("the error popup:\n%s", s)
 	}
 	m.press("Esc", "Esc", "!")
-	if s := m.screen_(); !strings.Contains(s, "token expired") || !strings.Contains(s, "Getting credentials") {
-		t.Errorf("the App Log has not the whole of it, with a capital:\n%s", s)
+	if s := m.screen_(); !strings.Contains(s, "token expired") || strings.Contains(s, "X509") {
+		t.Errorf("the App Log has not the whole of it as it is:\n%s", s)
 	}
 }
 

@@ -466,12 +466,13 @@ func (m *Model) toast(kind terminu.ToastKind, text string) tea.Cmd {
 
 // errorPopup is an error popup of a text from outside (the API's error), as
 // toast is a toast of one: its first line in the popup, the whole of it in
-// the App Log (tdp components.5), with a capital as every entry (tdp
-// toast.2).
+// the App Log (tdp components.5). There the title goes first: kbu's words
+// start the entry with a capital, and the text is kept as it is, often
+// starting with a name, x509: or pods "a" (tdp toast.2).
 func (m *Model) errorPopup(title, text string) tea.Cmd {
 	text = strings.TrimSpace(text)
 	if first, rest, ok := strings.Cut(text, "\n"); ok && strings.TrimSpace(rest) != "" {
-		m.log.app.Log(terminu.Error, capital(text))
+		m.log.app.Log(terminu.Error, title+": "+text)
 		text = strings.TrimSpace(first)
 	}
 	return m.app.Error(title, text)
