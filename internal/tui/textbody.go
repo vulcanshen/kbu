@@ -150,7 +150,7 @@ func (b *textBody) Key(key string, _ tea.KeyMsg) (bool, tea.Cmd) {
 }
 
 // Empty reports nothing to show, so the panel draws its loading or its
-// failure in the middle instead (tdp panel.5).
+// failure in the middle instead (tdp panel.15).
 func (b *textBody) Empty() bool { return len(b.rows) == 0 }
 
 // HasItem: a text has no items; Enter works on the whole panel (tdp K3).
