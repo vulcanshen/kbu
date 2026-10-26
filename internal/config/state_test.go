@@ -95,7 +95,7 @@ func TestState_OmitEmpty(t *testing.T) {
 	}
 }
 
-// tdp D6: $KBU__STATE is the state directory; state.yaml goes in it,
+// tdp E2: $KBU__STATE is the state directory; state.yaml goes in it,
 // trimmed of surrounding whitespace.
 func TestStatePath_KBUStateIsTheDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "kbu-state")
@@ -117,7 +117,7 @@ func TestStatePath_FollowsTheConfigDir(t *testing.T) {
 	}
 }
 
-// tdp D6: a rename keeps no old name. $KBU__STATEPATH (a file, v2.x) and
+// tdp E2: a rename keeps no old name. $KBU__STATEPATH (a file, v2.x) and
 // the pre-v2.0 $KM8__STATEPATH are not read.
 func TestStatePath_OldNamesAreNotRead(t *testing.T) {
 	t.Setenv("KBU__STATE", "")

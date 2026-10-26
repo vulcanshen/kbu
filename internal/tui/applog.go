@@ -7,7 +7,7 @@ import (
 	terminu "github.com/vulcanshen/terminu-go"
 )
 
-// appLog writes to the lib's App Log (! on a panel; components/dialog/note):
+// appLog writes to the lib's App Log (! on a panel; tdp note.7):
 // what kbu does and what it does in the background. Toasts and error popups
 // go in by themselves (tdp F5), so what one says is not logged again. Each
 // entry starts with a capital, as a toast does (tdp note-78).

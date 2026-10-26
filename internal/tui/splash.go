@@ -15,7 +15,7 @@ var icon []byte
 // intro is the splash's line under the name and the version.
 const intro = "A single-pane Kubernetes workspace"
 
-// newSplash is the family's easter egg, V on a panel (Rules S).
+// newSplash is the family's easter egg, V on a panel (tdp S1, S4).
 func newSplash(version string) (terminu.Splash, error) {
 	if version == "" {
 		version = "dev"

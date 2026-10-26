@@ -226,7 +226,7 @@ func TestStartsOnThePanelLeftFrom(t *testing.T) {
 
 // The namespace picker opens at once, loading (tdp F7), and the namespaces
 // fill it when they come. Every checkbox group has the lib's Select all; kbu
-// adds no All of its own (components/input/checkbox, KB31).
+// adds no All of its own (tdp checkbox.3, KB31).
 func TestNamespacePickerLoads(t *testing.T) {
 	m := newTestModel(t)
 	m.drive(m.namespacePicker(k8s.AllNamespaces()))

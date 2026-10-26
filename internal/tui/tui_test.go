@@ -81,7 +81,7 @@ func TestListRowsFromTheWatch(t *testing.T) {
 	}
 }
 
-// tdp's components/layout/panel: the columns that do not fit go whole, the
+// tdp panel.5: the columns that do not fit go whole, the
 // minor ones first (from the right), then Restarts, Age, Ready, Status, the
 // Helm mark and Namespace; the name never goes, and it is cut in the middle.
 // A sorted column goes last; with one namespace shown, Namespace goes first.
@@ -126,7 +126,7 @@ func TestListColumnsDropOrder(t *testing.T) {
 }
 
 // A long name shrinks before any column goes, cut in the middle, down to
-// nameRoom (components/layout/panel): at 100 and 80 columns a list with one
+// nameRoom (tdp panel.5): at 100 and 80 columns a list with one
 // still shows its namespace, readiness and status.
 func TestALongNameShrinksFirst(t *testing.T) {
 	for _, c := range []struct {
@@ -193,7 +193,7 @@ func TestTheMovedSettingsAreTold(t *testing.T) {
 			t.Errorf("the error popup has no %q:\n%s", want, s)
 		}
 	}
-	// One row a sentence (components, control characters): the second
+	// One row a sentence (tdp components.5): the second
 	// starts a row of its own, right after the popup's frame.
 	for _, line := range strings.Split(s, "\n") {
 		if i := strings.Index(line, "/old/logs stays"); i >= 0 {
@@ -338,7 +338,7 @@ func TestStatusbarKeepsItsFields(t *testing.T) {
 	}
 }
 
-// C enters the lib's Compare mode (tdp K11, panel's compare mode), the row
+// C enters the lib's Compare mode (tdp K11, panel.9), the row
 // the anchor, drawn whole on Yellow: on the anchor C is off, on another row
 // C or Enter opens the DIFF of their YAML and comes back to the mode; Esc
 // leaves, the anchor gone. UNIFIED or SPLIT is kept with the state.
@@ -549,7 +549,7 @@ func flat(s string) string {
 // tdp E3: settings, a state and pins and sorts kbu cannot read are asked
 // about at the start, MOVE ASIDE: Enter moves each to .bak, the settings
 // first, then the state, then the pins and sorts, and kbu goes on as on its
-// first start, which writes none of them (E3-18): each is made at its first
+// first start, which writes none of them (tdp E3-18): each is made at its first
 // save, the pins and sorts at a pin.
 func TestUnreadableFilesMoveAside(t *testing.T) {
 	m := newTestModelWith(t, Options{ConfigErr: errors.New("yaml: line 3: bad"), StateErr: errors.New("yaml: line 1: bad"),
@@ -615,7 +615,7 @@ func TestAToastTakesTheFirstLine(t *testing.T) {
 }
 
 // An error popup of the API's error is short as a toast is: its first
-// line, the whole in the App Log (components, control characters).
+// line, the whole in the App Log (tdp components.5).
 func TestAnErrorPopupTakesTheFirstLine(t *testing.T) {
 	m := newTestModel(t)
 	m.drive(m.namespacePicker(k8s.AllNamespaces()))
@@ -644,7 +644,7 @@ func TestTheWatchErrorStartsWithACapital(t *testing.T) {
 }
 
 // kbu's colours go as spans: a colour code left in a cell would show as its
-// name, \x1b (components, control characters). Panel 2 with a status in
+// name, \x1b (tdp components.5). Panel 2 with a status in
 // colour and the Compare anchor on Yellow, and the statusbar, show none.
 func TestNoColourCodeShows(t *testing.T) {
 	m := newTestModel(t)
@@ -657,7 +657,7 @@ func TestNoColourCodeShows(t *testing.T) {
 	}
 }
 
-// A log line is reading content (components, control characters): colour
+// A log line is reading content (tdp components.5): colour
 // codes colour, a \r leaves its last state, another sequence is its name,
 // a \n starts another row.
 func TestLogRowsAreReadingContent(t *testing.T) {

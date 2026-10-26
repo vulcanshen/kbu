@@ -16,7 +16,7 @@ import (
 
 // Panel 3: the details of the row under panel 2's cursor, in tabs — Logs,
 // Relatives, Events, Conditions, History, Info, as the kind has them. It
-// follows panel 2's cursor at once (components/layout/panel, details).
+// follows panel 2's cursor at once (tdp panel.13).
 
 const (
 	glyphLive   = "\U000F0753" // nf-md-play_circle: following the newest lines
@@ -360,8 +360,8 @@ func containerDetail(c k8s.ContainerInfo, pod k8s.ResourceItem) k8s.ResourceDeta
 
 // --- the tabs' content -----------------------------------------------------
 
-// logRows are a log line as the lib draws reading content (components,
-// control characters; terminu.Reading): a \n starts another row, a \r
+// logRows are a log line as the lib draws reading content (tdp
+// components.5; terminu.Reading): a \n starts another row, a \r
 // leaves its last state, colour codes colour, a tab is input_tab_width
 // spaces, any other control character is its name in Red.
 func logRows(s string) []string { return terminu.Reading(strings.TrimSuffix(s, "\n")) }
@@ -430,7 +430,7 @@ func (m *Model) renderLogs(w int) (header, rows []string, line []int) {
 func table(w int, titles []string, rows [][]string, bad func(i int) bool) (header, out []string, lineOf []int) {
 	n := len(titles)
 	// The cluster's words are names and short texts: a control character
-	// in them is its name in Red (components, control characters).
+	// in them is its name in Red (tdp components.5).
 	esc := make([][]string, len(rows))
 	for i, r := range rows {
 		esc[i] = make([]string, len(r))
@@ -469,7 +469,7 @@ func table(w int, titles []string, rows [][]string, bad func(i int) bool) (heade
 			if c == msg {
 				v = folded[0]
 			}
-			if c == n-1 { // the age: a number column, right-aligned (components/layout/panel)
+			if c == n-1 { // the age: a number column, right-aligned (tdp panel.5)
 				parts = append(parts, terminu.PadLeft(v, ws[c]))
 				continue
 			}
@@ -555,7 +555,7 @@ func (m *Model) renderInfo(w int) (header, rows []string, line []int) {
 // --- Relatives -------------------------------------------------------------
 
 // relatedGroup is the group of the relatives with no section of their own:
-// in a grouped list every row is under a title (components/layout/panel).
+// in a grouped list every row is under a title (tdp panel.11).
 const relatedGroup = "Related"
 
 func cmpOr(s, def string) string {
@@ -781,7 +781,7 @@ func (m *Model) setDetailActions() {
 	tab := m.currentTab()
 	zoom := terminu.Action{Key: "z", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Do: m.toggleZoom}
 	// Where Enter is an item's, zoom is in the hint: an empty tab still has
-	// a key for the whole panel (components/layout/panel).
+	// a key for the whole panel (tdp panel.1).
 	zoomHinted := zoom
 	zoomHinted.Hint = "zoom"
 	yaml := terminu.Action{Key: "Y", Label: "YAML", Desc: "this resource's manifest", Scope: terminu.PanelScope, Stay: true, Do: m.yamlOfLevel}

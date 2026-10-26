@@ -236,7 +236,7 @@ func rowCells(rt k8s.ResourceType, item k8s.ResourceItem) []string {
 }
 
 // numberColumns are the columns that hold a count (or an age): right-aligned
-// and sorted by value (components/layout/panel).
+// and sorted by value (tdp panel.5, panel.6).
 var numberColumns = map[string]bool{"Restarts": true, "Desired": true, "Current": true, "Up-to-date": true,
 	"Available": true, "Active": true, "Rev": true, "Age": true, "Updated": true, "Data": true, "Secrets": true,
 	"Min": true, "Max": true, "Replicas": true, "Allowed": true}
@@ -244,13 +244,13 @@ var numberColumns = map[string]bool{"Restarts": true, "Desired": true, "Current"
 // lastColumns say what a row is and how it is doing: on a narrow panel they
 // are taken away in this order, after the other short ones (an IP, a node)
 // have gone from the right, and before the long ones (longColumns), which
-// shrink first (components/layout/panel). The name never goes, and a sorted
+// shrink first (tdp panel.5). The name never goes, and a sorted
 // column goes after them all, its arrow in sight as long as it can be.
 var lastColumns = []string{"Restarts", "Age", "Ready", "Status", "Type", "Reason", "", "Namespace"}
 
 // longColumns hold long values (a name, a message, a list of hosts): on a
 // narrow panel they share the room the short ones leave, each cut to fit,
-// before any column is taken away (Column.Shrink; components/layout/panel).
+// before any column is taken away (Column.Shrink; tdp panel.5).
 var longColumns = map[string]bool{"Name": true, "Message": true, "Object": true, "Image": true, "Ports": true,
 	"Hosts": true, "Endpoints": true, "Targets": true, "Reference": true, "Server": true, "Cluster": true, "User": true,
 	"Chart": true, "Claim": true, "Provisioner": true, "Parameters": true, "Pod-Selector": true}
@@ -324,7 +324,7 @@ func (m *Model) setListRows() {
 	m.listP.Name = ""
 	if n := len(m.drill); n > 0 {
 		// What the level is in: [2] PODS: nginx-7d4f, the path above the
-		// header (components/layout/panel: the location row).
+		// header (tdp panel.10, the location row).
 		m.listP.Name = m.drill[n-1].parent.Name
 	}
 	if m.atContainers() {
@@ -367,7 +367,7 @@ func (m *Model) setListRows() {
 			cells[0] += " *"
 		}
 		// The app's colours go as spans, the text staying in the cells
-		// (components, control characters).
+		// (tdp components.5).
 		styled := make([][]terminu.Span, len(cells))
 		sortVals := make([]string, len(cells))
 		for c := range cells {
@@ -463,7 +463,7 @@ func statusColor(status, pending, failed string) string {
 }
 
 // listEsc is Esc on panel 2, one level up (tdp K4): out of the drill. Esc in
-// the Compare mode leaves the mode (the lib's, K11).
+// the Compare mode leaves the mode (the lib's, tdp K11).
 func (m *Model) listEsc() tea.Cmd {
 	if len(m.drill) > 0 {
 		return m.drillOut()
@@ -688,8 +688,8 @@ func (m *Model) drillOut() tea.Cmd {
 
 // --- compare --------------------------------------------------------------
 
-// The Compare mode and its DIFF are the lib's (tdp K11, panel's compare mode,
-// note's compare): kbu names a row by its namespace and name, and compares
+// The Compare mode and its DIFF are the lib's (tdp K11, panel.9,
+// note.8): kbu names a row by its namespace and name, and compares
 // rows by their YAML cleaned of what the server writes, from the list it has.
 
 func (m *Model) rowItem(r terminu.Row) (k8s.ResourceItem, bool) {

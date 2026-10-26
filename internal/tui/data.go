@@ -116,7 +116,7 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		}
 		m.setDetail(msg.detail, msg.events)
 		if msg.err != nil {
-			// An empty tab says why it is empty (components/layout/panel,
+			// An empty tab says why it is empty (tdp panel.5,
 			// errors); the App Log keeps it.
 			fact, _, _ := strings.Cut(msg.err.Error(), "\n")
 			m.log.warn("Details: " + fact)
@@ -186,7 +186,7 @@ func (m *Model) waitWatch() tea.Cmd {
 
 // onWatchErr is the watch failing: the App Log keeps it; the first time, a
 // toast says it (tdp F5), and an empty panel 2 says why it is empty
-// (components/layout/panel, errors). The watcher tries again on its own.
+// (tdp panel.5, errors). The watcher tries again on its own.
 func (m *Model) onWatchErr(err error) tea.Cmd {
 	text := capital(err.Error()) // "listing pods: …", as Go errors are written
 	m.log.err(text)

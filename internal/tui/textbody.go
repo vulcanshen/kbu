@@ -7,7 +7,7 @@ import (
 	terminu "github.com/vulcanshen/terminu-go"
 )
 
-// textBody is a panel body of lines with no cursor (components/layout/panel:
+// textBody is a panel body of lines with no cursor (tdp panel.5:
 // a log, a table of events): content laid out for the panel's width, a
 // header that does not scroll, and — when it follows — the view sticking to
 // the end while new lines come in, until the user scrolls up.
@@ -19,7 +19,7 @@ import (
 type textBody struct {
 	render func(w int) (header, rows []string, line []int)
 	// empty and hint are what it says with nothing to show: a fact and a
-	// hint naming a key (components/layout/screen, empty states).
+	// hint naming a key (tdp screen.8, empty states).
 	empty, hint string
 	follow      bool   // it follows the end when it was at the end
 	live        bool   // following now: at the end, not scrolled away
@@ -115,7 +115,7 @@ func (b *textBody) Draw(w, h int, focused bool) []string {
 		}
 	}
 	// The lines seen, not the rows: a folded line counts once
-	// (components/layout/popup, the scroll position's units).
+	// (tdp popup.6, the scroll position's units).
 	b.scroll = ""
 	if len(b.rows) > rows && rows > 0 {
 		last := min(b.top+rows, len(b.rows)) - 1
@@ -150,7 +150,7 @@ func (b *textBody) Key(key string, _ tea.KeyMsg) (bool, tea.Cmd) {
 }
 
 // Empty reports nothing to show, so the panel draws its loading or its
-// failure in the middle instead (components/layout/panel).
+// failure in the middle instead (tdp panel.5).
 func (b *textBody) Empty() bool { return len(b.rows) == 0 }
 
 // HasItem: a text has no items; Enter works on the whole panel (tdp K3).

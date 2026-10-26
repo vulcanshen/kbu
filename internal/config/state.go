@@ -82,7 +82,7 @@ type State struct {
 	Tab string `yaml:"tab,omitempty"`
 
 	// CompareSplit is which the compare showed last, SPLIT rather than
-	// UNIFIED (tdp note, compare: kept with the state).
+	// UNIFIED (tdp note.8: kept with the state).
 	CompareSplit bool `yaml:"compare_split,omitempty"`
 }
 
@@ -98,7 +98,7 @@ func DefaultState() *State {
 // user's config-dir stays flat and both files are equally discoverable
 // on `ls`.
 //
-// $KBU__STATE (the family's <APP>__STATE, tdp D6) is a state directory:
+// $KBU__STATE (the family's <APP>__STATE, tdp E2) is a state directory:
 // state.yaml goes in it — useful for tests, sandboxed launches, or a
 // per-project session. Unset, the state follows ConfigDir() (and so
 // $KBU__CONFIG). Whitespace-trimmed for the same reason ConfigDir is: a
