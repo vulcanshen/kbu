@@ -267,11 +267,12 @@ pod:
 
 ## terminu 家族
 
-kbu 遵循 [terminu design](https://github.com/vulcanshen/terminu)：跟家族其他成員一樣的鍵、一樣的 menu ——
-[filu](https://github.com/vulcanshen/filu)（檔案）、[sshu](https://github.com/vulcanshen/sshu)（ssh）、
-[webu](https://github.com/vulcanshen/webu)（網頁）、[locku](https://github.com/vulcanshen/locku)（鎖定螢幕）、
-[kamonu](https://github.com/vulcanshen/kamonu)（家族的 mark）、[ccdrawu](https://github.com/vulcanshen/ccdrawu)
-（Claude Code 的 sidebar 與 status line）與 [hostu](https://github.com/vulcanshen/hostu)（在終端機裡用 profile 切換 hosts 檔）。
+kbu 遵循 [terminu design](https://github.com/vulcanshen/terminu)：跟家族其他成員一樣的鍵、一樣的 menu。
+
+- [terminu design](https://github.com/vulcanshen/terminu)（tdp）—— 不用讀文件就會用的終端機介面
+- [terminu-go](https://github.com/vulcanshen/terminu-go) —— 照 terminu design 畫出 kbu 畫面的 Go library
+- [terminu-harness](https://github.com/vulcanshen/terminu-harness) —— 用 terminu design 與 terminu-go 做 TUI app 的
+  Claude Code plugin
 
 ## License
 

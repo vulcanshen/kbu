@@ -292,11 +292,13 @@ pod:
 ## terminu family
 
 kbu follows the [terminu design](https://github.com/vulcanshen/terminu): the same keys and the same menus as the rest of the
-family — [filu](https://github.com/vulcanshen/filu) (files), [sshu](https://github.com/vulcanshen/sshu) (ssh),
-[webu](https://github.com/vulcanshen/webu) (the web), [locku](https://github.com/vulcanshen/locku) (screen lock),
-[kamonu](https://github.com/vulcanshen/kamonu) (the family's marks), [ccdrawu](https://github.com/vulcanshen/ccdrawu)
-(a sidebar and a status line for Claude Code) and [hostu](https://github.com/vulcanshen/hostu) (switch the hosts file
-between profiles, in the terminal).
+family.
+
+- [terminu design](https://github.com/vulcanshen/terminu) (tdp) — terminal UIs you can use without reading the docs
+- [terminu-go](https://github.com/vulcanshen/terminu-go) — the Go library that draws kbu's screen the way terminu design
+  says
+- [terminu-harness](https://github.com/vulcanshen/terminu-harness) — a Claude Code plugin that makes TUI apps with terminu
+  design and terminu-go
 
 ## License
 
