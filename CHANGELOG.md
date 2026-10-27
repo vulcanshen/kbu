@@ -2,7 +2,7 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
-## Unreleased
+## v4.0.0 — tdp v1.0.0
 
 Not compatible with the last release in three ways:
 
@@ -20,7 +20,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.11.5: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v1.0.0: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -93,6 +93,8 @@ The rest:
     first. `z` shows them all.
   - **Drilled into a row**, panel 2's title names it (`[2] PODS: web-7d4f`)
     and the path is on the first row of the panel (`deployment/web > pods`).
+  - **An empty panel 2 says why**: `loading pods…` while the list is on its
+    way; when the watch fails, the error in red, and a toast the first time.
   - **Below 40×15** kbu shows only its name, the size it needs and how to
     quit (`Ctrl-C` twice); the screen comes back as the window grows.
 - **Settings live in `~/.config/kbu` on every platform** (tdp E3), or in
