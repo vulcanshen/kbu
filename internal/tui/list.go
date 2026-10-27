@@ -550,7 +550,7 @@ func (m *Model) setListActions() {
 			item = append(item, terminu.Action{Key: "D", Label: "Delete", Desc: "kubectl delete", Scope: terminu.ItemScope,
 				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Clear: true, Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
-		// The compare is not in the App Log: the user settled it (KB34).
+		// The compare is not in the App Log (tdp note.7).
 		item = append(item,
 			m.app.CompareAction(m.listP, m.list, terminu.Compare{Key: "C", Name: m.rowLabel, Text: m.rowYAML, Split: &m.compareSplit}),
 			terminu.Action{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
