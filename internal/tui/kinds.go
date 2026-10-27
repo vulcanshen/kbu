@@ -72,10 +72,7 @@ func (m *Model) setKindActions() {
 		pin,
 		{Key: "Enter", Label: "Show in panel 2", Desc: "focus panel 2 on this kind", Scope: terminu.ItemScope, Hint: "open",
 			ToDetails: func() bool { return true },
-			Do: func() tea.Cmd {
-				m.log.info("Showed " + m.kindAt.String() + " in panel 2")
-				return m.selectKind(m.kindAt, false)
-			}},
+			Do:        func() tea.Cmd { return m.selectKind(m.kindAt, false) }},
 		{Key: "D", Label: "Drag to reorder pinned kinds", Desc: "move this kind among the pinned ones", Scope: terminu.ItemScope,
 			Hidden:   func() bool { return !m.isPinned(m.kindAt) },
 			Disabled: func() bool { return len(m.pinned) < 2 },

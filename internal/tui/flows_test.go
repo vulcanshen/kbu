@@ -262,14 +262,14 @@ func TestTheAppLog(t *testing.T) {
 
 // tdp note.7: the App Log has the operations the user ran, one that only
 // looks too (a zoom, a YAML); moving the cursor goes unrecorded, panel 1's
-// over other kinds too.
+// over other kinds too, and so does Enter into panel 2: it moves the focus.
 func TestTheAppLogHasWhatTheUserDid(t *testing.T) {
 	m := newTestModel(t)
-	m.press("j", "j", "k", "k")
+	m.press("j", "j", "k", "k", "Enter")
 	m.feed(pod("demo", "a"))
-	m.press("z", "z", "Tab", "Y", "Esc", "!")
+	m.press("z", "z", "Y", "Esc", "!")
 	s := m.screen_()
-	for _, want := range []string{"Zoomed in on panel 1", "Zoomed out",
+	for _, want := range []string{"Zoomed in on panel 2", "Zoomed out",
 		"Opened the YAML of " + subject(k8s.ResourcePods, pod("demo", "a"))} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the App Log has no %q:\n%s", want, s)
@@ -277,5 +277,8 @@ func TestTheAppLogHasWhatTheUserDid(t *testing.T) {
 	}
 	if strings.Contains(s, "Switched to") {
 		t.Errorf("moving the cursor is in the App Log:\n%s", s)
+	}
+	if strings.Contains(s, "Showed") {
+		t.Errorf("Enter into panel 2 is in the App Log:\n%s", s)
 	}
 }
