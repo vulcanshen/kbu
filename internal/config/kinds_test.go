@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -130,6 +131,9 @@ func TestMoveKindDataThatCannotMove(t *testing.T) {
 // Written to kinds.yaml but not taken out of config.yaml (its directory
 // will not take a new file): kinds.yaml goes again, they stay in config.yaml.
 func TestMoveKindDataUndoneWhenConfigStays(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a read-only directory does not stop a write on Windows")
+	}
 	cfgPath, to := writeOld(t)
 	if err := os.Chmod(filepath.Dir(cfgPath), 0o555); err != nil {
 		t.Fatal(err)

@@ -179,7 +179,9 @@ func TestTheMovedSettingsAreTold(t *testing.T) {
 		{What: "settings", From: "/old/kbu/state.yaml", To: "/new/kbu/state.yaml"},
 		{What: "logs", From: "/old/kbu/logs", To: "/data/logs"},
 	}})
-	if s := m.screen_(); !strings.Contains(s, "Moved kbu's settings from /old/kbu to /new/kbu, and its logs from") {
+	// The directory is filepath.Dir's: \old\kbu on Windows.
+	want := "Moved kbu's settings from " + filepath.FromSlash("/old/kbu") + " to " + filepath.FromSlash("/new/kbu") + ", and its logs from"
+	if s := m.screen_(); !strings.Contains(s, want) {
 		t.Errorf("no toast for the move:\n%s", s)
 	}
 	m = newTestModelWith(t, Options{Moved: []config.Moved{
