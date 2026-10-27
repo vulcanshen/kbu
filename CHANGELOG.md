@@ -20,7 +20,7 @@ Not compatible with the last release in three ways:
 The rest:
 
 - **kbu's screen is drawn by terminu-go**, the terminu family's library, and
-  follows terminu design v0.10.3: the panels, the `Space` menu, `?`, the hints,
+  follows terminu design v0.11.0: the panels, the `Space` menu, `?`, the hints,
   confirms, toasts, popups and their animation are the family's own, the same
   as in every other family app. What changes for you:
   - **The namespace picker is a checkbox list**: `Space` checks a namespace,
@@ -39,7 +39,9 @@ The rest:
     every toast and error in it by itself; the footer says `!:2 errors` until
     you have looked. The statusbar no longer counts them, and the App Log is
     no longer cleared by hand: it is kept only while kbu runs. Its entries
-    start with a capital, as toasts do.
+    start with a capital, as toasts do. It has what you did, what only
+    looks included (a YAML opened, a zoom); moving the cursor is not in it,
+    nor the kinds panel 1's cursor passes over.
   - **A name or a message with a control character** (a tab, a line break, a
     colour code) shows it by its name in red, in lists, menus, toasts and
     the statusbar; a toast or an error of many lines from kubectl or the API
@@ -91,8 +93,8 @@ The rest:
     first. `z` shows them all.
   - **Drilled into a row**, panel 2's title names it (`[2] PODS: web-7d4f`)
     and the path is on the first row of the panel (`deployment/web > pods`).
-  - **Below 40×15** kbu shows only its name and the size it needs; the
-    screen comes back as the window grows.
+  - **Below 40×15** kbu shows only its name, the size it needs and how to
+    quit (`Ctrl-C` twice); the screen comes back as the window grows.
 - **Settings live in `~/.config/kbu` on every platform** (tdp E3), or in
   `$XDG_CONFIG_HOME/kbu`; `KBU__CONFIG` still moves them. On macOS and Windows
   an older kbu kept them in `~/Library/Application Support/kbu` and

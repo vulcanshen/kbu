@@ -692,6 +692,7 @@ func (m *Model) onRelative(msg relativeMsg) tea.Cmd {
 		return m.toastErr(fmt.Sprintf("Drill failed: %v", msg.err))
 	}
 	m.det.chain = append(m.det.chain, relFrame{ref: msg.ref, item: msg.item, detail: msg.detail})
+	m.log.info("Drilled into " + subject(msg.ref.Type, msg.item) + " on the Relatives tab")
 	m.refreshRelatives()
 	m.setTabLabels()
 	m.setDetailActions()
@@ -714,6 +715,9 @@ func (m *Model) chainRefs() []k8s.RefTarget {
 func (m *Model) relBack() tea.Cmd {
 	if n := len(m.det.chain); n > 0 {
 		m.det.chain = m.det.chain[:n-1]
+		if refs := m.chainRefs(); len(refs) > 0 {
+			m.log.info("Back up the chain to " + refSubject(refs[len(refs)-1]))
+		}
 		m.refreshRelatives()
 		m.setTabLabels()
 		m.setDetailActions()
@@ -796,7 +800,11 @@ func (m *Model) setDetailActions() {
 		acts = []terminu.Action{
 			{Key: "Enter", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Hint: "zoom", Do: m.toggleZoom},
 			{Label: "Go live", Desc: "jump to the newest " + what + " and follow ([G])", Scope: terminu.PanelScope,
-				Do: func() tea.Cmd { m.detailP.Body.Key("G", tea.KeyMsg{}); return nil }},
+				Do: func() tea.Cmd {
+					m.log.info("Went live on the " + tab + " tab")
+					m.detailP.Body.Key("G", tea.KeyMsg{})
+					return nil
+				}},
 			copyAll, yaml, zoom,
 		}
 	case "Relatives":

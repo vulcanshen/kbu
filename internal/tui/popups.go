@@ -54,6 +54,7 @@ func (s *yamlSearch) go_(step int) tea.Cmd {
 // openYAML shows a resource's YAML (tdp note): / searches,
 // n|N go to the next and the previous match, v selects, y copies, E edits.
 func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string) tea.Cmd {
+	m.log.info("Opened the YAML of " + subject(rt, item))
 	if yaml == "" {
 		yaml = "# no YAML — the resource may still be loading"
 	}
@@ -257,6 +258,15 @@ func (m *Model) openSortDirection(rt k8s.ResourceType, column string) tea.Cmd {
 
 // sortSaved writes the sort down and shows it, when panel 2 shows that kind.
 func (m *Model) sortSaved(rt k8s.ResourceType) tea.Cmd {
+	by := "the namespace, then the name"
+	if chain := m.kindData.GetSort(rt.KubectlName()); len(chain) > 0 {
+		cols := make([]string, len(chain))
+		for i, c := range chain {
+			cols[i] = c.Column + " " + directionWord(c.Direction)
+		}
+		by = strings.Join(cols, ", then ")
+	}
+	m.log.info("Sorted " + rt.String() + " by " + by)
 	if rt == m.shownKind() {
 		m.list.SortBy(m.sortKeys(rt, columnsOf(rt))...)
 	}
@@ -320,6 +330,7 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 // switchTo shows ref's kind in panels 1 and 2, the cursor on ref once its
 // list arrives.
 func (m *Model) switchTo(ref k8s.RefTarget) tea.Cmd {
+	m.log.info("Switched panels 1 and 2 to " + refSubject(ref))
 	m.kinds.ClearFilter()
 	m.kinds.Select(string(ref.Type))
 	m.kindAt = ref.Type

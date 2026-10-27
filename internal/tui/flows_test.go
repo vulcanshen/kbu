@@ -259,3 +259,23 @@ func TestTheAppLog(t *testing.T) {
 		}
 	}
 }
+
+// tdp note.7: the App Log has the operations the user ran, one that only
+// looks too (a zoom, a YAML); moving the cursor goes unrecorded, panel 1's
+// over other kinds too.
+func TestTheAppLogHasWhatTheUserDid(t *testing.T) {
+	m := newTestModel(t)
+	m.press("j", "j", "k", "k")
+	m.feed(pod("demo", "a"))
+	m.press("z", "z", "Tab", "Y", "Esc", "!")
+	s := m.screen_()
+	for _, want := range []string{"Zoomed in on panel 1", "Zoomed out",
+		"Opened the YAML of " + subject(k8s.ResourcePods, pod("demo", "a"))} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the App Log has no %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Switched to") {
+		t.Errorf("moving the cursor is in the App Log:\n%s", s)
+	}
+}

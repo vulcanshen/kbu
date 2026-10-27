@@ -96,7 +96,6 @@ func (m *Model) selectKind(rt k8s.ResourceType, debounce bool) tea.Cmd {
 	if rt == "" || (rt == m.current && m.kindSeq > 0) {
 		return nil
 	}
-	m.log.info("Switched to " + rt.String())
 	m.current = rt
 	m.drill = nil
 	m.rootItems = nil
@@ -551,6 +550,8 @@ func (m *Model) setListActions() {
 			item = append(item, terminu.Action{Key: "D", Label: "Delete", Desc: "kubectl delete", Scope: terminu.ItemScope,
 				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Clear: true, Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
+		// TODO(lib KB34): the compare is the lib's, so is what it opens: the
+		// App Log has no entry for it (tdp note.7).
 		item = append(item,
 			m.app.CompareAction(m.listP, m.list, terminu.Compare{Key: "C", Name: m.rowLabel, Text: m.rowYAML, Split: &m.compareSplit}),
 			terminu.Action{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
@@ -635,6 +636,7 @@ func (m *Model) drillIn() tea.Cmd {
 		m.setListRows()
 		m.rowSeq++
 		m.det.uid = ""
+		m.log.info("Drilled into " + subject(rt, item))
 		return m.rowMovedNow()
 	}
 	if !rt.SupportsDrillDown() || m.client == nil {
@@ -662,6 +664,7 @@ func (m *Model) onChildren(msg childrenMsg) tea.Cmd {
 	}
 	items := filterHelm(msg.children, msg.kind)
 	sortDefault(items)
+	m.log.info("Drilled into " + subject(m.shownKind(), msg.parent))
 	m.drill = append(m.drill, drillLevel{parentKind: m.shownKind(), parent: msg.parent, kind: msg.kind, items: items})
 	m.stopLogs()
 	m.list.ClearFilter()
@@ -683,6 +686,7 @@ func (m *Model) drillOut() tea.Cmd {
 	m.setListRows()
 	m.list.Select(itemKey(back))
 	m.resetDetail(m.shownKind())
+	m.log.info("Back to the " + m.shownKind().String() + " list")
 	return m.rowMovedNow()
 }
 
@@ -737,6 +741,11 @@ func (m *Model) toggleHelm() tea.Cmd {
 // the three back. It is a change of layout, not a mode: z puts it back.
 func (m *Model) toggleZoom() tea.Cmd {
 	m.app.ForceNarrow = !m.app.ForceNarrow
+	if m.app.ForceNarrow {
+		m.log.info(fmt.Sprintf("Zoomed in on panel %d", slices.Index(m.screen.Panels, m.screen.Focused())+1))
+	} else {
+		m.log.info("Zoomed out")
+	}
 	m.setListRows() // panel 2's width changed: which columns fit
 	return nil
 }
