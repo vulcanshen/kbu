@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.11.0/principle)（tdp v0.11.0），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.6.0）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v0.11.1/principle)（tdp v0.11.1），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v0.6.1）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -129,8 +129,8 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 - **錯誤與 App Log**（tdp F5、K1）：App Log 是 lib 的，panel 上按 `!` 打開，toast 與 error popup 自己會進去，footer 寫還沒看過的錯誤、
   警告數。kbu 用 `app.Log` 記其他的事：使用者做的操作與結果，只看的也記（tdp v0.11.0 note.7：開 YAML 與 helm 的文件、zoom、
   drill 進出、pin、排序、breadcrumb、Alterm、Go live；edit、exec、切 context、namespace；移動 cursor 不記，panel 1 的 cursor
-  經過的種類也不記，舊版記的 `Switched to <種類>` 拿掉了；compare 是 lib 的，App Log 沒有它，KB34；`/` 的篩選也是 lib 的，
-  tdp 還沒寫要記什麼，terminu-go G103）、背景的事（連上叢集、
+  經過的種類也不記，舊版記的 `Switched to <種類>` 拿掉了；compare 不記，user 定的，KB34；`/` 的篩選不記，tdp v0.11.1
+  note.7：只是換看得到的範圍，跟移動 cursor 一樣）、背景的事（連上叢集、
   找到的 CRD、namespace 選擇的修正、log 串流的狀況）、外面讀不到的細節。toast 已經記的不再記一次；toast 是短字，kubectl 或 API
   給的多行訊息只放第一行，整段記進 App Log（`Model.toast`；error popup 是 `Model.errorPopup`，tdp v0.9.15 components-32）。kbu 自己的
   字不放 `\n`：好幾句的訊息一句一列給（`app.Error(title, rows...)`，例如 `Not moved`；components-30、31），所以畫面上紅色的 `\n`
@@ -224,7 +224,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v0.11.0/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v0.11.1/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|
