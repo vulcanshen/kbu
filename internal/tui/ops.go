@@ -91,6 +91,11 @@ func subject(rt k8s.ResourceType, item k8s.ResourceItem) string {
 	return s
 }
 
+// refSubject is subject for a resource the Relatives chain names.
+func refSubject(ref k8s.RefTarget) string {
+	return subject(ref.Type, k8s.ResourceItem{Name: ref.Name, Namespace: ref.Namespace})
+}
+
 // --- YAML -----------------------------------------------------------------
 
 func (m *Model) yamlHere() tea.Cmd {
@@ -368,6 +373,7 @@ func (m *Model) onHelmDoc(msg helmDocMsg) tea.Cmd {
 	if msg.label == "Creator Notes" {
 		lang = ""
 	}
+	m.log.info("Opened the " + msg.label + " of release/" + msg.release)
 	return m.app.Viewer(&terminu.Viewer{Title: msg.label, Subject: "release/" + msg.release, Glyph: glyphYAML,
 		Lines: strings.Split(strings.TrimRight(msg.content, "\n"), "\n"), Lang: lang,
 		Keys:   []terminu.ViewerKey{{Key: "y", Desc: "copy", Do: func() tea.Cmd { return copyText(msg.content) }}},

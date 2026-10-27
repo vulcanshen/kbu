@@ -144,7 +144,7 @@ func New(o Options) *Model {
 	m.log = appLog{app: a}
 	a.QuitDesc = "leave kbu"
 	a.ShiftTab = true
-	// kbu's least size is lower than the family's 80×40 (tdp L1): it runs in
+	// kbu's least size is lower than the family's 60×32 (tdp L1): it runs in
 	// a terminal's usual 80×24 and in a split pane, its narrow layout (one
 	// panel) working down to minWidth×minHeight. docs/dev-remarks.md says why.
 	a.MinWidth, a.MinHeight = minWidth, minHeight

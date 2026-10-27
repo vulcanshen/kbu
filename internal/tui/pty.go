@@ -15,6 +15,7 @@ import (
 
 // showAlterm opens Alterm, starting a shell the first time.
 func (m *Model) showAlterm() tea.Cmd {
+	m.log.info("Opened Alterm")
 	if m.alterm == nil || m.alterm.Exited() {
 		m.alterm = m.newAlterm()
 	}

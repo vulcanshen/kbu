@@ -70,7 +70,7 @@ Relatives 導覽、YAML 比對與內嵌的 shell 都是內建的；kbu 沒做的
   `TERMINU__ICON_WIDTH` 與 `TERMINU__POWERLINE_WIDTH` —— terminu 家族共用：設一次，家族每個 app 都讀得到；kbu 在家族其他
   app 的 terminal 裡跑時，外層的 app 會替它設好。
 - **truecolor 終端機**（24-bit 色）：柔和的顏色與疊起來的 popup 之間的明暗，在 256 色下分不出來。
-- **終端機至少 40×15。** 60 欄以下 kbu 一次只畫一個 panel；比 40×15 小時只畫名稱與需要的大小，把視窗拉大就回來。
+- **終端機至少 40×15。** 60 欄以下 kbu 一次只畫一個 panel；比 40×15 小時只畫名稱、需要的大小與怎麼離開（按兩次 `Ctrl-C`），把視窗拉大就回來。
 
 ### 快速安裝（macOS / Linux）
 

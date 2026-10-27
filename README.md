@@ -81,8 +81,8 @@ an embedded shell are built in; any other tool you trust rides along in that she
   runs inside another family app's terminal, that app sets them for it.
 - **A truecolor terminal** (24-bit colour): the soft colours and the shading between stacked popups cannot be told apart in
   256 colours.
-- **A terminal of at least 40×15.** Below 60 columns kbu shows one panel at a time; below 40×15 it shows only its name and
-  the size it needs, and comes back as you make the window bigger.
+- **A terminal of at least 40×15.** Below 60 columns kbu shows one panel at a time; below 40×15 it shows only its name,
+  the size it needs and how to quit (`Ctrl-C` twice), and comes back as you make the window bigger.
 
 ### Quick install (macOS / Linux)
 

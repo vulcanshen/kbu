@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	terminu "github.com/vulcanshen/terminu-go"
@@ -71,7 +72,10 @@ func (m *Model) setKindActions() {
 		pin,
 		{Key: "Enter", Label: "Show in panel 2", Desc: "focus panel 2 on this kind", Scope: terminu.ItemScope, Hint: "open",
 			ToDetails: func() bool { return true },
-			Do:        func() tea.Cmd { return m.selectKind(m.kindAt, false) }},
+			Do: func() tea.Cmd {
+				m.log.info("Showed " + m.kindAt.String() + " in panel 2")
+				return m.selectKind(m.kindAt, false)
+			}},
 		{Key: "D", Label: "Drag to reorder pinned kinds", Desc: "move this kind among the pinned ones", Scope: terminu.ItemScope,
 			Hidden:   func() bool { return !m.isPinned(m.kindAt) },
 			Disabled: func() bool { return len(m.pinned) < 2 },
@@ -136,6 +140,11 @@ func (m *Model) togglePin() tea.Cmd {
 	m.refreshKinds()
 	m.kinds.Select(string(rt))
 	m.setKindActions()
+	if m.isPinned(rt) {
+		m.log.info("Pinned " + rt.String())
+	} else {
+		m.log.info("Unpinned " + rt.String())
+	}
 	if err := m.savePinned(); err != nil {
 		return m.toastErr("Pin save failed: " + err.Error())
 	}
@@ -194,6 +203,11 @@ func (m *Model) moveDragged(down bool) {
 func (m *Model) dropDragged() tea.Cmd {
 	m.kindsP.LeaveMode()
 	m.endDrag()
+	names := make([]string, len(m.pinned))
+	for i, rt := range m.pinned {
+		names[i] = rt.String()
+	}
+	m.log.info("Reordered the pinned kinds: " + strings.Join(names, ", "))
 	if err := m.savePinned(); err != nil {
 		return m.toastErr("Pin order save failed: " + err.Error())
 	}
