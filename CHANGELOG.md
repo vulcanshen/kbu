@@ -2,6 +2,17 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
+## Unreleased
+
+- On terminu-go v1.1.0-beta.1 (tdp v1.1.0-beta.1). Nothing you see
+  changes.
+- The repository keeps Claude Code's files out of git (tdp project.3):
+  `.gitignore` is the family's new template, which leaves out `CLAUDE.md`
+  and what is under `.claude/` but harness's `.claude/rules/terminu.md`.
+- The developer notes (`docs/dev-remarks.md`) and two code comments no
+  longer cite numbers from notes kept off GitHub; what each decision is
+  stays written there.
+
 ## v4.0.0 — tdp v1.0.0
 
 Not compatible with the last release in three ways:

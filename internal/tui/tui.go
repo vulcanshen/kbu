@@ -138,7 +138,7 @@ func New(o Options) *Model {
 		m.watcher = k8s.NewWatcher(m.client.Clientset())
 		m.logs = k8s.NewLogStreamer(m.client.Clientset())
 	}
-	// No mouse: the terminu family is keyboard only (tdp X1; KB4, settled),
+	// No mouse: the terminu family is keyboard only (tdp X1, settled),
 	// and so the Settings popup that held its two settings is gone too.
 	a := terminu.New("kbu")
 	m.log = appLog{app: a}
