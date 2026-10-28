@@ -11,7 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	terminu "github.com/vulcanshen/terminu-go"
 
-	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/v4/internal/k8s"
 )
 
 // Panel 3: the details of the row under panel 2's cursor, in tabs — Logs,

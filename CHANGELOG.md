@@ -2,6 +2,18 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
+## v4.0.1-beta.2 — tdp v1.1.0-beta.3
+
+A beta: nothing you see or press changes. Homebrew and scoop keep v4.0.0;
+this one is only on GitHub, as a pre-release.
+
+- On terminu-go v1.1.0-beta.3 (tdp v1.1.0-beta.3).
+- The module path is `github.com/vulcanshen/kbu/v4`, as Go wants from v2
+  on. Install from source with
+  `go install github.com/vulcanshen/kbu/v4/cmd/kbu@latest`; the old path
+  only reaches v1.7.12. The binaries' build information names the tag
+  (v4.0.1-beta.1's named a pseudo-version, `v1.7.13-0.…`).
+
 ## v4.0.1-beta.1 — tdp v1.1.0-beta.2
 
 A beta: nothing you see or press changes. Homebrew and scoop keep v4.0.0;

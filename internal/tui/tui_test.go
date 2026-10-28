@@ -12,8 +12,8 @@ import (
 
 	terminu "github.com/vulcanshen/terminu-go"
 
-	"github.com/vulcanshen/kbu/internal/config"
-	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/v4/internal/config"
+	"github.com/vulcanshen/kbu/v4/internal/k8s"
 )
 
 // tdp L4: every row is exactly as wide as the terminal, at every size, with

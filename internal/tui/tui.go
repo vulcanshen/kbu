@@ -15,9 +15,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	terminu "github.com/vulcanshen/terminu-go"
 
-	"github.com/vulcanshen/kbu/internal/config"
-	"github.com/vulcanshen/kbu/internal/k8s"
-	"github.com/vulcanshen/kbu/internal/theme"
+	"github.com/vulcanshen/kbu/v4/internal/config"
+	"github.com/vulcanshen/kbu/v4/internal/k8s"
+	"github.com/vulcanshen/kbu/v4/internal/theme"
 )
 
 // Options is what kbu starts with.

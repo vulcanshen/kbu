@@ -10,8 +10,8 @@ import (
 	terminu "github.com/vulcanshen/terminu-go"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/vulcanshen/kbu/internal/config"
-	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/v4/internal/config"
+	"github.com/vulcanshen/kbu/v4/internal/k8s"
 )
 
 // The namespace picker's checks: every one checked is the whole cluster.
