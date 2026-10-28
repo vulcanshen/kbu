@@ -2,10 +2,16 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
-## Unreleased
+## v4.0.1-beta.1 — tdp v1.1.0-beta.2
 
-- On terminu-go v1.1.0-beta.1 (tdp v1.1.0-beta.1). Nothing you see
-  changes.
+A beta: nothing you see or press changes. Homebrew and scoop keep v4.0.0;
+this one is only on GitHub, as a pre-release.
+
+- On terminu-go v1.1.0-beta.2 (tdp v1.1.0-beta.2).
+- A tag like `v4.0.1-beta.1` makes a GitHub pre-release, which the
+  Homebrew tap and the scoop bucket do not get.
+- The release notes are written outside the checkout, so the binaries'
+  build information no longer says `+dirty` (v4.0.0's did).
 - The repository keeps Claude Code's files out of git (tdp project.3):
   `.gitignore` is the family's new template, which leaves out `CLAUDE.md`
   and what is under `.claude/` but harness's `.claude/rules/terminu.md`.
