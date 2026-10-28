@@ -10,15 +10,18 @@
 *.out
 go.work
 go.work.sum
-.claude/settings.local.json
-.claude/worktrees/
+# Claude Code: the maintainer's own instructions and settings stay out of git;
+# harness's rules for the repo (.claude/rules/terminu.md) stay in.
+CLAUDE.md
+/.claude/*
+!/.claude/rules/
+/.claude/rules/*
+!/.claude/rules/terminu.md
 /kbu.exe
 *.swp
 *.swo
 Thumbs.db
 config.yaml
-.claude/
-/CLAUDE.md
 /AGENTS.md
 .forge/
 .checkpoints/
