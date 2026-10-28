@@ -1,8 +1,8 @@
 # kbu 開發者備忘
 
 開發 kbu 時要提醒自己、以及與 AI 協作時記下的決策。kbu 遵循
-[terminu design principle](https://github.com/vulcanshen/terminu/tree/v1.1.0-beta.1/principle)（tdp v1.1.0-beta.1），畫面建在
-[terminu-go](https://github.com/vulcanshen/terminu-go)（v1.1.0-beta.1）上；使用者要知道的在 README，這裡只放開發者需要的。
+[terminu design principle](https://github.com/vulcanshen/terminu/tree/v1.1.0/principle)（tdp v1.1.0），畫面建在
+[terminu-go](https://github.com/vulcanshen/terminu-go)（v1.1.0）上；使用者要知道的在 README，這裡只放開發者需要的。
 
 ---
 
@@ -225,7 +225,7 @@ edit 開始與 delete 成功寫進 `logs/audit-<日期>.log`。
 ## 設計文件導讀
 
 kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版改了什麼在 [`CHANGELOG.md`](../CHANGELOG.md)，畫面與按鍵的規則照
-[tdp](https://github.com/vulcanshen/terminu/tree/v1.1.0-beta.1/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
+[tdp](https://github.com/vulcanshen/terminu/tree/v1.1.0/principle)，畫面的做法照 terminu-go 的 README 與 `docs/`。
 
 | 檔案 | 內容 |
 |---|---|

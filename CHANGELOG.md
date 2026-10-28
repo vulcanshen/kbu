@@ -2,6 +2,29 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
+## v4.0.1 — tdp v1.1.0
+
+Nothing you see or press changes since v4.0.0. What changed is how kbu is
+built and released (the two betas, v4.0.1-beta.1 and v4.0.1-beta.2, are in
+here too):
+
+- **Installing from source takes a new path**:
+  `go install github.com/vulcanshen/kbu/v4/cmd/kbu@latest`. The module path
+  is now `github.com/vulcanshen/kbu/v4`, as Go wants from v2 on; the old
+  path only reaches v1.7.12.
+- The binaries name their release in their build information
+  (`go version -m`); v4.0.0's named a pseudo-version ending in `+dirty`,
+  because the release notes were written into the checkout.
+- A beta (a tag like `v4.0.1-beta.1`) is a GitHub pre-release: Homebrew
+  and scoop get only the stable releases.
+- On terminu-go v1.1.0 (tdp v1.1.0).
+- The repository keeps Claude Code's files out of git (tdp project.3):
+  `.gitignore` is the family's new template, which leaves out `CLAUDE.md`
+  and what is under `.claude/` but harness's `.claude/rules/terminu.md`.
+- The developer notes (`docs/dev-remarks.md`) and two code comments no
+  longer cite numbers from notes kept off GitHub; what each decision is
+  stays written there.
+
 ## v4.0.1-beta.2 — tdp v1.1.0-beta.3
 
 A beta: nothing you see or press changes. Homebrew and scoop keep v4.0.0;
