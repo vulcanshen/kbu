@@ -13,8 +13,8 @@ import (
 	terminu "github.com/vulcanshen/terminu-go"
 	"k8s.io/apimachinery/pkg/api/meta"
 
-	"github.com/vulcanshen/kbu/internal/config"
-	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/v4/internal/config"
+	"github.com/vulcanshen/kbu/v4/internal/k8s"
 )
 
 // Panel 2: the resources of the kind panel 1 shows, live through the

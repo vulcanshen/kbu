@@ -12,8 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/vulcanshen/kbu/internal/config"
-	"github.com/vulcanshen/kbu/internal/k8s"
+	"github.com/vulcanshen/kbu/v4/internal/config"
+	"github.com/vulcanshen/kbu/v4/internal/k8s"
 )
 
 // newTestModel is kbu without a cluster: nothing is fetched, the lists are

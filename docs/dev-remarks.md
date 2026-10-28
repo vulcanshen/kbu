@@ -243,7 +243,7 @@ kbu 沒有另外的設計文件；每個功能的理由在本文件，每一版�
 從原始碼安裝：
 
 ```bash
-go install github.com/vulcanshen/kbu/cmd/kbu@latest
+go install github.com/vulcanshen/kbu/v4/cmd/kbu@latest
 ```
 
 本地：
