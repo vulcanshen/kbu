@@ -292,6 +292,10 @@ make dev          # build 再跑 ./kbu（讀真正的設定與資料）
 `go test`，過了由 goreleaser 建 linux / darwin / windows × amd64 / arm64，推 Homebrew tap 與 Scoop bucket，最後用 CHANGELOG 那一段
 蓋過 release 的內文。版號由 user 決定。
 
+正式版之前先發 beta（tdp project 的「beta」）：tag 是 `vX.Y.Z-beta.N`，CHANGELOG 的標題是 `## vX.Y.Z-beta.N — tdp vA.B.C`。
+goreleaser 把它發成 GitHub 的 pre-release，不推 tap 與 bucket（`skip_upload: auto`），brew、scoop 拿到的還是正式版。之後的正式版
+那一段寫上一個正式版以來的全部改動，beta 的也算；beta 的段落照留。v4.0.1 之前發過 v4.0.1-beta.1、v4.0.1-beta.2。
+
 踩過的坑：
 
 - goreleaser 的 `--release-notes` 不可靠，workflow 最後一步用 CHANGELOG 強制覆寫 release body；`if: always()`，因為 tap push 401 這類
@@ -299,3 +303,7 @@ make dev          # build 再跑 ./kbu（讀真正的設定與資料）
 - 版號沒變的覆蓋發布（刪 release、刪遠端 tag、重打）之後，`brew upgrade` 不會重裝，要 `brew reinstall kbu`。
 - v3.0.0 與更早的 CHANGELOG 標題是 `## [vX.Y.Z] - 日期` 的舊寫法，照 tdp project 不改；v4.0.0 起用 `## vX.Y.Z — tdp vA.B.C`，
   release.yml 用 `$2 == tag` 抓那一段（舊寫法的標題它抓不到，不影響新版）。
+- v2 起 module path 要帶 `/vN`（現在是 `github.com/vulcanshen/kbu/v4`）。沒帶的話 Go 不把 v2 以上的 tag 當成這個 module 的版本：
+  `go install …@latest` 只拿到 v1.7.12，執行檔的 build 資訊是 pseudo-version。升 major 時 go.mod 的 module 和所有 import 一起改。
+- release notes 寫在 checkout 裡，工作目錄就 dirty，Go 把 build 資訊寫成帶 `+dirty` 的版本；release.yml 寫到 `$RUNNER_TEMP`。
+  v4.0.0 的執行檔兩個坑都踩到（`v1.7.13-0.…+dirty`），v4.0.1 的就是 `v4.0.1`。
