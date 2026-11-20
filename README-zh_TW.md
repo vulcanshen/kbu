@@ -51,7 +51,7 @@ Relatives 導覽、YAML diff 與內嵌的 shell 都是內建的；kbu 沒做的�
 
 - **Edit**（`[E]dit`）—— 在 kbu 裡的 terminal 跑真正的 `kubectl edit`，用你的 editor。
 - **Shell**（`[S]hell`）—— `kubectl exec` 進 container，一樣在 kbu 裡。
-- **Delete**（`[D]elete`）—— 一定先問；刪 namespace 會多一句警告。
+- **Delete**（`[x] Delete`）—— 一定先問；刪 namespace 會多一句警告。
 - **Alterm**（`Alt-t`）—— 住在 kbu 裡的 shell。用同一個鍵藏起來、叫回來：目錄、歷史與背景工作都還在。`Alt-Esc` 結束它。
   kbu 沒做的事，你慣用的工具在這裡做。
 - **複製**（`y`）—— 那一列或整個畫面到剪貼簿（OSC 52，所以 ssh 與 tmux 裡也能用）。
@@ -147,13 +147,13 @@ kbu
 |---|---|---|
 | Panel 1 | `P` | 釘選或取消釘選這個種類 |
 | Panel 1 | `D` | 把釘選的種類拖到位置：`j\|k`，然後 `Enter`；`Esc` 放回原處 |
-| Panel 2 | `Y`、`E`、`S`、`D` | YAML、edit、shell、delete |
-| Panel 2 | `C` | Diff：這一列成為基準，panel 2 進入 Diff 模式。移到另一列按 `C` 或 `Enter` 看兩者哪裡不同，要比幾次都可以；`Esc` 離開模式 |
+| Panel 2 | `Y`、`E`、`S`、`x` | YAML、edit、shell、delete |
+| Panel 2 | `D` | Diff：這一列成為基準，panel 2 進入 Diff 模式。移到另一列按 `D` 或 `Enter` 看兩者哪裡不同，要比幾次都可以；`Esc` 離開模式 |
 | Panel 2 | `Alt-S` | 依一欄、再選方向排序清單 |
 | Panel 2 | `.` | 顯示或藏起 Helm chart 管理的物件 |
 | 任何 panel | `z` | 全螢幕；再按 `z` 回到三個 |
 | Panel 3 | `B` | 在 Relatives 走深之後：breadcrumb |
-| panel 上任何地方 | `N`、`C`、`Alt-t` | namespace、context（在 panel 2 上 `C` 是 Diff）、Alterm |
+| panel 上任何地方 | `N`、`C`、`Alt-t` | namespace、context、Alterm |
 
 popup 疊在另一個 popup 上時，只有你正在用的那一個是亮的，底下的都變暗。
 

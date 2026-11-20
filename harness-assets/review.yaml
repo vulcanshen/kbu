@@ -1,0 +1,74 @@
+spec: 1
+tasks:
+  - id: 1
+    accepted: true
+  - id: 2
+    accepted: true
+  - id: 3
+    accepted: true
+  - id: 4
+    accepted: true
+  - id: 5
+    accepted: true
+  - id: 6
+    accepted: true
+  - id: 7
+    accepted: true
+  - id: 8
+    accepted: true
+  - id: 9
+    accepted: true
+  - id: 10
+    accepted: false
+    reason: tdp 不清楚：已定（tdp main ef9d168 的 E3-43：晚到的 E3 toast 併進還在畫面上的啟動 toast），要等 terminu-go v1.2.21-beta.2 才做得到；現在另外跳一個 toast
+  - id: 11
+    accepted: true
+  - id: 12
+    accepted: true
+  - id: 13
+    accepted: true
+  - id: 14
+    accepted: true
+  - id: 15
+    accepted: false
+    reason: tdp 不清楚：已定（tdp main ef9d168 的 E3-43：晚到的 E3 toast 併進還在畫面上的啟動 toast），要等 terminu-go v1.2.21-beta.2 才做得到；現在另外跳一個 toast
+  - id: 16
+    accepted: true
+  - id: 17
+    accepted: true
+  - id: 18
+    accepted: true
+  - id: 19
+    accepted: true
+  - id: 20
+    accepted: true
+  - id: 21
+    accepted: true
+  - id: 22
+    accepted: true
+  - id: 23
+    accepted: true
+  - id: 24
+    accepted: true
+  - id: 25
+    accepted: true
+  - id: 26
+    accepted: true
+  - id: 27
+    accepted: true
+  - id: 28
+    accepted: true
+  - id: 29
+    accepted: true
+  - id: 30
+    accepted: true
+  - id: 31
+    accepted: true
+  - id: 32
+    accepted: true
+  - id: 33
+    accepted: true
+  - id: 34
+    accepted: true
+  - id: 35
+    accepted: true

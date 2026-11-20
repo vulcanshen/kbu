@@ -105,7 +105,7 @@ func (m *Model) selectKind(rt k8s.ResourceType, debounce bool) tea.Cmd {
 	}
 	m.list.ClearFilter()
 	m.setListRows()
-	m.listP.Loading, m.listP.Fail = m.client != nil, nil
+	m.listP.Loading, m.listP.Fail = m.client != nil, m.clientFail()
 	m.listP.LoadingText = "loading " + strings.ToLower(rt.String()) + "…"
 	m.resetDetail(rt)
 	m.kindSeq++
@@ -559,12 +559,12 @@ func (m *Model) setListActions() {
 				Hidden: func() bool { return m.shellAsk() == nil }, Ask: m.shellAsk(), Clear: true, Do: m.runShell})
 		}
 		if allowsDelete(rt) && hasCur {
-			item = append(item, terminu.Action{Key: "D", Label: "Delete", Desc: "kubectl delete", Scope: terminu.ItemScope,
+			item = append(item, terminu.Action{Key: "x", Label: "Delete", Desc: "kubectl delete", Scope: terminu.ItemScope,
 				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Clear: true, Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
 		// The Diff mode is not in the App Log (tdp note.7).
 		item = append(item,
-			m.app.DiffModeAction(m.listP, m.list, terminu.DiffMode{Key: "C", Name: m.rowLabel, Text: m.rowYAML}),
+			m.app.DiffModeAction(m.listP, m.list, terminu.DiffMode{Key: "D", Name: m.rowLabel, Text: m.rowYAML}),
 			terminu.Action{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
 		)
 	}

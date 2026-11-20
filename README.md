@@ -59,7 +59,7 @@ an embedded shell are built in; any other tool you trust rides along in that she
 
 - **Edit** (`[E]dit`) — the real `kubectl edit` in a terminal inside kbu, with your editor.
 - **Shell** (`[S]hell`) — `kubectl exec` into a container, inside kbu too.
-- **Delete** (`[D]elete`) — always asks first; a namespace gets an extra warning.
+- **Delete** (`[x] Delete`) — always asks first; a namespace gets an extra warning.
 - **Alterm** (`Alt-t`) — a shell that lives inside kbu. Hide it and bring it back with the same key: its directory, history
   and jobs stay. `Alt-Esc` ends it. What kbu does not do, your usual tools do here.
 - **Copy** (`y`) — the row, or the whole view, to your clipboard (OSC 52, so it works over ssh and in tmux).
@@ -161,13 +161,13 @@ Every other key is a shortcut of a row of the `Space` menu, and the `?` of each 
 |---|---|---|
 | Panel 1 | `P` | Pin or unpin the kind |
 | Panel 1 | `D` | Drag the pinned kind into place: `j\|k`, then `Enter`; `Esc` puts it back |
-| Panel 2 | `Y`, `E`, `S`, `D` | YAML, edit, shell, delete |
-| Panel 2 | `C` | Diff: the row becomes the anchor and panel 2 goes into the Diff mode. Move to another row and press `C` or `Enter` to see where the two differ, as often as you like; `Esc` leaves the mode |
+| Panel 2 | `Y`, `E`, `S`, `x` | YAML, edit, shell, delete |
+| Panel 2 | `D` | Diff: the row becomes the anchor and panel 2 goes into the Diff mode. Move to another row and press `D` or `Enter` to see where the two differ, as often as you like; `Esc` leaves the mode |
 | Panel 2 | `Alt-S` | Sort the list by a column, then a direction |
 | Panel 2 | `.` | Show or hide what a Helm chart manages |
 | Any panel | `z` | Full screen; `z` again for the three |
 | Panel 3 | `B` | On Relatives, deep in a chain: the breadcrumb |
-| Anywhere on a panel | `N`, `C`, `Alt-t` | Namespaces, context (on panel 2 `C` is Diff), Alterm |
+| Anywhere on a panel | `N`, `C`, `Alt-t` | Namespaces, context, Alterm |
 
 When a popup opens over another, only the one you are in is bright; everything under it dims.
 

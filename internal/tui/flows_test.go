@@ -105,7 +105,7 @@ func TestPanel2EscOneLevel(t *testing.T) {
 	if m.atContainers() {
 		t.Fatal("Esc did not leave the drill")
 	}
-	m.press("C") // the anchor on a
+	m.press("D") // the anchor on a
 	m.press("Esc")
 	if m.list.Anchor != "" {
 		t.Error("the first Esc kept the anchor")
@@ -119,8 +119,8 @@ func TestPanel2SpaceMenu(t *testing.T) {
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "Space")
 	s := m.screen_()
-	for _, want := range []string{"ITEM OPERATION", "[Enter] Drill in", "[Y]AML", "[E]dit", "[S]hell", "[D]elete",
-		"[C] Diff", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "[z]oom",
+	for _, want := range []string{"ITEM OPERATION", "[Enter] Drill in", "[Y]AML", "[E]dit", "[S]hell", "[x] Delete",
+		"[D]iff", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "[z]oom",
 		"Global operation"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the Space menu has no %q:\n%s", want, s)

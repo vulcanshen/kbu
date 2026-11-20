@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -114,19 +115,24 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		if msg.uid == "" || msg.uid != m.det.uid {
 			return nil
 		}
+		if msg.err != nil && m.det.got {
+			msg.events = m.det.events // read again: what the tab has stays (tdp panel.15)
+		}
 		m.setDetail(msg.detail, msg.events)
 		if msg.err != nil {
-			// An empty tab says why it is empty (tdp panel.15,
-			// errors). The details are read again with every change: an
-			// Error toast the first time, again only for another failure
-			// (tdp note.7).
-			fact, _, _ := strings.Cut(msg.err.Error(), "\n")
-			m.detailP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu asks again with the next change; [!] shows the App Log"}
-			if m.detailErr.failed(fact) {
-				return m.app.Toast(terminu.Error, "Details: "+fact)
+			// The details are read again with every change: an Error toast
+			// the first time, again only for another failure (tdp note.7);
+			// a tab that had nothing yet says why it is empty (tdp panel.15).
+			if !m.det.got {
+				fact, _, _ := strings.Cut(msg.err.Error(), "\n")
+				m.detailP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu asks again with the next change; [!] shows the App Log"}
+			}
+			if text := "Details: " + msg.err.Error(); m.detailErr.failed(text) {
+				return m.toast(terminu.Error, text)
 			}
 			return nil
 		}
+		m.det.got = true
 		if m.detailErr.ok() {
 			m.log.info("The details can be read again")
 		}
@@ -193,18 +199,21 @@ func (m *Model) waitWatch() tea.Cmd {
 }
 
 // onWatchErr is the watch failing; the watcher tries again on its own. An
-// empty panel 2 says why it is empty (tdp panel.15, errors); an Error toast
-// says it the first time, and again only for another failure: the same one
-// again is neither shown nor logged (tdp note.7).
+// Error toast says it the first time, and again only for another failure:
+// the same one again is neither shown nor logged (tdp note.7). The rows
+// panel 2 has stay; an empty one says why it is empty (tdp panel.15).
 func (m *Model) onWatchErr(err error) tea.Cmd {
 	// The watcher's own "listing pods: " or "watching pods: " starts it, the
 	// API's words after it kept as they are (tdp toast.2).
-	fact, _, _ := strings.Cut(capital(err.Error()), "\n")
+	text := capital(err.Error())
 	cmds := []tea.Cmd{m.waitWatch()}
-	if m.watchErr.failed(fact) {
+	if m.watchErr.failed(text) {
 		m.listP.Loading = false
-		m.listP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu tries again on its own; [!] shows the App Log"}
-		cmds = append(cmds, m.app.Toast(terminu.Error, fact))
+		if len(m.rootItems) == 0 {
+			fact, _, _ := strings.Cut(text, "\n")
+			m.listP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu tries again on its own; [!] shows the App Log"}
+		}
+		cmds = append(cmds, m.toast(terminu.Error, text))
 	}
 	return tea.Batch(cmds...)
 }
@@ -341,26 +350,30 @@ func discoverCRDs(client *k8s.Client) tea.Cmd {
 // onCRDs puts the CRDs found into panel 1.
 func (m *Model) onCRDs(msg crdsMsg) tea.Cmd {
 	if msg.err != nil {
-		m.log.warn("CRD discovery: " + msg.err.Error())
-		return nil
+		// panel 1 keeps the built-in kinds; the toast says why the custom
+		// ones are not there (tdp panel.15, F5).
+		return m.toast(terminu.Error, "CRD discovery: "+msg.err.Error())
 	}
 	if msg.count > 0 {
 		m.log.info(fmt.Sprintf("Discovered %d CRDs", msg.count))
 	}
 	m.pinned = m.loadPinned()
 	m.refreshKinds()
-	// A saved kind that is a CRD is known only now.
-	if m.state.Kind != "" && m.current == k8s.ResourcePods && m.state.Kind != k8s.ResourcePods.KubectlName() {
-		if rt := k8s.DefaultRegistry.LookupByKubectlName(m.state.Kind); rt != "" {
-			m.kinds.Select(string(rt))
-			return m.selectKind(rt, false)
-		}
+	// The recorded kind not known at start is known now, or not there:
+	// then a Warning says so, and state.yaml keeps it all the same. kbu
+	// stays where it is either way: discovery ending is no reason to move
+	// (tdp E3, K3).
+	if k := m.keepKind; k != nil && k8s.DefaultRegistry.LookupByKubectlName(k.Kind) == "" {
+		// TODO(tgo v1.2.21-beta.2): join the start's toast while it shows
+		// (tdp E3-43, on tdp main ef9d168); a toast of its own until then.
+		return m.toastWarn(fmt.Sprintf("Kind %q in state.yaml is not in the cluster: showing Pods", k.Kind))
 	}
 	return nil
 }
 
-// onNamespaces fills the namespace picker, or, at start, drops the saved
-// namespaces that are gone.
+// onNamespaces fills the namespace picker, or, at start, shows the saved
+// namespaces the cluster has, a Warning naming those it has not; state.yaml
+// keeps them (tdp E3).
 func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if !msg.check {
 		fill := m.fillNamespaces
@@ -390,8 +403,21 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if kept.Count() == sel.Count() {
 		return nil
 	}
-	m.log.info(fmt.Sprintf("Namespace selection: %d no longer exist, now %s", sel.Count()-kept.Count(), selectionText(kept)))
-	return m.setNamespaces(kept)
+	m.keepNamespaces = nil
+	var gone []string
+	for _, n := range sel.List() {
+		if kept.IsAll() || !kept.Contains(n) {
+			m.keepNamespaces = append(m.keepNamespaces, n)
+			gone = append(gone, fmt.Sprintf("%q", n))
+		}
+	}
+	what := "Namespace " + gone[0] + " in state.yaml is"
+	if len(gone) > 1 {
+		what = "Namespaces " + strings.Join(gone, ", ") + " in state.yaml are"
+	}
+	// TODO(tgo v1.2.21-beta.2): join the start's toast while it shows
+	// (tdp E3-43, on tdp main ef9d168); a toast of its own until then.
+	return tea.Batch(m.toastWarn(what+" not in the cluster: showing "+selectionText(kept)), m.showNamespaces(kept))
 }
 
 func selectionText(sel k8s.NamespaceSelection) string {
@@ -414,7 +440,9 @@ func (m *Model) restore() {
 				m.pendingSel = &k8s.RefTarget{Type: rt, Name: s.ObjectName, Namespace: s.ObjectNamespace}
 			}
 		} else {
-			m.log.info(fmt.Sprintf("State: recorded kind %q not known yet, starting on Pods", s.Kind))
+			// Not known yet: a CRD, found only once discovery is done
+			// (onCRDs). kbu starts on Pods meanwhile and keeps it.
+			m.keepKind = &config.State{Kind: s.Kind, ObjectNamespace: s.ObjectNamespace, ObjectName: s.ObjectName, Tab: s.Tab}
 		}
 		m.startTab, m.startPanel = s.Tab, s.Panel
 	}
@@ -426,13 +454,20 @@ func (m *Model) restore() {
 func (m *Model) sessionState() *config.State {
 	s := &config.State{Kind: m.current.KubectlName(), Tab: m.currentTab()}
 	if m.client != nil {
-		s.Context = m.client.ContextName()
+		s.Context = cmp.Or(m.keepContext, m.client.ContextName())
 		s.Namespaces = m.client.Selection().List()
+		if len(m.keepNamespaces) > 0 {
+			s.Namespaces = append(s.Namespaces, m.keepNamespaces...)
+			slices.Sort(s.Namespaces)
+		}
 	}
 	if len(m.drill) == 0 {
 		if item, ok := m.currentItem(); ok {
 			s.ObjectName, s.ObjectNamespace = item.Name, item.Namespace
 		}
+	}
+	if k := m.keepKind; k != nil {
+		s.Kind, s.ObjectNamespace, s.ObjectName, s.Tab = k.Kind, k.ObjectNamespace, k.ObjectName, k.Tab
 	}
 	switch m.screen.Focused() {
 	case m.listP:

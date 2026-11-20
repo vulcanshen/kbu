@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -28,8 +29,8 @@ func TestL4EveryRowIsTheTerminalWidth(t *testing.T) {
 		{"?"},                   // the key reference
 		{"Tab", "Y"},            // the YAML viewer
 		{"Tab", "Alt-S"},        // the sort menu
-		{"Tab", "D"},            // a confirm
-		{"Tab", "C", "j", "C"},  // the compare viewer
+		{"Tab", "x"},            // a confirm
+		{"Tab", "D", "j", "D"},  // the diff viewer
 		{"!"},                   // the App Log
 	}
 	// Below kbu's least size too, down to 1×1 (tdp E5): only the name and
@@ -324,8 +325,8 @@ func TestDragReordersThePinnedKinds(t *testing.T) {
 	}
 }
 
-// tdp L2: the statusbar's chips that come and go are first, the context has
-// a fixed width, and the namespaces, the last dynamic field, come last.
+// tdp L2: the statusbar's context and namespaces have a fixed width, and
+// the chips that come and go are after them: nothing moves with them.
 func TestStatusbarKeepsItsFields(t *testing.T) {
 	m := newTestModel(t)
 	bar := plainSpans(m.statusbar(120))
@@ -333,31 +334,34 @@ func TestStatusbarKeepsItsFields(t *testing.T) {
 		t.Errorf("[N]amespace at %d, want %d:\n%q", i, want, bar)
 	}
 	m.feed(pod("demo", "a"), pod("demo", "b"))
-	m.press("Tab", "C")
+	m.press("Tab", "D")
 	bar = plainSpans(m.statusbar(120))
-	if c, x := strings.Index(bar, "[C] Diff"), strings.Index(bar, "[C]ontext"); c < 0 || c > x {
-		t.Errorf("[C] Diff is not before [C]ontext:\n%q", bar)
+	if i, want := strings.Index(bar, "[N]amespace"), 1+len("[C]ontext: ")+24+2; i != want {
+		t.Errorf("in the Diff mode [N]amespace at %d, want %d:\n%q", i, want, bar)
+	}
+	if d, want := strings.Index(bar, "[D]iff"), strings.Index(bar, "[N]amespace")+len("[N]amespace: ")+16+2+len("[Alt-t]erm")+2; d != want {
+		t.Errorf("[D]iff at %d, want %d, after the fields:\n%q", d, want, bar)
 	}
 }
 
-// C enters the lib's Diff mode (tdp K11, panel.9), the row
-// the anchor, drawn whole on Yellow: on the anchor C is off, on another row
-// C or Enter opens the DIFF of their YAML and comes back to the mode; Esc
+// D enters the lib's Diff mode (tdp K11, panel.9), the row
+// the anchor, drawn whole on Yellow: on the anchor D is off, on another row
+// D or Enter opens the DIFF of their YAML and comes back to the mode; Esc
 // leaves, the anchor gone. The state keeps no tab: every DIFF opens on
 // UNIFIED (tdp note.8).
 func TestDiffMode(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
-	m.press("Tab", "C")
+	m.press("Tab", "D")
 	if md := m.listP.InMode(); md == nil || md.Name != "Diff" || m.list.Anchor == "" {
 		t.Fatalf("panel 2 in mode %+v, anchor %q", md, m.list.Anchor)
 	}
-	if !strings.Contains(m.screen_(), "[C] Diff") {
-		t.Errorf("no [C] Diff on the statusbar:\n%s", m.screen_())
+	if !strings.Contains(m.screen_(), "[D]iff") {
+		t.Errorf("no [D]iff on the statusbar:\n%s", m.screen_())
 	}
-	m.press("C")
+	m.press("D")
 	if strings.Contains(m.screen_(), "DIFF") {
-		t.Errorf("C on the anchor compared:\n%s", m.screen_())
+		t.Errorf("D on the anchor compared:\n%s", m.screen_())
 	}
 	m.press("j", "Enter")
 	if s := m.screen_(); !strings.Contains(s, "DIFF") || !strings.Contains(s, "demo/a ↔ demo/b") {
@@ -374,7 +378,7 @@ func TestDiffMode(t *testing.T) {
 	}
 }
 
-// D asks first; Enter runs kubectl delete with kbu's own context, never a
+// x asks first; Enter runs kubectl delete with kbu's own context, never a
 // real one in a test.
 func TestDeleteAsksThenRunsKubectl(t *testing.T) {
 	m := newTestModel(t)
@@ -384,9 +388,9 @@ func TestDeleteAsksThenRunsKubectl(t *testing.T) {
 		return "pod \"a\" deleted", nil
 	}
 	m.feed(pod("demo", "a"), pod("demo", "b"))
-	m.press("Tab", "D")
+	m.press("Tab", "x")
 	if ran != nil {
-		t.Fatal("D deleted without asking")
+		t.Fatal("x deleted without asking")
 	}
 	if !strings.Contains(m.screen_(), "Delete pod/a?") {
 		t.Fatalf("no confirm:\n%s", m.screen_())
@@ -402,7 +406,7 @@ func TestDeleteAsksThenRunsKubectl(t *testing.T) {
 func TestDeleteEscCancels(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
-	m.press("Tab", "D", "Esc")
+	m.press("Tab", "x", "Esc")
 	// m.run fails the test if it runs.
 }
 
@@ -423,14 +427,14 @@ func TestTabsOfKinds(t *testing.T) {
 	}
 }
 
-// Logs and Events are streaming content: not dimmed when the panel loses the
-// focus (tdp T2).
+// Logs are streaming content: not dimmed when the panel loses the focus
+// (tdp T2). The events are read again with the details, and dim.
 func TestStreamingTabsAreNotDimmed(t *testing.T) {
 	m := newTestModel(t)
 	for i, tab := range m.det.tabs {
 		m.detailP.Tab = i
 		m.showTab()
-		want := tab == "Logs" || tab == "Events"
+		want := tab == "Logs"
 		if m.detailP.Stream != want {
 			t.Errorf("tab %s: Stream %v, want %v", tab, m.detailP.Stream, want)
 		}
@@ -605,7 +609,7 @@ func TestQWithAPopupAsks(t *testing.T) {
 func TestAToastTakesTheFirstLine(t *testing.T) {
 	m := newTestModel(t)
 	m.drive(m.toastErr("Delete pod/a failed: exit status 1: Error from server (Forbidden)\nmore detail"))
-	if s := m.screen_(); strings.Contains(s, `\n`) || !strings.Contains(s, "Error from server (Forbidden)") {
+	if s := m.screen_(); strings.Contains(s, `\n`) || !strings.Contains(s, "Error from server (Forbidden)…") {
 		t.Errorf("the toast:\n%s", s)
 	}
 	m.press("!")
@@ -664,7 +668,7 @@ func TestNoColourCodeShows(t *testing.T) {
 	bad := pod("demo", "b")
 	bad.Row[2] = "CrashLoopBackOff"
 	m.feed(pod("demo", "a"), bad)
-	m.press("Tab", "C")
+	m.press("Tab", "D")
 	if s := m.screen_(); strings.Contains(s, `\x1b`) || !strings.Contains(s, "CrashLoopBackOff") {
 		t.Errorf("a colour code shows:\n%s", s)
 	}
@@ -816,5 +820,245 @@ func TestPodsLookedForAgainSayOnce(t *testing.T) {
 		if got := strings.Count(s, want); got != n {
 			t.Errorf("%q is in the App Log %d times, want %d:\n%s", want, got, n, s)
 		}
+	}
+}
+
+// S on a pod asks first, the confirm naming the exact kubectl exec (bash when
+// the image has it, else sh); Esc runs nothing. The exec itself runs in a
+// terminal popup, never in a test.
+func TestShellAsksFirst(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "a"), pod("demo", "b"))
+	m.press("Tab", "S")
+	s := m.screen_()
+	for _, want := range []string{"SHELL", "Exec into app?", "kubectl exec -it a -n demo -c app", "exec bash; else exec sh"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the confirm has no %q:\n%s", want, s)
+		}
+	}
+	m.press("Esc")
+	if m.tx != nil || strings.Contains(m.screen_(), "Exec into") {
+		t.Errorf("Esc did not leave the confirm, or started a shell:\n%s", m.screen_())
+	}
+}
+
+// Copying is a Success toast saying how many lines went to the clipboard;
+// nothing to copy is an error popup (tdp toast.2, F5).
+func TestCopyIsTold(t *testing.T) {
+	m := newTestModel(t)
+	m.drive(copyText("a\nb\n"))
+	if s := m.screen_(); !strings.Contains(s, "Copied 2 lines") {
+		t.Errorf("no toast for the copy:\n%s", s)
+	}
+	m.drive(copyText(""))
+	if s := m.screen_(); !strings.Contains(s, "COPY FAILED") || !strings.Contains(s, "no content to copy") {
+		t.Errorf("no error popup for nothing to copy:\n%s", s)
+	}
+}
+
+// A kubeconfig kbu cannot read is outside kbu (tdp E3): kbu opens, panel 2
+// says why and what to do, an Error toast says it, and what needs the
+// cluster is off (tdp M6).
+func TestNoKubeconfigStillOpens(t *testing.T) {
+	m := newTestModelWith(t, Options{ClientErr: errors.New("loading kubeconfig: open /nope: no such file or directory")})
+	s := m.screen_()
+	for _, want := range []string{"Loading kubeconfig: open /nope", "Fix the kubeconfig, then start kbu again"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("no %q:\n%s", want, s)
+		}
+	}
+	m.press("N")
+	if strings.Contains(m.screen_(), "NAMESPACES") {
+		t.Errorf("[N] opened the namespaces with no cluster:\n%s", m.screen_())
+	}
+	m.press("1", "j", "j")
+	if !strings.Contains(m.screen_(), "Fix the kubeconfig") {
+		t.Errorf("another kind lost the reason:\n%s", m.screen_())
+	}
+}
+
+// state.yaml's context that the kubeconfig no longer has is written back as
+// it was, until the user picks another (tdp E3).
+func TestTheStateKeepsAContextGone(t *testing.T) {
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\nkind: Config\ncurrent-context: a\n"+
+		"clusters:\n- name: c\n  cluster: {server: \"https://127.0.0.1:6443\"}\nusers:\n- name: u\n  user: {token: t}\n"+
+		"contexts:\n- name: a\n  context: {cluster: c, user: u}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KUBECONFIG", kubeconfig)
+	c, err := k8s.NewClient("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newTestModel(t)
+	m.client, m.keepContext = c, "gone"
+	if got := m.sessionState().Context; got != "gone" {
+		t.Errorf("the state's context is %q, want the one kept, gone", got)
+	}
+	m.keepContext = ""
+	if got := m.sessionState().Context; got != "a" {
+		t.Errorf("the state's context is %q, want a", got)
+	}
+}
+
+// What is in the Relatives tab's chain already is not gone into again:
+// Drill in is off there (tdp M6).
+func TestDrillInIsOffOnTheChain(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "a"), pod("demo", "b"))
+	if !m.inChain(k8s.RefTarget{Type: k8s.ResourcePods, Name: "a", Namespace: "demo"}) {
+		t.Error("the row panel 3 shows is not in its chain")
+	}
+	if m.inChain(k8s.RefTarget{Type: k8s.ResourcePods, Name: "b", Namespace: "demo"}) {
+		t.Error("another pod is in the chain")
+	}
+}
+
+// testClient is a client on a kubeconfig of one context, a, that no test
+// ever reaches: for what reads the client and not the cluster.
+func testClient(t *testing.T) *k8s.Client {
+	t.Helper()
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\nkind: Config\ncurrent-context: a\n"+
+		"clusters:\n- name: c\n  cluster: {server: \"https://127.0.0.1:6443\"}\nusers:\n- name: u\n  user: {token: t}\n"+
+		"contexts:\n- name: a\n  context: {cluster: c, user: u}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KUBECONFIG", kubeconfig)
+	c, err := k8s.NewClient("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// Recorded namespaces the cluster does not have are kept (tdp E3, E3-41):
+// kbu shows the ones it has, all of them when none is there, a Warning
+// names those gone, and state.yaml keeps them until the user picks.
+func TestTheStateKeepsNamespacesGone(t *testing.T) {
+	m := newTestModel(t)
+	m.client = testClient(t)
+	m.client.SetSelection(k8s.SelectedNamespaces("a", "gone1", "gone2"))
+	cmd := m.onMsg(namespacesMsg{check: true, names: []string{"a", "b"}})
+	m.listP.Loading = false // no watch here to end the loading
+	m.drive(cmd)
+	if s := m.screen_(); !strings.Contains(s, `Namespaces "gone1", "gone2" in state.yaml are not in the cluster: showing [a]`) {
+		t.Errorf("no Warning naming the namespaces gone:\n%s", s)
+	}
+	if got := m.client.Selection().List(); !slices.Equal(got, []string{"a"}) {
+		t.Errorf("kbu shows %q, want the one there, a", got)
+	}
+	if got := m.sessionState().Namespaces; !slices.Equal(got, []string{"a", "gone1", "gone2"}) {
+		t.Errorf("state.yaml gets %q, want all three kept", got)
+	}
+
+	m = newTestModel(t)
+	m.client = testClient(t)
+	m.client.SetSelection(k8s.SelectedNamespaces("gone"))
+	cmd = m.onMsg(namespacesMsg{check: true, names: []string{"a"}})
+	m.listP.Loading = false
+	m.drive(cmd)
+	if s := m.screen_(); !strings.Contains(s, `Namespace "gone" in state.yaml is not in the cluster: showing`) {
+		t.Errorf("no Warning naming the namespace gone:\n%s", s)
+	}
+	if !m.client.Selection().IsAll() || !slices.Equal(m.sessionState().Namespaces, []string{"gone"}) {
+		t.Errorf("none there: shows %v, state gets %q; want all, and gone kept", m.client.Selection(), m.sessionState().Namespaces)
+	}
+}
+
+// A recorded kind found only after start (a CRD) is not missing until
+// discovery is done (tdp E3, E3-42): kbu starts on Pods and keeps it, warns
+// only when discovery ends without it, and stays where it is.
+func TestTheStateKeepsAKindNotFoundYet(t *testing.T) {
+	m := newTestModelWith(t, Options{State: &config.State{Kind: "crontabs.stable.example.com", ObjectName: "x", Tab: "Events"}})
+	if m.current != k8s.ResourcePods {
+		t.Fatalf("started on %q, want Pods", m.current)
+	}
+	if s := m.screen_(); strings.Contains(s, "crontabs") {
+		t.Errorf("warned before discovery was done:\n%s", s)
+	}
+	if s := m.sessionState(); s.Kind != "crontabs.stable.example.com" || s.ObjectName != "x" || s.Tab != "Events" {
+		t.Errorf("state.yaml gets %+v, want the recorded kind, row and tab kept", s)
+	}
+	m.drive(m.onMsg(crdsMsg{}))
+	if s := m.screen_(); !strings.Contains(s, `Kind "crontabs.stable.example.com" in state.yaml is not in the cluster: showing Pods`) {
+		t.Errorf("no Warning after discovery:\n%s", s)
+	}
+	if m.current != k8s.ResourcePods || m.sessionState().Kind != "crontabs.stable.example.com" {
+		t.Errorf("after discovery: on %q, state gets %q", m.current, m.sessionState().Kind)
+	}
+	m.press("j")
+	if m.sessionState().Kind == "crontabs.stable.example.com" {
+		t.Error("the user picked another kind, and state.yaml still gets the recorded one")
+	}
+}
+
+// Details read again that fail keep what the tab had: only the toast says
+// it (tdp panel.15); a tab that had nothing yet says why it is empty.
+func TestDetailReadAgainKeepsWhatItHas(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "a"))
+	m.det.uid = itemKey(pod("demo", "a"))
+	ev := []k8s.EventItem{{Type: "Normal", Reason: "Pulled", Message: "pulled"}}
+	m.drive(m.onMsg(detailMsg{uid: m.det.uid, events: ev}))
+	m.drive(m.onMsg(detailMsg{uid: m.det.uid, err: errors.New("events is forbidden")}))
+	if len(m.det.events) != 1 || m.detailP.Fail != nil {
+		t.Errorf("read again and failed: events %v, Fail %v; want the events kept, no Fail", m.det.events, m.detailP.Fail)
+	}
+	m = newTestModel(t)
+	m.feed(pod("demo", "a"))
+	m.det.uid = itemKey(pod("demo", "a"))
+	m.drive(m.onMsg(detailMsg{uid: m.det.uid, err: errors.New("events is forbidden")}))
+	if m.detailP.Fail == nil {
+		t.Error("the first read failed and the tab does not say why")
+	}
+}
+
+// CRD discovery that fails leaves panel 1 its built-in kinds and says why in
+// an Error toast (tdp panel.15, F5).
+func TestCRDDiscoveryFailureIsTold(t *testing.T) {
+	m := newTestModel(t)
+	m.drive(m.onMsg(crdsMsg{err: errors.New("the server could not find the requested resource")}))
+	if s := m.screen_(); !strings.Contains(s, "CRD discovery: the server could not find the requested resource") || !strings.Contains(s, "Pods") {
+		t.Errorf("no Error toast, or the built-in kinds gone:\n%s", s)
+	}
+}
+
+// Esc on the Relatives tab goes one level up with the cursor on the relative
+// it came out of (tdp panel.10).
+func TestRelativesBackPutsTheCursorWhereItCameFrom(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "a"))
+	node := k8s.RefTarget{Type: k8s.ResourceNodes, Name: "node-1"}
+	m.det.detail = k8s.ResourceDetail{PodRelatives: &k8s.PodRelativesData{
+		Owner: &k8s.RefTarget{Type: k8s.ResourceDeployments, Name: "a", Namespace: "demo"}, Node: &node}}
+	m.refreshRelatives()
+	m.det.chain = []relFrame{{ref: node}}
+	m.relBack()
+	if r, ok := m.relList.Current(); !ok || r.ID != "1" {
+		t.Errorf("the cursor is on %+v, want the node's row, 1", r)
+	}
+}
+
+// A state that cannot be written on leaving does not keep the user from
+// leaving; it is Run's error, for main to write to stderr after "kbu: "
+// (tdp F5, E1).
+func TestAStateNotSavedIsTold(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a folder Windows does not keep from being written to")
+	}
+	m := newTestModel(t)
+	dir := os.Getenv("KBU__STATE")
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	err := m.shutdown()
+	if err == nil {
+		t.Fatal("the state was written to a folder that cannot be written to")
+	}
+	if s := (NotSaved{err}).Error(); !strings.Contains(s, "state.yaml could not be written: ") {
+		t.Errorf("NotSaved says %q", s)
 	}
 }

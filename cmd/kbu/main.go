@@ -153,17 +153,8 @@ func main() {
 	// first start; the UI says where to, or what stayed.
 	moved := config.MoveOldPlaces()
 
-	// v2.0 km8 → kbu rename: one-shot copy of the km8 settings directory
-	// when kbu's does not exist yet. A copy failure is fatal — going on with
-	// an empty directory would silently lose the user's pins and sorts.
-	notices := []string{}
-	migrated, err := config.MigrateLegacyConfigDir()
-	if err != nil {
-		fail(err.Error())
-	}
-	notices = append(notices, migrated)
 	// tdp E3: the pins and sorts are data. An older kbu's, in config.yaml,
-	// move to kinds.yaml in the data directory (after the copy above, which
+	// move to kinds.yaml in the data directory (after the moves above, which
 	// may bring km8's).
 	moved = append(moved, config.MoveKindData()...)
 
@@ -193,15 +184,19 @@ func main() {
 		start = append(start, fitted(config.KindDataPath(), kinds.Misfits(), kinds.Save)...)
 	}
 
-	client, gone, err := connect(state.Context, cfg.DefaultContext)
-	if err != nil {
-		fail(err.Error())
-	}
+	// A kubeconfig kbu cannot read is outside it: kbu opens all the same,
+	// panel 2 saying why (tdp E3).
+	client, gone, clientErr := connect(state.Context, cfg.DefaultContext)
 	start = append(start, gone...)
+	keep := "" // state.yaml's context, written back while the kubeconfig lacks it
+	if client != nil && state.Context != "" && client.ContextName() != state.Context {
+		keep = state.Context
+	}
 
 	// The saved namespaces go in first; the ones since deleted are dropped
 	// once the cluster says which exist.
 	switch {
+	case client == nil:
 	case len(state.Namespaces) > 0:
 		client.SetSelection(k8s.SelectedNamespaces(state.Namespaces...))
 	case state.Namespace != "":
@@ -214,12 +209,14 @@ func main() {
 	k8s.RegisterHelmIfAvailable()
 
 	ui := tui.New(tui.Options{Client: client, Config: cfg, ConfigErr: cfgErr, State: state, StateErr: stateErr,
-		Kinds: kinds, KindsErr: kindsErr, Notices: notices, Moved: moved, Start: start, Status: theme.DefaultTheme().Status,
+		Kinds: kinds, KindsErr: kindsErr, Moved: moved, Start: start, ClientErr: clientErr, KeepContext: keep,
+		Status:  theme.DefaultTheme().Status,
 		Version: version.Display()})
 	if err := ui.Run(); err != nil {
 		// The user left at a file kbu could not read: why, and no crash.
 		var notRead tui.NotRead
-		if errors.As(err, &notRead) {
+		var notSaved tui.NotSaved
+		if errors.As(err, &notRead) || errors.As(err, &notSaved) {
 			fail(err.Error())
 		}
 		// bubbletea catches panics, restores the terminal, then returns

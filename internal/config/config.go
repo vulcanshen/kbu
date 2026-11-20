@@ -233,6 +233,9 @@ func ConfigDir() string {
 	if old := platformConfigDir(appName); old != "" && old != dir && !exists(dir) && exists(old) {
 		return old
 	}
+	if old := legacyConfigDir(); old != dir && !exists(dir) && exists(old) {
+		return old // km8's, which could not be moved (moveKm8)
+	}
 	return dir
 }
 
@@ -252,13 +255,16 @@ type Moved struct {
 // settings from the platform's settings directory (macOS
 // ~/Library/Application Support/kbu, Windows %APPDATA%\kbu) to
 // ~/.config/kbu, and the logs from the settings directory to the data one
-// (~/.kbu/logs). What the new place has already stays where it was; when a
-// setting cannot be moved none is, and kbu keeps using the old directory
-// (ConfigDir). The old directory goes once it is empty.
+// (~/.kbu/logs); and km8's settings and logs, kbu's name before v2.0, while
+// kbu has no settings directory of its own (moveKm8). What the new place has
+// already stays where it was; when a setting cannot be moved none is, and
+// kbu keeps using the old directory (ConfigDir). The old directory goes once
+// it is empty.
 func MoveOldPlaces() []Moved {
 	var out []Moved
 	if strings.TrimSpace(os.Getenv("KBU__CONFIG")) == "" {
-		out = moveSettings()
+		out = moveSettings(platformConfigDir(appName), familyConfigDir(appName))
+		out = append(out, moveKm8()...)
 	}
 	out = append(out, moveLogs()...)
 	if old := platformConfigDir(appName); old != "" && old != familyConfigDir(appName) {
@@ -267,8 +273,37 @@ func MoveOldPlaces() []Moved {
 	return out
 }
 
-func moveSettings() []Moved {
-	to, from := familyConfigDir(appName), platformConfigDir(appName)
+// moveKm8 moves km8's settings directory to kbu's, item by item, and its
+// logs to kbu's data, while kbu has no settings directory yet: a km8 user's
+// first start of kbu. Where kbu has its own already (an older kbu copied
+// km8's), km8's is a directory no longer used (NoLongerUsed).
+func moveKm8() []Moved {
+	to, from := familyConfigDir(appName), legacyConfigDir()
+	if from == to || exists(to) || !exists(from) {
+		return nil
+	}
+	out := moveSettings(from, to)
+	if len(out) == 1 && out[0].From == from {
+		return out // none moved: kbu keeps using km8's
+	}
+	if logs := filepath.Join(from, "logs"); exists(logs) {
+		mv := Moved{What: "logs", From: logs, To: LogDir()}
+		if exists(mv.To) {
+			mv.Err = ErrThereAlready
+		} else if err := os.MkdirAll(filepath.Dir(mv.To), 0o755); err != nil {
+			mv.Err = err
+		} else if err := os.Rename(mv.From, mv.To); err != nil {
+			mv.Err = err
+		}
+		out = append(out, mv)
+	}
+	_ = os.Remove(from) // only when it is empty
+	return out
+}
+
+// moveSettings moves the settings in from to to, item by item, the logs
+// aside (moveLogs, moveKm8).
+func moveSettings(from, to string) []Moved {
 	if from == "" || from == to || !exists(from) {
 		return nil
 	}
@@ -362,8 +397,7 @@ func exists(path string) bool {
 }
 
 // legacyConfigDir is where the pre-v2.0 km8 kept its settings: the
-// platform's settings directory, or $XDG_CONFIG_HOME when set. Only used
-// by MigrateLegacyConfigDir; every other caller uses ConfigDir directly.
+// platform's settings directory, or $XDG_CONFIG_HOME when set.
 func legacyConfigDir() string {
 	if old := platformConfigDir(legacyAppName); old != "" {
 		return old
@@ -375,13 +409,13 @@ func legacyConfigDir() string {
 // the App Log at every start while it is there (tdp E3, files no longer
 // used): theme.yaml, whose colours the family's took over, where the
 // settings are (the old directory's moved with them); and km8's directory,
-// which v2.0 copied to kbu's and left in place. Nothing is deleted: what to
-// do with them is the user's call.
+// where kbu has its own (an older kbu copied km8's and left it). Nothing is
+// deleted: what to do with them is the user's call.
 func NoLongerUsed() []string {
 	dir := ConfigDir()
 	paths := []string{filepath.Join(dir, "theme.yaml")}
 	if !exists(dir) {
-		return paths // km8's is still to be copied (MigrateLegacyConfigDir)
+		return paths // km8's is kbu's still (moveKm8)
 	}
 	for _, old := range []string{platformConfigDir(legacyAppName), familyConfigDir(legacyAppName)} {
 		if old != "" && old != dir && !slices.Contains(paths, old) {

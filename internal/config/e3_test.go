@@ -249,3 +249,74 @@ func TestE3_Misfits(t *testing.T) {
 		t.Errorf("the misfits are still in the pins and sorts: %+v", k)
 	}
 }
+
+// tdp E3: a km8 user's first start of kbu moves km8's settings to kbu's
+// directory item by item, its logs to the data, and takes the empty km8
+// directory away.
+func TestE3_Km8MovesItemByItem(t *testing.T) {
+	home := isolateHome(t)
+	km8 := legacyConfigDir()
+	write(t, filepath.Join(km8, "config.yaml"), "editor: vi\n")
+	write(t, filepath.Join(km8, "state.yaml"), "kind: pods\n")
+	write(t, filepath.Join(km8, "logs", "crash.log"), "boom\n")
+	moved := MoveOldPlaces()
+	kbu := filepath.Join(home, ".config", "kbu")
+	if ConfigDir() != kbu || read(filepath.Join(kbu, "config.yaml")) != "editor: vi\n" || read(filepath.Join(kbu, "state.yaml")) != "kind: pods\n" {
+		t.Errorf("km8's settings did not move to %s: %+v", kbu, moved)
+	}
+	if read(filepath.Join(home, ".kbu", "logs", "crash.log")) != "boom\n" {
+		t.Errorf("km8's logs did not move to the data: %+v", moved)
+	}
+	if exists(km8) {
+		t.Error("the empty km8 directory is still there")
+	}
+	for _, mv := range moved {
+		if mv.Err != nil {
+			t.Errorf("a move failed: %+v", mv)
+		}
+	}
+}
+
+// Where kbu has its own settings already (an older kbu copied km8's), km8's
+// directory stays, a directory no longer used, and nothing is asked.
+func TestE3_Km8StaysWhenKbuHasItsOwn(t *testing.T) {
+	home := isolateHome(t)
+	km8 := legacyConfigDir()
+	write(t, filepath.Join(km8, "config.yaml"), "editor: vi\n")
+	write(t, filepath.Join(home, ".config", "kbu", "config.yaml"), "editor: nano\n")
+	if moved := MoveOldPlaces(); len(moved) != 0 {
+		t.Errorf("moved %+v", moved)
+	}
+	if read(filepath.Join(km8, "config.yaml")) != "editor: vi\n" || !slices.Contains(NoLongerUsed(), km8) {
+		t.Errorf("km8's directory is not left as no longer used: %q", NoLongerUsed())
+	}
+}
+
+// When km8's settings cannot be moved, none is, and kbu keeps using km8's
+// directory; the start says so with both paths.
+func TestE3_Km8NotMovedKeepsIt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a folder Windows does not keep from being written to")
+	}
+	home := isolateHome(t)
+	km8 := legacyConfigDir()
+	write(t, filepath.Join(km8, "config.yaml"), "editor: vi\n")
+	parent := filepath.Join(home, ".config")
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(parent, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(parent, 0o755) })
+	if km8 == filepath.Join(parent, "km8") {
+		t.Skip("km8's directory is under the folder made read-only here")
+	}
+	moved := MoveOldPlaces()
+	if len(moved) != 1 || moved[0].Err == nil || moved[0].From != km8 {
+		t.Errorf("moved %+v, want km8's directory not moved", moved)
+	}
+	if ConfigDir() != km8 || read(filepath.Join(km8, "config.yaml")) != "editor: vi\n" {
+		t.Errorf("ConfigDir() = %q, want km8's %q", ConfigDir(), km8)
+	}
+}

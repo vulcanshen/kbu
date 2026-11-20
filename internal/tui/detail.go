@@ -41,6 +41,7 @@ type detailState struct {
 	kind   k8s.ResourceType // the kind of the row it shows ("" for a container)
 	uid    string           // the row's key
 	loaded bool             // its details have been asked for
+	got    bool             // and came, once at least
 	detail k8s.ResourceDetail
 	events []k8s.EventItem
 	tabs   []string
@@ -57,11 +58,10 @@ type detailState struct {
 func (m *Model) buildDetail() {
 	d := &m.det
 	d.logBody = newTextBody(m.renderLogs, "Waiting for logs…", true)
-	d.eventBody = newTextBody(m.renderEvents, "No events", true)
+	d.eventBody = newTextBody(m.renderEvents, "No events", false)
 	d.condBody = newTextBody(m.renderConditions, "No conditions", false)
 	d.infoBody = newTextBody(m.renderInfo, "No detail", false)
 	d.logBody.onLive = m.setTabLabels
-	d.eventBody.onLive = m.setTabLabels
 	m.relList = &terminu.List{Columns: []terminu.Column{{Title: "Name", Shrink: true}, {Title: "Target", Shrink: true}},
 		EmptyFact: "No relatives to show", EmptyHint: "Press [Y] for the full YAML"}
 	m.histList = &terminu.List{Columns: []terminu.Column{{Title: ""}, {Title: "Rev", Number: true}, {Title: "Status"},
@@ -111,7 +111,7 @@ func supportsLogs(rt k8s.ResourceType) bool {
 func (m *Model) resetDetail(rt k8s.ResourceType) {
 	d := &m.det
 	prev := m.currentTab()
-	d.kind, d.uid, d.loaded = rt, "", false
+	d.kind, d.uid, d.loaded, d.got = rt, "", false, false
 	d.detail, d.events, d.chain = k8s.ResourceDetail{}, nil, nil
 	d.logs = nil
 	d.tabs = tabsOf(rt)
@@ -150,7 +150,9 @@ func (m *Model) showTab() {
 		m.detailP.Body = m.histList
 	}
 	t := m.currentTab()
-	m.detailP.Stream = t == "Logs" || t == "Events" // streaming content is not dimmed (tdp T2)
+	// The logs are streaming content, not dimmed (tdp T2); the events are
+	// read again with the details, newest first.
+	m.detailP.Stream = t == "Logs"
 	m.setTabLabels()
 	m.setDetailActions()
 }
@@ -174,8 +176,6 @@ func (m *Model) setTabLabels() {
 		switch t {
 		case "Logs":
 			names[i] += " " + liveGlyph(d.logBody.live)
-		case "Events":
-			names[i] += " " + liveGlyph(d.eventBody.live)
 		case "Relatives":
 			// How deep the chain is, from 1: always there, so the tabs
 			// after it do not move when it changes (tdp L2).
@@ -218,7 +218,7 @@ func (m *Model) rowMoved(key string) tea.Cmd {
 		m.setTabLabels()
 		m.setDetailActions()
 	}
-	m.det.uid, m.det.loaded = key, false
+	m.det.uid, m.det.loaded, m.det.got = key, false, false
 	m.det.nextRetry = time.Time{}
 	m.detailP.Loading, m.detailP.Fail = m.client != nil && key != "", nil
 	m.setListActions() // the descriptions name the row's own (an HPA's target)
@@ -304,8 +304,8 @@ func (m *Model) onPods(msg podsMsg) tea.Cmd {
 			}
 			return nil
 		}
-		if fact := "Logs: " + msg.err.Error(); m.podsErr.failed(fact) {
-			return m.app.Toast(terminu.Error, fact)
+		if text := "Logs: " + msg.err.Error(); m.podsErr.failed(text) {
+			return m.toast(terminu.Error, text)
 		}
 		return nil
 	}
@@ -671,20 +671,21 @@ func (m *Model) relAt() (relEntry, bool) {
 	return entries[i], true
 }
 
+// inChain reports whether ref is in the Relatives tab's chain already.
+func (m *Model) inChain(ref k8s.RefTarget) bool {
+	return slices.ContainsFunc(m.chainRefs(), func(f k8s.RefTarget) bool {
+		return f.Type == ref.Type && f.Name == ref.Name && f.Namespace == ref.Namespace
+	})
+}
+
 // relDrill goes into the relative under the cursor: its own relatives
-// appear here, one level further down the chain. A resource already in the
-// chain is not gone into again.
+// appear here, one level further down the chain.
 func (m *Model) relDrill() tea.Cmd {
 	e, ok := m.relAt()
 	if !ok || e.ref == nil || m.client == nil {
 		return nil
 	}
 	ref := *e.ref
-	for _, f := range m.chainRefs() {
-		if f.Type == ref.Type && f.Name == ref.Name && f.Namespace == ref.Namespace {
-			return m.toastErr(fmt.Sprintf("Cycle blocked: %s/%s already in chain", ref.Type, ref.Name))
-		}
-	}
 	src := m.det.uid
 	cs := m.client.Clientset()
 	return func() tea.Msg {
@@ -727,14 +728,22 @@ func (m *Model) chainRefs() []k8s.RefTarget {
 	return refs
 }
 
-// relBack goes one level back up the chain.
+// relBack goes one level back up the chain, the cursor on the relative it
+// came out of (tdp panel.10).
 func (m *Model) relBack() tea.Cmd {
 	if n := len(m.det.chain); n > 0 {
+		out := m.det.chain[n-1].ref
 		m.det.chain = m.det.chain[:n-1]
 		if refs := m.chainRefs(); len(refs) > 0 {
 			m.log.info("Back up the chain to " + refSubject(refs[len(refs)-1]))
 		}
 		m.refreshRelatives()
+		for i, e := range relEntries(m.levelDetail()) {
+			if e.ref != nil && *e.ref == out {
+				m.relList.Select(strconv.Itoa(i))
+				break
+			}
+		}
 		m.setTabLabels()
 		m.setDetailActions()
 	}
@@ -810,25 +819,18 @@ func (m *Model) setDetailActions() {
 	var acts []terminu.Action
 	switch tab {
 	case "Logs", "Events":
-		what := "line"
-		if tab == "Events" {
-			what = "event"
-		}
 		acts = []terminu.Action{
 			{Key: "Enter", Label: "Zoom", Desc: "full-screen this panel", Scope: terminu.PanelScope, Hint: "zoom", Do: m.toggleZoom},
-			{Label: "Go live", Desc: "jump to the newest " + what + " and follow ([G])", Scope: terminu.PanelScope,
-				Do: func() tea.Cmd {
-					m.log.info("Went live on the " + tab + " tab")
-					m.detailP.Body.Key("G", tea.KeyMsg{})
-					return nil
-				}},
 			copyAll, yaml, zoom,
 		}
 	case "Relatives":
 		onRef := func() bool { e, ok := m.relAt(); return ok && e.ref != nil }
+		// A resource already in the chain is not gone into again: Drill in is
+		// off there (tdp M6).
+		canDrill := func() bool { e, ok := m.relAt(); return ok && e.ref != nil && !m.inChain(*e.ref) }
 		acts = []terminu.Action{
 			{Key: "Enter", Label: "Drill in", Desc: "show its relatives here", Scope: terminu.ItemScope, Hint: "drill", Clear: true,
-				Disabled: func() bool { return !onRef() }, Do: m.relDrill},
+				Disabled: func() bool { return !canDrill() }, Do: m.relDrill},
 			// Y is the entry's YAML on an entry kbu can go to (an item
 			// operation), else the YAML of the level the tab is at (the
 			// panel's): one key, the object under the cursor first.

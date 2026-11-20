@@ -31,9 +31,6 @@ type Options struct {
 	// the pins and sorts could not be read: kbu starts on the defaults and
 	// asks to move the file aside (tdp E3).
 	ConfigErr, StateErr, KindsErr error
-	// Notices go into the App Log at start (a migrated config directory, a
-	// deprecated key).
-	Notices []string
 	// Moved is where the settings, the logs and the pins and sorts were
 	// moved at start (tdp E3): a toast
 	// says so, or an error popup when the move failed.
@@ -42,6 +39,13 @@ type Options struct {
 	// what moved (tdp E3): values put back to their defaults, a context
 	// the kubeconfig no longer has.
 	Start []terminu.Notice
+	// ClientErr is why kbu has no client: the kubeconfig could not be read
+	// or names no context. kbu opens all the same and panel 2 says why
+	// (tdp E3: what is outside the app).
+	ClientErr error
+	// KeepContext is state.yaml's context the kubeconfig no longer has: kbu
+	// writes it back until the user picks another (tdp E3).
+	KeepContext string
 	// Status are the colours of a resource's status cells (the app's
 	// content, tdp P4).
 	Status theme.StatusColors
@@ -121,6 +125,14 @@ type Model struct {
 	cfgErr, stateErr, kindsErr error
 	asideAsked                 bool
 	startNotices               []terminu.Notice
+	clientErr                  error
+	keepContext                string
+	// keepKind is state.yaml's kind (with its row and tab) while it is not
+	// known, a CRD found only after start; keepNamespaces the recorded
+	// namespaces the cluster does not have. state.yaml keeps both until
+	// the user picks another (tdp E3: a value naming an entry not there).
+	keepKind       *config.State
+	keepNamespaces []string
 }
 
 // New builds kbu's UI.
@@ -133,7 +145,7 @@ func New(o Options) *Model {
 		run:    runCommand,
 		moved:  o.Moved,
 		cfgErr: o.ConfigErr, stateErr: o.StateErr, kindsErr: o.KindsErr,
-		startNotices: o.Start,
+		startNotices: o.Start, clientErr: o.ClientErr, keepContext: o.KeepContext,
 	}
 	if m.cfg == nil {
 		m.cfg = config.DefaultConfig()
@@ -181,13 +193,6 @@ func New(o Options) *Model {
 	}
 
 	m.log.info("Started kbu")
-	for _, n := range o.Notices {
-		for _, line := range strings.Split(n, "\n") {
-			if line = strings.TrimSpace(line); line != "" {
-				m.log.info(line)
-			}
-		}
-	}
 	for _, w := range m.cfg.DeprecationWarnings {
 		m.log.warn(w)
 	}
@@ -209,9 +214,12 @@ func New(o Options) *Model {
 // down where the user was (the session state).
 func (m *Model) Run() error {
 	err := m.app.Run()
-	m.shutdown()
+	saveErr := m.shutdown()
 	if err != nil && m.asideAsked && !errors.Is(err, tea.ErrProgramPanic) {
 		return NotRead{err}
+	}
+	if err == nil && saveErr != nil {
+		return NotSaved{saveErr}
 	}
 	return err
 }
@@ -223,9 +231,19 @@ type NotRead struct{ Err error }
 func (e NotRead) Error() string { return e.Err.Error() }
 func (e NotRead) Unwrap() error { return e.Err }
 
+// NotSaved is Run's error when kbu could not write where the user was, on
+// leaving: the screen is gone, so main writes it to stderr (tdp F5, E1).
+type NotSaved struct{ Err error }
+
+func (e NotSaved) Error() string {
+	return config.HomeShort(config.StatePath()) + " could not be written: " + e.Err.Error()
+}
+func (e NotSaved) Unwrap() error { return e.Err }
+
 // shutdown stops the watcher, the log stream and the PTYs, and saves the
-// session state. A save that fails does not keep the user from leaving.
-func (m *Model) shutdown() {
+// session state. A save that fails does not keep the user from leaving: it
+// is the error returned.
+func (m *Model) shutdown() error {
 	if m.watcher != nil {
 		m.watcher.Stop()
 	}
@@ -237,7 +255,7 @@ func (m *Model) shutdown() {
 			t.Stop()
 		}
 	}
-	_ = m.sessionState().Save()
+	return m.sessionState().Save()
 }
 
 // App is the lib's app, for tests.
@@ -267,10 +285,22 @@ func layout(w, h int) []terminu.Rect {
 // a row of the global operation popup and a key on the panels (tdp M4).
 func (m *Model) globalActions() []terminu.Action {
 	return []terminu.Action{
-		{Key: "N", Label: "Namespace", Desc: "pick which namespaces to show", Scope: terminu.GlobalScope, Do: m.openNamespaces},
-		{Key: "C", Label: "Context", Desc: "switch the kubeconfig context", Scope: terminu.GlobalScope, Do: m.openContexts},
+		{Key: "N", Label: "Namespace", Desc: "pick which namespaces to show", Scope: terminu.GlobalScope, Disabled: m.noClient, Do: m.openNamespaces},
+		{Key: "C", Label: "Context", Desc: "switch the kubeconfig context", Scope: terminu.GlobalScope, Disabled: m.noClient, Do: m.openContexts},
 		{Key: "Alt-t", Label: "Term", Desc: "show the embedded shell (Alterm)", Scope: terminu.GlobalScope, Clear: true, Do: m.showAlterm},
 	}
+}
+
+// noClient: kbu could not read the kubeconfig, and has no cluster (tdp M6).
+func (m *Model) noClient() bool { return m.client == nil }
+
+// clientFail is what panel 2 says with no client: why, and what to do.
+func (m *Model) clientFail() *terminu.Failure {
+	if m.clientErr == nil {
+		return nil
+	}
+	fact, _, _ := strings.Cut(capital(m.clientErr.Error()), "\n")
+	return &terminu.Failure{Fact: fact, Hint: "Fix the kubeconfig, then start kbu again; [!] shows the App Log"}
 }
 
 // start is what runs when the program starts: who we are connected to, the
@@ -278,6 +308,9 @@ func (m *Model) globalActions() []terminu.Action {
 // panel the user left from.
 func (m *Model) start() tea.Cmd {
 	cmds := []tea.Cmd{m.selectKind(m.kindAt, false)}
+	if m.clientErr != nil {
+		cmds = append(cmds, m.toast(terminu.Error, capital(m.clientErr.Error())))
+	}
 	if m.client != nil {
 		info := m.client.GetClusterInfo()
 		m.log.info(fmt.Sprintf("Connected to %s (%s)", info.ContextName, info.ServerURL))
@@ -369,19 +402,14 @@ func (m *Model) sayMoved() tea.Cmd {
 // statusbar is the row at the top (tdp screen.4): the context
 // and the namespaces with their hotkeys, the Alterm in the background, the
 // Diff mode, and on the right the errors and warnings not seen yet.
-// When panel 2 has the focus its C (Diff) is the C that fires: [C] Diff
-// is lit there and [C]ontext is not (tdp M9).
+// The fields in a fixed width first, the chips that come and go after them:
+// nothing moves when one comes or goes (tdp L2).
+// [D]iff is lit where D is the Diff's, on panel 2; on panel 1 D drags
+// (tdp M9).
 func (m *Model) statusbar(int) []terminu.Span {
 	grey, value := terminu.Fg(terminu.Overlay0), terminu.Fg(terminu.Lavender)
 	lit, unlit := terminu.Fg(terminu.Blue), terminu.Fg(terminu.Surface2)
 	onList := m.screen.Focused() == m.listP
-	// panel 2's C is Diff where it has a row to compare: there [C]ontext
-	// does not fire (tdp M9).
-	compareC := onList && !m.atContainers() && m.list.HasItem()
-	ctxKey := lit
-	if compareC {
-		ctxKey = unlit
-	}
 	ctx, ns := "", "All Namespaces"
 	if m.client != nil {
 		ctx = m.client.ContextName()
@@ -393,10 +421,8 @@ func (m *Model) statusbar(int) []terminu.Span {
 			}
 		}
 	}
-	// tdp L2: the chips that come and go first, then the context in a fixed
-	// width, and the namespaces last, as wide as they are: the last dynamic
-	// field of a row pushes nothing. The lib fits the row to the terminal,
-	// and draws a control character in a name by its name.
+	// The lib fits the row to the terminal, and draws a control character
+	// in a name by its name.
 	out := []terminu.Span{{Text: " "}}
 	add := func(spans ...terminu.Span) {
 		if len(out) > 1 {
@@ -404,21 +430,24 @@ func (m *Model) statusbar(int) []terminu.Span {
 		}
 		out = append(out, spans...)
 	}
-	if m.alterm != nil && m.alterm.Running() {
-		// A live session is in effect (tdp color.2: Green).
-		add(terminu.Span{Text: "[Alt-t]", Style: lit}, terminu.Span{Text: "erm", Style: terminu.Fg(terminu.Green)})
-	}
-	if m.list.Anchor != "" { // in the Diff mode
-		cmpKey := unlit
-		if compareC {
-			cmpKey = lit
-		}
-		add(terminu.Span{Text: "[C]", Style: cmpKey}, terminu.Span{Text: " Diff", Style: grey})
-	}
-	add(terminu.Span{Text: "[C]", Style: ctxKey}, terminu.Span{Text: "ontext: ", Style: grey},
+	add(terminu.Span{Text: "[C]", Style: lit}, terminu.Span{Text: "ontext: ", Style: grey},
 		terminu.Span{Text: terminu.Pad(capMiddle(ctx, 24), 24), Style: value})
 	add(terminu.Span{Text: "[N]", Style: lit}, terminu.Span{Text: "amespace: ", Style: grey},
-		terminu.Span{Text: capMiddle(ns, 16), Style: value})
+		terminu.Span{Text: terminu.Pad(capMiddle(ns, 16), 16), Style: value})
+	// A live session is in effect (tdp color.2: Green). Not the last chip,
+	// it keeps its width when it is not there: [D]iff after it stays.
+	if m.alterm != nil && m.alterm.Running() {
+		add(terminu.Span{Text: "[Alt-t]", Style: lit}, terminu.Span{Text: "erm", Style: terminu.Fg(terminu.Green)})
+	} else {
+		add(terminu.Span{Text: terminu.Pad("", terminu.Width("[Alt-t]erm"))})
+	}
+	if m.list.Anchor != "" { // in the Diff mode
+		diffKey := unlit
+		if onList {
+			diffKey = lit
+		}
+		add(terminu.Span{Text: "[D]", Style: diffKey}, terminu.Span{Text: "iff", Style: grey})
+	}
 	return out
 }
 
@@ -479,7 +508,7 @@ func (m *Model) toast(kind terminu.ToastKind, text string) tea.Cmd {
 	text = strings.TrimSpace(text)
 	if first, rest, ok := strings.Cut(text, "\n"); ok && strings.TrimSpace(rest) != "" {
 		m.log.app.Log(kind, text)
-		text = strings.TrimSpace(first)
+		text = strings.TrimSpace(first) + "…" // the rest is in the App Log (tdp toast.2)
 	}
 	return m.app.Toast(kind, text)
 }

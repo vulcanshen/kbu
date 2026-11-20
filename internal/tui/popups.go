@@ -130,8 +130,14 @@ func (m *Model) setNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
 	if sel.Equal(m.client.Selection()) {
 		return nil
 	}
-	m.client.SetSelection(sel)
 	m.log.info("Namespace selection → " + selectionText(sel))
+	m.keepNamespaces = nil // the user picked (tdp E3)
+	return m.showNamespaces(sel)
+}
+
+// showNamespaces shows the namespaces in sel from now on.
+func (m *Model) showNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
+	m.client.SetSelection(sel)
 	m.stopLogs()
 	if m.watcher != nil {
 		m.watcher.Stop()
@@ -295,7 +301,7 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 		}
 		rows = append(rows, terminu.Action{Label: label, Desc: desc, Clear: true,
 			Ask: &terminu.Ask{Title: "Switch", Subject: ref.Name, Details: details,
-				Question: "Switch panel 1 + 2 to this resource?", Verb: "switch"},
+				Question: "Switch panels 1 and 2 to " + ref.Type.KubectlName() + "/" + ref.Name + "?", Verb: "switch"},
 			Do: func() tea.Cmd { return m.switchTo(ref) }})
 	}
 	return m.app.Menu("Breadcrumb", terminu.MenuSection{Actions: rows})
@@ -305,6 +311,7 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 // list arrives.
 func (m *Model) switchTo(ref k8s.RefTarget) tea.Cmd {
 	m.log.info("Switched panels 1 and 2 to " + refSubject(ref))
+	m.keepKind = nil // the user picked a kind (tdp E3)
 	m.kinds.ClearFilter()
 	m.kinds.Select(string(ref.Type))
 	m.kindAt = ref.Type

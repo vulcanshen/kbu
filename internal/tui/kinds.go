@@ -27,6 +27,9 @@ type dragState struct {
 func (m *Model) buildKinds() {
 	m.kinds = &terminu.List{Draggable: true, EmptyFact: "No kinds match", EmptyHint: "Press [Esc] to clear the filter"}
 	m.kinds.OnMove = func(r terminu.Row) tea.Cmd {
+		if k8s.ResourceType(r.ID) != m.kindAt {
+			m.keepKind = nil // the user picked a kind (tdp E3)
+		}
 		m.kindAt = k8s.ResourceType(r.ID)
 		m.setKindActions()
 		return m.selectKind(m.kindAt, true)
