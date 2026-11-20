@@ -173,41 +173,38 @@ func (m *Model) runEdit(rt k8s.ResourceType, item k8s.ResourceItem, then func() 
 }
 
 // rereadMsg is a resource read again after an edit, for the viewer that
-// show puts it in.
+// read puts it in.
 type rereadMsg struct {
 	key  string
 	item k8s.ResourceItem
 	err  error
-	show func(yaml string)
+	read func(yaml string, err error) tea.Cmd
 }
 
 // rereadYAML reads the resource again for the YAML viewer an edit was
 // started from: from the API for the kinds kbu knows, else as the watch has
 // it (onReread).
-func (m *Model) rereadYAML(rt k8s.ResourceType, item k8s.ResourceItem, show func(string)) tea.Cmd {
+func (m *Model) rereadYAML(rt k8s.ResourceType, item k8s.ResourceItem, read func(string, error) tea.Cmd) tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
 	cs, ref := m.client.Clientset(), k8s.RefTarget{Type: rt, Name: item.Name, Namespace: item.Namespace}
 	return func() tea.Msg {
 		it, err := k8s.FetchResourceByRef(context.Background(), cs, ref)
-		return rereadMsg{key: itemKey(item), item: it, err: err, show: show}
+		return rereadMsg{key: itemKey(item), item: it, err: err, read: read}
 	}
 }
 
 // onReread puts what was read in the viewer; when it could not be read
-// (a CRD), what the watch has now.
+// (a CRD), what the watch has now; with neither, the viewer says why.
 func (m *Model) onReread(msg rereadMsg) tea.Cmd {
 	if msg.err == nil {
-		msg.show(k8s.MarshalItemYAML(msg.item))
-		return nil
+		return msg.read(k8s.MarshalItemYAML(msg.item), nil)
 	}
 	if i := indexOfKey(m.shownItems(), msg.key); i >= 0 {
-		msg.show(k8s.MarshalItemYAML(m.shownItems()[i]))
-		return nil
+		return msg.read(k8s.MarshalItemYAML(m.shownItems()[i]), nil)
 	}
-	m.log.warn("YAML not read again after the edit: " + msg.err.Error())
-	return nil
+	return msg.read("", msg.err)
 }
 
 func namespaced(args []string, ns string) []string {
@@ -428,6 +425,7 @@ func (m *Model) switchContext(name string) tea.Cmd {
 		return m.toastErr("Context switch failed: " + err.Error())
 	}
 	m.log.info("Context switched to " + name)
+	m.keepContext, m.keepKind, m.keepNamespaces = "", nil, nil // the user picked another (tdp E3)
 	if m.watcher != nil {
 		m.watcher.Stop()
 	}
@@ -440,6 +438,7 @@ func (m *Model) switchContext(name string) tea.Cmd {
 	if rt.SupportsDrillDown() || k8s.DefaultRegistry.Get(rt) == nil {
 		rt = k8s.ResourcePods
 	}
+	m.kinds.ClearFilter() // the cursor goes to rt (tdp panel.14)
 	m.refreshKinds()
 	m.kinds.Select(string(rt))
 	m.current, m.kindSeq = "", 0

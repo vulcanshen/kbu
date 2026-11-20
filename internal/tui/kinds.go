@@ -27,6 +27,9 @@ type dragState struct {
 func (m *Model) buildKinds() {
 	m.kinds = &terminu.List{Draggable: true, EmptyFact: "No kinds match", EmptyHint: "Press [Esc] to clear the filter"}
 	m.kinds.OnMove = func(r terminu.Row) tea.Cmd {
+		if k8s.ResourceType(r.ID) != m.kindAt {
+			m.keepKind = nil // the user picked a kind (tdp E3)
+		}
 		m.kindAt = k8s.ResourceType(r.ID)
 		m.setKindActions()
 		return m.selectKind(m.kindAt, true)
@@ -134,6 +137,7 @@ func (m *Model) togglePin() tea.Cmd {
 	} else {
 		m.pinned = append(m.pinned, rt)
 	}
+	m.kinds.ClearFilter() // the kind moves, the cursor with it (tdp panel.14)
 	m.refreshKinds()
 	m.kinds.Select(string(rt))
 	m.setKindActions()
@@ -156,6 +160,7 @@ func (m *Model) startDrag() tea.Cmd {
 		return nil
 	}
 	m.drag = &dragState{before: slices.Clone(m.pinned), kind: m.kindAt}
+	m.kinds.ClearFilter() // the kind moves among every pinned one (tdp panel.14)
 	m.kinds.Hold()
 	m.kindsP.EnterMode(&terminu.Mode{
 		Name: "Drag", Exit: "cancel", Pause: true,

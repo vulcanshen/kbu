@@ -14,7 +14,7 @@
 
 **A single-pane Kubernetes workspace in your terminal.** The kinds on the left, the resources of the one you are on, and
 everything about the row under the cursor — its logs, what it is connected to, its events — live as the cluster changes.
-`Space` shows what you can do wherever you are, `?` shows the keys, `Esc` steps back. Relatives navigation, YAML compare and
+`Space` shows what you can do wherever you are, `?` shows the keys, `Esc` steps back. Relatives navigation, YAML diff and
 an embedded shell are built in; any other tool you trust rides along in that shell.
 
 > _When in doubt, press_ **`Space`**.
@@ -47,8 +47,8 @@ an embedded shell are built in; any other tool you trust rides along in that she
 - **Conditions** — `.status.conditions` as a table, as `kubectl describe` shows them; still there after the events expire.
 - **YAML viewer** (`[Y]AML`) — line numbers and colours; `/` searches, `n` / `N` go to the next and the previous match, `v`
   selects, `y` copies.
-- **Compare** — diff two resources of the same kind, only where they differ, unified or side by side (`h|l` switches, and
-  kbu keeps your choice).
+- **Diff** — two resources of the same kind, only where they differ, unified or side by side (`h|l` switches; every diff
+  opens unified).
   Status and server-managed fields are left out, so you see only what was written.
 - **Problems stand out** — a status cell is coloured only when it needs a look: pending or degraded, or failed.
 - **Helm releases** — when `helm` is on your `PATH`: each release's manifest, values, notes and hooks; its revision history
@@ -59,7 +59,7 @@ an embedded shell are built in; any other tool you trust rides along in that she
 
 - **Edit** (`[E]dit`) — the real `kubectl edit` in a terminal inside kbu, with your editor.
 - **Shell** (`[S]hell`) — `kubectl exec` into a container, inside kbu too.
-- **Delete** (`[D]elete`) — always asks first; a namespace gets an extra warning.
+- **Delete** (`[x] Delete`) — always asks first; a namespace gets an extra warning.
 - **Alterm** (`Alt-t`) — a shell that lives inside kbu. Hide it and bring it back with the same key: its directory, history
   and jobs stay. `Alt-Esc` ends it. What kbu does not do, your usual tools do here.
 - **Copy** (`y`) — the row, or the whole view, to your clipboard (OSC 52, so it works over ssh and in tmux).
@@ -109,8 +109,6 @@ scoop bucket add vulcanshen https://github.com/vulcanshen/scoop-bucket
 scoop install kbu
 ```
 
-Building from source is in [`docs/dev-remarks.md`](docs/dev-remarks.md).
-
 ### The first start
 
 kbu connects to your kubeconfig's current context and shows the Pods. Nothing is written until you pin, sort or quit:
@@ -148,11 +146,11 @@ there, `Esc` steps back, `q` leaves.
 
 | Key | What it does |
 |---|---|
-| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, quit). In a mode (Compare, Drag), what the mode can do |
+| `Space` | What you can do here: the item, then the panel, then `Global operation` (namespaces, context, Alterm, quit). In a mode (Diff, Drag), what the mode can do |
 | `?` | The keys of whatever is in front: the panel, or the popup on top. `?` again or `Esc` closes it |
 | `Tab`, `Shift-Tab`, `1–3` | The next panel, the previous one, a panel by its number |
 | `Enter` | The obvious action: drill in (a workload into its Pods), open a YAML, switch to a context, a shell into a container, roll back to a Helm revision. On panel 1 it takes you to panel 2; on Logs, Events, Conditions and Info it is full screen |
-| `Esc` | One step back: clear the filter, leave a mode (Compare, Drag), come back up a drill. It never leaves kbu |
+| `Esc` | One step back: clear the filter, leave a mode (Diff, Drag), come back up a drill. It never leaves kbu |
 | `!` | The App Log: what kbu did and what went wrong, newest last. The footer says `!:2 errors` until you have looked |
 | `q`, `Ctrl-C` | Leave kbu (it remembers where you were). With a popup open it asks first |
 | `j\|k`, `u\|d`, `gg\|G` | Down and up, half a page, the top and the end. On panel 3 `h\|l` switch tabs |
@@ -163,13 +161,13 @@ Every other key is a shortcut of a row of the `Space` menu, and the `?` of each 
 |---|---|---|
 | Panel 1 | `P` | Pin or unpin the kind |
 | Panel 1 | `D` | Drag the pinned kind into place: `j\|k`, then `Enter`; `Esc` puts it back |
-| Panel 2 | `Y`, `E`, `S`, `D` | YAML, edit, shell, delete |
-| Panel 2 | `C` | Compare: the row becomes the anchor and panel 2 goes into the Compare mode. Move to another row and press `C` or `Enter` to see where the two differ, as often as you like; `Esc` leaves the mode |
+| Panel 2 | `Y`, `E`, `S`, `x` | YAML, edit, shell, delete |
+| Panel 2 | `D` | Diff: the row becomes the anchor and panel 2 goes into the Diff mode. Move to another row and press `D` or `Enter` to see where the two differ, as often as you like; `Esc` leaves the mode |
 | Panel 2 | `Alt-S` | Sort the list by a column, then a direction |
 | Panel 2 | `.` | Show or hide what a Helm chart manages |
 | Any panel | `z` | Full screen; `z` again for the three |
 | Panel 3 | `B` | On Relatives, deep in a chain: the breadcrumb |
-| Anywhere on a panel | `N`, `C`, `Alt-t` | Namespaces, context (on panel 2 `C` is compare), Alterm |
+| Anywhere on a panel | `N`, `C`, `Alt-t` | Namespaces, context, Alterm |
 
 When a popup opens over another, only the one you are in is bright; everything under it dims.
 
@@ -208,7 +206,7 @@ defaults.
 | File | What it is |
 |---|---|
 | `config.yaml` | Your settings (below) |
-| `state.yaml` | Where you left off, and whether the compare was unified or side by side; written when you quit. `KBU__STATE` keeps it in another directory |
+| `state.yaml` | Where you left off; written when you quit. `KBU__STATE` keeps it in another directory |
 
 kbu's data is in **`~/.kbu`** (`KBU__DATA` points it elsewhere). Back it up if you need it: deleted, it is gone.
 
@@ -229,6 +227,12 @@ merge; when they cannot be moved, kbu keeps using them there; either way it show
 When kbu cannot read `config.yaml`, `state.yaml` or `kinds.yaml` (a broken file, no permission), it asks at the start:
 `Enter` renames it to `config.yaml.bak` (or `.bak.1`…, never over another) and kbu starts as on its first start, from the
 defaults, or with no pins and sorts; `Esc` leaves kbu and prints the path and the reason in the terminal.
+
+A value kbu cannot use (a negative `input_tab_width`, a sort in neither direction) does not stop it: at the start kbu
+copies the file to `.bak` and writes it again with the default in its place, and a toast says so. A key kbu does not
+read (a typo, or one an older kbu read, such as `mouse_opt_config`) stays in the file, and the App Log (`!`) names it
+at every start. A context in `config.yaml` or `state.yaml` that your kubeconfig no longer has is left as written: kbu
+starts on the next one (the setting's, else the kubeconfig's current-context) and says which.
 
 ### config.yaml
 
@@ -273,7 +277,7 @@ pod:
 - **The mouse does nothing.** kbu, like every terminu app, is used from the keyboard.
 - **Alterm, edit and shell need macOS or Linux** (WSL too): on Windows kbu cannot open a terminal inside itself.
 - **If the frames are a cell off**, the check kbu runs at start got a wrong answer from your terminal: `kbu iconwidth` prints
-  what it found; set `KBU__ICON_WIDTH` and `KBU__POWERLINE_WIDTH`. On Windows there is no check: set them there when your font
+  what it found and where each number came from; set `KBU__ICON_WIDTH` and `KBU__POWERLINE_WIDTH`. On Windows there is no check: set them there when your font
   draws icons two cells wide.
 - **Helm needs the `helm` command**: the Helm category appears only when it is on `PATH`, and the release list is read again
   every 3 seconds (Helm has no watch).
@@ -287,7 +291,6 @@ pod:
 ## Links
 
 - [CHANGELOG.md](CHANGELOG.md) — what changed in each release
-- [`docs/dev-remarks.md`](docs/dev-remarks.md) — how it works, why, building and testing
 
 ## terminu family
 

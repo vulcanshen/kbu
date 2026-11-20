@@ -2,6 +2,82 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
+## Unreleased
+
+- **Compare is now Diff, on `D`**: panel 2's `[D]iff`, the mode on the frame
+  `Diff` and its menu `DIFF MODE`. Delete moves to `x` (`[x] Delete`), and `C`
+  is the context's on every panel. Every diff opens unified: kbu no longer
+  keeps whether you last looked unified or side by side (`state.yaml`'s
+  `compare_split` goes).
+- **The command line follows the family's form**: `kbu iconwidth` prints two
+  lines, `icon N (from)` and `powerline N (from)`, each width with where it
+  came from; a command kbu does not know prints `kbu: Unknown command "x"`, a
+  blank line and the usage, and exits with status 2 instead of starting kbu;
+  every error kbu prints before or after it runs starts with `kbu: `.
+- **A value kbu cannot use no longer goes unnoticed**: a negative
+  `input_tab_width` in `config.yaml`, a panel in `state.yaml` that is none of
+  the three, a sort in `kinds.yaml` in neither direction. At the start kbu
+  copies the file to `.bak`, writes it again with the default in its place,
+  and a toast says so, a WARN in the App Log for each value.
+- **A key of `config.yaml` kbu does not read stays in the file**, also when kbu
+  writes it, and the App Log names it at every start: `No longer used` for one
+  an older kbu read (`mouse_opt_config`, `compare`, `pinned_resource_kinds`),
+  `Not read` for any other, such as a typo.
+- **A context your kubeconfig no longer has no longer stops kbu**: the one in
+  `state.yaml` or `config.yaml` is left as written, kbu starts on the next one
+  (the setting's, else the kubeconfig's current-context), and a Warning says
+  which.
+- **What one start has to say is one toast**, a row each: what moved, the
+  values put back to their defaults, a context that is gone.
+- **What kbu reads again on its own says a failure once**: panel 2's list,
+  panel 3's details and a workload's merged logs looking for its pods give an
+  Error toast the first time, again only for another failure, and an INFO
+  entry when they can be read again; a workload running no pods is said once. The Helm releases,
+  read again every few seconds, log one INFO entry for what changed: installed,
+  uninstalled, a new revision or status.
+- **An action that changes what a panel lists clears its filter first**:
+  picking namespaces, showing or hiding the Helm-managed rows, pinning a kind,
+  dragging the pinned kinds, switching the context, switching to a resource of
+  the kind shown, and the History tab putting its cursor on the deployed
+  revision.
+- **The YAML viewer's search is the family's**: `/`, `n|N` as before, its
+  status on the bottom border; with no hit the toast says `No line has <text>`.
+  After an edit the viewer reads the resource again as the family does: the
+  search found again, the selection kept where it still can be, and a resource
+  that can't be read again said in an Error toast.
+- **A kubeconfig kbu cannot read no longer stops it**: kbu opens, panel 2 says
+  why and what to do, and `[N]amespace` and `[C]ontext` are off until then.
+  A watch that fails keeps the rows panel 2 already has.
+- **What `state.yaml` names that is not there stays in it** as you left it,
+  until you pick another: a context gone from your kubeconfig, namespaces gone
+  from the cluster (kbu shows the ones still there, or all of them, and a
+  Warning names those gone), and a kind not found (kbu starts on Pods; a CRD
+  found only after start is not warned about unless discovery ends without
+  it, and kbu no longer jumps to it once found).
+- **km8's settings, kbu's name before v2.0, move item by item** the first time
+  kbu starts with none of its own, the empty directory taken away, as the
+  other old places do; when they cannot move, kbu keeps using them there
+  instead of not starting.
+- **The statusbar's context and namespaces no longer move**: the chips that
+  come and go, `[Alt-t]erm` and `[D]iff`, are after them.
+- **A toast with more to say ends with `…`**, the whole of it in the App Log.
+- **Panel 3**: the Events tab is read again with the details, newest first,
+  and dims with the panel; the Space menu's Go live is gone (`G` still goes to
+  the end and follows the logs); a relative already in the chain has its
+  Drill in off instead of an error; `Esc` back up the chain puts the cursor on
+  the relative you came out of, and the Breadcrumb's confirm names the
+  resource.
+- **A `state.yaml` that cannot be written on leaving is told**: kbu still
+  leaves, then prints `kbu: … could not be written: …` and exits with
+  status 1.
+- **CRD discovery that fails is an Error toast**, panel 1 keeping its built-in
+  kinds, where it was only in the App Log.
+- **The developer notes are gone** (`docs/dev-remarks.md`): kbu is now kept
+  with the terminu harness, its records in `harness-assets/`.
+- A Warning that comes once the cluster has answered (namespaces gone, a kind
+  not found) joins the start's toast while that one still shows.
+- On terminu-go v1.2.21-beta.3 (tdp v1.2.19).
+
 ## v4.0.1 — tdp v1.1.0
 
 Nothing you see or press changes since v4.0.0. What changed is how kbu is

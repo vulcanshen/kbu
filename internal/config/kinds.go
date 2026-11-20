@@ -3,10 +3,13 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 
+	terminu "github.com/vulcanshen/terminu-go"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,6 +21,28 @@ import (
 // but are dropped from the sidebar, so a re-install of the CRD silently
 // restores the user's pin / sort.
 type KindData map[string]ResourceKindConfigEntry
+
+// Misfits are the entries of the pins and sorts kbu cannot use, each taken
+// out of k (tdp E3): a sort by a column in neither direction, asc or desc.
+func (k KindData) Misfits() []terminu.Misfit {
+	var out []terminu.Misfit
+	for _, kind := range slices.Sorted(maps.Keys(k)) {
+		entry := k[kind]
+		keep := entry.Sort[:0:0]
+		for _, tier := range entry.Sort {
+			if tier.Direction == SortDirectionAscending || tier.Direction == SortDirectionDescending {
+				keep = append(keep, tier)
+				continue
+			}
+			out = append(out, terminu.Misfit{Key: fmt.Sprintf("%s sort by %s (direction %q)", kind, tier.Column, tier.Direction)})
+		}
+		if len(keep) != len(entry.Sort) {
+			entry.Sort = keep
+			k.put(kind, entry)
+		}
+	}
+	return out
+}
 
 // KindDataPath is the pins' and sorts' file: kinds.yaml in DataDir(), which
 // $KBU__DATA moves.

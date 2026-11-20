@@ -1,0 +1,178 @@
+id: 1
+from: 0
+to: v1.2.19
+tasks:
+  - id: 1
+    spec: 1
+    request: 一頁看完：左邊是資源種類，中間是游標所在那一種的資源，下面是游標那一列的一切；終端機至少 40×15，60 欄以下一次一個 panel
+    tdp: [tdp L1, tdp screen.1, tdp screen.5, tdp screen.7, tdp panel.13, tdp K2, tdp P5]
+    remark:
+      - |
+        版面（tdp L1 把排列交給 app）：
+        ┌[1] KINDS──┐┌[2] PODS──────────────┐
+        │ 種類       ││ 清單                  │
+        │           │└──────────────────────┘
+        │           │┌[3] LOGS RELATIVES …──┐
+        │           ││ 游標那一列的明細       │
+        └───────────┘└──────────────────────┘
+        panel 1 寬 min(26, 寬/3)，panel 3 高 min(14, 高/2)；60 欄以下（NarrowBelow）一次只畫 focus 的 panel
+      - 最低 40×15，比家族的 60×32 低：kbu 要在終端機常見的 80×24 與分割的窗格裡用（tdp L1 的最低尺寸由 app 定、不高於標準）
+  - id: 2
+    spec: 1
+    request: 資源種類的清單：28 種內建資源，加上叢集裡的 CRD，分類列出
+    tdp: [tdp panel.5, tdp panel.11, tdp panel.13, tdp K3, tdp P5, tdp note.7, tdp M2, tdp panel.15, tdp F5, tdp E3, tdp toast.2, tdp M5]
+    remark:
+      - 分類（KUBECONFIG、CLUSTER、WORKLOADS、NETWORK、CONFIG、STORAGE、RBAC、AUTOSCALING、CUSTOM RESOURCES）是 panel.11 的群組；釘選的在最上面一組
+  - id: 3
+    spec: 1
+    request: 游標所在那一種的資源清單，跟著叢集即時更新；狀態欄只在需要注意時上色；窄的時候先截長的值
+    tdp: [tdp panel.5, tdp panel.15, tdp screen.8, tdp color.2, tdp L2, tdp T2, tdp M2, tdp P4, tdp P5]
+    remark:
+      - 欄位依種類（Kubernetes 的慣例，kubectl get 的欄）；狀態的顏色是 app 的內容（tdp P4）：轉換中與降級的、失敗的各一種顏色，健康的不上色
+      - 清單用 Kubernetes 的 watch 保持最新：tdp note.7 的「連線一直保持最新的清單」，不是 T2 的串流內容，失焦時照常變暗
+  - id: 4
+    spec: 1
+    request: 游標那一列的明細分 tab：Logs、Relatives、Events、Conditions、Info，Helm release 多一個 History
+    tdp: [tdp panel.4, tdp panel.13, tdp panel.15, tdp K3, tdp screen.6, tdp M2, tdp P5, tdp note.9, tdp T2, tdp K12, tdp M5]
+    remark:
+      - 每一種資源有哪幾個 tab 由 kbu 定（tdp P5）；Logs 是串流的內容（tdp T2）
+  - id: 5
+    spec: 1
+    request: Pod 的 log 跟著最新的一行，往上捲就停；workload 的每一個 Pod 的 log 合成一份，Pod 與 container 各有自己的顏色
+    tdp: [tdp T2, tdp note.7, tdp panel.15, tdp P5, tdp K12, tdp note.9, tdp toast.2, tdp screen.8]
+  - id: 6
+    spec: 1
+    request: events：workload 自己的加上它的 Pod 的（CronJob 再加上它的 Job 的），新的在前
+    tdp: [tdp panel.13, tdp panel.15, tdp P5, tdp screen.8, tdp T2, tdp K12]
+  - id: 7
+    spec: 1
+    request: conditions：`.status.conditions` 的表，跟 kubectl describe 看到的一樣
+    tdp: [tdp panel.13, tdp panel.15, tdp P5]
+  - id: 8
+    spec: 1
+    request: Relatives：每個資源列出它連到的東西，跟著連結走、退回一步，把 panel 1、2 切到走過的鏈上任何一點
+    tdp: [tdp panel.10, tdp K3, tdp K4, tdp confirm, tdp F6, tdp panel.14, tdp note.7, tdp P5, tdp M6, tdp panel.11, tdp toast.2, tdp T1, tdp menu, tdp popup.1, tdp M5]
+    remark:
+      - 連到什麼是 Kubernetes 的關係（owner、selector、volume、binding……），kbu 照 YAML 字面指向的目標走
+  - id: 9
+    spec: 1
+    request: Drill-down：workload 往下看它的 Pod、Pod 看它的 container、CronJob 看 Job、HPA 看它的目標、Helm release 看 chart 部署的物件
+    tdp: [tdp panel.10, tdp K3, tdp K4, tdp panel.14, tdp note.7, tdp toast.2, tdp T1, tdp M2]
+  - id: 10
+    spec: 1
+    request: 一次看好幾個 namespace，或整個叢集；kbu 記得選擇
+    tdp: [tdp checkbox, tdp M4, tdp panel.14, tdp E3, tdp note.7, tdp note.6, tdp toast.2, tdp F5, tdp toast.1]
+    remark:
+      - 叢集裡不在的 namespace 照 E3「指到不在的一筆」：user 2026-11-20 定（A：app 外面的東西也算），寫進 tdp main c893eef 的 E3（E3-41，下一版 tdp 才有）
+      - 晚到的 Warning 走 App.Notify，啟動的 toast 還在畫面上時併進去（user 2026-11-20 選 C，tdp main ef9d168 的 E3-43；terminu-go v1.2.21-beta.2 起）
+  - id: 11
+    spec: 1
+    request: kubeconfig 的 context：唯讀的清單、憑證不顯示；讓 kbu 切到另一個 context，不動 ~/.kube/config
+    tdp: [tdp select, tdp confirm, tdp F6, tdp M4, tdp M9, tdp panel.14, tdp note.7, tdp P5, tdp toast.2]
+  - id: 12
+    spec: 1
+    request: 把常用的種類釘在最上面，拖成自己要的順序
+    tdp: [tdp panel.8, tdp K11, tdp K12, tdp reorder, tdp menu.4, tdp screen.2, tdp panel.14, tdp E3, tdp note.7, tdp toast.2, tdp M6]
+    remark:
+      - 拖曳是 panel 的 Drag mode（tdp panel.8，元件的模式，不是 app 自己的）：只在釘選的種類之間搬；進入的鍵 D 由 app 定（panel.8）
+  - id: 13
+    spec: 1
+    request: 任何清單依一欄或好幾欄排序，依種類記住
+    tdp: [tdp menu, tdp T1, tdp E3, tdp note.7, tdp P5, tdp panel.6, tdp F1, tdp toast.2]
+  - id: 14
+    spec: 1
+    request: 打字篩選種類與資源
+    tdp: [tdp panel.14, tdp note.7]
+  - id: 15
+    spec: 1
+    request: 離開再開，從上次停的地方接著用：同一個 context、namespace、種類、那一列、panel 與 tab
+    tdp: [tdp E3, tdp K3, tdp note.7, tdp toast.2, tdp F5, tdp E1]
+    remark:
+      - 啟動後才找得到的種類（CRD）：user 2026-11-20 定，寫進 tdp main c893eef 的 E3（E3-42，下一版 tdp 才有）：找完之前用預設值，找完還沒有才警告；找到了不自己切過去（tdp K3：背景的事不換畫面）
+      - 晚到的 Warning 走 App.Notify，啟動的 toast 還在畫面上時併進去（user 2026-11-20 選 C，tdp main ef9d168 的 E3-43；terminu-go v1.2.21-beta.2 起）
+  - id: 16
+    spec: 1
+    request: YAML：有行號與語法顏色，可以搜尋、選取、複製，也可以從這裡 edit
+    tdp: [tdp note.2, tdp note.3, tdp note.4, tdp note.9, tdp T1, tdp note.7]
+  - id: 17
+    spec: 1
+    request: 比對同一種的兩個資源，只列出不同的地方；status 與 server 管的欄位先拿掉
+    tdp: [tdp panel.9, tdp note.8, tdp K11, tdp M9, tdp note.7, tdp screen.4, tdp L2]
+    remark:
+      - 鍵是 D、寫成 [D]iff：user 2026-11-20 定，寫進 tdp main e60b6f8 的 K13（下一版 tdp 才有）
+  - id: 18
+    spec: 1
+    request: Helm release：清單、manifest、values、notes 與 hooks；外面裝、升、刪 release 時跟著變
+    tdp: [tdp note.2, tdp note.7, tdp T1, tdp P5, tdp note.9, tdp toast.2, tdp T2]
+    remark:
+      - Helm 沒有 watch：release 清單每 3 秒重讀一次（kbu 自己重讀的內容，tdp note.7）
+  - id: 19
+    spec: 1
+    request: Helm release 的 revision 歷史與 rollback
+    tdp: [tdp confirm, tdp F6, tdp toast.2, tdp panel.14, tdp M6, tdp P5, tdp panel.7, tdp K3]
+  - id: 20
+    spec: 1
+    request: Helm chart 管理的物件有標記、不讓人誤改，想看清楚時可以藏起來
+    tdp: [tdp M6, tdp panel.14, tdp toast.2, tdp P5, tdp panel.7, tdp panel.5, tdp M5]
+  - id: 21
+    spec: 1
+    request: edit：在 kbu 裡跑真正的 kubectl edit，用使用者的 editor；每一次都記下來
+    tdp: [tdp confirm, tdp F6, tdp terminal, tdp K10, tdp T1, tdp note.9, tdp E3, tdp note.6, tdp toast.2]
+  - id: 22
+    spec: 1
+    request: shell：kubectl exec 進 container，在 kbu 裡
+    tdp: [tdp confirm, tdp F6, tdp terminal, tdp K10, tdp toast.2, tdp T1, tdp note.6, tdp terminal.4, tdp terminal.5, tdp terminal.6, tdp note.7]
+  - id: 23
+    spec: 1
+    request: delete：一定先問，刪 namespace 多一句警告；每一次都記下來
+    tdp: [tdp confirm, tdp F6, tdp toast.2, tdp E3, tdp M6, tdp T1, tdp note.7, tdp M5]
+    remark:
+      - 鍵是 x、寫成 [x] Delete：user 2026-11-20 定，寫進 tdp main e60b6f8 的 K13（下一版 tdp 才有）；永久拿掉東西的不用 D、d
+  - id: 24
+    spec: 1
+    request: 住在 kbu 裡的 shell（Alterm）：藏起來還會繼續跑，叫回來時目錄、歷史與背景工作都還在
+    tdp: [tdp terminal, tdp M4, tdp K10, tdp screen.4, tdp popup.1, tdp L2, tdp toast.2]
+  - id: 25
+    spec: 1
+    request: 複製一列、一個 tab 或選取的字到剪貼簿，ssh 與 tmux 裡也能用
+    tdp: [tdp toast.2, tdp note.4, tdp F5, tdp P5, tdp note.6]
+  - id: 26
+    spec: 1
+    request: 一個 panel 用滿整個畫面，再按一次回到三個
+    tdp: [tdp screen.6, tdp note.7]
+  - id: 27
+    spec: 1
+    request: 最上面一列寫出現在的 context 與 namespace
+    tdp: [tdp screen.4, tdp M9, tdp M5, tdp L2, tdp M4, tdp color.2]
+  - id: 28
+    spec: 1
+    request: 看 kbu 做過的事與出問題的事；離開 kbu，有 popup 開著時先問
+    tdp: [tdp note.7, tdp F5, tdp K9, tdp toast.2, tdp note.6]
+  - id: 29
+    spec: 1
+    request: 設定、上次停在哪裡、釘選與排序、log 的位置；舊版放在別的地方的，升級時搬過來
+    tdp: [tdp E2, tdp E3, tdp note.7, tdp note.6, tdp toast.2]
+  - id: 30
+    spec: 1
+    request: 檔案壞了、有用不了的值、有打錯的 key、指到不在的 context 時，使用者的東西不會默默不見
+    tdp: [tdp E3, tdp confirm, tdp toast.2, tdp note.7, tdp E1]
+  - id: 31
+    spec: 1
+    request: 讀叢集失敗時看得到為什麼，同一個錯誤不一直跳
+    tdp: [tdp note.7, tdp panel.15, tdp F5, tdp E3, tdp E1, tdp toast.2, tdp M6, tdp M5]
+  - id: 32
+    spec: 1
+    request: 命令列：kbu version、kbu help、kbu iconwidth
+    tdp: [tdp E1, tdp E5, tdp E3]
+  - id: 33
+    spec: 1
+    request: splash
+    tdp: [tdp S1, tdp S2, tdp S3, tdp S4, tdp S5]
+  - id: 34
+    spec: 1
+    request: Nerd Font 的 icon 與 powerline 符號在不同字型下都排得齊
+    tdp: [tdp E4, tdp E5, tdp E2]
+  - id: 35
+    spec: 1
+    request: 用 install.sh、Homebrew、Scoop 安裝，每一版發到 GitHub release
+    tdp: [harness project]

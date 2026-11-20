@@ -2,7 +2,7 @@
 # kbu uninstaller for macOS / Linux.
 # Usage: curl -fsSL https://raw.githubusercontent.com/vulcanshen/kbu/main/uninstall.sh | sh
 #
-# terminu family template (tdp project/uninstall.sh). Replace kbu; the
+# terminu family template (harness project/uninstall.sh). Replace kbu; the
 # blocks marked "app's own" are the app's, the rest stays as it is.
 
 set -e

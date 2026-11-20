@@ -31,63 +31,36 @@ func (m *Model) selection() *terminu.Selection {
 
 // --- the YAML viewer ---------------------------------------------------------
 
-// yamlSearch is the YAML viewer's search: the viewer draws its hits, every
-// one underlined and the one it is on as the cursor block
-// (tdp note.2).
-type yamlSearch struct{ v *terminu.Viewer }
-
-func (s *yamlSearch) find(q string) tea.Cmd {
-	s.v.Hits, s.v.Current = s.v.FindText(q), 0
-	return s.go_(0)
-}
-
-func (s *yamlSearch) go_(step int) tea.Cmd {
-	n := len(s.v.Hits)
-	if n == 0 {
-		return nil
-	}
-	s.v.Current = ((s.v.Current+step)%n + n) % n
-	s.v.ScrollTo(s.v.Hits[s.v.Current].Line)
-	return nil
-}
-
 // openYAML shows a resource's YAML (tdp note): / searches,
-// n|N go to the next and the previous match, v selects, y copies, E edits.
+// n|N go to the next and the previous match (the lib's search, tdp note.3),
+// v selects, y copies, E edits.
 func (m *Model) openYAML(rt k8s.ResourceType, item k8s.ResourceItem, yaml string) tea.Cmd {
 	m.log.info("Opened the YAML of " + subject(rt, item))
 	if yaml == "" {
 		yaml = "# no YAML — the resource may still be loading"
 	}
 	v := &terminu.Viewer{Title: "YAML", Subject: subject(rt, item), Glyph: glyphYAML,
-		Lines: strings.Split(strings.TrimRight(yaml, "\n"), "\n"), Lang: "yaml", Select: m.selection()}
-	s := &yamlSearch{v: v}
-	// show puts the resource as it is now in the viewer, after an edit.
-	show := func(y string) {
-		yaml, v.Lines, v.Hits = y, strings.Split(strings.TrimRight(y, "\n"), "\n"), nil
+		Lines: strings.Split(strings.TrimRight(yaml, "\n"), "\n"), Lang: "yaml", Select: m.selection(),
+		Search: &terminu.ViewerSearch{Title: "Search", Glyph: glyphSearch,
+			Prompt: "Find in the YAML; [n] and [N] go to the next and the previous"}}
+	// read puts the resource as it is now in the viewer, after an edit, as
+	// content read again while open (tdp note.9); one that cannot be read is
+	// said as the viewer's (tdp note-100).
+	read := func(y string, err error) tea.Cmd {
+		if err != nil {
+			return m.app.CannotReadAgain(v, "The YAML of "+subject(rt, item)+" can't be read again: "+err.Error())
+		}
+		yaml = y
+		return m.app.ReadAgain(v, strings.Split(strings.TrimRight(y, "\n"), "\n"))
 	}
 	v.Keys = []terminu.ViewerKey{
-		{Key: "/", Desc: "search", Do: func() tea.Cmd {
-			// Search: a pasted control character is only drawn, not refused
-			// (tdp input.8).
-			return m.app.Text(terminu.TextInput{Title: "Search", Subject: subject(rt, item), Glyph: glyphSearch,
-				Name: "The text to find", Search: true,
-				Prompt: "Find in the YAML; [n] and [N] go to the next and the previous", Verb: "search",
-				Done: func(q string) tea.Cmd {
-					if s.find(q); len(v.Hits) == 0 {
-						return m.app.Toast(terminu.Info, "No match for "+q)
-					}
-					return nil
-				}})
-		}},
-		{Key: "n", Desc: "next", Do: func() tea.Cmd { return s.go_(1) }},
-		{Key: "N", Desc: "previous", Do: func() tea.Cmd { return s.go_(-1) }},
 		{Key: "y", Desc: "copy", Do: func() tea.Cmd { return copyText(yaml) }},
 	}
 	if allowsEdit(rt) && item.Name != "" && !k8s.IsHelmManaged(item) {
 		// tdp T1: an edit in the editor keeps the viewer it was started
 		// from; when the edit ends, the viewer reads the resource again.
 		v.Keys = append(v.Keys, terminu.ViewerKey{Key: "E", Desc: "edit", Do: func() tea.Cmd {
-			return m.confirmEdit(rt, item, func() tea.Cmd { return m.rereadYAML(rt, item, show) })
+			return m.confirmEdit(rt, item, func() tea.Cmd { return m.rereadYAML(rt, item, read) })
 		}})
 	}
 	return m.app.Viewer(v)
@@ -157,13 +130,20 @@ func (m *Model) setNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
 	if sel.Equal(m.client.Selection()) {
 		return nil
 	}
-	m.client.SetSelection(sel)
 	m.log.info("Namespace selection → " + selectionText(sel))
+	m.keepNamespaces = nil // the user picked (tdp E3)
+	return m.showNamespaces(sel)
+}
+
+// showNamespaces shows the namespaces in sel from now on.
+func (m *Model) showNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
+	m.client.SetSelection(sel)
 	m.stopLogs()
 	if m.watcher != nil {
 		m.watcher.Stop()
 	}
 	m.drill, m.rootItems = nil, nil
+	m.list.ClearFilter() // panel 2 lists other rows (tdp panel.14)
 	m.setListRows()
 	m.listP.Loading = true
 	m.resetDetail(m.current)
@@ -321,7 +301,7 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 		}
 		rows = append(rows, terminu.Action{Label: label, Desc: desc, Clear: true,
 			Ask: &terminu.Ask{Title: "Switch", Subject: ref.Name, Details: details,
-				Question: "Switch panel 1 + 2 to this resource?", Verb: "switch"},
+				Question: "Switch panels 1 and 2 to " + ref.Type.KubectlName() + "/" + ref.Name + "?", Verb: "switch"},
 			Do: func() tea.Cmd { return m.switchTo(ref) }})
 	}
 	return m.app.Menu("Breadcrumb", terminu.MenuSection{Actions: rows})
@@ -331,6 +311,7 @@ func (m *Model) openBreadcrumb() tea.Cmd {
 // list arrives.
 func (m *Model) switchTo(ref k8s.RefTarget) tea.Cmd {
 	m.log.info("Switched panels 1 and 2 to " + refSubject(ref))
+	m.keepKind = nil // the user picked a kind (tdp E3)
 	m.kinds.ClearFilter()
 	m.kinds.Select(string(ref.Type))
 	m.kindAt = ref.Type
@@ -339,6 +320,7 @@ func (m *Model) switchTo(ref k8s.RefTarget) tea.Cmd {
 	m.pendingSel = &r
 	if ref.Type == m.current && m.kindSeq > 0 {
 		m.drill = nil
+		m.list.ClearFilter() // the cursor goes to ref, hidden or not (tdp panel.14)
 		m.setListRows()
 		for _, it := range m.rootItems {
 			if it.Name == ref.Name && it.Namespace == ref.Namespace {

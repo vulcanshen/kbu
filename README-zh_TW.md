@@ -14,7 +14,7 @@
 
 **終端機裡的一頁式 Kubernetes 工作區。** 左邊是資源種類，中間是游標所在那一種的資源，下面是游標那一列的一切 —— 它的
 log、它連到哪些東西、它的 events —— 跟著叢集即時更新。在哪裡都可以按 `Space` 看能做什麼，按 `?` 看按鍵，按 `Esc` 退一步。
-Relatives 導覽、YAML 比對與內嵌的 shell 都是內建的；kbu 沒做的事，用你慣用的工具在那個 shell 裡做。
+Relatives 導覽、YAML diff 與內嵌的 shell 都是內建的；kbu 沒做的事，用你慣用的工具在那個 shell 裡做。
 
 > _不確定的時候，按_ **`Space`**。
 
@@ -41,7 +41,7 @@ Relatives 導覽、YAML 比對與內嵌的 shell 都是內建的；kbu 沒做的
 - **Events** —— workload 自己的 events 加上它的 Pod 的（CronJob 再加上它的 Job 的），新的在前。
 - **Conditions** —— `.status.conditions` 的表，跟 `kubectl describe` 看到的一樣；events 過期之後還在。
 - **YAML viewer**（`[Y]AML`）—— 有行號與語法顏色；`/` 搜尋，`n` / `N` 到下一個、上一個符合，`v` 選取，`y` 複製。
-- **Compare** —— 比對同一種的兩個資源，只列出不同的地方，unified 或左右並排（`h|l` 切換，kbu 會記住）。status 與 server 管的欄位會先拿掉，只看寫下的內容。
+- **Diff** —— 比對同一種的兩個資源，只列出不同的地方，unified 或左右並排（`h|l` 切換；每次打開都是 unified）。status 與 server 管的欄位會先拿掉，只看寫下的內容。
 - **問題一眼看得到** —— 狀態欄只在需要注意時上色：pending 或降級中，或失敗。
 - **Helm releases** —— `helm` 在 `PATH` 上時：每個 release 的 manifest、values、notes 與 hooks；revision 歷史與 rollback。
   chart 管理的物件有標記、不讓你誤改，想看清楚時按 `.` 藏起來。
@@ -51,7 +51,7 @@ Relatives 導覽、YAML 比對與內嵌的 shell 都是內建的；kbu 沒做的
 
 - **Edit**（`[E]dit`）—— 在 kbu 裡的 terminal 跑真正的 `kubectl edit`，用你的 editor。
 - **Shell**（`[S]hell`）—— `kubectl exec` 進 container，一樣在 kbu 裡。
-- **Delete**（`[D]elete`）—— 一定先問；刪 namespace 會多一句警告。
+- **Delete**（`[x] Delete`）—— 一定先問；刪 namespace 會多一句警告。
 - **Alterm**（`Alt-t`）—— 住在 kbu 裡的 shell。用同一個鍵藏起來、叫回來：目錄、歷史與背景工作都還在。`Alt-Esc` 結束它。
   kbu 沒做的事，你慣用的工具在這裡做。
 - **複製**（`y`）—— 那一列或整個畫面到剪貼簿（OSC 52，所以 ssh 與 tmux 裡也能用）。
@@ -97,8 +97,6 @@ scoop bucket add vulcanshen https://github.com/vulcanshen/scoop-bucket
 scoop install kbu
 ```
 
-從原始碼建置寫在 [`docs/dev-remarks.md`](docs/dev-remarks.md)。
-
 ### 第一次啟動
 
 kbu 連上 kubeconfig 的 current context，先顯示 Pods。在你釘選、排序或離開之前什麼都不寫：釘選、排序時才建立 `~/.kbu`，
@@ -134,11 +132,11 @@ kbu
 
 | 鍵 | 做什麼 |
 |---|---|
-| `Space` | 這裡能做什麼：先是這一項，再是這個 panel，最後是 `Global operation`（namespace、context、Alterm、離開）。在模式裡（Compare、Drag）列出模式能做的 |
+| `Space` | 這裡能做什麼：先是這一項，再是這個 panel，最後是 `Global operation`（namespace、context、Alterm、離開）。在模式裡（Diff、Drag）列出模式能做的 |
 | `?` | 最前面那個東西的按鍵：panel，或最上層的 popup。再按 `?` 或 `Esc` 關掉 |
 | `Tab`、`Shift-Tab`、`1–3` | 下一個 panel、上一個、照編號跳 |
 | `Enter` | 最直觀的動作：drill 進去（workload 進它的 Pods）、打開 YAML、切到某個 context、shell 進 container、rollback 到某個 Helm revision。在 panel 1 上是到 panel 2；在 Logs、Events、Conditions、Info 上是全螢幕 |
-| `Esc` | 退一步：清掉篩選、離開模式（Compare、Drag）、從 drill 退回一層。永遠不會離開 kbu |
+| `Esc` | 退一步：清掉篩選、離開模式（Diff、Drag）、從 drill 退回一層。永遠不會離開 kbu |
 | `!` | App Log：kbu 做過的事與出問題的事，最新的在最下面。還沒看過的錯誤，footer 會寫 `!:2 errors`，打開看過就回去 |
 | `q`、`Ctrl-C` | 離開 kbu（會記住你在哪裡）。有 popup 開著時會先問 |
 | `j\|k`、`u\|d`、`gg\|G` | 下、上，半頁，到頭、到尾。panel 3 上 `h\|l` 切 tab |
@@ -149,13 +147,13 @@ kbu
 |---|---|---|
 | Panel 1 | `P` | 釘選或取消釘選這個種類 |
 | Panel 1 | `D` | 把釘選的種類拖到位置：`j\|k`，然後 `Enter`；`Esc` 放回原處 |
-| Panel 2 | `Y`、`E`、`S`、`D` | YAML、edit、shell、delete |
-| Panel 2 | `C` | 比對：這一列成為基準，panel 2 進入 Compare 模式。移到另一列按 `C` 或 `Enter` 看兩者哪裡不同，要比幾次都可以；`Esc` 離開模式 |
+| Panel 2 | `Y`、`E`、`S`、`x` | YAML、edit、shell、delete |
+| Panel 2 | `D` | Diff：這一列成為基準，panel 2 進入 Diff 模式。移到另一列按 `D` 或 `Enter` 看兩者哪裡不同，要比幾次都可以；`Esc` 離開模式 |
 | Panel 2 | `Alt-S` | 依一欄、再選方向排序清單 |
 | Panel 2 | `.` | 顯示或藏起 Helm chart 管理的物件 |
 | 任何 panel | `z` | 全螢幕；再按 `z` 回到三個 |
 | Panel 3 | `B` | 在 Relatives 走深之後：breadcrumb |
-| panel 上任何地方 | `N`、`C`、`Alt-t` | namespace、context（在 panel 2 上 `C` 是 compare）、Alterm |
+| panel 上任何地方 | `N`、`C`、`Alt-t` | namespace、context、Alterm |
 
 popup 疊在另一個 popup 上時，只有你正在用的那一個是亮的，底下的都變暗。
 
@@ -191,7 +189,7 @@ kbu 的設定與上次停在哪裡都在 **`~/.config/kbu`**（有設 `$XDG_CONF
 | 檔案 | 是什麼 |
 |---|---|
 | `config.yaml` | 你的設定（見下面） |
-| `state.yaml` | 上次停在哪裡，以及比對看的是 unified 還是左右並排；離開時寫入。`KBU__STATE` 可以放到別的目錄 |
+| `state.yaml` | 上次停在哪裡；離開時寫入。`KBU__STATE` 可以放到別的目錄 |
 
 kbu 的資料在 **`~/.kbu`**（`KBU__DATA` 可以改到別的目錄）。需要的話自己備份：刪掉就找不回來了。
 
@@ -208,6 +206,11 @@ kbu 的資料在 **`~/.kbu`**（`KBU__DATA` 可以改到別的目錄）。需要
 它們留在 `config.yaml` 讓你自己合併；搬不動時 kbu 照舊用 `config.yaml` 裡的；兩種都會寫出兩個路徑。
 
 kbu 讀不了 `config.yaml`、`state.yaml` 或 `kinds.yaml`（檔案壞了、沒有權限）時，啟動時會問：`Enter` 把它改名成 `config.yaml.bak`（已經有了就是 `.bak.1`……，不會蓋掉），像第一次打開一樣，從預設值、或沒有釘選與排序重新開始；`Esc` 離開 kbu，把路徑與原因印在終端機上。
+
+kbu 用不了的值（負的 `input_tab_width`、方向不是 asc 也不是 desc 的排序）不會讓它停下來：啟動時先把檔案複製成 `.bak`，
+再用預設值取代那個值重寫檔案，並跳一個 toast 告訴你。kbu 不讀的 key（打錯字，或舊版讀過的，例如 `mouse_opt_config`）留在
+檔案裡，每次啟動在 App Log（`!`）寫出來。`config.yaml` 或 `state.yaml` 寫的 context 已經不在你的 kubeconfig 裡時，檔案照原樣
+留著：kbu 改用下一個（設定的，再來是 kubeconfig 的 current-context）啟動，並告訴你用了哪一個。
 
 ### config.yaml
 
@@ -251,7 +254,7 @@ pod:
 
 - **滑鼠沒有作用。** kbu 跟 terminu 家族的每個 app 一樣，用鍵盤操作。
 - **Alterm、edit 與 shell 要 macOS 或 Linux**（WSL 也可以）：在 Windows 上 kbu 開不了內嵌的 terminal。
-- **框線歪了一格的話**，是 kbu 啟動時問終端機得到的答案不對：`kbu iconwidth` 印出它量到的；設 `KBU__ICON_WIDTH` 與
+- **框線歪了一格的話**，是 kbu 啟動時問終端機得到的答案不對：`kbu iconwidth` 印出它量到的，以及每個數字從哪裡來；設 `KBU__ICON_WIDTH` 與
   `KBU__POWERLINE_WIDTH`。Windows 不會量：字型把 icon 畫成兩格時，在那裡設這兩個變數。
 - **Helm 要有 `helm` 指令**：`helm` 在 `PATH` 上才會出現 Helm 分類，release 清單每 3 秒重讀一次（Helm 沒有 watch）。
 - **workload 的 log 跟的是你選那一列時已經有的 Pod。** rollout 之後，重新選那一列才會換成新的 Pod。
@@ -263,7 +266,6 @@ pod:
 ## 相關連結
 
 - [CHANGELOG.md](CHANGELOG.md) —— 每一版改了什麼
-- [`docs/dev-remarks.md`](docs/dev-remarks.md) —— 它怎麼運作、為什麼這樣做、建置與測試
 
 ## terminu 家族
 

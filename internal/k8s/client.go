@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -29,6 +30,10 @@ type Client struct {
 // NewClient creates a Client for the given context name. If contextName is
 // empty, the current-context from the kubeconfig is used. The kubeconfig
 // location is resolved via $KUBECONFIG, falling back to ~/.kube/config.
+// ErrNoContext is NewClient's error for a context the kubeconfig does not
+// have (any more).
+var ErrNoContext = errors.New("not in the kubeconfig")
+
 func NewClient(contextName string) (*Client, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 
@@ -48,7 +53,7 @@ func NewClient(contextName string) (*Client, error) {
 
 	// Validate that the context exists.
 	if _, ok := rawConfig.Contexts[contextName]; !ok {
-		return nil, fmt.Errorf("context %q not found in kubeconfig", contextName)
+		return nil, fmt.Errorf("context %q is %w", contextName, ErrNoContext)
 	}
 
 	overrides := &clientcmd.ConfigOverrides{

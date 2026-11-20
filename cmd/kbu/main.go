@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-logr/logr"
@@ -26,7 +27,8 @@ Usage:
   kbu              start it, on your kubeconfig's context
   kbu version      print the version (also --version, -v)
   kbu help         print this (also --help, -h)
-  kbu iconwidth    print how many cells a Nerd Font icon takes here
+  kbu iconwidth    print how many cells an icon and a powerline symbol take
+                   here, and where each number came from
 
 Environment:
   KBU__CONFIG               the settings directory (default ~/.config/kbu)
@@ -54,17 +56,91 @@ func asksHelp(args []string) bool {
 	return len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h")
 }
 
-func main() {
+// command runs what the command line asks for, kbu itself aside, and returns
+// its exit status (tdp E1): results on stdout; a wrong use on stderr, after
+// "kbu: ", a blank line and the usage, status 2.
+func command(args []string, stdout, stderr io.Writer) int {
 	switch {
-	case asksVersion(os.Args[1:]):
-		fmt.Println("kbu " + version.Display())
-		return
-	case asksHelp(os.Args[1:]):
-		fmt.Print(usage)
-		return
-	case len(os.Args) > 1 && os.Args[1] == "iconwidth":
-		fmt.Println(terminu.Probe("kbu").IconCells)
-		return
+	case asksVersion(args):
+		fmt.Fprintln(stdout, "kbu "+version.Display())
+	case asksHelp(args):
+		fmt.Fprint(stdout, usage)
+	case args[0] == "iconwidth":
+		for _, line := range terminu.Probe("kbu").Lines() {
+			fmt.Fprintln(stdout, line)
+		}
+	default:
+		fmt.Fprintf(stderr, "kbu: Unknown command %q\n\n%s", args[0], usage)
+		return 2
+	}
+	return 0
+}
+
+// fail writes what kept kbu from going on to stderr and exits with status 1
+// (tdp E1).
+func fail(text string) {
+	fmt.Fprintln(os.Stderr, "kbu: "+capital(text))
+	os.Exit(1)
+}
+
+// fitted copies the file at path aside and writes it again with the
+// defaults in place of the misfits, already put in what save writes, and
+// says so (tdp E3). When the copy cannot be made, the file is left as it
+// was and the defaults hold for this run only.
+func fitted(path string, misfits []terminu.Misfit, save func() error) []terminu.Notice {
+	if len(misfits) == 0 {
+		return nil
+	}
+	copied, err := terminu.KeepAside(path)
+	if err == nil {
+		err = save()
+	}
+	if err != nil {
+		return []terminu.Notice{{Kind: terminu.Error, Text: capital(err.Error())}, terminu.MisfitNotice(path, "", misfits...)}
+	}
+	return []terminu.Notice{terminu.MisfitNotice(path, copied, misfits...)}
+}
+
+// connect makes the client on the context kbu starts on: where the user
+// left off (left), else the settings' (setting), else the kubeconfig's
+// current one. One the kubeconfig no longer has is left as written and the
+// next used for this run, with a Warning saying so (tdp E3: a value naming
+// an entry that is not there).
+func connect(left, setting string) (*k8s.Client, []terminu.Notice, error) {
+	var gone []string
+	for _, c := range []struct{ name, in string }{{left, "state.yaml"}, {setting, "config.yaml"}, {"", ""}} {
+		if c.name == "" && c.in != "" {
+			continue
+		}
+		client, err := k8s.NewClient(c.name)
+		if c.name != "" && errors.Is(err, k8s.ErrNoContext) {
+			gone = append(gone, fmt.Sprintf("Context %q in %s is not in the kubeconfig", c.name, c.in))
+			continue
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		var notices []terminu.Notice
+		for _, g := range gone {
+			notices = append(notices, terminu.Notice{Kind: terminu.Warning, Text: fmt.Sprintf("%s: using %q", g, client.ContextName())})
+		}
+		return client, notices, nil
+	}
+	return nil, nil, nil // not reached: the last is the current context, found or an error
+}
+
+// capital starts a sentence on stderr with a capital, as a toast does
+// (tdp E1).
+func capital(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func main() {
+	if len(os.Args) > 1 {
+		os.Exit(command(os.Args[1:], os.Stdout, os.Stderr))
 	}
 	// Suppress k8s client-go / klog output that would corrupt the TUI.
 	// logr.Discard() is a true no-op; klog.NewKlogr() would route back through
@@ -77,18 +153,8 @@ func main() {
 	// first start; the UI says where to, or what stayed.
 	moved := config.MoveOldPlaces()
 
-	// v2.0 km8 → kbu rename: one-shot copy of the km8 settings directory
-	// when kbu's does not exist yet. A copy failure is fatal — going on with
-	// an empty directory would silently lose the user's pins and sorts.
-	notices := []string{}
-	migrated, err := config.MigrateLegacyConfigDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error migrating legacy config dir: %v\n", err)
-		os.Exit(1)
-	}
-	notices = append(notices, migrated)
 	// tdp E3: the pins and sorts are data. An older kbu's, in config.yaml,
-	// move to kinds.yaml in the data directory (after the copy above, which
+	// move to kinds.yaml in the data directory (after the moves above, which
 	// may bring km8's).
 	moved = append(moved, config.MoveKindData()...)
 
@@ -105,21 +171,32 @@ func main() {
 	}
 	kinds, kindsErr := config.LoadKindData()
 
-	// State wins over config for context / namespace when present — "where
-	// the user left off" is a stronger signal than the static default.
-	initialContext := cfg.DefaultContext
-	if state.Context != "" {
-		initialContext = state.Context
+	// tdp E3: values kbu cannot use go back to their defaults, the file
+	// copied aside first; one toast at start says it, with what moved.
+	var start []terminu.Notice
+	if cfgErr == nil {
+		start = append(start, fitted(config.ConfigPath(), cfg.Misfits(), cfg.Save)...)
 	}
-	client, err := k8s.NewClient(initialContext)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error connecting to cluster: %v\n", err)
-		os.Exit(1)
+	if stateErr == nil {
+		start = append(start, fitted(config.StatePath(), state.Misfits(), state.Save)...)
+	}
+	if kindsErr == nil {
+		start = append(start, fitted(config.KindDataPath(), kinds.Misfits(), kinds.Save)...)
+	}
+
+	// A kubeconfig kbu cannot read is outside it: kbu opens all the same,
+	// panel 2 saying why (tdp E3).
+	client, gone, clientErr := connect(state.Context, cfg.DefaultContext)
+	start = append(start, gone...)
+	keep := "" // state.yaml's context, written back while the kubeconfig lacks it
+	if client != nil && state.Context != "" && client.ContextName() != state.Context {
+		keep = state.Context
 	}
 
 	// The saved namespaces go in first; the ones since deleted are dropped
 	// once the cluster says which exist.
 	switch {
+	case client == nil:
 	case len(state.Namespaces) > 0:
 		client.SetSelection(k8s.SelectedNamespaces(state.Namespaces...))
 	case state.Namespace != "":
@@ -132,24 +209,26 @@ func main() {
 	k8s.RegisterHelmIfAvailable()
 
 	ui := tui.New(tui.Options{Client: client, Config: cfg, ConfigErr: cfgErr, State: state, StateErr: stateErr,
-		Kinds: kinds, KindsErr: kindsErr, Notices: notices, Moved: moved, Status: theme.DefaultTheme().Status, Version: version.Display()})
+		Kinds: kinds, KindsErr: kindsErr, Moved: moved, Start: start, ClientErr: clientErr, KeepContext: keep,
+		Status:  theme.DefaultTheme().Status,
+		Version: version.Display()})
 	if err := ui.Run(); err != nil {
 		// The user left at a file kbu could not read: why, and no crash.
 		var notRead tui.NotRead
-		if errors.As(err, &notRead) {
-			fmt.Fprintf(os.Stderr, "kbu: %v\n", err)
-			os.Exit(1)
+		var notSaved tui.NotSaved
+		if errors.As(err, &notRead) || errors.As(err, &notSaved) {
+			fail(err.Error())
 		}
 		// bubbletea catches panics, restores the terminal, then returns
 		// tea.ErrProgramPanic.
 		path := config.WriteCrashLog(err)
 		if errors.Is(err, tea.ErrProgramPanic) {
-			fmt.Fprintf(os.Stderr, "\n\x1b[31;1mkbu crashed!\x1b[0m\npanic: %v\n", err)
+			fmt.Fprintln(os.Stderr, "kbu: Crashed: "+err.Error())
 		} else {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			fmt.Fprintln(os.Stderr, "kbu: "+capital(err.Error()))
 		}
 		if path != "" {
-			fmt.Fprintf(os.Stderr, "crash log: %s\n", path)
+			fmt.Fprintln(os.Stderr, "kbu: The crash log is "+path)
 		}
 		os.Exit(1)
 	}

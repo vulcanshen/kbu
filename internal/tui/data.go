@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -114,13 +115,26 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		if msg.uid == "" || msg.uid != m.det.uid {
 			return nil
 		}
+		if msg.err != nil && m.det.got {
+			msg.events = m.det.events // read again: what the tab has stays (tdp panel.15)
+		}
 		m.setDetail(msg.detail, msg.events)
 		if msg.err != nil {
-			// An empty tab says why it is empty (tdp panel.15,
-			// errors); the App Log keeps it.
-			fact, _, _ := strings.Cut(msg.err.Error(), "\n")
-			m.log.warn("Details: " + fact)
-			m.detailP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu asks again with the next change; [!] shows the App Log"}
+			// The details are read again with every change: an Error toast
+			// the first time, again only for another failure (tdp note.7);
+			// a tab that had nothing yet says why it is empty (tdp panel.15).
+			if !m.det.got {
+				fact, _, _ := strings.Cut(msg.err.Error(), "\n")
+				m.detailP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu asks again with the next change; [!] shows the App Log"}
+			}
+			if text := "Details: " + msg.err.Error(); m.detailErr.failed(text) {
+				return m.toast(terminu.Error, text)
+			}
+			return nil
+		}
+		m.det.got = true
+		if m.detailErr.ok() {
+			m.log.info("The details can be read again")
 		}
 		return nil
 	case logLineMsg:
@@ -184,22 +198,77 @@ func (m *Model) waitWatch() tea.Cmd {
 	}
 }
 
-// onWatchErr is the watch failing: the App Log keeps it; the first time, a
-// toast says it (tdp F5), and an empty panel 2 says why it is empty
-// (tdp panel.15, errors). The watcher tries again on its own.
+// onWatchErr is the watch failing; the watcher tries again on its own. An
+// Error toast says it the first time, and again only for another failure:
+// the same one again is neither shown nor logged (tdp note.7). The rows
+// panel 2 has stay; an empty one says why it is empty (tdp panel.15).
 func (m *Model) onWatchErr(err error) tea.Cmd {
 	// The watcher's own "listing pods: " or "watching pods: " starts it, the
 	// API's words after it kept as they are (tdp toast.2).
 	text := capital(err.Error())
-	m.log.err(text)
 	cmds := []tea.Cmd{m.waitWatch()}
-	if m.listP.Fail == nil {
-		fact, _, _ := strings.Cut(text, "\n")
+	if m.watchErr.failed(text) {
 		m.listP.Loading = false
-		m.listP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu tries again on its own; [!] shows the App Log"}
-		cmds = append(cmds, m.app.Toast(terminu.Error, fact))
+		if len(m.rootItems) == 0 {
+			fact, _, _ := strings.Cut(text, "\n")
+			m.listP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu tries again on its own; [!] shows the App Log"}
+		}
+		cmds = append(cmds, m.toast(terminu.Error, text))
 	}
 	return tea.Batch(cmds...)
+}
+
+// rereadErr is the last failure of what kbu reads again on its own, so that
+// the same failure again says nothing (tdp note.7).
+type rereadErr struct{ last string }
+
+// failed reports whether fact is a new failure: the first, or another one.
+func (r *rereadErr) failed(fact string) bool {
+	if fact == r.last {
+		return false
+	}
+	r.last = fact
+	return true
+}
+
+// ok reports whether reading works again after a failure.
+func (r *rereadErr) ok() bool {
+	failed := r.last != ""
+	r.last = ""
+	return failed
+}
+
+// helmChanged is what the poll found changed in the Helm releases since it
+// last read them, for one INFO entry (tdp note.7), "" when nothing did or
+// when it reads them for the first time.
+func (m *Model) helmChanged(items []k8s.ResourceItem) string {
+	seen := map[string]string{}
+	for _, it := range items {
+		if r, ok := it.Raw.(*k8s.Release); ok {
+			seen[diffLabel(it)] = "revision " + r.Revision + ", " + r.Status
+		}
+	}
+	before := m.helmSeen
+	m.helmSeen = seen
+	if before == nil {
+		return ""
+	}
+	var what []string
+	for name, now := range seen {
+		switch was, ok := before[name]; {
+		case !ok:
+			what = append(what, name+" installed ("+now+")")
+		case was != now:
+			what = append(what, name+" now "+now)
+		}
+	}
+	for name := range before {
+		if _, ok := seen[name]; !ok {
+			what = append(what, name+" uninstalled")
+		}
+	}
+	slices.Sort(what)
+	return strings.Join(what, "; ")
 }
 
 // fetchDetail fetches what panel 3 shows of item: its details, its relatives
@@ -281,26 +350,31 @@ func discoverCRDs(client *k8s.Client) tea.Cmd {
 // onCRDs puts the CRDs found into panel 1.
 func (m *Model) onCRDs(msg crdsMsg) tea.Cmd {
 	if msg.err != nil {
-		m.log.warn("CRD discovery: " + msg.err.Error())
-		return nil
+		// panel 1 keeps the built-in kinds; the toast says why the custom
+		// ones are not there (tdp panel.15, F5).
+		return m.toast(terminu.Error, "CRD discovery: "+msg.err.Error())
 	}
 	if msg.count > 0 {
 		m.log.info(fmt.Sprintf("Discovered %d CRDs", msg.count))
 	}
 	m.pinned = m.loadPinned()
 	m.refreshKinds()
-	// A saved kind that is a CRD is known only now.
-	if m.state.Kind != "" && m.current == k8s.ResourcePods && m.state.Kind != k8s.ResourcePods.KubectlName() {
-		if rt := k8s.DefaultRegistry.LookupByKubectlName(m.state.Kind); rt != "" {
-			m.kinds.Select(string(rt))
-			return m.selectKind(rt, false)
-		}
+	// The recorded kind not known at start is known now, or not there:
+	// then a Warning says so, and state.yaml keeps it all the same. kbu
+	// stays where it is either way: discovery ending is no reason to move
+	// (tdp E3, K3).
+	if k := m.keepKind; k != nil && k8s.DefaultRegistry.LookupByKubectlName(k.Kind) == "" {
+		// Through Notify: it joins the start's toast while that one shows
+		// (tdp E3-43).
+		return m.app.Notify(terminu.Notice{Kind: terminu.Warning,
+			Text: fmt.Sprintf("Kind %q in state.yaml is not in the cluster: showing Pods", k.Kind)})
 	}
 	return nil
 }
 
-// onNamespaces fills the namespace picker, or, at start, drops the saved
-// namespaces that are gone.
+// onNamespaces fills the namespace picker, or, at start, shows the saved
+// namespaces the cluster has, a Warning naming those it has not; state.yaml
+// keeps them (tdp E3).
 func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if !msg.check {
 		fill := m.fillNamespaces
@@ -330,8 +404,22 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if kept.Count() == sel.Count() {
 		return nil
 	}
-	m.log.info(fmt.Sprintf("Namespace selection: %d no longer exist, now %s", sel.Count()-kept.Count(), selectionText(kept)))
-	return m.setNamespaces(kept)
+	m.keepNamespaces = nil
+	var gone []string
+	for _, n := range sel.List() {
+		if kept.IsAll() || !kept.Contains(n) {
+			m.keepNamespaces = append(m.keepNamespaces, n)
+			gone = append(gone, fmt.Sprintf("%q", n))
+		}
+	}
+	what := "Namespace " + gone[0] + " in state.yaml is"
+	if len(gone) > 1 {
+		what = "Namespaces " + strings.Join(gone, ", ") + " in state.yaml are"
+	}
+	// Through Notify: it joins the start's toast while that one shows
+	// (tdp E3-43).
+	late := terminu.Notice{Kind: terminu.Warning, Text: what + " not in the cluster: showing " + selectionText(kept)}
+	return tea.Batch(m.app.Notify(late), m.showNamespaces(kept))
 }
 
 func selectionText(sel k8s.NamespaceSelection) string {
@@ -354,7 +442,9 @@ func (m *Model) restore() {
 				m.pendingSel = &k8s.RefTarget{Type: rt, Name: s.ObjectName, Namespace: s.ObjectNamespace}
 			}
 		} else {
-			m.log.info(fmt.Sprintf("State: recorded kind %q not known yet, starting on Pods", s.Kind))
+			// Not known yet: a CRD, found only once discovery is done
+			// (onCRDs). kbu starts on Pods meanwhile and keeps it.
+			m.keepKind = &config.State{Kind: s.Kind, ObjectNamespace: s.ObjectNamespace, ObjectName: s.ObjectName, Tab: s.Tab}
 		}
 		m.startTab, m.startPanel = s.Tab, s.Panel
 	}
@@ -364,15 +454,22 @@ func (m *Model) restore() {
 
 // sessionState is where the user is, for state.yaml.
 func (m *Model) sessionState() *config.State {
-	s := &config.State{Kind: m.current.KubectlName(), Tab: m.currentTab(), CompareSplit: m.compareSplit}
+	s := &config.State{Kind: m.current.KubectlName(), Tab: m.currentTab()}
 	if m.client != nil {
-		s.Context = m.client.ContextName()
+		s.Context = cmp.Or(m.keepContext, m.client.ContextName())
 		s.Namespaces = m.client.Selection().List()
+		if len(m.keepNamespaces) > 0 {
+			s.Namespaces = append(s.Namespaces, m.keepNamespaces...)
+			slices.Sort(s.Namespaces)
+		}
 	}
 	if len(m.drill) == 0 {
 		if item, ok := m.currentItem(); ok {
 			s.ObjectName, s.ObjectNamespace = item.Name, item.Namespace
 		}
+	}
+	if k := m.keepKind; k != nil {
+		s.Kind, s.ObjectNamespace, s.ObjectName, s.Tab = k.Kind, k.ObjectNamespace, k.ObjectName, k.Tab
 	}
 	switch m.screen.Focused() {
 	case m.listP:
