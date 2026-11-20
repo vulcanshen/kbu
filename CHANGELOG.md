@@ -28,9 +28,10 @@ Each release names the version of terminu design (tdp) it follows.
   which.
 - **What one start has to say is one toast**, a row each: what moved, the
   values put back to their defaults, a context that is gone.
-- **What kbu reads again on its own says a failure once**: panel 2's list and
-  panel 3's details give an Error toast the first time, again only for another
-  failure, and an INFO entry when they can be read again. The Helm releases,
+- **What kbu reads again on its own says a failure once**: panel 2's list,
+  panel 3's details and a workload's merged logs looking for its pods give an
+  Error toast the first time, again only for another failure, and an INFO
+  entry when they can be read again; a workload running no pods is said once. The Helm releases,
   read again every few seconds, log one INFO entry for what changed: installed,
   uninstalled, a new revision or status.
 - **An action that changes what a panel lists clears its filter first**:

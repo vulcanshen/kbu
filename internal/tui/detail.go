@@ -284,25 +284,41 @@ func (m *Model) ensureLogs(item k8s.ResourceItem) tea.Cmd {
 	return fetchPods(m.client, item)
 }
 
-// onPods starts a workload's merged logs.
+// onPods starts a workload's merged logs. kbu looks for its pods again
+// every few seconds until it finds some: a failure is an Error toast the
+// first time and again only for another one, none running an INFO once, and
+// pods found after a failure an INFO (tdp note.7).
 func (m *Model) onPods(msg podsMsg) tea.Cmd {
 	if msg.uid != m.det.uid {
 		return nil
 	}
+	if m.podsOf != msg.uid {
+		m.podsOf, m.podsErr = msg.uid, rereadErr{}
+	}
 	if msg.err != nil || len(msg.targets) == 0 {
-		if msg.err != nil {
-			m.log.warn("Aggregate logs: " + msg.err.Error())
-		} else {
-			m.log.info("Aggregate logs: no pods running")
-		}
 		m.det.logsOn = false
 		m.det.nextRetry = time.Now().Add(aggregateRetry)
+		if msg.err == nil {
+			if m.podsErr.failed(noPods) {
+				m.log.info(noPods)
+			}
+			return nil
+		}
+		if fact := "Logs: " + msg.err.Error(); m.podsErr.failed(fact) {
+			return m.app.Toast(terminu.Error, fact)
+		}
 		return nil
+	}
+	if was := m.podsErr.last; m.podsErr.ok() && was != noPods {
+		m.log.info("The pods' logs can be read again")
 	}
 	m.logs.StartMulti(msg.targets)
 	m.det.logsOn = true
 	return waitLogLine(m.logs)
 }
+
+// noPods is what a workload's logs say when it runs no pods.
+const noPods = "Logs: no pods running"
 
 func (m *Model) stopLogs() {
 	if m.logs != nil {

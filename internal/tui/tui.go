@@ -66,6 +66,10 @@ type Model struct {
 	// each Helm release's revision and status as the poll last found them.
 	watchErr, detailErr rereadErr
 	helmSeen            map[string]string
+	// podsErr is the same for the pods a workload's merged logs look for,
+	// those of the row podsOf.
+	podsErr rereadErr
+	podsOf  string
 	// run runs a command to its end and returns what it printed: kubectl
 	// delete, helm rollback. Tests replace it, so that no test ever deletes
 	// anything.
@@ -153,7 +157,7 @@ func New(o Options) *Model {
 	a.ShiftTab = true
 	// kbu's least size is lower than the family's 60×32 (tdp L1): it runs in
 	// a terminal's usual 80×24 and in a split pane, its narrow layout (one
-	// panel) working down to minWidth×minHeight. docs/dev-remarks.md says why.
+	// panel) working down to minWidth×minHeight. harness-assets/spec.yaml's task 1 says why.
 	a.MinWidth, a.MinHeight = minWidth, minHeight
 	a.InputTabWidth = m.cfg.InputTabWidth // the family's input_tab_width (tdp E3)
 	a.Status = m.statusbar

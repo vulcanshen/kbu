@@ -1,0 +1,312 @@
+tasks:
+  - id: 1
+    spec: 1
+    implementation: |
+      一個 screen（tgo Screen，Name kbu）三個 panel：[1] KINDS 在左，寬 min(26, 寬/3)；[2] 在右上；[3] 在右下，高 min(14, 高/2)
+      Tab|Shift-Tab|1–3 換 focus（lib）；NarrowBelow 60：60 欄以下只畫 focus 的 panel
+      App.MinWidth、MinHeight 40×15：比它小時 lib 只畫名稱、需要的大小與 Press [Ctrl-C] twice to quit
+      panel 2 跟著 panel 1 的 cursor、panel 3 跟著 panel 2 的 cursor（Panel.Details，tdp panel.13）
+    test: [TestTDP, TestTDPTrickyNames, TestL4EveryRowIsTheTerminalWidth, TestBelowTheLeastSize]
+  - id: 2
+    spec: 1
+    implementation: |
+      [1] KINDS 是一般清單（tgo List），用 Row.Group 分類：釘選的在最上面，再來 KUBECONFIG、CLUSTER、WORKLOADS、NETWORK、CONFIG、
+      STORAGE、RBAC、AUTOSCALING，CUSTOM RESOURCES 是啟動時（與切 context 後）從叢集找到的 CRD；找到幾個記 INFO Discovered N CRDs，
+      找不到記 WARN CRD discovery: <原因>。Helm Releases 只在 helm 在 PATH 上時才有，沒有時啟動記 INFO Helm CLI not found — Helm
+      Releases category hidden
+      cursor 停在一個種類 300ms（App.Tick 的 debounce）後 panel 2 換成它；Enter（Show in panel 2）同樣換、focus 到 panel 2
+      Space menu：[P]in／Unpin <種類>、[Enter] Show in panel 2、[D]rag（見 task 12）、Cop[y]（kubectl 名稱）、[/] Search、[z]oom
+    test: [TestTDP, TestContextsRegisteredUnderKubeConfig, TestKindToResourceType_NewKinds]
+  - id: 3
+    spec: 1
+    implementation: |
+      [2] <種類> 是一般清單：欄位依種類，名稱欄 Column.Shrink 從中間截（demo-app…66-gm72n），窄時先截長的值，再照最不需要的
+      先收整欄，名稱不收；用 Kubernetes 的 watch 收到整份清單就換上（串流的內容，Panel.Stream）
+      清單依 namespace、再依名稱排（排序見 task 13）；狀態欄只在要注意時上色（app 的內容）：轉換中、降級的（Pending、
+      ContainerCreating、pending-install……）#f9e2af，失敗的（CrashLoopBackOff、Error、NotReady、failed……）#f38ba8；Events 的
+      Warning 是 #f38ba8；健康的不上色
+      loading 時寫 loading <種類>…；空的時候寫 No <種類> 與 Press [N] to pick other namespaces, or [Space] to see what you can do here
+      Space menu：ITEM OPERATION（依種類：[Enter] Drill in／Open、[Y]AML、[E]dit、[S]hell、[D]elete、[C] Diff、Cop[y]），
+      PANEL OPERATION（[Alt-S]ort panel 2 list、[/] Search、[.] Helm-managed rows、[z]oom），Global operation
+    test: [TestListRowsFromTheWatch, TestListColumnsDropOrder, TestALongNameShrinksFirst, TestStatusColor, TestPanel2SpaceMenu, TestNoColourCodeShows]
+  - id: 4
+    spec: 1
+    implementation: |
+      [3] 的 tab 是 panel 框上的膠囊串，h|l 切換；依種類：Pod、Deployment、StatefulSet、DaemonSet、Job、CronJob 有 LOGS、RELATIVES、
+      EVENTS；container 只有 LOGS；Event 有 RELATIVES；Helm release 有 RELATIVES、HISTORY；context 有 INFO；Namespace 有 EVENTS；其他
+      有 RELATIVES、EVENTS；Pod、Node、PVC、Deployment、StatefulSet、DaemonSet、Job、HPA、Ingress 再加 CONDITIONS
+      panel 2 的 cursor 停在一列 300ms（App.Tick 的 debounce）後讀它的明細；叢集有變時再讀一次
+      Space menu：[Y]AML（這個資源的 manifest）、Cop[y]（這個 tab 的全部）、[z]oom；Logs、Events、Conditions、Info 上 [Enter] Zoom
+      讀不到明細時 tab 裡寫兩列的錯誤（tgo Failure：原因、kbu asks again with the next change; [!] shows the App Log），見 task 31
+    test: [TestTabsOfKinds, TestStreamingTabsAreNotDimmed]
+  - id: 5
+    spec: 1
+    implementation: |
+      LOGS tab：Pod 的每個 container 的 log 串流（Panel.Stream，失焦不變暗），最多留 maxLogLines 行；跟著最新一行，往上捲就停；
+      Space menu 的 Go live（[G]，Logs 與 Events tab）跳到最新的並跟著，記 INFO Went live on the <tab> tab；log 的字是讀的內容，
+      控制字元照 lib 畫
+      workload：找出它現在跑的 Pod（k8s.PodsForWorkload），合成一份，每一列前面寫 Pod 與 container，各有顏色；沒有 Pod 或讀不到時
+      10 秒後（下一次叢集變動時）再找：沒有 Pod 只記一次 INFO Logs: no pods running；讀不到第一次 Error toast Logs: <原因>，同一句
+      不再跳也不記，換一句再跳；又找到時記 INFO The pods' logs can be read again
+      空的時候寫 Waiting for logs…
+    test: [TestLogsFollowUntilScrolledUp, TestLogRowsAreReadingContent, TestStreamingTabsAreNotDimmed, TestPodsLookedForAgainSayOnce]
+  - id: 6
+    spec: 1
+    implementation: |
+      EVENTS tab：k8s.FetchResourceEventsAggregated：workload 自己的加上它的 Pod 的，CronJob 加上它的 Job 與 Pod 的，新的在前；
+      跟著明細一起讀（task 4）；空的時候寫 No events
+    test: [TestFetchResourceEventsAggregated_DeploymentMergesPodEvents, TestFetchResourceEventsAggregated_CronJobMergesJobAndPodEvents, TestFetchResourceEventsAggregated_NonWorkloadFallsBack]
+  - id: 7
+    spec: 1
+    implementation: |
+      CONDITIONS tab：.status.conditions 的表（type、status、reason、message、多久之前），k8s.ExtractConditions；沒有的種類沒有這個 tab
+    test: [TestExtractConditions_Pod, TestExtractConditions_Deployment, TestExtractConditions_UnsupportedKindReturnsNil]
+  - id: 8
+    spec: 1
+    implementation: |
+      RELATIVES tab：一般清單，依關係分組（owner、Service 選到的 Pod、HPA 的目標、掛載 PVC 的 Pod、用到 ConfigMap、Secret 的 Pod……）
+      [Enter] Drill in：在 panel 3 裡換成那一個的 relatives，位置列寫走過的鏈，記 INFO Drilled into <種類>/<名稱> on the Relatives tab；
+      走回鏈上已經有的會被擋，Error toast Cycle blocked: <種類>/<名稱> already in chain；讀不到 Error toast Drill failed: <原因>
+      Esc 退回一層，記 INFO Back up the chain to <種類>/<名稱>
+      [B]readcrumb（走深之後）：menu 列出鏈上每一點，選了開 confirm SWITCH，問 Switch panel 1 + 2 to this resource?，Enter 把 panel 1
+      切到那個種類、panel 2 的 cursor 放到它上面（先清掉 panel 2 的篩選），記 INFO Switched panels 1 and 2 to <種類>/<名稱>
+      [Y]AML 開那一列的 YAML（task 16）、Cop[y] 這一列
+    test: [TestBuildPodLinks_ExtractsOwnerNodeServiceAccount, TestEnrichLinks_WorkloadPods, TestBuildHPALinks_ScaleTarget, TestBuildPVCLinks_BoundAndStorageClass, TestPodUsesConfigMap_VolumeAndEnv]
+  - id: 9
+    spec: 1
+    implementation: |
+      panel 2 上 [Enter] Drill in：Deployment、StatefulSet、DaemonSet、Job → Pods → Containers，CronJob → Jobs，HPA → 它的目標，
+      Helm release → chart 部署的每一個物件；先清掉篩選，換上那一層的清單，位置列寫路徑，記 INFO Drilled into <種類>/<名稱>；
+      讀不到 Error toast Drill failed: <原因>
+      Esc（與 PANEL OPERATION 的 Back）退一層，cursor 回到出來的那一列，記 INFO Back to the <種類> list；最上層 Esc 不做事
+      在 container 上 [Enter] Open a shell（task 22）
+    test: [TestDrillIntoContainersAndBack, TestPanel2EscOneLevel]
+  - id: 10
+    spec: 1
+    implementation: |
+      [N]amespace（global operation，每個 panel 都按得到）：tgo LoadChecks 的 checkbox popup，邊讀邊開，第一列是元件的 Select all；
+      選項是叢集的 namespace，勾的是現在的選擇
+      Enter：全勾或全不勾是整個叢集，其他是勾的那幾個；跟現在一樣就不做事；換了就記 INFO Namespace selection → <幾個或名稱>，
+      panel 2 清掉篩選、重新 watch，panel 3 重來；讀不到 namespace 開 error popup Namespaces not read
+      選擇存在 state.yaml 的 namespaces（task 15）；啟動時叢集已經沒有的丟掉，記 INFO Namespace selection: N no longer exist, now <…>
+    test: [TestPickedSelection, TestNamespacePickerLoads, TestNamespaceSelection_FilterExisting, TestGlobalOperations]
+  - id: 11
+    spec: 1
+    implementation: |
+      panel 1 的 KUBECONFIG > Contexts：唯讀的清單，每個 context 的 cluster、user、namespace；INFO tab 與 YAML 裡的憑證不顯示
+      （certificate 寫 <redacted>、token 寫 token (redacted)）
+      在 context 上 [Enter] Switch to this context（kbu only; ~/.kube/config is not changed）：confirm SWITCH CONTEXT，細節
+      ~/.kube/config is not changed，問 Switch kbu to context <名稱>?；Enter 換 client 與 watch，panel 1 清掉篩選、cursor 到 Pods，
+      重新找 CRD，記 INFO Context switched to <名稱>；失敗 Error toast Context switch failed: <原因>
+      [C]ontext（global operation）：select popup Contexts，現在的那一個選好，選了就是確認（tdp F6），一樣切過去
+      kbu 從不改 kubeconfig：每一個 kubectl 都帶 --context
+    test: [TestFetchContextItems_SortedAndFlattened, TestContextYAML_RendersAndRedactsSecrets, TestDetailContext_RicherFields, TestGlobalOperations]
+  - id: 12
+    spec: 1
+    implementation: |
+      panel 1 上 [P]in <種類>：先清掉 panel 1 的篩選，種類移到最上面的釘選組，cursor 跟著，記 INFO Pinned <種類>；再按是 Unpin，
+      記 INFO Unpinned <種類>；寫進 ~/.kbu/kinds.yaml（寫不進去 Error toast Pin save failed: <原因>）
+      [D]rag to reorder pinned kinds（只在釘選的種類上，少於兩個停用）：先清掉篩選，進 kbu 自己的模式 Drag：j|k（與 ↓|↑）在釘選的
+      種類之間移動它、到頭繞回；Enter Drop 放下、存順序，記 INFO Reordered the pinned kinds: <順序>（存不進去 Error toast Pin order
+      save failed: <原因>）；Esc（cancel）放回原處、不存
+    test: [TestPinMovesTheKindToPinned, TestDragReordersThePinnedKinds, TestActionsClearTheFilter]
+  - id: 13
+    spec: 1
+    implementation: |
+      panel 2 上 [Alt-S]ort panel 2 list：menu SORT BY: <種類>，fields 一欄一列（已經排的寫 sorted 1st, ascending），all 的 Reset；
+      選一欄開第二個 menu DIRECTION: <欄>：Ascending、Descending（現在的寫 (current)）、排過的多一個 Unset；選了寫回第一個
+      menu、只關第二個，可以接著選第二欄（多層排序）
+      每次改了記 INFO Sorted <種類> by <欄 方向, then …>，panel 2 照新的順序排，寫進 ~/.kbu/kinds.yaml（寫不進去 Error toast Sort save
+      failed: <原因>）
+    test: [TestSortTwoSteps, TestSortValues, TestSortItemsChain_PrimaryFirstTiebreakerNext, TestSortHelpers_SetUnsetGet]
+  - id: 14
+    spec: 1
+    implementation: |
+      panel 1、panel 2 的 [/] Search 是 tgo List 的 panel filter；不記 App Log
+      kbu 自己的動作換掉 panel 列的東西或移它的 cursor 前，先清掉篩選：換種類、drill 進出、換 namespace、[.] 藏或顯示 Helm 管理的
+      列、釘選、Drag、切 context、Breadcrumb 切到同一種的資源、History tab 把 cursor 放到部署中的 revision
+    test: [TestActionsClearTheFilter]
+  - id: 15
+    spec: 1
+    implementation: |
+      離開時寫 state.yaml（設定目錄，或 KBU__STATE）：context、namespaces、種類、panel 2 cursor 那一列（drill 裡不記）、focus 的
+      panel（sidebar、table、detail）、panel 3 的 tab；寫不進去不擋離開
+      啟動時照它開：focus 到那個 panel，cursor 等清單來了放到那一列；記的種類現在不認得（CRD 還沒找到）時從 Pods 開始，記 INFO
+      State: recorded kind "<名稱>" not known yet, starting on Pods
+    test: [TestSessionState, TestStartsOnThePanelLeftFrom, TestState_RoundTrip]
+  - id: 16
+    spec: 1
+    implementation: |
+      panel 2 的 [Y]AML（與 Helm release 的 Enter Open、panel 3 Relatives 上的 [Y]AML）：開 tgo Viewer YAML — <種類>/<名稱>，Lang yaml、
+      行號、語法顏色，記 INFO Opened the YAML of <種類>/<名稱>；從 Space menu 開的，Esc 回到 menu
+      搜尋是 lib 的（Viewer.Search，標題 Search，prompt Find in the YAML; [n] and [N] go to the next and the previous）：/、n|N，
+      找不到 lib 的 Info toast No line has <字>，狀態寫在下框
+      v 選取模式（Visual），y 複製選取的（task 25）；沒在選取時 y 複製整份 YAML
+      E edit（task 21）：edit 結束後重讀那個資源，用 App.ReadAgain 換進開著的 viewer；API 讀不到（CRD）時用 watch 手上的；都沒有時
+      App.CannotReadAgain 說 The YAML of <種類>/<名稱> can't be read again: <原因>
+    test: [TestYAMLSearch, TestAnEditRereadsTheYAML, TestTheMenuStaysUnderWhatItOpens, TestMarshalItemYAML_PopulatesGVK]
+  - id: 17
+    spec: 1
+    implementation: |
+      panel 2 的 [C] Diff：App.DiffModeAction（tgo DiffMode，Key C，Name 是 namespace/name，Text 是拿掉 status 與 server 寫的欄位的
+      YAML，用手上的清單、不打叢集）；Diff 模式、anchor、DIFF、UNIFIED|SPLIT 都是 lib 的，每次打開都是 UNIFIED、不記
+      Diff 模式不記 App Log；在模式裡 statusbar 多一個 [C] Diff chip
+      container 那一層沒有 Diff
+    test: [TestDiffMode, TestMarshalItemYAMLForCompare_StripsStatusAndNoise]
+  - id: 18
+    spec: 1
+    implementation: |
+      helm 在 PATH 上時有 Helm Releases 種類：helm list -o json（-A 或 -n）；Helm 沒有 watch，panel 2 在這個種類上時每 3 秒重讀一次
+      重讀到變了記一筆 INFO Helm releases changed: <ns/名稱> installed (revision N, <狀態>); <ns/名稱> uninstalled; <ns/名稱> now
+      revision N, <狀態>；沒變不記；第一次讀不記；讀不到照 task 31
+      release 的 Space menu 在 [Y]AML 旁邊列出它的文件：Manifest、Creator Notes（post-install notes）、User Values、Merged Values、
+      Hooks（install/upgrade hook resources）；各開一個 viewer（helm get），記 INFO Opened the <文件> of release/<名稱>；讀不到 Error
+      toast Helm <文件> of <名稱>: <原因>；從 Space menu 開的，Esc 回到 menu
+    test: [TestParseReleases_Sample, TestHelmChanged, TestPollWatch_FiresModifiedEvents, TestDetailRelease_Stub]
+  - id: 19
+    spec: 1
+    implementation: |
+      Helm release 在 panel 3 的 HISTORY tab：revision 清單（revision、狀態、時間、chart、說明），部署中的那一個前面 ● Green；第一次
+      顯示時（先清掉篩選）cursor 放在部署中的那一個
+      [Enter] Roll back to this revision（部署中的那一個停用）：confirm ROLLBACK，細節是確切的 helm rollback <名稱> <revision> -n <ns>，
+      問 Roll <名稱> back to revision N?；Enter 在 update loop 外跑，成功 Success toast Rolled back <名稱>，失敗 Error toast Rollback
+      <名稱> failed: <原因>: <輸出>
+    test: [TestParseReleaseHistory_Sample, TestRollbackCommandString, TestFormatHelmHistoryDate_Empty]
+  - id: 20
+    spec: 1
+    implementation: |
+      chart 管理的物件（helm 的 label 或 annotation）在 panel 2 有標記；它們的 [E]dit、[D]elete 停用（tdp M6），改它請用 helm
+      [.] Helm-managed rows（PANEL OPERATION）：藏起或顯示這些列（與 Secrets 裡 release 的紀錄），先清掉篩選，Info toast Helm-managed
+      rows hidden／shown，重新 watch
+    test: [TestIsHelmManaged_LabelMatch, TestIsHelmManaged_AnnotationMatch, TestIsHelmStorageSecret, TestToggleHelmHideManaged, TestMarkHelm, TestActionsClearTheFilter]
+  - id: 21
+    spec: 1
+    implementation: |
+      panel 2 的 [E]dit（與 YAML viewer 的 E）：confirm EDIT，細節是確切的 kubectl edit <種類>/<名稱> -n <ns> --context <context>，問
+      Edit <種類>/<名稱>?；Enter 在 terminal popup（tgo Terminal）裡跑它，KUBE_EDITOR 是 config.yaml 的 editor（有設時），記 INFO
+      Edit: <種類>/<名稱>，audit log（~/.kbu/logs/audit-<日期>.log）記一行
+      已經有 edit 或 shell 開著時開 error popup EDIT：An edit or a shell is open already: close it first.
+      editor 結束後 popup 關掉，清單經由 watch 自己更新；從 YAML viewer 開的回到 viewer 並重讀（task 16）；kubectl 以錯誤結束時
+      Error toast Edit ended: <原因>
+      Windows 上：不知道：開不了內嵌 terminal 時給使用者什麼回饋
+    test: [TestAnEditRereadsTheYAML]
+  - id: 22
+    spec: 1
+    implementation: |
+      Pod 上 [S]hell（與 container 那一層 [Enter] Open a shell、[S]hell）：confirm SHELL，細節是確切的 kubectl exec -it … --context
+      <context> -- bash（image 有 bash 時，不然 sh），問 Exec into <container>?；Enter 在 terminal popup 裡跑，記 INFO Exec shell:
+      kubectl <參數>；已經有 edit 或 shell 開著時 error popup SHELL：An edit or a shell is open already: close it first.；以錯誤結束時
+      Error toast Shell ended: <原因>
+      Windows 上：不知道：開不了內嵌 terminal 時給使用者什麼回饋
+    test: []
+  - id: 23
+    spec: 1
+    implementation: |
+      panel 2 的 [D]elete（Events、node、kubeconfig context、Helm release、chart 管理的物件沒有或停用）：confirm DELETE，細節是確切的
+      kubectl delete <種類>/<名稱> -n <ns> --context <context>，刪 namespace 時多一句 Warn，問 Delete <種類>/<名稱>?
+      Enter 在 update loop 外跑 kubectl delete；成功 Success toast（kubectl 的輸出照原樣，沒有輸出時 Deleted <種類>/<名稱>），audit
+      log 記一行；失敗 Error toast Delete <種類>/<名稱> failed: <原因>: <輸出>；Esc 什麼都不做、不記
+    test: [TestDeleteAsksThenRunsKubectl, TestDeleteEscCancels, TestADeleteToastStartsWithACapital]
+  - id: 24
+    spec: 1
+    implementation: |
+      [Alt-t]erm（global operation，每個 panel 都按得到）：terminal popup Alterm — <hostname>，跑 config.yaml 的 alterm_shell（沒有時
+      $SHELL，再來 /bin/sh），alterm_login_shell 為 true 時加 -l；記 INFO Opened Alterm
+      Alt-t 藏起來、shell 繼續跑，再按 Alt-t 叫回來；Alt-Esc 結束（lib 先問）；PgUp 歷史模式、Alt-v 選取模式（lib）；以錯誤結束時
+      Error toast Alterm ended: <原因>
+      shell 還在跑時 statusbar 多一個 [Alt-t]erm chip，erm 是 Green
+      Windows 上：不知道：開不了內嵌 terminal 時給使用者什麼回饋
+    test: [TestGlobalOperations]
+  - id: 25
+    spec: 1
+    implementation: |
+      Cop[y]：panel 1 是種類的 kubectl 名稱、panel 2 是這一列（tab 分隔）、panel 3 是這個 tab 的全部或這一列、viewer 的選取模式是
+      選的字、YAML viewer 沒在選取時是整份 YAML
+      用 OSC 52 寫到終端機（tmux 裡包一層），成功 Success toast Copied N lines，沒東西或寫不出去開 error popup Copy failed
+    test: []
+  - id: 26
+    spec: 1
+    implementation: |
+      每個 panel 的 [z]oom：只畫 focus 的 panel、用滿整個畫面，記 INFO Zoomed in on panel N；再按 z 回到三個，記 INFO Zoomed out
+    test: [TestTheAppLogHasWhatTheUserDid]
+  - id: 27
+    spec: 1
+    implementation: |
+      statusbar（最上面一列）：會出現、消失的 chip 在前（[Alt-t]erm、[C] Diff），再來 [C]ontext: <context>（固定 24 格，長的從中間截），
+      最後 [N]amespace: <名稱、N selected 或 All Namespaces>（最多 16 格）
+      focus 在 panel 2、有列可以比時，panel 2 的 C 是 Diff：[C] Diff 亮、[C]ontext 的 [C] 變暗（Surface2），tdp M9
+    test: [TestStatusbarKeepsItsFields]
+  - id: 28
+    spec: 1
+    implementation: |
+      ! 開 lib 的 App Log；kbu 記：啟動（Started kbu、Connected to <context> (<server>)）、每個動作的結果（各 task 寫的 INFO）、背景做的
+      事；每一個 toast 與 error popup 由 lib 自己記；移動、換 focus、篩選、搜尋、進出模式不記；toast 與 error popup 只取一行一句
+      q、Ctrl-C 離開（lib）：有 popup 開著時先開 confirm Quit kbu?；離開時停掉 watch、log、terminal，寫 state.yaml（task 15）
+    test: [TestTheAppLog, TestTheAppLogHasWhatTheUserDid, TestQWithAPopupAsks, TestAToastTakesTheFirstLine, TestAnErrorPopupTakesTheFirstLine]
+  - id: 29
+    spec: 1
+    implementation: |
+      設定 config.yaml 與狀態 state.yaml 在 $KBU__CONFIG，否則 $XDG_CONFIG_HOME/kbu，否則 ~/.config/kbu（Windows 也是 ~ 底下）；
+      state.yaml 可以用 KBU__STATE 改；資料在 ~/.kbu（KBU__DATA）：kinds.yaml（釘選與排序）、logs/audit-<日期>.log、logs/crash-<日期>.log
+      第一次啟動什麼都不寫：釘選、排序時才建 ~/.kbu，離開時才建設定目錄
+      舊版放在 ~/Library/Application Support/kbu、%APPDATA%\kbu 的設定與旁邊的 log，第一次啟動逐項搬過去；舊版 config.yaml 裡的
+      resource_kind_config 搬到 kinds.yaml；搬了的放進啟動的 toast（Moved kbu's <什麼> from <舊> to <新>）；新位置已經有的留在原處、
+      搬不動的照舊用舊位置，都開 error popup NOT MOVED 寫出兩個路徑；v2.0 前 km8 的設定目錄複製過來（複製失敗 kbu: <原因>，exit 1）
+      不再用的 theme.yaml 與 km8 的目錄，每次啟動記 INFO No longer used: <路徑>; delete it if you don't need it（App.NoLongerUsed）
+    test: [TestE3_ConfigDirIsTheFamilys, TestE3_OldPlacesMoveItemByItem, TestE3_WhatIsThereAlreadyStays, TestE3_AFailedMoveKeepsTheOldDir, TestE3_OldLogsMoveToTheData, TestStatePath_KBUStateIsTheDirectory, TestLogDirIsTheData, TestMoveKindDataMovesThemOut, TestMoveKindDataLeavesThemWhenThere, TestTheMovedSettingsAreTold, TestTheMovedPinsAndSortsAreTold, TestPinsAndSortsNotMovedStayInConfig, TestFilesNoLongerUsedAreNoted, TestMigrateLegacyConfigDir_CopiesFilesAndSubdirs]
+  - id: 30
+    spec: 1
+    implementation: |
+      讀不了 config.yaml、state.yaml 或 kinds.yaml（格式錯、沒有權限）：先用預設值開，啟動時一個一個用 App.MoveAside 問（MOVE ASIDE，
+      Enter:move Esc:quit）：Enter 改名成 .bak（.bak.1…），像第一次打開一樣接著用；Esc 離開，main 印 kbu: <路徑> can't be read: <原因>，
+      exit 1
+      值用不了（config.yaml 負的 input_tab_width、state.yaml 不是三個 panel 之一的 panel、kinds.yaml 方向不是 asc 也不是 desc 的排序）：
+      啟動時先 terminu.KeepAside 複製成 .bak，再用預設值（排序那一筆拿掉）重寫；啟動的 toast 有一列 MisfitNotice（N values in <檔> did
+      not fit: defaults used, yours kept in <檔>.bak），每個值一筆 WARN；.bak 做不出來時不重寫、預設值只用這一次，Error 那一列寫原因
+      config.yaml 裡 kbu 不讀的 key 留著（kbu 寫那個檔時也寫回去），每次啟動記 INFO：舊版讀過的（mouse_opt_config、compare、
+      pinned_resource_kinds）寫 No longer used: <key> in <路徑>; delete it if you don't need it，其他寫 Not read: …；舊的
+      km8erm_shell、km8erm_login_shell 照舊讀，記 WARN 請改名
+      state.yaml 或 config.yaml 的 context 不在 kubeconfig 裡：檔案不動，改用下一個（設定的，再來 current-context），啟動的 toast 有一列
+      Warning Context "<名稱>" in <檔> is not in the kubeconfig: using "<名稱>"
+      同一次啟動的這些（搬了、值用不了、context 不在）合成一個 toast（App.Notify），照發生的順序一件一列，種類取最重的
+      沒有畫面的指令（version、help、iconwidth）不讀這些檔
+    test: [TestUnreadableFilesMoveAside, TestE3_Misfits, TestFitted, TestE3_KeysNotRead, TestConnect, TestTheStartSaysItInOneToast, TestLoadStateFrom_MalformedIsError, TestLoadFrom_InvalidYAML]
+  - id: 31
+    spec: 1
+    implementation: |
+      panel 2 的 watch 失敗：panel 2 寫兩列的錯誤（原因、kbu tries again on its own; [!] shows the App Log），第一次 Error toast <原因>
+      （watcher 的 listing <種類>: 接 API 的原話）；同一句再發生不跳、不記，換一句再跳；又讀得到時記 INFO <種類> can be read again，
+      不跳 toast；watcher 自己重試
+      panel 3 的明細跟著叢集變動重讀：讀不到時 tab 寫兩列的錯誤，第一次 Error toast Details: <原因>，同一句不再跳，又讀得到記 INFO
+      The details can be read again
+      連不上叢集時（kubeconfig 讀不了、沒有 current-context）：不知道：kbu 開不了，main 印 kbu: <原因>，exit 1
+    test: [TestWatchFailureSaysOnce, TestDetailFailureSaysOnce, TestTheWatchErrorStartsWithACapital]
+  - id: 32
+    spec: 1
+    implementation: |
+      main 有參數時交給 command(args, stdout, stderr)，回傳 exit status：
+      kbu version（--version、-v）stdout 印 kbu <版號>，0；kbu help（--help、-h）stdout 印用法，0
+      kbu iconwidth：stdout 印 terminu.Probe("kbu").Lines() 兩行 icon N (<來源>)、powerline N (<來源>)，0
+      其他：stderr 印 kbu: Unknown command "<x>"、空一行、用法，2，不開 kbu
+      開 kbu 時 main 的錯誤（km8 複製失敗、連不上、讀不了的檔、Run 的錯誤）寫 stderr，開頭 kbu: 、句首大寫，exit 1；當掉時
+      kbu: Crashed: <原因> 與 kbu: The crash log is <路徑>
+    test: [TestCommand, TestMain_UnknownCommand, TestMain_PrintsVersion, TestMain_PrintsHelp, TestAsksVersion, TestAsksHelp]
+  - id: 33
+    spec: 1
+    implementation: |
+      lib 的 splash（App.Splash）：V 在 panel 上叫出來，任意鍵關掉；內容是 docs/icon.svg 的家族 icon（嵌進程式）與版號
+    test: [TestSplashIconIsDocsIcon]
+  - id: 34
+    spec: 1
+    implementation: |
+      lib 啟動時問終端機 icon 與 powerline 符號占幾格；KBU__ICON_WIDTH、KBU__POWERLINE_WIDTH（1 或 2），或家族共用的
+      TERMINU__ICON_WIDTH、TERMINU__POWERLINE_WIDTH 指定；kbu iconwidth 印出量到的與來源（task 32）
+      每一列剛好是終端機寬，在三種 icon 寬度下都是（tdptest）
+    test: [TestTDP, TestL4EveryRowIsTheTerminalWidth, TestCommand]
+  - id: 35
+    spec: 1
+    implementation: |
+      repo 照家族範本：family.mk、.github/workflows/release.yml（測試的 matrix 加 windows-latest）、.goreleaser.yaml（打開 Windows 與
+      scoop）、install.sh、uninstall.sh、internal/version/version.go、.gitignore；module github.com/vulcanshen/kbu/v4；CHANGELOG 的
+      Unreleased 與每一版的標題；install.ps1、uninstall.ps1 是 Windows 的
+    test: [{check: repo}]

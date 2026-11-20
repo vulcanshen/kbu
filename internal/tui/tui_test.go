@@ -797,3 +797,24 @@ func TestTheStartSaysItInOneToast(t *testing.T) {
 		}
 	}
 }
+
+// A workload's merged logs look for its pods again every few seconds: none
+// running is said once, a failure once, as everything kbu reads again on its
+// own (tdp note.7).
+func TestPodsLookedForAgainSayOnce(t *testing.T) {
+	m := newTestModel(t)
+	m.det.uid = "uid-demo-web"
+	for range 2 {
+		m.drive(m.onMsg(podsMsg{uid: m.det.uid}))
+	}
+	for range 2 {
+		m.drive(m.onMsg(podsMsg{uid: m.det.uid, err: errors.New("pods is forbidden")}))
+	}
+	m.press("!")
+	s := m.screen_()
+	for want, n := range map[string]int{"INFO Logs: no pods running": 1, "ERR  Logs: pods is forbidden": 1} {
+		if got := strings.Count(s, want); got != n {
+			t.Errorf("%q is in the App Log %d times, want %d:\n%s", want, got, n, s)
+		}
+	}
+}
