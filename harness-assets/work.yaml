@@ -20,7 +20,7 @@ tasks:
       Space menu：[P]in／Unpin <種類>、[Enter] Show in panel 2、[D]rag（見 task 12）、Cop[y]（kubectl 名稱）、[/] Search、[z]oom
     test: [TestTDP, TestContextsRegisteredUnderKubeConfig, TestKindToResourceType_NewKinds, TestCRDDiscoveryFailureIsTold]
   - id: 3
-    spec: 1
+    spec: 2
     implementation: |
       [2] <種類> 是一般清單：欄位依種類，名稱欄 Column.Shrink 從中間截（demo-app…66-gm72n），窄時先截長的值，再照最不需要的
       先收整欄，名稱不收；用 Kubernetes 的 watch 保持最新，每次收到整份清單就換上；沒設 Panel.Stream，失焦時照常變暗
@@ -90,13 +90,14 @@ tasks:
       Helm release 的 Enter 是 Open（task 16）；chart 部署的物件在它的 RELATIVES tab（task 8）
     test: [TestDrillIntoContainersAndBack, TestPanel2EscOneLevel]
   - id: 10
-    spec: 1
+    spec: 2
     implementation: |
       [N]amespace（global operation，每個 panel 都按得到）：tgo LoadChecks 的 checkbox popup，邊讀邊開，第一列是元件的 Select all；
       選項是叢集的 namespace，勾的是現在的選擇
       Enter：全勾或全不勾是整個叢集，其他是勾的那幾個；跟現在一樣就不做事；換了就記 INFO Namespace selection → <幾個或名稱>，
       panel 2 清掉篩選、重新 watch，panel 3 重來；讀不到 namespace 開 error popup NAMESPACES NOT READ
-      選擇存在 state.yaml 的 namespaces（task 15）；啟動時問叢集有哪些：記的 namespace 叢集沒有了，用還在的那幾個（一個都不在就看
+      選擇存在 state.yaml 的 namespaces（task 15）；啟動時照記的 namespaces 開始 watch（各 namespace 分開讀，不在的那幾個只是沒有列），
+      同時問叢集有哪些：記的 namespace 叢集沒有了，用還在的那幾個（一個都不在就看
       全部），Warning Namespace(s) "<名稱>"… in state.yaml is/are not in the cluster: showing <現在看的>，同一句記 WARN；它走
       App.Notify：啟動的 toast 還在畫面上時併進去（多一列、種類取最重的、時間重算），已經收掉了才是自己一個 toast；
       state.yaml 照樣留著不在的那幾個（離開時寫回），直到使用者自己選了 namespace 或切了 context
@@ -113,7 +114,7 @@ tasks:
       kbu 從不改 kubeconfig：每一個 kubectl 都帶 --context
     test: [TestFetchContextItems_SortedAndFlattened, TestContextYAML_RendersAndRedactsSecrets, TestDetailContext_RicherFields, TestGlobalOperations]
   - id: 12
-    spec: 1
+    spec: 2
     implementation: |
       panel 1 上 [P]in <種類>：先清掉 panel 1 的篩選，種類移到最上面的釘選組，cursor 跟著，記 INFO Pinned <種類>；再按是 Unpin，
       記 INFO Unpinned <種類>；寫進 ~/.kbu/kinds.yaml（寫不進去 Error toast Pin save failed: <原因>）
@@ -140,7 +141,7 @@ tasks:
       列、釘選、Drag、切 context、Breadcrumb 切到同一種的資源、History tab 把 cursor 放到部署中的 revision
     test: [TestActionsClearTheFilter]
   - id: 15
-    spec: 1
+    spec: 2
     implementation: |
       離開時寫 state.yaml（設定目錄，或 KBU__STATE）：context、namespaces、種類、panel 2 cursor 那一列（drill 裡不記）、focus 的
       panel（sidebar、table、detail）、panel 3 的 tab；寫不進去不擋離開，畫面收掉之後 stderr 印
@@ -163,7 +164,7 @@ tasks:
       App.CannotReadAgain 說 The YAML of <種類>/<名稱> can't be read again: <原因>
     test: [TestYAMLSearch, TestAnEditRereadsTheYAML, TestTheMenuStaysUnderWhatItOpens, TestMarshalItemYAML_PopulatesGVK]
   - id: 17
-    spec: 1
+    spec: 2
     implementation: |
       panel 2 的 [D]iff：App.DiffModeAction（tgo DiffMode，Key D，Name 是 namespace/name，Text 是拿掉 status 與 server 寫的欄位的
       YAML，用手上的清單、不打叢集）；Diff 模式、anchor、DIFF、UNIFIED|SPLIT 都是 lib 的，每次打開都是 UNIFIED、不記
@@ -221,7 +222,7 @@ tasks:
       Windows 上 lib 開不了 PTY：terminal popup 打開，裡面寫 a terminal needs a unix system，程式算是已經結束
     test: [TestShellAsksFirst]
   - id: 23
-    spec: 1
+    spec: 2
     implementation: |
       panel 2 的 [x] Delete（Events、node、kubeconfig context、Helm release 沒有；chart 管理的物件停用）：confirm DELETE，細節是確切的
       kubectl delete <種類>/<名稱> -n <ns> --context <context>，刪 namespace 時多一句 Warn，問 Delete <種類>/<名稱>?
@@ -282,7 +283,7 @@ tasks:
       need it（App.NoLongerUsed）
     test: [TestE3_ConfigDirIsTheFamilys, TestE3_OldPlacesMoveItemByItem, TestE3_WhatIsThereAlreadyStays, TestE3_AFailedMoveKeepsTheOldDir, TestE3_OldLogsMoveToTheData, TestE3_Km8MovesItemByItem, TestE3_Km8StaysWhenKbuHasItsOwn, TestE3_Km8NotMovedKeepsIt, TestStatePath_KBUStateIsTheDirectory, TestLogDirIsTheData, TestMoveKindDataMovesThemOut, TestMoveKindDataLeavesThemWhenThere, TestTheMovedSettingsAreTold, TestTheMovedPinsAndSortsAreTold, TestPinsAndSortsNotMovedStayInConfig, TestFilesNoLongerUsedAreNoted]
   - id: 30
-    spec: 1
+    spec: 2
     implementation: |
       讀不了 config.yaml、state.yaml 或 kinds.yaml（格式錯、沒有權限）：先用預設值開，啟動時一個一個用 App.MoveAside 問（MOVE ASIDE，
       Enter:move Esc:quit）：Enter 改名成 .bak（.bak.1…），像第一次打開一樣接著用；Esc 離開，main 印 kbu: <路徑> can't be read: <原因>，
@@ -297,11 +298,12 @@ tasks:
       Warning Context "<名稱>" in <檔> is not in the kubeconfig: using "<名稱>"；離開時 state.yaml 照樣寫回原本的 context，直到使用者
       自己切了 context
       同一次啟動的這些（搬了、值用不了、context 不在）合成一個 toast（App.Notify），照發生的順序一件一列，種類取最重的；開了畫面
-      才知道的（叢集沒有的 namespace、找完還沒有的種類，task 10、15）也走 App.Notify，那個 toast 還在時併進去
+      才知道的（叢集沒有的 namespace、找完還沒有的種類，task 10、15）也走 App.Notify，那個 toast 還在時併進去；E3 的 toast 都走
+      App.Notify，彼此不會在被讀到之前蓋掉對方
       沒有畫面的指令（version、help、iconwidth）不讀這些檔
     test: [TestUnreadableFilesMoveAside, TestE3_Misfits, TestFitted, TestE3_KeysNotRead, TestConnect, TestTheStartSaysItInOneToast, TestTheStateKeepsAContextGone, TestLoadStateFrom_MalformedIsError, TestLoadFrom_InvalidYAML]
   - id: 31
-    spec: 1
+    spec: 2
     implementation: |
       panel 2 的 watch 失敗：第一次 Error toast <原因>（watcher 的 listing <種類>: 開頭轉成大寫 Listing <種類>: ，接 API 的原話）；panel 2 已經有清單時留著，空的時候
       寫兩列的錯誤（原因、kbu tries again on its own; [!] shows the App Log）；同一句再發生不跳、不記，換一句再跳；又讀得到時記 INFO
@@ -310,9 +312,10 @@ tasks:
       with the next change; [!] shows the App Log）；第一次 Error toast Details: <原因>，同一句不再跳，又讀得到記 INFO The details can
       be read again
       kubeconfig 讀不了、沒有 current-context、建不了 client（app 外面的東西）：kbu 照常開，panel 2 寫兩列的錯誤（原因、Fix the
-      kubeconfig, then start kbu again; [!] shows the App Log），換種類也一樣，啟動時一個 Error toast；要叢集的 [N]amespace、[C]ontext
+      kubeconfig, then start kbu again; [!] shows the App Log），換種類也一樣；原因是啟動 toast 的一列 Error（App.Notify，跟搬了、
+      值用不了的在同一個 toast，task 30）；要叢集的 [N]amespace、[C]ontext
       停用
-    test: [TestWatchFailureSaysOnce, TestDetailFailureSaysOnce, TestDetailReadAgainKeepsWhatItHas, TestTheWatchErrorStartsWithACapital, TestNoKubeconfigStillOpens]
+    test: [TestWatchFailureSaysOnce, TestDetailFailureSaysOnce, TestDetailReadAgainKeepsWhatItHas, TestTheWatchErrorStartsWithACapital, TestNoKubeconfigStillOpens, TestNoKubeconfigJoinsTheStartToast]
   - id: 32
     spec: 1
     implementation: |

@@ -147,6 +147,12 @@ func New(o Options) *Model {
 		cfgErr: o.ConfigErr, stateErr: o.StateErr, kindsErr: o.KindsErr,
 		startNotices: o.Start, clientErr: o.ClientErr, keepContext: o.KeepContext,
 	}
+	if o.ClientErr != nil {
+		// A row of the start's toast, after what came before it, so that
+		// neither replaces the other unread (tdp E3).
+		fact, _, _ := strings.Cut(capital(o.ClientErr.Error()), "\n")
+		m.startNotices = append(m.startNotices, terminu.Notice{Kind: terminu.Error, Text: fact})
+	}
 	if m.cfg == nil {
 		m.cfg = config.DefaultConfig()
 	}
@@ -308,9 +314,6 @@ func (m *Model) clientFail() *terminu.Failure {
 // panel the user left from.
 func (m *Model) start() tea.Cmd {
 	cmds := []tea.Cmd{m.selectKind(m.kindAt, false)}
-	if m.clientErr != nil {
-		cmds = append(cmds, m.toast(terminu.Error, capital(m.clientErr.Error())))
-	}
 	if m.client != nil {
 		info := m.client.GetClusterInfo()
 		m.log.info(fmt.Sprintf("Connected to %s (%s)", info.ContextName, info.ServerURL))

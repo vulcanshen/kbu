@@ -1,4 +1,4 @@
-spec: 1
+spec: 2
 tasks:
   - id: 1
     accepted: true
@@ -19,7 +19,8 @@ tasks:
   - id: 9
     accepted: true
   - id: 10
-    accepted: true
+    accepted: false
+    reason: tdp 不清楚：E3-42「找完之前先用預設值」涵不涵蓋不用等叢集回答就能用的值（記的 namespace 照名字就能 watch），tdp 沒寫
   - id: 11
     accepted: true
   - id: 12
@@ -59,9 +60,11 @@ tasks:
   - id: 29
     accepted: true
   - id: 30
-    accepted: true
+    accepted: false
+    reason: tdp 不清楚：E3「這條規則的 toast 都不會在被讀到之前被另一個蓋掉」的「另一個」只指 E3 自己的 toast，還是任何 toast（啟動後馬上來的叢集讀不到的 Error toast），tdp 沒寫
   - id: 31
-    accepted: true
+    accepted: false
+    reason: tdp 不清楚：跟 task 30 同一個問題，panel 2 watch 失敗、明細讀不到的第一次 Error toast 要不要併進還在的啟動 toast
   - id: 32
     accepted: true
   - id: 33
