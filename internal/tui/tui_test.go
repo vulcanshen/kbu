@@ -335,24 +335,25 @@ func TestStatusbarKeepsItsFields(t *testing.T) {
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "C")
 	bar = plainSpans(m.statusbar(120))
-	if c, x := strings.Index(bar, "[C]ompare"), strings.Index(bar, "[C]ontext"); c < 0 || c > x {
-		t.Errorf("[C]ompare is not before [C]ontext:\n%q", bar)
+	if c, x := strings.Index(bar, "[C] Diff"), strings.Index(bar, "[C]ontext"); c < 0 || c > x {
+		t.Errorf("[C] Diff is not before [C]ontext:\n%q", bar)
 	}
 }
 
-// C enters the lib's Compare mode (tdp K11, panel.9), the row
+// C enters the lib's Diff mode (tdp K11, panel.9), the row
 // the anchor, drawn whole on Yellow: on the anchor C is off, on another row
 // C or Enter opens the DIFF of their YAML and comes back to the mode; Esc
-// leaves, the anchor gone. UNIFIED or SPLIT is kept with the state.
-func TestCompareMode(t *testing.T) {
+// leaves, the anchor gone. The state keeps no tab: every DIFF opens on
+// UNIFIED (tdp note.8).
+func TestDiffMode(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
 	m.press("Tab", "C")
-	if md := m.listP.InMode(); md == nil || md.Name != "Compare" || m.list.Anchor == "" {
+	if md := m.listP.InMode(); md == nil || md.Name != "Diff" || m.list.Anchor == "" {
 		t.Fatalf("panel 2 in mode %+v, anchor %q", md, m.list.Anchor)
 	}
-	if !strings.Contains(m.screen_(), "[C]ompare") {
-		t.Errorf("no [C]ompare on the statusbar:\n%s", m.screen_())
+	if !strings.Contains(m.screen_(), "[C] Diff") {
+		t.Errorf("no [C] Diff on the statusbar:\n%s", m.screen_())
 	}
 	m.press("C")
 	if strings.Contains(m.screen_(), "DIFF") {
@@ -370,9 +371,6 @@ func TestCompareMode(t *testing.T) {
 	m.press("Esc")
 	if m.listP.InMode() != nil || m.list.Anchor != "" {
 		t.Errorf("Esc kept the mode %v or the anchor %q", m.listP.InMode(), m.list.Anchor)
-	}
-	if !m.sessionState().CompareSplit {
-		t.Error("SPLIT is not kept with the state")
 	}
 }
 
@@ -660,7 +658,7 @@ func TestTheWatchErrorStartsWithACapital(t *testing.T) {
 
 // kbu's colours go as spans: a colour code left in a cell would show as its
 // name, \x1b (tdp components.5). Panel 2 with a status in
-// colour and the Compare anchor on Yellow, and the statusbar, show none.
+// colour and the Diff anchor on Yellow, and the statusbar, show none.
 func TestNoColourCodeShows(t *testing.T) {
 	m := newTestModel(t)
 	bad := pod("demo", "b")
@@ -687,5 +685,115 @@ func TestLogRowsAreReadingContent(t *testing.T) {
 	}
 	if r := logRows("a\nb\n"); len(r) != 2 {
 		t.Errorf("a \\n is not two rows: %q", r)
+	}
+}
+
+// A watch that fails is an Error toast and an entry the first time; the same
+// failure again says nothing, another one says it again, and a list read
+// again is one INFO entry with no toast (tdp note.7, note-105).
+func TestWatchFailureSaysOnce(t *testing.T) {
+	m := newTestModel(t)
+	fail := func(text string) { m.drive(m.onMsg(watchErrMsg{err: errors.New(text)})) }
+	fail("listing pods: forbidden")
+	fail("listing pods: forbidden")
+	fail("listing pods: connection refused")
+	m.feed(pod("demo", "a"))
+	m.feed(pod("demo", "a"), pod("demo", "b"))
+	m.press("!")
+	s := m.screen_()
+	for want, n := range map[string]int{"ERR  Listing pods: forbidden": 1, "ERR  Listing pods: connection refused": 1,
+		"INFO Pods can be read again": 1} {
+		if got := strings.Count(s, want); got != n {
+			t.Errorf("%q is in the App Log %d times, want %d:\n%s", want, got, n, s)
+		}
+	}
+}
+
+// The details read again with every change say a failure once, as the watch
+// does (tdp note.7).
+func TestDetailFailureSaysOnce(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "a"))
+	m.det.uid = itemKey(pod("demo", "a"))
+	for range 2 {
+		m.drive(m.onMsg(detailMsg{uid: m.det.uid, err: errors.New("events is forbidden")}))
+	}
+	m.drive(m.onMsg(detailMsg{uid: m.det.uid}))
+	m.press("!")
+	s := m.screen_()
+	for want, n := range map[string]int{"ERR  Details: events is forbidden": 1, "INFO The details can be read again": 1} {
+		if got := strings.Count(s, want); got != n {
+			t.Errorf("%q is in the App Log %d times, want %d:\n%s", want, got, n, s)
+		}
+	}
+}
+
+// Helm has no watch: the poll reads the releases again, and what changed is
+// one INFO entry, nothing when nothing did, nothing the first time
+// (tdp note.7, note-104).
+func TestHelmChanged(t *testing.T) {
+	m := newTestModel(t)
+	rel := func(name, rev, status string) k8s.ResourceItem {
+		return k8s.ResourceItem{Name: name, Namespace: "demo", Raw: &k8s.Release{Name: name, Namespace: "demo", Revision: rev, Status: status}}
+	}
+	if got := m.helmChanged([]k8s.ResourceItem{rel("web", "1", "deployed"), rel("db", "2", "deployed")}); got != "" {
+		t.Errorf("the first read changed %q", got)
+	}
+	if got := m.helmChanged([]k8s.ResourceItem{rel("web", "1", "deployed"), rel("db", "2", "deployed")}); got != "" {
+		t.Errorf("a read with no change changed %q", got)
+	}
+	got := m.helmChanged([]k8s.ResourceItem{rel("web", "2", "failed"), rel("api", "1", "deployed")})
+	if want := "demo/api installed (revision 1, deployed); demo/db uninstalled; demo/web now revision 2, failed"; got != want {
+		t.Errorf("changed %q, want %q", got, want)
+	}
+}
+
+// An action of kbu that changes what a panel lists, or puts its cursor on an
+// item, clears the panel filter first, whether it hides that item or not
+// (tdp panel.14, panel-180): showing or hiding the Helm-managed rows, pinning
+// a kind.
+func TestActionsClearTheFilter(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "a"), pod("demo", "b"))
+	m.press("Tab", "/", "b", "Enter")
+	if !m.list.Filtering() {
+		t.Fatal("/ b did not filter panel 2")
+	}
+	m.press(".")
+	if m.list.Filtering() {
+		t.Error("[.] kept the filter of panel 2")
+	}
+	m.press("1", "/", "D", "e", "p", "Enter")
+	if !m.kinds.Filtering() {
+		t.Fatal("/ Dep did not filter panel 1")
+	}
+	m.press("P")
+	if m.kinds.Filtering() {
+		t.Error("[P]in kept the filter of panel 1")
+	}
+}
+
+// What one start has to say is one toast, a row each in the order it
+// happened, its kind the strongest; the App Log an entry each (tdp E3-37).
+// The keys of config.yaml kbu does not read are an INFO each (tdp E3).
+func TestTheStartSaysItInOneToast(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Unread = map[string]any{"refesh": 5}
+	m := newTestModelWith(t, Options{Config: cfg,
+		Moved: []config.Moved{{What: "logs", From: "/old/logs", To: "/data/logs"}},
+		Start: []terminu.Notice{{Kind: terminu.Warning, Text: `Context "gone" in state.yaml is not in the kubeconfig: using "a"`}}})
+	s := m.screen_()
+	for _, want := range []string{"WARNING", "Moved kbu's logs from", `Context "gone" in state.yaml is not in the kubeconfig: using "a"`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the start's toast has no %q:\n%s", want, s)
+		}
+	}
+	m.press("!")
+	s = m.screen_()
+	for _, want := range []string{"INFO Moved kbu's logs from", `WARN Context "gone" in state.yaml`,
+		"INFO Not read: refesh in "} { // the path folds onto the rows after
+		if !strings.Contains(s, want) {
+			t.Errorf("the App Log has no %q:\n%s", want, s)
+		}
 	}
 }

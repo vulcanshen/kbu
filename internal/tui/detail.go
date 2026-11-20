@@ -749,6 +749,7 @@ func (m *Model) refreshHistory() {
 	had := len(m.histList.Rows()) > 0
 	m.histList.SetRows(rows)
 	if !had && current > 0 {
+		m.histList.ClearFilter() // the cursor goes to the deployed one (tdp panel.14)
 		m.histList.Select(strconv.Itoa(current))
 	}
 }

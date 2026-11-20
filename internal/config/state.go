@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	terminu "github.com/vulcanshen/terminu-go"
 	"gopkg.in/yaml.v3"
 )
 
@@ -80,10 +81,19 @@ type State struct {
 	// the recorded index wouldn't survive a kind switch. Tab names
 	// are stable across kbu upgrades AND kinds.
 	Tab string `yaml:"tab,omitempty"`
+}
 
-	// CompareSplit is which the compare showed last, SPLIT rather than
-	// UNIFIED (tdp note.8: kept with the state).
-	CompareSplit bool `yaml:"compare_split,omitempty"`
+// Misfits are the values of state.yaml kbu cannot use, each put back to its
+// default in s (tdp E3): a panel that is none of kbu's three.
+func (s *State) Misfits() []terminu.Misfit {
+	var out []terminu.Misfit
+	switch s.Panel {
+	case "", "sidebar", "table", "detail":
+	default:
+		out = append(out, terminu.Misfit{Key: "panel", Was: s.Panel, Now: "sidebar"})
+		s.Panel = ""
+	}
+	return out
 }
 
 // DefaultState returns an empty State. Used both as the load-file-missing

@@ -120,7 +120,7 @@ func TestPanel2SpaceMenu(t *testing.T) {
 	m.press("Tab", "Space")
 	s := m.screen_()
 	for _, want := range []string{"ITEM OPERATION", "[Enter] Drill in", "[Y]AML", "[E]dit", "[S]hell", "[D]elete",
-		"[C]ompare", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "[z]oom",
+		"[C] Diff", "Cop[y]", "PANEL OPERATION", "[Alt-S]ort panel 2 list", "[/] Search", "[z]oom",
 		"Global operation"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the Space menu has no %q:\n%s", want, s)
@@ -152,16 +152,28 @@ func TestAnEditRereadsTheYAML(t *testing.T) {
 	after.Raw.(*corev1.Pod).Labels = map[string]string{"edited": "yes"}
 	m.feed(before)
 	got := ""
-	show := func(y string) { got = y }
-	m.drive(m.onMsg(rereadMsg{key: itemKey(before), item: after, show: show}))
+	read := func(y string, err error) tea.Cmd {
+		if err != nil {
+			got = "error: " + err.Error()
+		} else {
+			got = y
+		}
+		return nil
+	}
+	m.drive(m.onMsg(rereadMsg{key: itemKey(before), item: after, read: read}))
 	if !strings.Contains(got, "edited") {
 		t.Errorf("the viewer did not get what the API read:\n%s", got)
 	}
 	got = ""
 	m.feed(after)
-	m.drive(m.onMsg(rereadMsg{key: itemKey(before), err: errors.New("unsupported ref type"), show: show}))
+	m.drive(m.onMsg(rereadMsg{key: itemKey(before), err: errors.New("unsupported ref type"), read: read}))
 	if !strings.Contains(got, "edited") {
 		t.Errorf("the viewer did not get what the watch has:\n%s", got)
+	}
+	m.feed()
+	m.drive(m.onMsg(rereadMsg{key: itemKey(before), err: errors.New("unsupported ref type"), read: read}))
+	if got != "error: unsupported ref type" {
+		t.Errorf("the viewer was not told it can't be read: %q", got)
 	}
 	ran := false
 	m.drive(m.txExited("edit", func() tea.Cmd { ran = true; return nil })(nil))
@@ -189,8 +201,7 @@ func TestTheMenuStaysUnderWhatItOpens(t *testing.T) {
 	}
 }
 
-// The YAML viewer's / finds the hits the viewer draws (Viewer.FindText); none
-// found is told.
+// The YAML viewer's / is the lib's search (tdp note.3); none found is told.
 func TestYAMLSearch(t *testing.T) {
 	for _, c := range []struct {
 		q     string
@@ -203,7 +214,7 @@ func TestYAMLSearch(t *testing.T) {
 			m.press(string(r))
 		}
 		m.press("Enter")
-		if told := strings.Contains(m.screen_(), "No match for "+c.q); told == c.found {
+		if told := strings.Contains(m.screen_(), "No line has "+c.q); told == c.found {
 			t.Errorf("search %q: no-match toast %v, want %v:\n%s", c.q, told, !c.found, m.screen_())
 		}
 	}

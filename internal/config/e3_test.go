@@ -5,7 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
+
+	terminu "github.com/vulcanshen/terminu-go"
 )
 
 // isolateHome points $HOME (and Windows' %USERPROFILE% / %AppData%) at a
@@ -179,5 +183,69 @@ func TestE3_OldLogsMoveToTheData(t *testing.T) {
 	}
 	if read(filepath.Join(ConfigDir(), "config.yaml")) != "editor: vi\n" {
 		t.Error("the settings moved too")
+	}
+}
+
+// tdp E3: a key of config.yaml kbu does not read is kept, also when kbu
+// writes the file, and is an INFO at every start: "No longer used" for one
+// an older kbu read, "Not read" for a typo. The old Alterm keys are read
+// and dropped as before.
+func TestE3_KeysNotRead(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	write(t, path, "editor: vi\nrefesh: 5\nmouse_opt_config:\n  enabled: false\ncompare:\n  layout: split\nkm8erm_shell: zsh\n")
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"No longer used: compare in " + path + "; delete it if you don't need it",
+		"No longer used: mouse_opt_config in " + path + "; delete it if you don't need it",
+		"Not read: refesh in " + path + "; delete it if you don't need it",
+	}
+	if got := cfg.NotRead(path); !slices.Equal(got, want) {
+		t.Errorf("NotRead = %q, want %q", got, want)
+	}
+	if cfg.AltermShell != "zsh" {
+		t.Errorf("km8erm_shell was not read: %q", cfg.AltermShell)
+	}
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatal(err)
+	}
+	saved := read(path)
+	for _, key := range []string{"refesh: 5", "mouse_opt_config:", "compare:", "editor: vi"} {
+		if !strings.Contains(saved, key) {
+			t.Errorf("writing the file lost %q:\n%s", key, saved)
+		}
+	}
+	if strings.Contains(saved, "km8erm_shell") {
+		t.Errorf("writing the file kept km8erm_shell:\n%s", saved)
+	}
+}
+
+// tdp E3: a value kbu cannot use goes back to its default, and says what it
+// was: a negative input_tab_width, a panel that is none of the three, a sort
+// in neither direction (taken out).
+func TestE3_Misfits(t *testing.T) {
+	cfg := &Config{InputTabWidth: -2, Editor: "vi"}
+	if got := cfg.Misfits(); len(got) != 1 || got[0] != (terminu.Misfit{Key: "input_tab_width", Was: "-2", Now: "4"}) || cfg.InputTabWidth != 0 {
+		t.Errorf("config misfits %+v, input_tab_width now %d", got, cfg.InputTabWidth)
+	}
+	if got := (&Config{InputTabWidth: 2}).Misfits(); len(got) != 0 {
+		t.Errorf("input_tab_width 2 did not fit: %+v", got)
+	}
+	s := &State{Panel: "nowhere", Kind: "pods"}
+	if got := s.Misfits(); len(got) != 1 || got[0] != (terminu.Misfit{Key: "panel", Was: "nowhere", Now: "sidebar"}) || s.Panel != "" {
+		t.Errorf("state misfits %+v, panel now %q", got, s.Panel)
+	}
+	k := KindData{"pod": {Sort: SortChain{{Column: "Age", Direction: "sideways"}, {Column: "Name", Direction: "asc"}}},
+		"node": {Sort: SortChain{{Column: "Age", Direction: ""}}}}
+	got := k.Misfits()
+	want := []terminu.Misfit{{Key: `node sort by Age (direction "")`}, {Key: `pod sort by Age (direction "sideways")`}}
+	if !slices.Equal(got, want) {
+		t.Errorf("kinds misfits %+v, want %+v", got, want)
+	}
+	if _, ok := k["node"]; ok || len(k["pod"].Sort) != 1 || k["pod"].Sort[0].Column != "Name" {
+		t.Errorf("the misfits are still in the pins and sorts: %+v", k)
 	}
 }

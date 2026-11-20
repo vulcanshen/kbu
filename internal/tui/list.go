@@ -121,6 +121,7 @@ func (m *Model) startWatch() tea.Cmd {
 	if m.watcher == nil || m.client == nil {
 		return nil
 	}
+	m.watchErr, m.helmSeen = rereadErr{}, nil // a new watch: what it reads first is no change
 	m.watcher.Start(m.current, m.client.Selection())
 	return m.waitWatch()
 }
@@ -131,6 +132,17 @@ func (m *Model) onWatchData(msg watchDataMsg) tea.Cmd {
 		return nil // a list from before the kind changed; its watch is gone
 	}
 	m.listP.Loading, m.listP.Fail = false, nil
+	if m.watchErr.ok() {
+		m.log.info(m.current.String() + " can be read again")
+	}
+	// Helm has no watch: kbu reads the releases again every few seconds, and
+	// logs what changed (tdp note.7). A watched kind's list keeps itself
+	// up to date, and is not logged change by change.
+	if msg.kind == k8s.ResourceReleases {
+		if what := m.helmChanged(msg.items); what != "" {
+			m.log.info("Helm releases changed: " + what)
+		}
+	}
 	m.rootItems = filterHelm(msg.items, msg.kind)
 	sortDefault(m.rootItems)
 	cmds := []tea.Cmd{m.waitWatch()}
@@ -462,7 +474,7 @@ func statusColor(status, pending, failed string) string {
 }
 
 // listEsc is Esc on panel 2, one level up (tdp K4): out of the drill. Esc in
-// the Compare mode leaves the mode (the lib's, tdp K11).
+// the Diff mode leaves the mode (the lib's, tdp K11).
 func (m *Model) listEsc() tea.Cmd {
 	if len(m.drill) > 0 {
 		return m.drillOut()
@@ -550,9 +562,9 @@ func (m *Model) setListActions() {
 			item = append(item, terminu.Action{Key: "D", Label: "Delete", Desc: "kubectl delete", Scope: terminu.ItemScope,
 				Disabled: helmManaged, Ask: m.deleteAsk(rt, cur), Clear: true, Do: func() tea.Cmd { return m.runDelete(rt, cur) }})
 		}
-		// The compare is not in the App Log (tdp note.7).
+		// The Diff mode is not in the App Log (tdp note.7).
 		item = append(item,
-			m.app.CompareAction(m.listP, m.list, terminu.Compare{Key: "C", Name: m.rowLabel, Text: m.rowYAML, Split: &m.compareSplit}),
+			m.app.DiffModeAction(m.listP, m.list, terminu.DiffMode{Key: "C", Name: m.rowLabel, Text: m.rowYAML}),
 			terminu.Action{Key: "y", Label: "Copy", Desc: "this row, tab-separated", Scope: terminu.ItemScope, Do: m.copyRow},
 		)
 	}
@@ -689,9 +701,9 @@ func (m *Model) drillOut() tea.Cmd {
 	return m.rowMovedNow()
 }
 
-// --- compare --------------------------------------------------------------
+// --- diff -----------------------------------------------------------------
 
-// The Compare mode and its DIFF are the lib's (tdp K11, panel.9,
+// The Diff mode and its DIFF are the lib's (tdp K11, panel.9,
 // note.8): kbu names a row by its namespace and name, and compares
 // rows by their YAML cleaned of what the server writes, from the list it has.
 
@@ -727,6 +739,7 @@ func (m *Model) toggleHelm() tea.Cmd {
 		state = "hidden"
 	}
 	m.rootItems = filterHelm(m.rootItems, m.current)
+	m.list.ClearFilter() // panel 2 lists other rows (tdp panel.14)
 	m.setListRows()
 	cmds := []tea.Cmd{m.app.Toast(terminu.Info, "Helm-managed rows "+state)}
 	if m.watcher != nil && len(m.drill) == 0 {

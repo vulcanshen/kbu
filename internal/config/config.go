@@ -3,11 +3,14 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
+	terminu "github.com/vulcanshen/terminu-go"
 	"gopkg.in/yaml.v3"
 )
 
@@ -55,14 +58,6 @@ type Config struct {
 	// family's default, 4.
 	InputTabWidth int `yaml:"input_tab_width,omitempty"`
 
-	// Mouse carries app-level mouse settings (enable toggle + scroll
-	// direction). Nested so future mouse options (double-click
-	// threshold, edge-pan, ...) drop in here without polluting the
-	// top-level Config. nil = use defaults (enabled, natural
-	// scrolling) — matches how an existing user's config behaves on
-	// upgrade.
-	Mouse *MouseConfig `yaml:"mouse_opt_config,omitempty"`
-
 	// ResourceKindConfig is where an older kbu kept the pins and sorts.
 	// They are data now, in kinds.yaml (KindData; tdp E3), and
 	// MoveKindData moves them there at start. They are read here only
@@ -79,6 +74,11 @@ type Config struct {
 	// sees the nudge in the `!` popup. Removable next release once the
 	// transition period ends.
 	DeprecationWarnings []string `yaml:"-"`
+
+	// Unread are the keys kbu does not read, a typo or one an older kbu
+	// read: kept as they are, and written back when kbu writes the file
+	// (tdp E3).
+	Unread map[string]any `yaml:",inline"`
 }
 
 // ResourceKindConfigEntry is the per-kind config bag. Each sub-field
@@ -192,68 +192,6 @@ func (s SortChain) IndexOf(column string) int {
 		}
 	}
 	return -1
-}
-
-// Mouse scroll direction constants — written verbatim to YAML and
-// matched in the wheel translator. Anything not equal to
-// MouseScrollReverse is treated as natural so a typo / future value
-// degrades gracefully.
-const (
-	MouseScrollNatural = "natural"
-	MouseScrollReverse = "reverse"
-)
-
-// MouseConfig is the nested config bag for everything mouse-related.
-// Lives behind a *MouseConfig in Config so legacy/empty configs
-// stay nil-friendly without leaking yaml `null`s into the file.
-//
-// Enabled is a pointer so the helper can distinguish "never set"
-// (legacy, treat as enabled) from "explicit false" (user turned it
-// off). ScrollDirection is a string so future values (e.g. a
-// per-axis variant) can be added without breaking the YAML shape.
-type MouseConfig struct {
-	Enabled         *bool  `yaml:"enabled,omitempty"`
-	ScrollDirection string `yaml:"scroll_direction,omitempty"`
-}
-
-// IsMouseEnabled reports the current mouse-enabled state. nil
-// MouseConfig or nil Enabled both fall back to true so an existing
-// user's config "just works" the moment this feature ships.
-func (c *Config) IsMouseEnabled() bool {
-	if c == nil || c.Mouse == nil || c.Mouse.Enabled == nil {
-		return true
-	}
-	return *c.Mouse.Enabled
-}
-
-// SetMouseEnabled writes the explicit on/off value, lazily creating
-// the nested MouseConfig if it's the first mouse setting touched.
-// Callers Save() to persist.
-func (c *Config) SetMouseEnabled(v bool) {
-	if c.Mouse == nil {
-		c.Mouse = &MouseConfig{}
-	}
-	c.Mouse.Enabled = &v
-}
-
-// MouseScrollDirection returns the configured wheel-direction string,
-// defaulting to natural when unset. Validity isn't enforced here —
-// the wheel translator only special-cases "reverse" and treats
-// everything else (including unrecognised values) as natural.
-func (c *Config) MouseScrollDirection() string {
-	if c == nil || c.Mouse == nil || c.Mouse.ScrollDirection == "" {
-		return MouseScrollNatural
-	}
-	return c.Mouse.ScrollDirection
-}
-
-// SetMouseScrollDirection writes the explicit scroll direction
-// string. Lazily creates MouseConfig if needed.
-func (c *Config) SetMouseScrollDirection(d string) {
-	if c.Mouse == nil {
-		c.Mouse = &MouseConfig{}
-	}
-	c.Mouse.ScrollDirection = d
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -515,8 +453,56 @@ func LoadFrom(path string) (*Config, error) {
 				"Config: 'km8erm_login_shell' is deprecated, rename to 'alterm_login_shell' (auto-migrated this session — the next kbu save will rewrite your config.yaml with the new key)")
 		}
 	}
+	// The old Alterm keys are read above, and a save drops them.
+	delete(cfg.Unread, "km8erm_shell")
+	delete(cfg.Unread, "km8erm_login_shell")
 
 	return cfg, nil
+}
+
+// noLongerRead are the keys an older kbu read in config.yaml: the mouse
+// settings (kbu has no mouse, tdp X1), the compare's layout (every diff
+// opens on UNIFIED, tdp note.8) and the pins before resource_kind_config.
+var noLongerRead = []string{"compare", "mouse_opt_config", "pinned_resource_kinds"}
+
+// NotRead is an INFO entry for each key of config.yaml at path that kbu
+// does not read, for the App Log at every start (tdp E3): "No longer used"
+// for one an older kbu read, "Not read" for any other (a typo).
+func (c *Config) NotRead(path string) []string {
+	keys := slices.Sorted(maps.Keys(c.Unread))
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		says := "Not read"
+		if slices.Contains(noLongerRead, k) {
+			says = "No longer used"
+		}
+		out = append(out, says+": "+k+" in "+HomeShort(path)+"; delete it if you don't need it")
+	}
+	return out
+}
+
+// Misfits are the values of config.yaml kbu cannot use, each put back to
+// its default in c (tdp E3): a negative input_tab_width.
+func (c *Config) Misfits() []terminu.Misfit {
+	var out []terminu.Misfit
+	if c.InputTabWidth < 0 {
+		out = append(out, terminu.Misfit{Key: "input_tab_width", Was: strconv.Itoa(c.InputTabWidth), Now: "4"})
+		c.InputTabWidth = 0
+	}
+	return out
+}
+
+// HomeShort is path with the home folder written ~, as the lib writes the
+// paths it names.
+func HomeShort(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if rest, ok := strings.CutPrefix(path, home); ok && (rest == "" || os.IsPathSeparator(rest[0])) {
+		return "~" + rest
+	}
+	return path
 }
 
 // Save persists the config to the default path via atomic write

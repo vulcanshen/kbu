@@ -117,10 +117,18 @@ func (m *Model) onMsg(msg tea.Msg) tea.Cmd {
 		m.setDetail(msg.detail, msg.events)
 		if msg.err != nil {
 			// An empty tab says why it is empty (tdp panel.15,
-			// errors); the App Log keeps it.
+			// errors). The details are read again with every change: an
+			// Error toast the first time, again only for another failure
+			// (tdp note.7).
 			fact, _, _ := strings.Cut(msg.err.Error(), "\n")
-			m.log.warn("Details: " + fact)
 			m.detailP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu asks again with the next change; [!] shows the App Log"}
+			if m.detailErr.failed(fact) {
+				return m.app.Toast(terminu.Error, "Details: "+fact)
+			}
+			return nil
+		}
+		if m.detailErr.ok() {
+			m.log.info("The details can be read again")
 		}
 		return nil
 	case logLineMsg:
@@ -184,22 +192,74 @@ func (m *Model) waitWatch() tea.Cmd {
 	}
 }
 
-// onWatchErr is the watch failing: the App Log keeps it; the first time, a
-// toast says it (tdp F5), and an empty panel 2 says why it is empty
-// (tdp panel.15, errors). The watcher tries again on its own.
+// onWatchErr is the watch failing; the watcher tries again on its own. An
+// empty panel 2 says why it is empty (tdp panel.15, errors); an Error toast
+// says it the first time, and again only for another failure: the same one
+// again is neither shown nor logged (tdp note.7).
 func (m *Model) onWatchErr(err error) tea.Cmd {
 	// The watcher's own "listing pods: " or "watching pods: " starts it, the
 	// API's words after it kept as they are (tdp toast.2).
-	text := capital(err.Error())
-	m.log.err(text)
+	fact, _, _ := strings.Cut(capital(err.Error()), "\n")
 	cmds := []tea.Cmd{m.waitWatch()}
-	if m.listP.Fail == nil {
-		fact, _, _ := strings.Cut(text, "\n")
+	if m.watchErr.failed(fact) {
 		m.listP.Loading = false
 		m.listP.Fail = &terminu.Failure{Fact: fact, Hint: "kbu tries again on its own; [!] shows the App Log"}
 		cmds = append(cmds, m.app.Toast(terminu.Error, fact))
 	}
 	return tea.Batch(cmds...)
+}
+
+// rereadErr is the last failure of what kbu reads again on its own, so that
+// the same failure again says nothing (tdp note.7).
+type rereadErr struct{ last string }
+
+// failed reports whether fact is a new failure: the first, or another one.
+func (r *rereadErr) failed(fact string) bool {
+	if fact == r.last {
+		return false
+	}
+	r.last = fact
+	return true
+}
+
+// ok reports whether reading works again after a failure.
+func (r *rereadErr) ok() bool {
+	failed := r.last != ""
+	r.last = ""
+	return failed
+}
+
+// helmChanged is what the poll found changed in the Helm releases since it
+// last read them, for one INFO entry (tdp note.7), "" when nothing did or
+// when it reads them for the first time.
+func (m *Model) helmChanged(items []k8s.ResourceItem) string {
+	seen := map[string]string{}
+	for _, it := range items {
+		if r, ok := it.Raw.(*k8s.Release); ok {
+			seen[diffLabel(it)] = "revision " + r.Revision + ", " + r.Status
+		}
+	}
+	before := m.helmSeen
+	m.helmSeen = seen
+	if before == nil {
+		return ""
+	}
+	var what []string
+	for name, now := range seen {
+		switch was, ok := before[name]; {
+		case !ok:
+			what = append(what, name+" installed ("+now+")")
+		case was != now:
+			what = append(what, name+" now "+now)
+		}
+	}
+	for name := range before {
+		if _, ok := seen[name]; !ok {
+			what = append(what, name+" uninstalled")
+		}
+	}
+	slices.Sort(what)
+	return strings.Join(what, "; ")
 }
 
 // fetchDetail fetches what panel 3 shows of item: its details, its relatives
@@ -364,7 +424,7 @@ func (m *Model) restore() {
 
 // sessionState is where the user is, for state.yaml.
 func (m *Model) sessionState() *config.State {
-	s := &config.State{Kind: m.current.KubectlName(), Tab: m.currentTab(), CompareSplit: m.compareSplit}
+	s := &config.State{Kind: m.current.KubectlName(), Tab: m.currentTab()}
 	if m.client != nil {
 		s.Context = m.client.ContextName()
 		s.Namespaces = m.client.Selection().List()

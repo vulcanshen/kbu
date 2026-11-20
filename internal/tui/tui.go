@@ -38,6 +38,10 @@ type Options struct {
 	// moved at start (tdp E3): a toast
 	// says so, or an error popup when the move failed.
 	Moved []config.Moved
+	// Start is the rest of what the start has to say in its toast, after
+	// what moved (tdp E3): values put back to their defaults, a context
+	// the kubeconfig no longer has.
+	Start []terminu.Notice
 	// Status are the colours of a resource's status cells (the app's
 	// content, tdp P4).
 	Status theme.StatusColors
@@ -57,6 +61,11 @@ type Model struct {
 
 	watcher *k8s.Watcher
 	logs    *k8s.LogStreamer
+	// watchErr and detailErr are the last failure of panel 2's watch and of
+	// panel 3's details, read again on their own (tdp note.7); helmSeen is
+	// each Helm release's revision and status as the poll last found them.
+	watchErr, detailErr rereadErr
+	helmSeen            map[string]string
 	// run runs a command to its end and returns what it printed: kubectl
 	// delete, helm rollback. Tests replace it, so that no test ever deletes
 	// anything.
@@ -77,13 +86,12 @@ type Model struct {
 	drag   *dragState
 
 	// panel 2
-	current      k8s.ResourceType // the kind panel 1 shows in panel 2, watched
-	rootItems    []k8s.ResourceItem
-	drill        []drillLevel // panel 2's drill chain, below current
-	compareSplit bool         // the compare shows SPLIT, not UNIFIED: kept with the state
-	pendingSel   *k8s.RefTarget
-	kindSeq      int // invalidates a kind switch still waiting out its debounce
-	rowSeq       int // the same for a row switch
+	current    k8s.ResourceType // the kind panel 1 shows in panel 2, watched
+	rootItems  []k8s.ResourceItem
+	drill      []drillLevel // panel 2's drill chain, below current
+	pendingSel *k8s.RefTarget
+	kindSeq    int // invalidates a kind switch still waiting out its debounce
+	rowSeq     int // the same for a row switch
 
 	// panel 3
 	det detailState
@@ -108,6 +116,7 @@ type Model struct {
 	// asideAsked is the start asking to move one aside (tdp E3).
 	cfgErr, stateErr, kindsErr error
 	asideAsked                 bool
+	startNotices               []terminu.Notice
 }
 
 // New builds kbu's UI.
@@ -120,12 +129,10 @@ func New(o Options) *Model {
 		run:    runCommand,
 		moved:  o.Moved,
 		cfgErr: o.ConfigErr, stateErr: o.StateErr, kindsErr: o.KindsErr,
+		startNotices: o.Start,
 	}
 	if m.cfg == nil {
 		m.cfg = config.DefaultConfig()
-	}
-	if o.State != nil {
-		m.compareSplit = o.State.CompareSplit
 	}
 	m.kindData = &o.Kinds
 	if m.kindsInConfig = config.KindDataInConfig(m.cfg); m.kindsInConfig {
@@ -179,6 +186,13 @@ func New(o Options) *Model {
 	}
 	for _, w := range m.cfg.DeprecationWarnings {
 		m.log.warn(w)
+	}
+	// The keys of config.yaml kbu does not read: an INFO for each, at every
+	// start (tdp E3).
+	if o.ConfigErr == nil {
+		for _, line := range m.cfg.NotRead(config.ConfigPath()) {
+			m.log.info(line)
+		}
 	}
 	// What an older kbu kept that this one no longer reads: an INFO for
 	// each still there, at every start, and nothing else (tdp E3-23).
@@ -306,8 +320,9 @@ func (m *Model) askAside() tea.Cmd {
 	return ask(0)
 }
 
-// sayMoved says what was moved at start (tdp E3): an Info toast from where
-// to where, and an error popup with both paths for what stayed where it was.
+// sayMoved says what was moved at start (tdp E3): a row of the start's
+// toast from where to where, with the rest it has to say (one toast, tdp
+// E3-37), and an error popup with both paths for what stayed where it was.
 func (m *Model) sayMoved() tea.Cmd {
 	var done, left []string
 	said := map[string]bool{}
@@ -336,10 +351,11 @@ func (m *Model) sayMoved() tea.Cmd {
 			left = append(left, fmt.Sprintf("%s could not be moved to %s (%v)%s. Move it yourself.", mv.From, mv.To, mv.Err, keeps))
 		}
 	}
-	var cmds []tea.Cmd
+	var notices []terminu.Notice
 	if len(done) > 0 {
-		cmds = append(cmds, m.app.Toast(terminu.Info, "Moved kbu's "+strings.Join(done, ", and its ")))
+		notices = append(notices, terminu.Notice{Kind: terminu.Info, Text: "Moved kbu's " + strings.Join(done, ", and its ")})
 	}
+	cmds := []tea.Cmd{m.app.Notify(append(notices, m.startNotices...)...)}
 	if len(left) > 0 {
 		cmds = append(cmds, m.app.Error("Not moved", left...))
 	}
@@ -348,14 +364,14 @@ func (m *Model) sayMoved() tea.Cmd {
 
 // statusbar is the row at the top (tdp screen.4): the context
 // and the namespaces with their hotkeys, the Alterm in the background, the
-// compare anchor, and on the right the errors and warnings not seen yet.
-// When panel 2 has the focus its C (Compare) is the C that fires: [C]ompare
+// Diff mode, and on the right the errors and warnings not seen yet.
+// When panel 2 has the focus its C (Diff) is the C that fires: [C] Diff
 // is lit there and [C]ontext is not (tdp M9).
 func (m *Model) statusbar(int) []terminu.Span {
 	grey, value := terminu.Fg(terminu.Overlay0), terminu.Fg(terminu.Lavender)
 	lit, unlit := terminu.Fg(terminu.Blue), terminu.Fg(terminu.Surface2)
 	onList := m.screen.Focused() == m.listP
-	// panel 2's C is compare where it has a row to compare: there [C]ontext
+	// panel 2's C is Diff where it has a row to compare: there [C]ontext
 	// does not fire (tdp M9).
 	compareC := onList && !m.atContainers() && m.list.HasItem()
 	ctxKey := lit
@@ -388,12 +404,12 @@ func (m *Model) statusbar(int) []terminu.Span {
 		// A live session is in effect (tdp color.2: Green).
 		add(terminu.Span{Text: "[Alt-t]", Style: lit}, terminu.Span{Text: "erm", Style: terminu.Fg(terminu.Green)})
 	}
-	if m.list.Anchor != "" { // in the Compare mode
+	if m.list.Anchor != "" { // in the Diff mode
 		cmpKey := unlit
 		if compareC {
 			cmpKey = lit
 		}
-		add(terminu.Span{Text: "[C]", Style: cmpKey}, terminu.Span{Text: "ompare", Style: grey})
+		add(terminu.Span{Text: "[C]", Style: cmpKey}, terminu.Span{Text: " Diff", Style: grey})
 	}
 	add(terminu.Span{Text: "[C]", Style: ctxKey}, terminu.Span{Text: "ontext: ", Style: grey},
 		terminu.Span{Text: terminu.Pad(capMiddle(ctx, 24), 24), Style: value})

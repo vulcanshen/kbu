@@ -2,6 +2,51 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
+## Unreleased
+
+- **Compare is now Diff**: panel 2's `C` is `[C] Diff`, the mode on the frame
+  is `Diff` and its menu `DIFF MODE`. Every diff opens unified: kbu no longer
+  keeps whether you last looked unified or side by side (`state.yaml`'s
+  `compare_split` goes).
+- **The command line follows the family's form**: `kbu iconwidth` prints two
+  lines, `icon N (from)` and `powerline N (from)`, each width with where it
+  came from; a command kbu does not know prints `kbu: Unknown command "x"`, a
+  blank line and the usage, and exits with status 2 instead of starting kbu;
+  every error kbu prints before or after it runs starts with `kbu: `.
+- **A value kbu cannot use no longer goes unnoticed**: a negative
+  `input_tab_width` in `config.yaml`, a panel in `state.yaml` that is none of
+  the three, a sort in `kinds.yaml` in neither direction. At the start kbu
+  copies the file to `.bak`, writes it again with the default in its place,
+  and a toast says so, a WARN in the App Log for each value.
+- **A key of `config.yaml` kbu does not read stays in the file**, also when kbu
+  writes it, and the App Log names it at every start: `No longer used` for one
+  an older kbu read (`mouse_opt_config`, `compare`, `pinned_resource_kinds`),
+  `Not read` for any other, such as a typo.
+- **A context your kubeconfig no longer has no longer stops kbu**: the one in
+  `state.yaml` or `config.yaml` is left as written, kbu starts on the next one
+  (the setting's, else the kubeconfig's current-context), and a Warning says
+  which.
+- **What one start has to say is one toast**, a row each: what moved, the
+  values put back to their defaults, a context that is gone.
+- **What kbu reads again on its own says a failure once**: panel 2's list and
+  panel 3's details give an Error toast the first time, again only for another
+  failure, and an INFO entry when they can be read again. The Helm releases,
+  read again every few seconds, log one INFO entry for what changed: installed,
+  uninstalled, a new revision or status.
+- **An action that changes what a panel lists clears its filter first**:
+  picking namespaces, showing or hiding the Helm-managed rows, pinning a kind,
+  dragging the pinned kinds, switching the context, switching to a resource of
+  the kind shown, and the History tab putting its cursor on the deployed
+  revision.
+- **The YAML viewer's search is the family's**: `/`, `n|N` as before, its
+  status on the bottom border; with no hit the toast says `No line has <text>`.
+  After an edit the viewer reads the resource again as the family does: the
+  search found again, the selection kept where it still can be, and a resource
+  that can't be read again said in an Error toast.
+- **The developer notes are gone** (`docs/dev-remarks.md`): kbu is now kept
+  with the terminu harness, its records in `harness-assets/`.
+- On terminu-go v1.2.20 (tdp v1.2.19).
+
 ## v4.0.1 — tdp v1.1.0
 
 Nothing you see or press changes since v4.0.0. What changed is how kbu is
