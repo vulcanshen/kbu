@@ -364,9 +364,10 @@ func (m *Model) onCRDs(msg crdsMsg) tea.Cmd {
 	// stays where it is either way: discovery ending is no reason to move
 	// (tdp E3, K3).
 	if k := m.keepKind; k != nil && k8s.DefaultRegistry.LookupByKubectlName(k.Kind) == "" {
-		// TODO(tgo v1.2.21-beta.2): join the start's toast while it shows
-		// (tdp E3-43, on tdp main ef9d168); a toast of its own until then.
-		return m.toastWarn(fmt.Sprintf("Kind %q in state.yaml is not in the cluster: showing Pods", k.Kind))
+		// Through Notify: it joins the start's toast while that one shows
+		// (tdp E3-43).
+		return m.app.Notify(terminu.Notice{Kind: terminu.Warning,
+			Text: fmt.Sprintf("Kind %q in state.yaml is not in the cluster: showing Pods", k.Kind)})
 	}
 	return nil
 }
@@ -415,9 +416,10 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if len(gone) > 1 {
 		what = "Namespaces " + strings.Join(gone, ", ") + " in state.yaml are"
 	}
-	// TODO(tgo v1.2.21-beta.2): join the start's toast while it shows
-	// (tdp E3-43, on tdp main ef9d168); a toast of its own until then.
-	return tea.Batch(m.toastWarn(what+" not in the cluster: showing "+selectionText(kept)), m.showNamespaces(kept))
+	// Through Notify: it joins the start's toast while that one shows
+	// (tdp E3-43).
+	late := terminu.Notice{Kind: terminu.Warning, Text: what + " not in the cluster: showing " + selectionText(kept)}
+	return tea.Batch(m.app.Notify(late), m.showNamespaces(kept))
 }
 
 func selectionText(sel k8s.NamespaceSelection) string {

@@ -97,9 +97,10 @@ tasks:
       Enter：全勾或全不勾是整個叢集，其他是勾的那幾個；跟現在一樣就不做事；換了就記 INFO Namespace selection → <幾個或名稱>，
       panel 2 清掉篩選、重新 watch，panel 3 重來；讀不到 namespace 開 error popup NAMESPACES NOT READ
       選擇存在 state.yaml 的 namespaces（task 15）；啟動時問叢集有哪些：記的 namespace 叢集沒有了，用還在的那幾個（一個都不在就看
-      全部），Warning toast Namespace(s) "<名稱>"… in state.yaml is/are not in the cluster: showing <現在看的>，同一句記 WARN；
+      全部），Warning Namespace(s) "<名稱>"… in state.yaml is/are not in the cluster: showing <現在看的>，同一句記 WARN；它走
+      App.Notify：啟動的 toast 還在畫面上時併進去（多一列、種類取最重的、時間重算），已經收掉了才是自己一個 toast；
       state.yaml 照樣留著不在的那幾個（離開時寫回），直到使用者自己選了 namespace 或切了 context
-    test: [TestPickedSelection, TestNamespacePickerLoads, TestNamespaceSelection_FilterExisting, TestGlobalOperations, TestTheStateKeepsNamespacesGone]
+    test: [TestPickedSelection, TestNamespacePickerLoads, TestNamespaceSelection_FilterExisting, TestGlobalOperations, TestTheStateKeepsNamespacesGone, TestALateWarningJoinsTheStartToast]
   - id: 11
     spec: 1
     implementation: |
@@ -146,7 +147,8 @@ tasks:
       kbu: ~/.config/kbu/state.yaml could not be written: <原因>，exit 1
       啟動時照它開：focus 到那個 panel，cursor 等清單來了放到那一列
       記的種類現在還不認得（CRD 要等啟動後的 discovery 才找得到）：先從 Pods 開始，不跳警告；state.yaml 照樣留著記的種類、那一列與
-      tab；discovery 找完還是沒有時 Warning toast Kind "<名稱>" in state.yaml is not in the cluster: showing Pods，同一句記 WARN；
+      tab；discovery 找完還是沒有時 Warning Kind "<名稱>" in state.yaml is not in the cluster: showing Pods，同一句記 WARN，走
+      App.Notify：啟動的 toast 還在畫面上時併進去，已經收掉了才是自己一個 toast；
       找到了也不自己切過去（背景的事不換畫面）；discovery 讀不到時沒有找完，不警告，一樣留在 Pods、state.yaml 留著；使用者在 panel 1 選了別的種類、用 Breadcrumb 切或切了 context，才改掉它
     test: [TestAStateNotSavedIsTold, TestSessionState, TestStartsOnThePanelLeftFrom, TestState_RoundTrip, TestTheStateKeepsAKindNotFoundYet]
   - id: 16
@@ -294,7 +296,8 @@ tasks:
       state.yaml 或 config.yaml 的 context 不在 kubeconfig 裡：檔案不動，改用下一個（設定的，再來 current-context），啟動的 toast 有一列
       Warning Context "<名稱>" in <檔> is not in the kubeconfig: using "<名稱>"；離開時 state.yaml 照樣寫回原本的 context，直到使用者
       自己切了 context
-      同一次啟動的這些（搬了、值用不了、context 不在）合成一個 toast（App.Notify），照發生的順序一件一列，種類取最重的
+      同一次啟動的這些（搬了、值用不了、context 不在）合成一個 toast（App.Notify），照發生的順序一件一列，種類取最重的；開了畫面
+      才知道的（叢集沒有的 namespace、找完還沒有的種類，task 10、15）也走 App.Notify，那個 toast 還在時併進去
       沒有畫面的指令（version、help、iconwidth）不讀這些檔
     test: [TestUnreadableFilesMoveAside, TestE3_Misfits, TestFitted, TestE3_KeysNotRead, TestConnect, TestTheStartSaysItInOneToast, TestTheStateKeepsAContextGone, TestLoadStateFrom_MalformedIsError, TestLoadFrom_InvalidYAML]
   - id: 31

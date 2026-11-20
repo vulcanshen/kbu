@@ -61,12 +61,10 @@ tasks:
   - id: 10
     spec: 1
     request: 一次看好幾個 namespace，或整個叢集；kbu 記得選擇
-    tdp: [tdp checkbox, tdp M4, tdp panel.14, tdp E3, tdp note.7, tdp note.6, tdp toast.2]
+    tdp: [tdp checkbox, tdp M4, tdp panel.14, tdp E3, tdp note.7, tdp note.6, tdp toast.2, tdp F5, tdp toast.1]
     remark:
       - 叢集裡不在的 namespace 照 E3「指到不在的一筆」：user 2026-11-20 定（A：app 外面的東西也算），寫進 tdp main c893eef 的 E3（E3-41，下一版 tdp 才有）
-      - note: 晚到的 Warning 先另外跳一個 toast；啟動的 toast 還在畫面上時併進去（user 2026-11-20 選 C，tdp main ef9d168 的 E3-43）要等
-          terminu-go v1.2.21-beta.2，程式裡標 TODO(tgo v1.2.21-beta.2)
-        issue: terminu-go v1.2.21-beta.2（terminu 轉的 E3-43）
+      - 晚到的 Warning 走 App.Notify，啟動的 toast 還在畫面上時併進去（user 2026-11-20 選 C，tdp main ef9d168 的 E3-43；terminu-go v1.2.21-beta.2 起）
   - id: 11
     spec: 1
     request: kubeconfig 的 context：唯讀的清單、憑證不顯示；讓 kbu 切到另一個 context，不動 ~/.kube/config
@@ -91,9 +89,7 @@ tasks:
     tdp: [tdp E3, tdp K3, tdp note.7, tdp toast.2, tdp F5, tdp E1]
     remark:
       - 啟動後才找得到的種類（CRD）：user 2026-11-20 定，寫進 tdp main c893eef 的 E3（E3-42，下一版 tdp 才有）：找完之前用預設值，找完還沒有才警告；找到了不自己切過去（tdp K3：背景的事不換畫面）
-      - note: 晚到的 Warning 先另外跳一個 toast；啟動的 toast 還在畫面上時併進去（user 2026-11-20 選 C，tdp main ef9d168 的 E3-43）要等
-          terminu-go v1.2.21-beta.2，程式裡標 TODO(tgo v1.2.21-beta.2)
-        issue: terminu-go v1.2.21-beta.2（terminu 轉的 E3-43）
+      - 晚到的 Warning 走 App.Notify，啟動的 toast 還在畫面上時併進去（user 2026-11-20 選 C，tdp main ef9d168 的 E3-43；terminu-go v1.2.21-beta.2 起）
   - id: 16
     spec: 1
     request: YAML：有行號與語法顏色，可以搜尋、選取、複製，也可以從這裡 edit

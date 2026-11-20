@@ -1062,3 +1062,21 @@ func TestAStateNotSavedIsTold(t *testing.T) {
 		t.Errorf("NotSaved says %q", s)
 	}
 }
+
+// A Warning that comes after the start, once the cluster has said which
+// namespaces it has, joins the start's toast while that one still shows
+// (tdp E3-43): one toast, both rows.
+func TestALateWarningJoinsTheStartToast(t *testing.T) {
+	m := newTestModelWith(t, Options{Moved: []config.Moved{{What: "logs", From: "/old/logs", To: "/data/logs"}}})
+	m.client = testClient(t)
+	m.client.SetSelection(k8s.SelectedNamespaces("gone"))
+	cmd := m.onMsg(namespacesMsg{check: true, names: []string{"a"}})
+	m.listP.Loading = false // no watch here to end the loading
+	m.drive(cmd)
+	s := m.screen_()
+	for _, want := range []string{"WARNING", "Moved kbu's logs from", `Namespace "gone" in state.yaml is not in the cluster`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the start's toast has no %q:\n%s", want, s)
+		}
+	}
+}

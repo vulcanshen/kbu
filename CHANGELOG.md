@@ -74,7 +74,9 @@ Each release names the version of terminu design (tdp) it follows.
   kinds, where it was only in the App Log.
 - **The developer notes are gone** (`docs/dev-remarks.md`): kbu is now kept
   with the terminu harness, its records in `harness-assets/`.
-- On terminu-go v1.2.20 (tdp v1.2.19).
+- A Warning that comes once the cluster has answered (namespaces gone, a kind
+  not found) joins the start's toast while that one still shows.
+- On terminu-go v1.2.21-beta.3 (tdp v1.2.19).
 
 ## v4.0.1 — tdp v1.1.0
 

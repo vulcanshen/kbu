@@ -19,8 +19,7 @@ tasks:
   - id: 9
     accepted: true
   - id: 10
-    accepted: false
-    reason: tdp 不清楚：已定（tdp main ef9d168 的 E3-43：晚到的 E3 toast 併進還在畫面上的啟動 toast），要等 terminu-go v1.2.21-beta.2 才做得到；現在另外跳一個 toast
+    accepted: true
   - id: 11
     accepted: true
   - id: 12
@@ -30,8 +29,7 @@ tasks:
   - id: 14
     accepted: true
   - id: 15
-    accepted: false
-    reason: tdp 不清楚：已定（tdp main ef9d168 的 E3-43：晚到的 E3 toast 併進還在畫面上的啟動 toast），要等 terminu-go v1.2.21-beta.2 才做得到；現在另外跳一個 toast
+    accepted: true
   - id: 16
     accepted: true
   - id: 17
