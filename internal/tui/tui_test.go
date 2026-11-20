@@ -1080,3 +1080,16 @@ func TestALateWarningJoinsTheStartToast(t *testing.T) {
 		}
 	}
 }
+
+// A kubeconfig kbu cannot read is a row of the start's toast, after what
+// moved: one toast, so neither replaces the other unread (tdp E3).
+func TestNoKubeconfigJoinsTheStartToast(t *testing.T) {
+	m := newTestModelWith(t, Options{Moved: []config.Moved{{What: "logs", From: "/old/logs", To: "/data/logs"}},
+		ClientErr: errors.New("loading kubeconfig: open /nope: no such file or directory")})
+	s := m.screen_()
+	for _, want := range []string{"ERROR", "Moved kbu's logs from", "Loading kubeconfig: open /nope"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the start's toast has no %q:\n%s", want, s)
+		}
+	}
+}

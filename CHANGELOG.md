@@ -2,7 +2,7 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
-## Unreleased
+## v4.1.0 — tdp v1.2.20
 
 - **Compare is now Diff, on `D`**: panel 2's `[D]iff`, the mode on the frame
   `Diff` and its menu `DIFF MODE`. Delete moves to `x` (`[x] Delete`), and `C`
@@ -76,7 +76,7 @@ Each release names the version of terminu design (tdp) it follows.
   with the terminu harness, its records in `harness-assets/`.
 - A Warning that comes once the cluster has answered (namespaces gone, a kind
   not found) joins the start's toast while that one still shows.
-- On terminu-go v1.2.21-beta.3 (tdp v1.2.19).
+- On terminu-go v1.2.21 (tdp v1.2.20).
 
 ## v4.0.1 — tdp v1.1.0
 
