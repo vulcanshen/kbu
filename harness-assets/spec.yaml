@@ -73,7 +73,7 @@ tasks:
   - id: 12
     spec: 4
     request: 把常用的種類釘在最上面，拖成自己要的順序
-    tdp: [tdp panel.8, tdp K11, tdp K12, tdp reorder, tdp menu.4, tdp screen.2, tdp panel.14, tdp E3, tdp note.7, tdp toast.2, tdp M6, tdp K13, tdp panel-198, tdp panel.11, tdp panel-199]
+    tdp: [tdp panel.8, tdp K11, tdp K12, tdp reorder, tdp menu.4, tdp screen.2, tdp panel.14, tdp E3, tdp note.7, tdp toast.2, tdp M6, tdp K13, tdp panel-198, tdp panel.11, tdp panel-199, tdp M5]
     remark:
       - 拖曳是 panel 的 Drag mode（tdp panel.8，元件的模式，不是 app 自己的）：只在釘選的種類之間搬；進入的鍵 D 由 app 定（panel.8）；panel 1 沒有 Diff，D 不是刪除，tdp K13 允許
       - 篩選著時拿起一項，拿著的時候篩選收起來、全部列出來，放下或放回後照原樣回來（tdp panel.8、panel-199，tdp v1.3.5 照 kbu 的回報加的，本機送給 terminu session，2026-11-23；user 選 B）；lib 的 List.Hold、Drop 做

@@ -17,7 +17,7 @@ tasks:
       cursor 一移到一個種類，panel 2 立刻換成它：label、loading <種類>…（tdp panel.15 的 loading），上一種的列拿掉；cursor 停 300ms（App.Tick 的 debounce）
       沒再移動，才開始 watch 那一種（往下一路按 j 不會每一列都開 watch）；換種類不記 App Log（移動 cursor）
       [Enter] Show in panel 2：同樣換、focus 到 panel 2（換 focus，不記）
-      Space menu：[P]in／Unpin <種類>、[Enter] Show in panel 2、[D]rag（見 task 12）、Cop[y]（kubectl 名稱）、[/] Search、[z]oom
+      Space menu：[P]in <種類>（釘選了的寫 Un[P]in <種類>）、[Enter] Show in panel 2、[D]rag（見 task 12）、Cop[y]（kubectl 名稱）、[/] Search、[z]oom
     test: [TestTDP, TestContextsRegisteredUnderKubeConfig, TestKindToResourceType_NewKinds, TestCRDDiscoveryFailureIsTold]
   - id: 3
     spec: 2
@@ -119,7 +119,7 @@ tasks:
   - id: 12
     spec: 4
     implementation: |
-      panel 1 上 [P]in <種類>：種類移到最上面的釘選組，cursor 跟著，記 INFO Pinned <種類>；再按是 Unpin，移回原本的組，記 INFO
+      panel 1 上 [P]in <種類>：種類移到最上面的釘選組，cursor 跟著，記 INFO Pinned <種類>；再按是 Un[P]in <種類>，移回原本的組，記 INFO
       Unpinned <種類>；panel 1 篩選著時篩選留著（種類的名字沒變，照樣在篩選裡），cursor 跟著它；寫進 ~/.kbu/kinds.yaml（寫不進去 Error toast Pin save failed: <原因>）
       [D]rag to reorder pinned kinds（只在釘選的種類上，少於兩個停用）：panel 的 Drag mode（tdp panel.8）。清單是 List.Draggable：
       每一列都留標記欄；List.Hold 拿起 cursor 那一列（lib 畫成 Yellow 底、Base 粗體、標記欄 U+F04E2；篩選著時 lib 把篩選收起來、
