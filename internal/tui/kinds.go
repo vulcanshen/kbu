@@ -129,7 +129,8 @@ func (m *Model) saveKinds() error {
 }
 
 // togglePin pins the kind under the cursor, or puts it back in its category.
-// The cursor goes with it.
+// The cursor goes with it. A filter stays: the user moved a kind it shows,
+// and the kind is still among them (tdp panel.14, panel-198).
 func (m *Model) togglePin() tea.Cmd {
 	rt := m.kindAt
 	if i := slices.Index(m.pinned, rt); i >= 0 {
@@ -137,7 +138,6 @@ func (m *Model) togglePin() tea.Cmd {
 	} else {
 		m.pinned = append(m.pinned, rt)
 	}
-	m.kinds.ClearFilter() // the kind moves, the cursor with it (tdp panel.14)
 	m.refreshKinds()
 	m.kinds.Select(string(rt))
 	m.setKindActions()
@@ -160,7 +160,11 @@ func (m *Model) startDrag() tea.Cmd {
 		return nil
 	}
 	m.drag = &dragState{before: slices.Clone(m.pinned), kind: m.kindAt}
-	m.kinds.ClearFilter() // the kind moves among every pinned one (tdp panel.14)
+	// The kind moves among every pinned one, not only those a filter shows
+	// (tdp reorder.1). TODO(tdp): panel.14 keeps the filter for a user's
+	// action that moves an item; asked of tdp on 2026-11-23 which one Drag
+	// follows (harness-assets/spec.yaml, tasks 12 and 14).
+	m.kinds.ClearFilter()
 	m.kinds.Hold()
 	m.kindsP.EnterMode(&terminu.Mode{
 		Name: "Drag", Exit: "cancel", Pause: true,

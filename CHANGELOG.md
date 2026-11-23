@@ -13,6 +13,8 @@ Each release names the version of terminu design (tdp) it follows.
 - **What kbu's state names that is gone is said once**: a context your kubeconfig no longer has, namespaces the cluster
   no longer has and a kind discovery did not find are a Warning at the start, and when you quit `state.yaml` gets what
   kbu was using instead, so the next start does not warn again. Before, `state.yaml` kept them until you picked another.
+- **Pinning a kind keeps panel 1's filter**: the kind moves to the pinned group, or back, the cursor with it, and the
+  filter stays as you typed it. Dragging the pinned kinds still clears it first.
 - **The Relatives tab's depth reads `1` again**, a blank after one digit keeping its width, so the tabs after it still
   stay put when the chain reaches ten.
 - terminu-go v1.3.4 (tdp v1.3.4).
