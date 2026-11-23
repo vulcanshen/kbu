@@ -159,7 +159,8 @@ func (m *Model) confirmEdit(rt k8s.ResourceType, item k8s.ResourceItem, then fun
 // when it ends.
 func (m *Model) runEdit(rt k8s.ResourceType, item k8s.ResourceItem, then func() tea.Cmd) tea.Cmd {
 	if m.tx != nil && m.tx.Running() {
-		return m.app.Error("Edit", "An edit or a shell is open already: close it first.")
+		// The title says what failed (tdp note.6).
+		return m.app.Error("Edit not opened", "An edit or a shell is open already: close it first.")
 	}
 	_ = config.WriteAuditEntry("edit", rt.KubectlName()+"/"+item.Name, item.Namespace, "started")
 	m.log.info("Edit: " + rt.KubectlName() + "/" + item.Name)
@@ -253,7 +254,8 @@ func (m *Model) runShell() tea.Cmd {
 		return nil
 	}
 	if m.tx != nil && m.tx.Running() {
-		return m.app.Error("Shell", "An edit or a shell is open already: close it first.")
+		// The title says what failed (tdp note.6).
+		return m.app.Error("Shell not opened", "An edit or a shell is open already: close it first.")
 	}
 	args := m.shellArgs(pod, container)
 	m.log.info("Exec shell: kubectl " + strings.Join(args, " "))

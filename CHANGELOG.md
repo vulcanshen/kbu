@@ -10,6 +10,8 @@ Each release names the version of terminu design (tdp) it follows.
 - **Alterm, edit and shell work on Windows too** (Windows 10 1809 or later). Alterm starts PowerShell there when nothing
   names a shell: `pwsh` when it is installed, else the PowerShell Windows comes with; a `$SHELL` Windows cannot run, such
   as Git Bash's `/usr/bin/bash`, is passed over.
+- **An edit or a shell kbu cannot open says so in its title**: `EDIT NOT OPENED` or `SHELL NOT OPENED` when one is
+  open already, where the title was only `EDIT` or `SHELL`.
 - terminu-go v1.3.6 (tdp v1.3.5).
 
 ## v4.1.2 — tdp v1.3.4
