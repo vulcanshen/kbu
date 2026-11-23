@@ -108,6 +108,9 @@ func TestCommand(t *testing.T) {
 		{[]string{"version"}, 0, "kbu dev\n", ""},
 		{[]string{"help"}, 0, usage, ""},
 		{[]string{"iconwidth"}, 0, "icon 2 (KBU__ICON_WIDTH)\npowerline 1 (KBU__POWERLINE_WIDTH)\n", ""},
+		// A test's kbu is built from source: update says where, status 1
+		// (tdp E1-10), never looking anything up.
+		{[]string{"update"}, 1, "", "kbu: This kbu is built from source: update it there (`git pull && make install`)\n"},
 		{[]string{"x"}, 2, "", "kbu: Unknown command \"x\"\n\n" + usage},
 		{[]string{"--versions"}, 2, "", "kbu: Unknown command \"--versions\"\n\n" + usage},
 	} {

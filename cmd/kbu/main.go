@@ -27,6 +27,7 @@ Usage:
   kbu              start it, on your kubeconfig's context
   kbu version      print the version (also --version, -v)
   kbu help         print this (also --help, -h)
+  kbu update       update to the latest release, the way kbu was installed
   kbu iconwidth    print how many cells an icon and a powerline symbol take
                    here, and where each number came from
 
@@ -65,6 +66,10 @@ func command(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "kbu "+version.Display())
 	case asksHelp(args):
 		fmt.Fprint(stdout, usage)
+	case args[0] == "update":
+		// The latest release, the way kbu was installed (tdp E1-9, E1-10).
+		return terminu.SelfUpdate{App: "kbu", Version: version.Version, Owner: "vulcanshen", Tap: "vulcanshen/tap",
+			Source: "git pull && make install"}.Run(stdout, stderr)
 	case args[0] == "iconwidth":
 		for _, line := range terminu.Probe("kbu").Lines() {
 			fmt.Fprintln(stdout, line)
@@ -172,7 +177,8 @@ func main() {
 	kinds, kindsErr := config.LoadKindData()
 
 	// tdp E3: values kbu cannot use go back to their defaults, the file
-	// copied aside first; one toast at start says it, with what moved.
+	// copied aside first; a toast at start says it, one for each file and
+	// for what moved, stacked (tdp E3-37).
 	var start []terminu.Notice
 	if cfgErr == nil {
 		start = append(start, fitted(config.ConfigPath(), cfg.Misfits(), cfg.Save)...)
@@ -185,13 +191,11 @@ func main() {
 	}
 
 	// A kubeconfig kbu cannot read is outside it: kbu opens all the same,
-	// panel 2 saying why (tdp E3).
+	// panel 2 saying why (tdp E3). A context the kubeconfig no longer has
+	// is a Warning; state.yaml gets the one in use at the next write (tdp
+	// E3-41).
 	client, gone, clientErr := connect(state.Context, cfg.DefaultContext)
 	start = append(start, gone...)
-	keep := "" // state.yaml's context, written back while the kubeconfig lacks it
-	if client != nil && state.Context != "" && client.ContextName() != state.Context {
-		keep = state.Context
-	}
 
 	// The saved namespaces go in first; the ones since deleted are dropped
 	// once the cluster says which exist.
@@ -209,7 +213,7 @@ func main() {
 	k8s.RegisterHelmIfAvailable()
 
 	ui := tui.New(tui.Options{Client: client, Config: cfg, ConfigErr: cfgErr, State: state, StateErr: stateErr,
-		Kinds: kinds, KindsErr: kindsErr, Moved: moved, Start: start, ClientErr: clientErr, KeepContext: keep,
+		Kinds: kinds, KindsErr: kindsErr, Moved: moved, Start: start, ClientErr: clientErr,
 		Status:  theme.DefaultTheme().Status,
 		Version: version.Display()})
 	if err := ui.Run(); err != nil {

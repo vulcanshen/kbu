@@ -1,6 +1,6 @@
-id: 2
-from: v1.2.19
-to: v1.2.20
+id: 3
+from: v1.2.20
+to: v1.3.4
 tasks:
   - id: 1
     spec: 1
@@ -49,24 +49,23 @@ tasks:
     request: conditions：`.status.conditions` 的表，跟 kubectl describe 看到的一樣
     tdp: [tdp panel.13, tdp panel.15, tdp P5]
   - id: 8
-    spec: 1
+    spec: 3
     request: Relatives：每個資源列出它連到的東西，跟著連結走、退回一步，把 panel 1、2 切到走過的鏈上任何一點
-    tdp: [tdp panel.10, tdp K3, tdp K4, tdp confirm, tdp F6, tdp panel.14, tdp note.7, tdp P5, tdp M6, tdp panel.11, tdp toast.2, tdp T1, tdp menu, tdp popup.1, tdp M5, tdp components.2, tdp L2, tdp panel.4, tdp panel.5, tdp toast.1]
+    tdp: [tdp panel.10, tdp K3, tdp K4, tdp confirm, tdp F6, tdp panel.14, tdp note.7, tdp P5, tdp M6, tdp panel.11, tdp toast.2, tdp T1, tdp menu, tdp popup.1, tdp M5, tdp components.2, tdp L2, tdp L2-2, tdp panel.4, tdp panel.5, tdp toast.1]
     remark:
       - 連到什麼是 Kubernetes 的關係（owner、selector、volume、binding……），kbu 照 YAML 字面指向的目標走
-      - note: user 要 tab 的深度寫成 `1 `（數字後面留一格，到兩位數寬度不變，tdp L2），但那一格在 tab 膠囊的尾端，tdp panel.4 不加空白；tdp 允許了再改，暫時補 0 寫成 `01`（user 2026-11-23 選）。terminu 2026-11-23 回：tdp main 29a9614 允許（L2 怎麼補由 app 決定，panel.4 字尾補的空白算字），terminu-go 確認 lib 本來就留著膠囊字尾的空白（TestPanel38PaddedText，不用新的 lib）；等下一個 tdp 版出版，terminu 通知後再改成 `1 `，改時在 kbu 用的 terminu-go 上看一次空白留著
-        issue: 本機送給 terminu session，2026-11-23
+      - tab 的深度寫成 `1 `、`2 `……`10`：一位數後面留一格，到兩位數寬度不變（tdp L2、L2-2：怎麼補由 app 決定；panel.4：字尾補的空白算字），user 2026-11-23 要的；tdp v1.3.4 照 kbu 的回報（本機送給 terminu session，2026-11-23）加的。之前 v4.1.1 補 0 寫成 `01`
   - id: 9
     spec: 1
     request: Drill-down：workload 往下看它的 Pod、Pod 看它的 container、CronJob 看 Job、HPA 看它的目標、Helm release 看 chart 部署的物件
     tdp: [tdp panel.10, tdp K3, tdp K4, tdp panel.14, tdp note.7, tdp toast.2, tdp T1, tdp M2]
   - id: 10
-    spec: 2
+    spec: 3
     request: 一次看好幾個 namespace，或整個叢集；kbu 記得選擇
-    tdp: [tdp checkbox, tdp M4, tdp panel.14, tdp E3, tdp note.7, tdp note.6, tdp toast.2, tdp F5, tdp toast.1, tdp E3-41, tdp E3-43, tdp finder.2]
+    tdp: [tdp checkbox, tdp M4, tdp panel.14, tdp E3, tdp note.7, tdp note.6, tdp toast.2, tdp F5, tdp toast.1, tdp E3-41, tdp E3-37, tdp finder.2]
     remark:
-      - 叢集裡不在的 namespace 照 E3「指到不在的一筆」（tdp E3-41：app 外面的東西也算，user 2026-11-20 定）
-      - 晚到的 Warning 走 App.Notify，啟動的 toast 還在畫面上時併進去（tdp E3-43，user 2026-11-20 選的）
+      - 叢集裡的 namespace 是 app 外面的東西（tdp E3-41）：記的名字直接用、不等叢集回答；回答說不在的那幾個警告一次，下次寫 state.yaml 時拿掉
+      - 晚到的 Warning 走 App.Notify，是自己一個 toast，跟其他 toast 往上疊（tdp E3-37、toast.2）
   - id: 11
     spec: 1
     request: kubeconfig 的 context：唯讀的清單、憑證不顯示；讓 kbu 切到另一個 context，不動 ~/.kube/config
@@ -86,12 +85,13 @@ tasks:
     request: 打字篩選種類與資源
     tdp: [tdp panel.14, tdp note.7]
   - id: 15
-    spec: 2
+    spec: 3
     request: 離開再開，從上次停的地方接著用：同一個 context、namespace、種類、那一列、panel 與 tab
-    tdp: [tdp E3, tdp K3, tdp note.7, tdp toast.2, tdp F5, tdp E1, tdp E3-42, tdp E3-43, tdp E3-41]
+    tdp: [tdp E3, tdp K3, tdp note.7, tdp toast.2, tdp F5, tdp E1, tdp E3-42, tdp E3-37, tdp E3-41]
     remark:
       - 啟動後才找得到的種類（CRD）照 tdp E3-42：找完之前用預設值，找完還沒有才警告；找到了不自己切過去（tdp K3：背景的事不換畫面）
-      - 晚到的 Warning 走 App.Notify，啟動的 toast 還在畫面上時併進去（tdp E3-43，user 2026-11-20 選的）
+      - 記的種類、context 都是 app 外面的東西（叢集的 CRD、kubeconfig 的 context，別的工具在增減，tdp E3-41）：知道不在了警告一次，下次寫 state.yaml 時改寫成正在用的
+      - 晚到的 Warning 走 App.Notify，是自己一個 toast，跟其他 toast 往上疊（tdp E3-37、toast.2）
   - id: 16
     spec: 1
     request: YAML：有行號與語法顏色，可以搜尋、選取、複製，也可以從這裡 edit
@@ -125,9 +125,9 @@ tasks:
     request: shell：kubectl exec 進 container，在 kbu 裡
     tdp: [tdp confirm, tdp F6, tdp terminal, tdp K10, tdp toast.2, tdp T1, tdp note.6, tdp terminal.4, tdp terminal.5, tdp terminal.6, tdp note.7]
   - id: 23
-    spec: 2
+    spec: 3
     request: delete：一定先問，刪 namespace 多一句警告；每一次都記下來
-    tdp: [tdp confirm, tdp F6, tdp toast.2, tdp E3, tdp M6, tdp T1, tdp note.7, tdp M5, tdp K13]
+    tdp: [tdp confirm, tdp F6, tdp toast.2, tdp E3, tdp M6, tdp T1, tdp note.7, tdp M5, tdp K13, tdp panel.14, tdp panel-198]
     remark:
       - 鍵是 x、寫成 [x] Delete（tdp K13，user 2026-11-20 定，從 kbu 來）；永久拿掉東西的不用 D、d
   - id: 24
@@ -151,21 +151,21 @@ tasks:
     request: 看 kbu 做過的事與出問題的事；離開 kbu，有 popup 開著時先問
     tdp: [tdp note.7, tdp F5, tdp K9, tdp toast.2, tdp note.6]
   - id: 29
-    spec: 1
+    spec: 3
     request: 設定、上次停在哪裡、釘選與排序、log 的位置；舊版放在別的地方的，升級時搬過來
-    tdp: [tdp E2, tdp E3, tdp note.7, tdp note.6, tdp toast.2]
+    tdp: [tdp E2, tdp E3, tdp note.7, tdp note.6, tdp toast.2, tdp E3-37]
   - id: 30
-    spec: 2
+    spec: 3
     request: 檔案壞了、有用不了的值、有打錯的 key、指到不在的 context 時，使用者的東西不會默默不見
-    tdp: [tdp E3, tdp confirm, tdp toast.2, tdp note.7, tdp E1, tdp E3-43, tdp E3-41]
+    tdp: [tdp E3, tdp confirm, tdp toast.2, tdp note.7, tdp E1, tdp E3-37, tdp E3-41]
   - id: 31
-    spec: 2
+    spec: 3
     request: 讀叢集失敗時看得到為什麼，同一個錯誤不一直跳
-    tdp: [tdp note.7, tdp panel.15, tdp F5, tdp E3, tdp E1, tdp toast.2, tdp M6, tdp M5, tdp E3-43]
+    tdp: [tdp note.7, tdp panel.15, tdp F5, tdp E3, tdp E1, tdp toast.2, tdp M6, tdp M5, tdp E3-37]
   - id: 32
-    spec: 1
-    request: 命令列：kbu version、kbu help、kbu iconwidth
-    tdp: [tdp E1, tdp E5, tdp E3]
+    spec: 3
+    request: 命令列：kbu version、kbu help、kbu iconwidth；tdp E1：kbu update
+    tdp: [tdp E1, tdp E5, tdp E3, tdp E1-9, tdp E1-10, tdp E6]
   - id: 33
     spec: 1
     request: splash

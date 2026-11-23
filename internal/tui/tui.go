@@ -43,9 +43,6 @@ type Options struct {
 	// or names no context. kbu opens all the same and panel 2 says why
 	// (tdp E3: what is outside the app).
 	ClientErr error
-	// KeepContext is state.yaml's context the kubeconfig no longer has: kbu
-	// writes it back until the user picks another (tdp E3).
-	KeepContext string
 	// Status are the colours of a resource's status cells (the app's
 	// content, tdp P4).
 	Status theme.StatusColors
@@ -126,13 +123,10 @@ type Model struct {
 	asideAsked                 bool
 	startNotices               []terminu.Notice
 	clientErr                  error
-	keepContext                string
 	// keepKind is state.yaml's kind (with its row and tab) while it is not
-	// known, a CRD found only after start; keepNamespaces the recorded
-	// namespaces the cluster does not have. state.yaml keeps both until
-	// the user picks another (tdp E3: a value naming an entry not there).
-	keepKind       *config.State
-	keepNamespaces []string
+	// known, a CRD found only after start: state.yaml keeps it until
+	// discovery ends without it or the user picks another (tdp E3, E3-42).
+	keepKind *config.State
 }
 
 // New builds kbu's UI.
@@ -145,11 +139,11 @@ func New(o Options) *Model {
 		run:    runCommand,
 		moved:  o.Moved,
 		cfgErr: o.ConfigErr, stateErr: o.StateErr, kindsErr: o.KindsErr,
-		startNotices: o.Start, clientErr: o.ClientErr, keepContext: o.KeepContext,
+		startNotices: o.Start, clientErr: o.ClientErr,
 	}
 	if o.ClientErr != nil {
-		// A row of the start's toast, after what came before it, so that
-		// neither replaces the other unread (tdp E3).
+		// A toast of the start, after what came before it, stacked so
+		// that neither replaces the other unread (tdp E3-37).
 		fact, _, _ := strings.Cut(capital(o.ClientErr.Error()), "\n")
 		m.startNotices = append(m.startNotices, terminu.Notice{Kind: terminu.Error, Text: fact})
 	}
@@ -360,9 +354,9 @@ func (m *Model) askAside() tea.Cmd {
 	return ask(0)
 }
 
-// sayMoved says what was moved at start (tdp E3): a row of the start's
-// toast from where to where, with the rest it has to say (one toast, tdp
-// E3-37), and an error popup with both paths for what stayed where it was.
+// sayMoved says what was moved at start (tdp E3): a toast from where to
+// where, stacked with the rest the start has to say (tdp E3-37), and an
+// error popup with both paths for what stayed where it was.
 func (m *Model) sayMoved() tea.Cmd {
 	var done, left []string
 	said := map[string]bool{}

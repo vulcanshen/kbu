@@ -177,16 +177,12 @@ func (m *Model) setTabLabels() {
 		case "Logs":
 			names[i] += " " + liveGlyph(d.logBody.live)
 		case "Relatives":
-			// How deep the chain is, from 01: always there and two
-			// digits, so the tabs after it do not move when it changes
-			// (tdp L2; a chain deeper than 99 is not walked by hand).
-			// The digits fill with 0, not spaces: one cell after the
-			// glyph (tdp components.2), none at a capsule's end (tdp
-			// panel.4).
-			// TODO(tdp): the user wants "1 ", a space kept after one
-			// digit; asked of tdp on 2026-11-23, as panel.4 has no space
-			// at a capsule's end (harness-assets/spec.yaml, task 8).
-			names[i] += " " + glyphLink + " " + fmt.Sprintf("%02d", len(d.chain)+1)
+			// How deep the chain is, from 1: always there and two cells,
+			// so the tabs after it do not move when it changes (tdp L2;
+			// a chain deeper than 99 is not walked by hand). One digit
+			// keeps a blank after it, part of the tab's text (L2-2, tdp
+			// panel.4), the glyph one cell before it (tdp components.2).
+			names[i] += " " + glyphLink + " " + fmt.Sprintf("%-2d", len(d.chain)+1)
 		}
 	}
 	if len(names) == 0 {

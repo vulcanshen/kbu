@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -777,20 +778,41 @@ func TestActionsClearTheFilter(t *testing.T) {
 	}
 }
 
-// What one start has to say is one toast, a row each in the order it
-// happened, its kind the strongest; the App Log an entry each (tdp E3-37).
-// The keys of config.yaml kbu does not read are an INFO each (tdp E3).
-func TestTheStartSaysItInOneToast(t *testing.T) {
+// A row deleted from the filtered list goes when the watch says so; the
+// filter stays and the cursor lands on a row it shows (tdp panel-198).
+func TestADeletedRowKeepsTheFilter(t *testing.T) {
+	m := newTestModel(t)
+	m.feed(pod("demo", "ab1"), pod("demo", "ab2"), pod("demo", "c"))
+	m.press("Tab", "/", "a", "b", "Enter")
+	if r, ok := m.list.Current(); !ok || r.ID != itemKey(pod("demo", "ab1")) {
+		t.Fatalf("the cursor is on %+v, want ab1", r)
+	}
+	m.feed(pod("demo", "ab2"), pod("demo", "c")) // the watch after deleting ab1
+	if !m.list.Filtering() {
+		t.Error("the filter went with the deleted row")
+	}
+	if r, ok := m.list.Current(); !ok || r.ID != itemKey(pod("demo", "ab2")) {
+		t.Errorf("the cursor is on %+v, want ab2, the row the filter shows", r)
+	}
+}
+
+// What one start has to say is a toast each, stacked in the order it
+// happened; the App Log an entry each (tdp E3-37). The keys of config.yaml
+// kbu does not read are an INFO each (tdp E3).
+func TestTheStartsToastsStack(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Unread = map[string]any{"refesh": 5}
 	m := newTestModelWith(t, Options{Config: cfg,
 		Moved: []config.Moved{{What: "logs", From: "/old/logs", To: "/data/logs"}},
 		Start: []terminu.Notice{{Kind: terminu.Warning, Text: `Context "gone" in state.yaml is not in the kubeconfig: using "a"`}}})
 	s := m.screen_()
-	for _, want := range []string{"WARNING", "Moved kbu's logs from", `Context "gone" in state.yaml is not in the kubeconfig: using "a"`} {
+	for _, want := range []string{"INFO", "Moved kbu's logs from", "WARNING", `Context "gone" in state.yaml is not in the kubeconfig: using "a"`} {
 		if !strings.Contains(s, want) {
-			t.Errorf("the start's toast has no %q:\n%s", want, s)
+			t.Errorf("the start's toasts have no %q:\n%s", want, s)
 		}
+	}
+	if strings.Index(s, "Moved kbu's logs from") > strings.Index(s, `Context "gone"`) {
+		t.Errorf("the toast that came first is not above:\n%s", s)
 	}
 	m.press("!")
 	s = m.screen_()
@@ -877,28 +899,14 @@ func TestNoKubeconfigStillOpens(t *testing.T) {
 	}
 }
 
-// state.yaml's context that the kubeconfig no longer has is written back as
-// it was, until the user picks another (tdp E3).
-func TestTheStateKeepsAContextGone(t *testing.T) {
-	kubeconfig := filepath.Join(t.TempDir(), "config")
-	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\nkind: Config\ncurrent-context: a\n"+
-		"clusters:\n- name: c\n  cluster: {server: \"https://127.0.0.1:6443\"}\nusers:\n- name: u\n  user: {token: t}\n"+
-		"contexts:\n- name: a\n  context: {cluster: c, user: u}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("KUBECONFIG", kubeconfig)
-	c, err := k8s.NewClient("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := newTestModel(t)
-	m.client, m.keepContext = c, "gone"
-	if got := m.sessionState().Context; got != "gone" {
-		t.Errorf("the state's context is %q, want the one kept, gone", got)
-	}
-	m.keepContext = ""
+// state.yaml's context that the kubeconfig no longer has is not written
+// back: the next write gives the one kbu uses, so the next start does not
+// warn again (tdp E3-41).
+func TestTheStateDropsAContextGone(t *testing.T) {
+	m := newTestModelWith(t, Options{State: &config.State{Context: "gone"}})
+	m.client = testClient(t)
 	if got := m.sessionState().Context; got != "a" {
-		t.Errorf("the state's context is %q, want a", got)
+		t.Errorf("the state's context is %q, want the one in use, a", got)
 	}
 }
 
@@ -933,10 +941,10 @@ func testClient(t *testing.T) *k8s.Client {
 	return c
 }
 
-// Recorded namespaces the cluster does not have are kept (tdp E3, E3-41):
+// Recorded namespaces the cluster does not have are left out (tdp E3-41):
 // kbu shows the ones it has, all of them when none is there, a Warning
-// names those gone, and state.yaml keeps them until the user picks.
-func TestTheStateKeepsNamespacesGone(t *testing.T) {
+// names those gone, once, and state.yaml no longer gets them.
+func TestTheStateDropsNamespacesGone(t *testing.T) {
 	m := newTestModel(t)
 	m.client = testClient(t)
 	m.client.SetSelection(k8s.SelectedNamespaces("a", "gone1", "gone2"))
@@ -949,8 +957,8 @@ func TestTheStateKeepsNamespacesGone(t *testing.T) {
 	if got := m.client.Selection().List(); !slices.Equal(got, []string{"a"}) {
 		t.Errorf("kbu shows %q, want the one there, a", got)
 	}
-	if got := m.sessionState().Namespaces; !slices.Equal(got, []string{"a", "gone1", "gone2"}) {
-		t.Errorf("state.yaml gets %q, want all three kept", got)
+	if got := m.sessionState().Namespaces; !slices.Equal(got, []string{"a"}) {
+		t.Errorf("state.yaml gets %q, want the one there, a", got)
 	}
 
 	m = newTestModel(t)
@@ -962,14 +970,15 @@ func TestTheStateKeepsNamespacesGone(t *testing.T) {
 	if s := m.screen_(); !strings.Contains(s, `Namespace "gone" in state.yaml is not in the cluster: showing`) {
 		t.Errorf("no Warning naming the namespace gone:\n%s", s)
 	}
-	if !m.client.Selection().IsAll() || !slices.Equal(m.sessionState().Namespaces, []string{"gone"}) {
-		t.Errorf("none there: shows %v, state gets %q; want all, and gone kept", m.client.Selection(), m.sessionState().Namespaces)
+	if !m.client.Selection().IsAll() || len(m.sessionState().Namespaces) != 0 {
+		t.Errorf("none there: shows %v, state gets %q; want all, gone left out", m.client.Selection(), m.sessionState().Namespaces)
 	}
 }
 
 // A recorded kind found only after start (a CRD) is not missing until
-// discovery is done (tdp E3, E3-42): kbu starts on Pods and keeps it, warns
-// only when discovery ends without it, and stays where it is.
+// discovery is done (tdp E3-42): kbu starts on Pods and keeps it, warns only
+// when discovery ends without it, then no longer writes it (tdp E3-41), and
+// stays where it is.
 func TestTheStateKeepsAKindNotFoundYet(t *testing.T) {
 	m := newTestModelWith(t, Options{State: &config.State{Kind: "crontabs.stable.example.com", ObjectName: "x", Tab: "Events"}})
 	if m.current != k8s.ResourcePods {
@@ -985,9 +994,12 @@ func TestTheStateKeepsAKindNotFoundYet(t *testing.T) {
 	if s := m.screen_(); !strings.Contains(s, `Kind "crontabs.stable.example.com" in state.yaml is not in the cluster: showing Pods`) {
 		t.Errorf("no Warning after discovery:\n%s", s)
 	}
-	if m.current != k8s.ResourcePods || m.sessionState().Kind != "crontabs.stable.example.com" {
-		t.Errorf("after discovery: on %q, state gets %q", m.current, m.sessionState().Kind)
+	if m.current != k8s.ResourcePods || m.sessionState().Kind != k8s.ResourcePods.KubectlName() {
+		t.Errorf("after discovery: on %q, state gets %q; want Pods for both", m.current, m.sessionState().Kind)
 	}
+
+	// Picked before discovery is done: the user's kind, not the recorded.
+	m = newTestModelWith(t, Options{State: &config.State{Kind: "crontabs.stable.example.com"}})
 	m.press("j")
 	if m.sessionState().Kind == "crontabs.stable.example.com" {
 		t.Error("the user picked another kind, and state.yaml still gets the recorded one")
@@ -1064,9 +1076,9 @@ func TestAStateNotSavedIsTold(t *testing.T) {
 }
 
 // A Warning that comes after the start, once the cluster has said which
-// namespaces it has, joins the start's toast while that one still shows
-// (tdp E3-43): one toast, both rows.
-func TestALateWarningJoinsTheStartToast(t *testing.T) {
+// namespaces it has, is a toast of its own, stacked under the start's while
+// that one still shows (tdp E3-37, toast.2).
+func TestALateWarningIsAToastOfItsOwn(t *testing.T) {
 	m := newTestModelWith(t, Options{Moved: []config.Moved{{What: "logs", From: "/old/logs", To: "/data/logs"}}})
 	m.client = testClient(t)
 	m.client.SetSelection(k8s.SelectedNamespaces("gone"))
@@ -1074,29 +1086,29 @@ func TestALateWarningJoinsTheStartToast(t *testing.T) {
 	m.listP.Loading = false // no watch here to end the loading
 	m.drive(cmd)
 	s := m.screen_()
-	for _, want := range []string{"WARNING", "Moved kbu's logs from", `Namespace "gone" in state.yaml is not in the cluster`} {
+	for _, want := range []string{"INFO", "Moved kbu's logs from", "WARNING", `Namespace "gone" in state.yaml is not in the cluster`} {
 		if !strings.Contains(s, want) {
-			t.Errorf("the start's toast has no %q:\n%s", want, s)
+			t.Errorf("the toasts have no %q:\n%s", want, s)
 		}
 	}
 }
 
-// A kubeconfig kbu cannot read is a row of the start's toast, after what
-// moved: one toast, so neither replaces the other unread (tdp E3).
-func TestNoKubeconfigJoinsTheStartToast(t *testing.T) {
+// A kubeconfig kbu cannot read is a toast of the start, after what moved:
+// stacked, so neither replaces the other unread (tdp E3-37, toast.2).
+func TestNoKubeconfigIsAStartToast(t *testing.T) {
 	m := newTestModelWith(t, Options{Moved: []config.Moved{{What: "logs", From: "/old/logs", To: "/data/logs"}},
 		ClientErr: errors.New("loading kubeconfig: open /nope: no such file or directory")})
 	s := m.screen_()
-	for _, want := range []string{"ERROR", "Moved kbu's logs from", "Loading kubeconfig: open /nope"} {
+	for _, want := range []string{"INFO", "Moved kbu's logs from", "ERROR", "Loading kubeconfig: open /nope"} {
 		if !strings.Contains(s, want) {
-			t.Errorf("the start's toast has no %q:\n%s", want, s)
+			t.Errorf("the start's toasts have no %q:\n%s", want, s)
 		}
 	}
 }
 
-// The Relatives tab says how deep the chain is in two digits, one cell
-// after its glyph: the same width from 01 to 99 (tdp L2, components.2,
-// panel.4).
+// The Relatives tab says how deep the chain is in two cells, one after its
+// glyph: one digit keeps a blank after it, the same width from 1 to 99
+// (tdp L2, L2-2, components.2, panel.4).
 func TestTheRelativesTabSpacesItsDepth(t *testing.T) {
 	m := newTestModel(t)
 	m.det.tabs = []string{"Details", "Relatives"}
@@ -1104,11 +1116,18 @@ func TestTheRelativesTabSpacesItsDepth(t *testing.T) {
 	for _, c := range []struct {
 		deep int
 		want string
-	}{{0, "01"}, {1, "02"}, {9, "10"}, {98, "99"}} {
+	}{{0, "1 "}, {1, "2 "}, {8, "9 "}, {9, "10"}, {98, "99"}} {
 		m.det.chain = slices.Repeat([]relFrame{node}, c.deep)
 		m.setTabLabels()
 		if want := "Relatives " + glyphLink + " " + c.want; len(m.detailP.Tabs) != 1 || m.detailP.Tabs[0] != want {
 			t.Errorf("%d deep, the tabs are %q, want [%q]", c.deep, m.detailP.Tabs, want)
 		}
+	}
+	// The tab as drawn keeps the blank: its seam comes after it.
+	m = newTestModel(t)
+	m.feed(pod("demo", "a"))
+	seam := regexp.MustCompile(`RELATIVES ` + glyphLink + ` 1 [\x{E0B0}\x{E0BA}\x{E0BB}\x{E0BC}]`)
+	if s := m.screen_(); !seam.MatchString(s) {
+		t.Errorf("the Relatives tab lost the blank after its depth:\n%s", s)
 	}
 }

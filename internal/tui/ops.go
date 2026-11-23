@@ -425,7 +425,7 @@ func (m *Model) switchContext(name string) tea.Cmd {
 		return m.toastErr("Context switch failed: " + err.Error())
 	}
 	m.log.info("Context switched to " + name)
-	m.keepContext, m.keepKind, m.keepNamespaces = "", nil, nil // the user picked another (tdp E3)
+	m.keepKind = nil // the user picked another (tdp E3)
 	if m.watcher != nil {
 		m.watcher.Stop()
 	}

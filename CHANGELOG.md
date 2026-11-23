@@ -2,6 +2,21 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
+## Unreleased
+
+- **`kbu update`** brings kbu to the latest release the way you installed it: Homebrew upgrades it, a copy from the
+  install script or a download is replaced, Scoop prints the command to run. A kbu built from source says to update it
+  there.
+- **Toasts stack**: a new one comes in at the bottom and pushes the others up, at most three, `Esc` closing the oldest
+  first; the same words again are one toast with a count. What a start has to say is a toast each, a warning that comes
+  later too, where it was one toast with a row each.
+- **What kbu's state names that is gone is said once**: a context your kubeconfig no longer has, namespaces the cluster
+  no longer has and a kind discovery did not find are a Warning at the start, and when you quit `state.yaml` gets what
+  kbu was using instead, so the next start does not warn again. Before, `state.yaml` kept them until you picked another.
+- **The Relatives tab's depth reads `1` again**, a blank after one digit keeping its width, so the tabs after it still
+  stay put when the chain reaches ten.
+- terminu-go v1.3.4 (tdp v1.3.4).
+
 ## v4.1.1 — tdp v1.2.20
 
 - **The Relatives tab's depth has a space before it and two digits**: panel
