@@ -2,6 +2,12 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
+## v4.1.1 — tdp v1.2.20
+
+- **The Relatives tab's depth has a space before it and two digits**: panel
+  3's tab writes how deep you are in a chain as `01` to `99`, a space after
+  the arrow, so the tabs after it stay put when the chain reaches ten.
+
 ## v4.1.0 — tdp v1.2.20
 
 - **Compare is now Diff, on `D`**: panel 2's `[D]iff`, the mode on the frame
