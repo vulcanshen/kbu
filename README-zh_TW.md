@@ -219,7 +219,7 @@ kbu 用不了的值（負的 `input_tab_width`、方向不是 asc 也不是 desc
 default_context: ""       # 啟動用的 context（預設：kubeconfig 的 current-context）
 default_namespace: ""     # 啟動用的 namespace（預設：全部）
 editor: ""                # 以 $KUBE_EDITOR 交給 kubectl
-alterm_shell: ""          # Alterm 的 shell（預設：$SHELL，再來 /bin/sh）；只寫名字時從 PATH 找
+alterm_shell: ""          # Alterm 的 shell（預設：$SHELL，再來 /bin/sh；Windows 上是 PowerShell）；只寫名字時從 PATH 找
 alterm_login_shell: false # true 時 Alterm 的 shell 加 -l，讀 ~/.zprofile / ~/.bash_profile
 input_tab_width: 4        # viewer（YAML、log）裡一個 tab 佔幾格；terminu 家族共用
 ```
@@ -254,7 +254,6 @@ pod:
 ## 限制
 
 - **滑鼠沒有作用。** kbu 跟 terminu 家族的每個 app 一樣，用鍵盤操作。
-- **Alterm、edit 與 shell 要 macOS 或 Linux**（WSL 也可以）：在 Windows 上 kbu 開不了內嵌的 terminal。
 - **框線歪了一格的話**，是 kbu 啟動時問終端機得到的答案不對：`kbu iconwidth` 印出它量到的，以及每個數字從哪裡來；設 `KBU__ICON_WIDTH` 與
   `KBU__POWERLINE_WIDTH`。Windows 不會量：字型把 icon 畫成兩格時，在那裡設這兩個變數。
 - **Helm 要有 `helm` 指令**：`helm` 在 `PATH` 上才會出現 Helm 分類，release 清單每 3 秒重讀一次（Helm 沒有 watch）。

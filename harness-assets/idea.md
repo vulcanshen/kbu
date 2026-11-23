@@ -26,7 +26,8 @@
 
 ## 平台
 
-macOS、Linux（含 WSL）、Windows（Windows 上開不了內嵌的 terminal：Alterm、edit、shell 不能用）。要有 kubectl、一份
+macOS、Linux（含 WSL）、Windows；Alterm、edit、shell 在 Windows 上也要能用（user 2026-11-23：terminu-go 能在 Windows 上開
+terminal 了就打開；Windows 上 Alterm 預設開 PowerShell）。要有 kubectl、一份
 kubeconfig 與連得到的叢集、Nerd Font、truecolor 終端機；Helm 的部分要有 `helm`。
 
 ## 哪些事不能發生

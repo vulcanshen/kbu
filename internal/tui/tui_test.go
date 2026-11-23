@@ -1184,3 +1184,47 @@ func TestTheRelativesTabSpacesItsDepth(t *testing.T) {
 		t.Errorf("the Relatives tab lost the blank after its depth:\n%s", s)
 	}
 }
+
+// Alterm runs $KBU__ALTERM_SHELL, alterm_shell or $SHELL, else /bin/sh; on
+// Windows PowerShell, pwsh when it is there, and a $SHELL Windows cannot run
+// (Git Bash's /usr/bin/bash) does not count (tdp terminal, P5).
+func TestAltermShell(t *testing.T) {
+	found := map[string]bool{}
+	orig := lookPath
+	lookPath = func(name string) (string, error) {
+		if found[name] {
+			return name, nil
+		}
+		return "", errors.New("not found")
+	}
+	t.Cleanup(func() { lookPath = orig })
+	t.Setenv("KBU__ALTERM_SHELL", "")
+	t.Setenv("KBU__ALTERM_LOGIN_SHELL", "")
+	for _, c := range []struct {
+		goos, env, cfg, shell string
+		login                 bool
+		found                 []string
+		want                  []string
+	}{
+		{"darwin", "", "", "/bin/zsh", false, nil, []string{"/bin/zsh"}},
+		{"linux", "", "", "", true, nil, []string{"/bin/sh", "-l"}},
+		{"linux", "fish", "bash", "/bin/zsh", false, nil, []string{"fish"}},
+		{"darwin", "", "bash", "/bin/zsh", false, nil, []string{"bash"}},
+		{"windows", "", "", "", false, []string{"pwsh"}, []string{"pwsh"}},
+		{"windows", "", "", "", false, nil, []string{"powershell.exe"}},
+		{"windows", "", "", "/usr/bin/bash", false, nil, []string{"powershell.exe"}},
+		{"windows", "", "", "bash", false, []string{"bash"}, []string{"bash"}},
+		{"windows", "", "cmd.exe", "", false, nil, []string{"cmd.exe"}},
+	} {
+		found = map[string]bool{}
+		for _, f := range c.found {
+			found[f] = true
+		}
+		t.Setenv("KBU__ALTERM_SHELL", c.env)
+		t.Setenv("SHELL", c.shell)
+		if got := altermCommand(c.goos, c.cfg, c.login); !slices.Equal(got, c.want) {
+			t.Errorf("%s, KBU__ALTERM_SHELL %q, alterm_shell %q, $SHELL %q, on PATH %v: %q, want %q",
+				c.goos, c.env, c.cfg, c.shell, c.found, got, c.want)
+		}
+	}
+}
