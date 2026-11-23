@@ -2,7 +2,7 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
-## Unreleased
+## v4.1.2 — tdp v1.3.4
 
 - **`kbu update`** brings kbu to the latest release the way you installed it: Homebrew upgrades it, a copy from the
   install script or a download is replaced, Scoop prints the command to run. A kbu built from source says to update it
