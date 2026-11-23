@@ -213,7 +213,7 @@ tasks:
       panel 2 的 [E]dit（與 YAML viewer 的 E）：confirm EDIT，細節是確切的 kubectl edit <種類>/<名稱> -n <ns> --context <context>，問
       Edit <種類>/<名稱>?；Enter 在 terminal popup（tgo Terminal，標題 EDIT: <種類>/<名稱>）裡跑它，KUBE_EDITOR 是 config.yaml 的
       editor（有設時），記 INFO Edit: <種類>/<名稱>，audit log（~/.kbu/logs/audit-<日期>.log）記一行
-      已經有 edit 或 shell 開著時開 error popup EDIT：An edit or a shell is open already: close it first.
+      已經有 edit 或 shell 開著時開 error popup EDIT NOT OPENED：An edit or a shell is open already: close it first.
       editor 結束後 terminal popup 關掉，回到開它的地方：從 Space menu 開的回到 menu（edit 的動作不清掉 menu），從 YAML viewer 開的
       回到 viewer 並重讀（task 16）；清單經由 watch 自己更新；kubectl 以錯誤結束時 Error toast Edit ended: <原因>
       Windows 上一樣（lib 用 ConPTY 開 PTY，Windows 10 1809 起）
@@ -225,7 +225,7 @@ tasks:
       <context> -- /bin/sh -c（image 有 bash 時 bash，不然 sh），問 Exec into <container>?；Esc 什麼都不跑；Enter 清掉 Space menu
       （從 menu 執行時），在互動的 terminal popup（tgo Terminal，Interactive，標題 SHELL: pod/<名稱> → <container>）裡跑，記 INFO
       Exec shell: kubectl <參數>；PgUp 歷史模式、Alt-v 選取模式（lib）；Alt-Esc 結束（lib 先問）
-      已經有 edit 或 shell 開著時 error popup SHELL：An edit or a shell is open already: close it first.；以錯誤結束時 Error toast
+      已經有 edit 或 shell 開著時 error popup SHELL NOT OPENED：An edit or a shell is open already: close it first.；以錯誤結束時 Error toast
       Shell ended: <原因>
       Windows 上一樣（lib 用 ConPTY 開 PTY，Windows 10 1809 起）
     test: [TestShellAsksFirst]
