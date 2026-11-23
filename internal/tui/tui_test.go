@@ -1093,3 +1093,15 @@ func TestNoKubeconfigJoinsTheStartToast(t *testing.T) {
 		}
 	}
 }
+
+// The Relatives tab says how deep the chain is, one cell after its glyph
+// (tdp components.2).
+func TestTheRelativesTabSpacesItsDepth(t *testing.T) {
+	m := newTestModel(t)
+	m.det.tabs = []string{"Details", "Relatives"}
+	m.det.chain = []relFrame{{ref: k8s.RefTarget{Type: k8s.ResourceNodes, Name: "node-1"}}}
+	m.setTabLabels()
+	if want := "Relatives " + glyphLink + " 2"; len(m.detailP.Tabs) != 1 || m.detailP.Tabs[0] != want {
+		t.Errorf("the tabs are %q, want [%q]", m.detailP.Tabs, want)
+	}
+}

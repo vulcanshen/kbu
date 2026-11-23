@@ -71,6 +71,7 @@ tasks:
     spec: 1
     implementation: |
       RELATIVES tab：一般清單，依關係分組（owner、Service 選到的 Pod、HPA 的目標、掛載 PVC 的 Pod、用到 ConfigMap、Secret 的 Pod……）
+      tab 名稱 Relatives <nf-oct-arrow_right> <鏈的深度，從 1 起>：glyph 後空一格；深度一直寫著，深度變了後面的 tab 不移動
       [Enter] Drill in（從 Space menu 執行時清掉 menu）：在 panel 3 裡換成那一個的 relatives，位置列寫走過的鏈，記 INFO Drilled into <種類>/<名稱> on the Relatives tab；
       讀不到 Error toast Drill failed: <原因>；那一列已經在鏈上（走回去會繞圈）、或不是 kbu 走得到的，Drill in 停用（cursor 照樣停在
       那一列，Enter 不作用）
@@ -79,7 +80,7 @@ tasks:
       panel 1 與 panel 2 的篩選，把 panel 1 的 cursor 移到那個種類、panel 2 的 cursor 放到它上面，記 INFO Switched panels 1 and 2 to
       <種類>/<名稱>
       [Y]AML 開那一列的 YAML（task 16）、Cop[y] 這一列
-    test: [TestDrillInIsOffOnTheChain, TestRelativesBackPutsTheCursorWhereItCameFrom, TestBuildPodLinks_ExtractsOwnerNodeServiceAccount, TestEnrichLinks_WorkloadPods, TestBuildHPALinks_ScaleTarget, TestBuildPVCLinks_BoundAndStorageClass, TestPodUsesConfigMap_VolumeAndEnv]
+    test: [TestDrillInIsOffOnTheChain, TestRelativesBackPutsTheCursorWhereItCameFrom, TestBuildPodLinks_ExtractsOwnerNodeServiceAccount, TestEnrichLinks_WorkloadPods, TestBuildHPALinks_ScaleTarget, TestBuildPVCLinks_BoundAndStorageClass, TestPodUsesConfigMap_VolumeAndEnv, TestTheRelativesTabSpacesItsDepth]
   - id: 9
     spec: 1
     implementation: |

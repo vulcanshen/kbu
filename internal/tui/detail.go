@@ -178,8 +178,9 @@ func (m *Model) setTabLabels() {
 			names[i] += " " + liveGlyph(d.logBody.live)
 		case "Relatives":
 			// How deep the chain is, from 1: always there, so the tabs
-			// after it do not move when it changes (tdp L2).
-			names[i] += " " + glyphLink + strconv.Itoa(len(d.chain)+1)
+			// after it do not move when it changes (tdp L2); one cell
+			// after the glyph (tdp components.2).
+			names[i] += " " + glyphLink + " " + strconv.Itoa(len(d.chain)+1)
 		}
 	}
 	if len(names) == 0 {
