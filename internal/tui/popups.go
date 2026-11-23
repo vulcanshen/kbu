@@ -131,7 +131,6 @@ func (m *Model) setNamespaces(sel k8s.NamespaceSelection) tea.Cmd {
 		return nil
 	}
 	m.log.info("Namespace selection → " + selectionText(sel))
-	m.keepNamespaces = nil // the user picked (tdp E3)
 	return m.showNamespaces(sel)
 }
 

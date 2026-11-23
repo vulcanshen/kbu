@@ -138,7 +138,8 @@ Move with `j|k`. Panel 2 follows the kind under panel 1's cursor, panel 3 the ro
 next panel (or `1`–`3`), `Enter` does the obvious thing to what is under the cursor, `Space` lists everything you can do
 there, `Esc` steps back, `q` leaves.
 
-`kbu version` prints the version, `kbu help` how to run it.
+`kbu version` prints the version, `kbu help` how to run it, and `kbu update` brings kbu to the latest release the way
+you installed it.
 
 ## Using kbu
 
@@ -231,8 +232,10 @@ defaults, or with no pins and sorts; `Esc` leaves kbu and prints the path and th
 A value kbu cannot use (a negative `input_tab_width`, a sort in neither direction) does not stop it: at the start kbu
 copies the file to `.bak` and writes it again with the default in its place, and a toast says so. A key kbu does not
 read (a typo, or one an older kbu read, such as `mouse_opt_config`) stays in the file, and the App Log (`!`) names it
-at every start. A context in `config.yaml` or `state.yaml` that your kubeconfig no longer has is left as written: kbu
-starts on the next one (the setting's, else the kubeconfig's current-context) and says which.
+at every start. When the context in `config.yaml` or `state.yaml` is no longer in your kubeconfig, kbu starts on the
+next one (the setting's, else the kubeconfig's current-context) and says which; namespaces in `state.yaml` the cluster
+no longer has are left out, and kbu says which. Either way it says so once: when you quit, `state.yaml` gets what kbu
+was using.
 
 ### config.yaml
 

@@ -124,7 +124,7 @@ kbu
 用 `j|k` 移動。panel 2 跟著 panel 1 游標所在的種類，panel 3 跟著 panel 2 游標那一列。`Tab` 到下一個 panel（或 `1`–`3`），
 `Enter` 對游標下的東西做最直觀的事，`Space` 列出這裡能做的一切，`Esc` 退一步，`q` 離開。
 
-`kbu version` 印出版號，`kbu help` 印出怎麼用。
+`kbu version` 印出版號，`kbu help` 印出怎麼用，`kbu update` 照你當初安裝的方式把 kbu 更新到最新版。
 
 ## 使用方式
 
@@ -209,8 +209,9 @@ kbu 讀不了 `config.yaml`、`state.yaml` 或 `kinds.yaml`（檔案壞了、沒
 
 kbu 用不了的值（負的 `input_tab_width`、方向不是 asc 也不是 desc 的排序）不會讓它停下來：啟動時先把檔案複製成 `.bak`，
 再用預設值取代那個值重寫檔案，並跳一個 toast 告訴你。kbu 不讀的 key（打錯字，或舊版讀過的，例如 `mouse_opt_config`）留在
-檔案裡，每次啟動在 App Log（`!`）寫出來。`config.yaml` 或 `state.yaml` 寫的 context 已經不在你的 kubeconfig 裡時，檔案照原樣
-留著：kbu 改用下一個（設定的，再來是 kubeconfig 的 current-context）啟動，並告訴你用了哪一個。
+檔案裡，每次啟動在 App Log（`!`）寫出來。`config.yaml` 或 `state.yaml` 寫的 context 已經不在你的 kubeconfig 裡時，kbu
+改用下一個（設定的，再來是 kubeconfig 的 current-context）啟動，並告訴你用了哪一個；`state.yaml` 記的 namespace 叢集已經
+沒有了，kbu 就不顯示它，並告訴你是哪幾個。這些都只說一次：離開時 `state.yaml` 會改記 kbu 正在用的。
 
 ### config.yaml
 

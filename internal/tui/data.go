@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -360,12 +359,11 @@ func (m *Model) onCRDs(msg crdsMsg) tea.Cmd {
 	m.pinned = m.loadPinned()
 	m.refreshKinds()
 	// The recorded kind not known at start is known now, or not there:
-	// then a Warning says so, and state.yaml keeps it all the same. kbu
-	// stays where it is either way: discovery ending is no reason to move
-	// (tdp E3, K3).
+	// then a Warning says so, once, and state.yaml no longer gets it (tdp
+	// E3-41, E3-42). kbu stays where it is either way: discovery ending is
+	// no reason to move (tdp E3, K3).
 	if k := m.keepKind; k != nil && k8s.DefaultRegistry.LookupByKubectlName(k.Kind) == "" {
-		// Through Notify: it joins the start's toast while that one shows
-		// (tdp E3-43).
+		m.keepKind = nil
 		return m.app.Notify(terminu.Notice{Kind: terminu.Warning,
 			Text: fmt.Sprintf("Kind %q in state.yaml is not in the cluster: showing Pods", k.Kind)})
 	}
@@ -373,8 +371,8 @@ func (m *Model) onCRDs(msg crdsMsg) tea.Cmd {
 }
 
 // onNamespaces fills the namespace picker, or, at start, shows the saved
-// namespaces the cluster has, a Warning naming those it has not; state.yaml
-// keeps them (tdp E3).
+// namespaces the cluster has, a Warning naming those it has not, which
+// state.yaml no longer gets (tdp E3-41).
 func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if !msg.check {
 		fill := m.fillNamespaces
@@ -404,11 +402,9 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if kept.Count() == sel.Count() {
 		return nil
 	}
-	m.keepNamespaces = nil
 	var gone []string
 	for _, n := range sel.List() {
 		if kept.IsAll() || !kept.Contains(n) {
-			m.keepNamespaces = append(m.keepNamespaces, n)
 			gone = append(gone, fmt.Sprintf("%q", n))
 		}
 	}
@@ -416,8 +412,7 @@ func (m *Model) onNamespaces(msg namespacesMsg) tea.Cmd {
 	if len(gone) > 1 {
 		what = "Namespaces " + strings.Join(gone, ", ") + " in state.yaml are"
 	}
-	// Through Notify: it joins the start's toast while that one shows
-	// (tdp E3-43).
+	// A toast of its own, stacked over the start's (tdp E3-37).
 	late := terminu.Notice{Kind: terminu.Warning, Text: what + " not in the cluster: showing " + selectionText(kept)}
 	return tea.Batch(m.app.Notify(late), m.showNamespaces(kept))
 }
@@ -456,12 +451,8 @@ func (m *Model) restore() {
 func (m *Model) sessionState() *config.State {
 	s := &config.State{Kind: m.current.KubectlName(), Tab: m.currentTab()}
 	if m.client != nil {
-		s.Context = cmp.Or(m.keepContext, m.client.ContextName())
+		s.Context = m.client.ContextName()
 		s.Namespaces = m.client.Selection().List()
-		if len(m.keepNamespaces) > 0 {
-			s.Namespaces = append(s.Namespaces, m.keepNamespaces...)
-			slices.Sort(s.Namespaces)
-		}
 	}
 	if len(m.drill) == 0 {
 		if item, ok := m.currentItem(); ok {
