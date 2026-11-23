@@ -2,6 +2,8 @@ package tui
 
 import (
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -26,7 +28,7 @@ func (m *Model) newAlterm() *terminu.Terminal {
 	// An interactive terminal, the user types in it (tdp terminal):
 	// PgUp goes into the History mode, gg|G to the oldest line and back to
 	// live, and Alt-v selects; Home and End stay the shell's (tdp K12).
-	t := &terminu.Terminal{Title: "Alterm", Subject: hostname(), Command: altermCommand(m.cfg.AltermShell, m.cfg.AltermLoginShell),
+	t := &terminu.Terminal{Title: "Alterm", Subject: hostname(), Command: altermCommand(runtime.GOOS, m.cfg.AltermShell, m.cfg.AltermLoginShell),
 		Ends: true, Interactive: true}
 	// Alt-t hides it, as it shows it on a panel. (The Ctrl-T an older kbu
 	// also took, for VHS, which cannot send Alt, is gone: on a panel it did
@@ -41,20 +43,26 @@ func (m *Model) newAlterm() *terminu.Terminal {
 	return t
 }
 
-// altermCommand is the shell Alterm runs: $KBU__ALTERM_SHELL, else the
-// config's alterm_shell, else $SHELL, else /bin/sh; with -l when
-// $KBU__ALTERM_LOGIN_SHELL or alterm_login_shell says so (the variable
-// first).
-func altermCommand(cfgShell string, cfgLogin bool) []string {
+// lookPath finds a program on PATH; tests give their own.
+var lookPath = exec.LookPath
+
+// altermCommand is the shell Alterm runs on goos: $KBU__ALTERM_SHELL, else
+// the config's alterm_shell, else $SHELL, else /bin/sh, PowerShell on
+// Windows; with -l when $KBU__ALTERM_LOGIN_SHELL or alterm_login_shell says
+// so (the variable first). On Windows $SHELL counts only when it can be
+// run: one a Unix-like shell set (Git Bash's /usr/bin/bash) is not.
+func altermCommand(goos, cfgShell string, cfgLogin bool) []string {
 	sh := strings.TrimSpace(os.Getenv("KBU__ALTERM_SHELL"))
 	if sh == "" {
 		sh = strings.TrimSpace(cfgShell)
 	}
 	if sh == "" {
-		sh = strings.TrimSpace(os.Getenv("SHELL"))
+		if s := strings.TrimSpace(os.Getenv("SHELL")); s != "" && (goos != "windows" || canRun(s)) {
+			sh = s
+		}
 	}
 	if sh == "" {
-		sh = "/bin/sh"
+		sh = defaultShell(goos)
 	}
 	login := cfgLogin
 	if v := strings.TrimSpace(os.Getenv("KBU__ALTERM_LOGIN_SHELL")); v != "" {
@@ -66,6 +74,23 @@ func altermCommand(cfgShell string, cfgLogin bool) []string {
 		return []string{sh, "-l"}
 	}
 	return []string{sh}
+}
+
+// defaultShell is Alterm's shell when nothing names one: /bin/sh, and on
+// Windows PowerShell, 7 (pwsh) when it is there, else the one Windows has.
+func defaultShell(goos string) string {
+	if goos != "windows" {
+		return "/bin/sh"
+	}
+	if canRun("pwsh") {
+		return "pwsh"
+	}
+	return "powershell.exe"
+}
+
+func canRun(name string) bool {
+	_, err := lookPath(name)
+	return err == nil
 }
 
 func hostname() string {

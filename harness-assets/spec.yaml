@@ -1,5 +1,5 @@
-id: 4
-from: v1.3.4
+id: 5
+from: v1.3.5
 to: v1.3.5
 tasks:
   - id: 1
@@ -118,11 +118,11 @@ tasks:
     request: Helm chart 管理的物件有標記、不讓人誤改，想看清楚時可以藏起來
     tdp: [tdp M6, tdp panel.14, tdp toast.2, tdp P5, tdp panel.7, tdp panel.5, tdp M5]
   - id: 21
-    spec: 1
+    spec: 5
     request: edit：在 kbu 裡跑真正的 kubectl edit，用使用者的 editor；每一次都記下來
     tdp: [tdp confirm, tdp F6, tdp terminal, tdp K10, tdp T1, tdp note.9, tdp E3, tdp note.6, tdp toast.2, tdp note.7]
   - id: 22
-    spec: 1
+    spec: 5
     request: shell：kubectl exec 進 container，在 kbu 裡
     tdp: [tdp confirm, tdp F6, tdp terminal, tdp K10, tdp toast.2, tdp T1, tdp note.6, tdp terminal.4, tdp terminal.5, tdp terminal.6, tdp note.7, tdp K3]
   - id: 23
@@ -132,9 +132,11 @@ tasks:
     remark:
       - 鍵是 x、寫成 [x] Delete（tdp K13，user 2026-11-20 定，從 kbu 來）；永久拿掉東西的不用 D、d
   - id: 24
-    spec: 1
+    spec: 5
     request: 住在 kbu 裡的 shell（Alterm）：藏起來還會繼續跑，叫回來時目錄、歷史與背景工作都還在
-    tdp: [tdp terminal, tdp M4, tdp K10, tdp screen.4, tdp popup.1, tdp L2, tdp toast.2, tdp note.7]
+    tdp: [tdp terminal, tdp M4, tdp K10, tdp screen.4, tdp popup.1, tdp L2, tdp toast.2, tdp note.7, tdp P5]
+    remark:
+      - Windows 上預設開 PowerShell（有 pwsh 用 pwsh，沒有用 powershell.exe；user 2026-11-23 選）；$SHELL 在 Windows 上要找得到才用（Git Bash 設的 /usr/bin/bash 是 Unix 的路徑，Windows 跑不了）
   - id: 25
     spec: 1
     request: 複製一列、一個 tab 或選取的字到剪貼簿，ssh 與 tmux 裡也能用

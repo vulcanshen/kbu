@@ -208,7 +208,7 @@ tasks:
       rows hidden／shown，重新 watch
     test: [TestIsHelmManaged_LabelMatch, TestIsHelmManaged_AnnotationMatch, TestIsHelmStorageSecret, TestToggleHelmHideManaged, TestMarkHelm, TestActionsClearTheFilter]
   - id: 21
-    spec: 1
+    spec: 5
     implementation: |
       panel 2 的 [E]dit（與 YAML viewer 的 E）：confirm EDIT，細節是確切的 kubectl edit <種類>/<名稱> -n <ns> --context <context>，問
       Edit <種類>/<名稱>?；Enter 在 terminal popup（tgo Terminal，標題 EDIT: <種類>/<名稱>）裡跑它，KUBE_EDITOR 是 config.yaml 的
@@ -216,10 +216,10 @@ tasks:
       已經有 edit 或 shell 開著時開 error popup EDIT：An edit or a shell is open already: close it first.
       editor 結束後 terminal popup 關掉，回到開它的地方：從 Space menu 開的回到 menu（edit 的動作不清掉 menu），從 YAML viewer 開的
       回到 viewer 並重讀（task 16）；清單經由 watch 自己更新；kubectl 以錯誤結束時 Error toast Edit ended: <原因>
-      Windows 上 lib 開不了 PTY：terminal popup 打開，裡面寫 a terminal needs a unix system，程式算是已經結束
+      Windows 上一樣（lib 用 ConPTY 開 PTY，Windows 10 1809 起）
     test: [TestAnEditRereadsTheYAML]
   - id: 22
-    spec: 1
+    spec: 5
     implementation: |
       Pod 上 [S]hell（與 container 那一層 [Enter] Open a shell、[S]hell）：confirm SHELL，細節是確切的 kubectl exec -it … --context
       <context> -- /bin/sh -c（image 有 bash 時 bash，不然 sh），問 Exec into <container>?；Esc 什麼都不跑；Enter 清掉 Space menu
@@ -227,7 +227,7 @@ tasks:
       Exec shell: kubectl <參數>；PgUp 歷史模式、Alt-v 選取模式（lib）；Alt-Esc 結束（lib 先問）
       已經有 edit 或 shell 開著時 error popup SHELL：An edit or a shell is open already: close it first.；以錯誤結束時 Error toast
       Shell ended: <原因>
-      Windows 上 lib 開不了 PTY：terminal popup 打開，裡面寫 a terminal needs a unix system，程式算是已經結束
+      Windows 上一樣（lib 用 ConPTY 開 PTY，Windows 10 1809 起）
     test: [TestShellAsksFirst]
   - id: 23
     spec: 3
@@ -240,15 +240,16 @@ tasks:
       panel 2 篩選著時刪掉的那一列，等 watch 說它沒了才拿掉（tgo List.SetRows）：篩選留著，cursor 停在篩選看得到的那一列
     test: [TestDeleteAsksThenRunsKubectl, TestDeleteEscCancels, TestADeleteToastStartsWithACapital, TestADeletedRowKeepsTheFilter]
   - id: 24
-    spec: 1
+    spec: 5
     implementation: |
       [Alt-t]erm（global operation，每個 panel 都按得到）：terminal popup，Title Alterm、Subject hostname，lib 畫成 ALTERM: <hostname>；
-      跑 config.yaml 的 alterm_shell（沒有時 $SHELL，再來 /bin/sh），alterm_login_shell 為 true 時加 -l；記 INFO Opened Alterm
+      跑 KBU__ALTERM_SHELL，沒有時 config.yaml 的 alterm_shell，再來 $SHELL（Windows 上要在 PATH 找得到才用），再來 /bin/sh，
+      Windows 上是 PowerShell（有 pwsh 用 pwsh，沒有用 powershell.exe）；alterm_login_shell 為 true 時加 -l；記 INFO Opened Alterm
       Alt-t 藏起來、shell 繼續跑，再按 Alt-t 叫回來；Alt-Esc 結束（lib 先問）；PgUp 歷史模式、Alt-v 選取模式（lib）；以錯誤結束時
       Error toast Alterm ended: <原因>
       shell 還在跑時 statusbar 的最後多一個 [Alt-t]erm chip，erm 是 Green（task 27）
-      Windows 上 lib 開不了 PTY：terminal popup 打開，裡面寫 a terminal needs a unix system，程式算是已經結束
-    test: [TestGlobalOperations]
+      Windows 上一樣（lib 用 ConPTY 開 PTY，Windows 10 1809 起）
+    test: [TestGlobalOperations, TestAltermShell]
   - id: 25
     spec: 1
     implementation: |

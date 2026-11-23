@@ -243,7 +243,7 @@ was using.
 default_context: ""       # the context to start on (default: the kubeconfig's current-context)
 default_namespace: ""     # the namespace to start on (default: all)
 editor: ""                # given to kubectl as $KUBE_EDITOR
-alterm_shell: ""          # Alterm's shell (default: $SHELL, then /bin/sh); a bare name is looked up on PATH
+alterm_shell: ""          # Alterm's shell (default: $SHELL, then /bin/sh; PowerShell on Windows); a bare name is looked up on PATH
 alterm_login_shell: false # true starts Alterm's shell with -l, reading ~/.zprofile / ~/.bash_profile
 input_tab_width: 4        # the cells a tab takes in the viewers (YAML, logs); shared by the terminu family
 ```
@@ -278,7 +278,6 @@ pod:
 ## Limits
 
 - **The mouse does nothing.** kbu, like every terminu app, is used from the keyboard.
-- **Alterm, edit and shell need macOS or Linux** (WSL too): on Windows kbu cannot open a terminal inside itself.
 - **If the frames are a cell off**, the check kbu runs at start got a wrong answer from your terminal: `kbu iconwidth` prints
   what it found and where each number came from; set `KBU__ICON_WIDTH` and `KBU__POWERLINE_WIDTH`. On Windows there is no check: set them there when your font
   draws icons two cells wide.

@@ -7,7 +7,10 @@ Each release names the version of terminu design (tdp) it follows.
 - **Dragging a pinned kind keeps panel 1's filter**: while the kind is held the filter is set aside and every pinned
   kind shows, so it moves past the ones the filter hid; once you drop it or put it back, the filter comes back as you
   typed it, the cursor on the kind.
-- terminu-go v1.3.5 (tdp v1.3.5).
+- **Alterm, edit and shell work on Windows too** (Windows 10 1809 or later). Alterm starts PowerShell there when nothing
+  names a shell: `pwsh` when it is installed, else the PowerShell Windows comes with; a `$SHELL` Windows cannot run, such
+  as Git Bash's `/usr/bin/bash`, is passed over.
+- terminu-go v1.3.6 (tdp v1.3.5).
 
 ## v4.1.2 — tdp v1.3.4
 
