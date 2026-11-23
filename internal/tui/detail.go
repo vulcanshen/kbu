@@ -177,10 +177,13 @@ func (m *Model) setTabLabels() {
 		case "Logs":
 			names[i] += " " + liveGlyph(d.logBody.live)
 		case "Relatives":
-			// How deep the chain is, from 1: always there, so the tabs
-			// after it do not move when it changes (tdp L2); one cell
-			// after the glyph (tdp components.2).
-			names[i] += " " + glyphLink + " " + strconv.Itoa(len(d.chain)+1)
+			// How deep the chain is, from 01: always there and two
+			// digits, so the tabs after it do not move when it changes
+			// (tdp L2; a chain deeper than 99 is not walked by hand).
+			// The digits fill with 0, not spaces: one cell after the
+			// glyph (tdp components.2), none at a capsule's end (tdp
+			// panel.4).
+			names[i] += " " + glyphLink + " " + fmt.Sprintf("%02d", len(d.chain)+1)
 		}
 	}
 	if len(names) == 0 {

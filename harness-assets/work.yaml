@@ -71,7 +71,9 @@ tasks:
     spec: 1
     implementation: |
       RELATIVES tab：一般清單，依關係分組（owner、Service 選到的 Pod、HPA 的目標、掛載 PVC 的 Pod、用到 ConfigMap、Secret 的 Pod……）
-      tab 名稱 Relatives <nf-oct-arrow_right> <鏈的深度，從 1 起>：glyph 後空一格；深度一直寫著，深度變了後面的 tab 不移動
+      tab 名稱 Relatives <nf-oct-arrow_right> <鏈的深度，兩位數，從 01 起>：glyph 後空一格；深度一直寫著、補 0 到兩位數，01 到 99
+      寬度一樣，深度變了後面的 tab 不移動（user 2026-11-23 定兩位數：鏈比 99 深不是用手走得到的；補 0 不補空格，因為 glyph
+      後只空一格、膠囊裡的字前後不加空白）
       [Enter] Drill in（從 Space menu 執行時清掉 menu）：在 panel 3 裡換成那一個的 relatives，位置列寫走過的鏈，記 INFO Drilled into <種類>/<名稱> on the Relatives tab；
       讀不到 Error toast Drill failed: <原因>；那一列已經在鏈上（走回去會繞圈）、或不是 kbu 走得到的，Drill in 停用（cursor 照樣停在
       那一列，Enter 不作用）

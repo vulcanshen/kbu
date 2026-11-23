@@ -1094,14 +1094,21 @@ func TestNoKubeconfigJoinsTheStartToast(t *testing.T) {
 	}
 }
 
-// The Relatives tab says how deep the chain is, one cell after its glyph
-// (tdp components.2).
+// The Relatives tab says how deep the chain is in two digits, one cell
+// after its glyph: the same width from 01 to 99 (tdp L2, components.2,
+// panel.4).
 func TestTheRelativesTabSpacesItsDepth(t *testing.T) {
 	m := newTestModel(t)
 	m.det.tabs = []string{"Details", "Relatives"}
-	m.det.chain = []relFrame{{ref: k8s.RefTarget{Type: k8s.ResourceNodes, Name: "node-1"}}}
-	m.setTabLabels()
-	if want := "Relatives " + glyphLink + " 2"; len(m.detailP.Tabs) != 1 || m.detailP.Tabs[0] != want {
-		t.Errorf("the tabs are %q, want [%q]", m.detailP.Tabs, want)
+	node := relFrame{ref: k8s.RefTarget{Type: k8s.ResourceNodes, Name: "node-1"}}
+	for _, c := range []struct {
+		deep int
+		want string
+	}{{0, "01"}, {1, "02"}, {9, "10"}, {98, "99"}} {
+		m.det.chain = slices.Repeat([]relFrame{node}, c.deep)
+		m.setTabLabels()
+		if want := "Relatives " + glyphLink + " " + c.want; len(m.detailP.Tabs) != 1 || m.detailP.Tabs[0] != want {
+			t.Errorf("%d deep, the tabs are %q, want [%q]", c.deep, m.detailP.Tabs, want)
+		}
 	}
 }
