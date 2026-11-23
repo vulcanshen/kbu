@@ -117,16 +117,16 @@ tasks:
       kbu 從不改 kubeconfig：每一個 kubectl 都帶 --context
     test: [TestFetchContextItems_SortedAndFlattened, TestContextYAML_RendersAndRedactsSecrets, TestDetailContext_RicherFields, TestGlobalOperations]
   - id: 12
-    spec: 2
+    spec: 3
     implementation: |
-      panel 1 上 [P]in <種類>：先清掉 panel 1 的篩選，種類移到最上面的釘選組，cursor 跟著，記 INFO Pinned <種類>；再按是 Unpin，
-      記 INFO Unpinned <種類>；寫進 ~/.kbu/kinds.yaml（寫不進去 Error toast Pin save failed: <原因>）
+      panel 1 上 [P]in <種類>：種類移到最上面的釘選組，cursor 跟著，記 INFO Pinned <種類>；再按是 Unpin，移回原本的組，記 INFO
+      Unpinned <種類>；panel 1 篩選著時篩選留著（種類的名字沒變，照樣在篩選裡），cursor 跟著它；寫進 ~/.kbu/kinds.yaml（寫不進去 Error toast Pin save failed: <原因>）
       [D]rag to reorder pinned kinds（只在釘選的種類上，少於兩個停用）：panel 的 Drag mode（tdp panel.8）。清單是 List.Draggable：
       每一列都留標記欄；先清掉篩選，List.Hold 拿起 cursor 那一列（lib 畫成 Yellow 底、Base 粗體、標記欄 U+F04E2），Panel.EnterMode
       進模式 Drag：j|k（與 ↓|↑）在釘選的種類之間搬、到頭尾繞回；Enter（Space menu 的 Drop）放下、List.Drop、存順序，記 INFO
       Reordered the pinned kinds: <順序>（存不進去 Error toast Pin order save failed: <原因>）；Esc（cancel）放回原處、不存
       進出模式不記 App Log
-    test: [TestPinMovesTheKindToPinned, TestDragReordersThePinnedKinds, TestActionsClearTheFilter]
+    test: [TestPinMovesTheKindToPinned, TestDragReordersThePinnedKinds, TestPinKeepsTheFilter]
   - id: 13
     spec: 1
     implementation: |
@@ -137,12 +137,13 @@ tasks:
       failed: <原因>）
     test: [TestSortTwoSteps, TestSortValues, TestSortItemsChain_PrimaryFirstTiebreakerNext, TestSortHelpers_SetUnsetGet]
   - id: 14
-    spec: 1
+    spec: 3
     implementation: |
       panel 1、panel 2 的 [/] Search 是 tgo List 的 panel filter；不記 App Log
       kbu 自己的動作換掉 panel 列的東西或移它的 cursor 前，先清掉篩選：換種類、drill 進出、換 namespace、[.] 藏或顯示 Helm 管理的
-      列、釘選、Drag、切 context、Breadcrumb 切到同一種的資源、History tab 把 cursor 放到部署中的 revision
-    test: [TestActionsClearTheFilter]
+      列、Drag、切 context、Breadcrumb 切到同一種的資源、History tab 把 cursor 放到部署中的 revision
+      使用者對篩選後的一項做的動作讓它移走或消失時，篩選留著，cursor 停在篩選看得到的一項：釘選與取消釘選（task 12）、刪除（task 23）
+    test: [TestActionsClearTheFilter, TestPinKeepsTheFilter, TestADeletedRowKeepsTheFilter]
   - id: 15
     spec: 3
     implementation: |

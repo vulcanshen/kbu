@@ -755,8 +755,7 @@ func TestHelmChanged(t *testing.T) {
 
 // An action of kbu that changes what a panel lists, or puts its cursor on an
 // item, clears the panel filter first, whether it hides that item or not
-// (tdp panel.14, panel-180): showing or hiding the Helm-managed rows, pinning
-// a kind.
+// (tdp panel.14, panel-180): showing or hiding the Helm-managed rows.
 func TestActionsClearTheFilter(t *testing.T) {
 	m := newTestModel(t)
 	m.feed(pod("demo", "a"), pod("demo", "b"))
@@ -768,13 +767,25 @@ func TestActionsClearTheFilter(t *testing.T) {
 	if m.list.Filtering() {
 		t.Error("[.] kept the filter of panel 2")
 	}
+}
+
+// [P]in on a kind of the filtered panel 1 moves it to the pinned group and
+// back; the filter stays, the cursor with the kind (tdp panel-198).
+func TestPinKeepsTheFilter(t *testing.T) {
+	m := newTestModel(t)
 	m.press("1", "/", "D", "e", "p", "Enter")
 	if !m.kinds.Filtering() {
 		t.Fatal("/ Dep did not filter panel 1")
 	}
-	m.press("P")
-	if m.kinds.Filtering() {
-		t.Error("[P]in kept the filter of panel 1")
+	for _, pinned := range []bool{true, false} {
+		m.press("P")
+		if !m.kinds.Filtering() {
+			t.Errorf("[P] (pinned %v) took the filter of panel 1 away", pinned)
+		}
+		if r, ok := m.kinds.Current(); !ok || r.ID != string(k8s.ResourceDeployments) || m.isPinned(k8s.ResourceDeployments) != pinned {
+			t.Errorf("after [P]: the cursor on %+v, Deployments pinned %v; want it on Deployments, pinned %v",
+				r, m.isPinned(k8s.ResourceDeployments), pinned)
+		}
 	}
 }
 
