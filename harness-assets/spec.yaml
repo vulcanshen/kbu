@@ -54,6 +54,8 @@ tasks:
     tdp: [tdp panel.10, tdp K3, tdp K4, tdp confirm, tdp F6, tdp panel.14, tdp note.7, tdp P5, tdp M6, tdp panel.11, tdp toast.2, tdp T1, tdp menu, tdp popup.1, tdp M5, tdp components.2, tdp L2, tdp panel.4, tdp panel.5, tdp toast.1]
     remark:
       - 連到什麼是 Kubernetes 的關係（owner、selector、volume、binding……），kbu 照 YAML 字面指向的目標走
+      - note: user 要 tab 的深度寫成 `1 `（數字後面留一格，到兩位數寬度不變，tdp L2），但那一格在 tab 膠囊的尾端，tdp panel.4 不加空白；tdp 允許了再改，暫時補 0 寫成 `01`（user 2026-11-23 選）
+        issue: 本機送給 terminu session，2026-11-23
   - id: 9
     spec: 1
     request: Drill-down：workload 往下看它的 Pod、Pod 看它的 container、CronJob 看 Job、HPA 看它的目標、Helm release 看 chart 部署的物件

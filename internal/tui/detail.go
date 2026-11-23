@@ -183,6 +183,9 @@ func (m *Model) setTabLabels() {
 			// The digits fill with 0, not spaces: one cell after the
 			// glyph (tdp components.2), none at a capsule's end (tdp
 			// panel.4).
+			// TODO(tdp): the user wants "1 ", a space kept after one
+			// digit; asked of tdp on 2026-11-23, as panel.4 has no space
+			// at a capsule's end (harness-assets/spec.yaml, task 8).
 			names[i] += " " + glyphLink + " " + fmt.Sprintf("%02d", len(d.chain)+1)
 		}
 	}
