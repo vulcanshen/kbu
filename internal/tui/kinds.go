@@ -154,17 +154,14 @@ func (m *Model) togglePin() tea.Cmd {
 
 // startDrag enters the Drag mode on the pinned kind under the cursor (tdp
 // K11): j|k move it among the pinned ones, wrapping at the ends (tdp K12),
-// Enter drops it and keeps the order, Esc puts it back.
+// Enter drops it and keeps the order, Esc puts it back. A filter is set
+// aside while the kind is held and comes back once it is dropped or put
+// back (List.Hold and Drop; tdp panel.8, panel-199).
 func (m *Model) startDrag() tea.Cmd {
 	if !m.isPinned(m.kindAt) || len(m.pinned) < 2 {
 		return nil
 	}
 	m.drag = &dragState{before: slices.Clone(m.pinned), kind: m.kindAt}
-	// The kind moves among every pinned one, not only those a filter shows
-	// (tdp reorder.1). TODO(tdp): panel.14 keeps the filter for a user's
-	// action that moves an item; asked of tdp on 2026-11-23 which one Drag
-	// follows (harness-assets/spec.yaml, tasks 12 and 14).
-	m.kinds.ClearFilter()
 	m.kinds.Hold()
 	m.kindsP.EnterMode(&terminu.Mode{
 		Name: "Drag", Exit: "cancel", Pause: true,
