@@ -2,7 +2,7 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
-## Unreleased
+## v4.1.3 — tdp v1.3.5
 
 - **Dragging a pinned kind keeps panel 1's filter**: while the kind is held the filter is set aside and every pinned
   kind shows, so it moves past the ones the filter hid; once you drop it or put it back, the filter comes back as you
