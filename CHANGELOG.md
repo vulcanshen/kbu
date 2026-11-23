@@ -2,6 +2,13 @@
 
 Each release names the version of terminu design (tdp) it follows.
 
+## Unreleased
+
+- **Dragging a pinned kind keeps panel 1's filter**: while the kind is held the filter is set aside and every pinned
+  kind shows, so it moves past the ones the filter hid; once you drop it or put it back, the filter comes back as you
+  typed it, the cursor on the kind.
+- terminu-go v1.3.5 (tdp v1.3.5).
+
 ## v4.1.2 — tdp v1.3.4
 
 - **`kbu update`** brings kbu to the latest release the way you installed it: Homebrew upgrades it, a copy from the

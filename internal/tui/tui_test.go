@@ -326,6 +326,48 @@ func TestDragReordersThePinnedKinds(t *testing.T) {
 	}
 }
 
+// A pinned kind picked up on the filtered panel 1 moves among every pinned
+// one: the filter is set aside while it is held, and comes back as it was
+// once it is dropped or put back, the cursor on it (tdp panel.8, panel-199).
+func TestDragSetsTheFilterAside(t *testing.T) {
+	m := newTestModel(t)
+	m.press("P") // Pods
+	m.kinds.Select(string(k8s.ResourceDeployments))
+	m.size(120, 40)
+	m.press("P")
+	m.press("/", "D", "e", "p", "Enter")
+	if !m.kinds.Filtering() {
+		t.Fatal("/ Dep did not filter panel 1")
+	}
+	onDeployments := func(when string) {
+		t.Helper()
+		if r, ok := m.kinds.Current(); !ok || r.ID != string(k8s.ResourceDeployments) {
+			t.Errorf("%s: the cursor is on %+v, want Deployments", when, r)
+		}
+	}
+	for _, c := range []struct {
+		end  string
+		want []k8s.ResourceType
+	}{
+		{"Esc", []k8s.ResourceType{k8s.ResourcePods, k8s.ResourceDeployments}},
+		{"Enter", []k8s.ResourceType{k8s.ResourceDeployments, k8s.ResourcePods}},
+	} {
+		m.press("D")
+		if m.kindsP.InMode() == nil || m.kinds.Filtering() {
+			t.Fatalf("D: in a mode %v, filtering %v; want the Drag mode, the filter set aside", m.kindsP.InMode() != nil, m.kinds.Filtering())
+		}
+		m.press("k") // past Pods, which the filter hid
+		m.press(c.end)
+		if !m.kinds.Filtering() {
+			t.Errorf("%s: the filter did not come back", c.end)
+		}
+		onDeployments(c.end)
+		if !slices.Equal(m.pinned, c.want) {
+			t.Errorf("%s: pinned %v, want %v", c.end, m.pinned, c.want)
+		}
+	}
+}
+
 // tdp L2: the statusbar's context and namespaces have a fixed width, and
 // the chips that come and go are after them: nothing moves with them.
 func TestStatusbarKeepsItsFields(t *testing.T) {

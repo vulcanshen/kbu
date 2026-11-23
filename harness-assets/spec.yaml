@@ -1,6 +1,6 @@
-id: 3
-from: v1.2.20
-to: v1.3.4
+id: 4
+from: v1.3.4
+to: v1.3.5
 tasks:
   - id: 1
     spec: 1
@@ -71,24 +71,20 @@ tasks:
     request: kubeconfig 的 context：唯讀的清單、憑證不顯示；讓 kbu 切到另一個 context，不動 ~/.kube/config
     tdp: [tdp select, tdp confirm, tdp F6, tdp M4, tdp M9, tdp panel.14, tdp note.7, tdp P5, tdp toast.2, tdp K3]
   - id: 12
-    spec: 3
+    spec: 4
     request: 把常用的種類釘在最上面，拖成自己要的順序
-    tdp: [tdp panel.8, tdp K11, tdp K12, tdp reorder, tdp menu.4, tdp screen.2, tdp panel.14, tdp E3, tdp note.7, tdp toast.2, tdp M6, tdp K13, tdp panel-198, tdp panel.11]
+    tdp: [tdp panel.8, tdp K11, tdp K12, tdp reorder, tdp menu.4, tdp screen.2, tdp panel.14, tdp E3, tdp note.7, tdp toast.2, tdp M6, tdp K13, tdp panel-198, tdp panel.11, tdp panel-199]
     remark:
       - 拖曳是 panel 的 Drag mode（tdp panel.8，元件的模式，不是 app 自己的）：只在釘選的種類之間搬；進入的鍵 D 由 app 定（panel.8）；panel 1 沒有 Diff，D 不是刪除，tdp K13 允許
-      - note: 篩選著時進 Drag 要不要先清掉篩選，tdp 不清楚：panel.14（panel-198）說使用者對篩選後的一項做的動作讓它移走時篩選留著，reorder.1 說篩選之後搬的時候說不清跟誰交換；暫時照舊先清掉篩選（user 2026-11-23 選回報）。terminu 2026-11-23 回：user 選 B，tdp main 2c0f67e（還沒出版）的 panel.8 寫拿著時篩選先收起來、放下或放回後照原樣回來，cursor 停在那一項（panel-199）；terminu-go 照這條改 lib，等兩邊出版、terminu 通知後再看 startDrag（lib 做了就拿掉 kbu 自己清篩選那段）
-        issue: 本機送給 terminu session，2026-11-23
+      - 篩選著時拿起一項，拿著的時候篩選收起來、全部列出來，放下或放回後照原樣回來（tdp panel.8、panel-199，tdp v1.3.5 照 kbu 的回報加的，本機送給 terminu session，2026-11-23；user 選 B）；lib 的 List.Hold、Drop 做
   - id: 13
     spec: 1
     request: 任何清單依一欄或好幾欄排序，依種類記住
     tdp: [tdp menu, tdp T1, tdp E3, tdp note.7, tdp P5, tdp panel.6, tdp F1, tdp toast.2]
   - id: 14
-    spec: 3
+    spec: 4
     request: 打字篩選種類與資源
-    tdp: [tdp panel.14, tdp note.7, tdp panel-180, tdp panel-198, tdp panel.8, tdp reorder.1]
-    remark:
-      - note: Drag 前先清篩選在等 tdp（task 12 的回報，本機送給 terminu session，2026-11-23）
-        issue: 本機送給 terminu session，2026-11-23
+    tdp: [tdp panel.14, tdp note.7, tdp panel-180, tdp panel-198, tdp panel.8, tdp reorder.1, tdp panel-199]
   - id: 15
     spec: 3
     request: 離開再開，從上次停的地方接著用：同一個 context、namespace、種類、那一列、panel 與 tab
